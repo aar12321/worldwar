@@ -1,0 +1,142 @@
+import { TECH_BY_ID, type TechModifiers } from '../data/techTree'
+import type { Army, GameState, LogKind, Nation, NationId, RegionId, UnitCounts, UnitType } from './types'
+
+export const pairKey = (a: NationId, b: NationId) => (a < b ? `${a}|${b}` : `${b}|${a}`)
+
+export const atWar = (s: GameState, a: NationId, b: NationId) => a !== b && s.wars.includes(pairKey(a, b))
+
+export const hasPact = (s: GameState, a: NationId, b: NationId) => (s.pacts[pairKey(a, b)] ?? -1) >= s.turn
+
+export const hasCasusBelli = (s: GameState, holder: NationId, target: NationId) =>
+  (s.casusBelli[`${holder}|${target}`] ?? -1) >= s.turn
+
+export function enemiesOf(s: GameState, id: NationId): NationId[] {
+  const out: NationId[] = []
+  for (const k of s.wars) {
+    const [a, b] = k.split('|')
+    if (a === id) out.push(b)
+    else if (b === id) out.push(a)
+  }
+  return out
+}
+
+export function regionsOf(s: GameState, id: NationId): RegionId[] {
+  return Object.values(s.regions)
+    .filter((r) => r.owner === id)
+    .map((r) => r.id)
+    .sort()
+}
+
+export function armiesOf(s: GameState, id: NationId): Army[] {
+  return Object.values(s.armies)
+    .filter((a) => a.owner === id)
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+}
+
+export function armiesIn(s: GameState, regionId: RegionId, owner?: NationId): Army[] {
+  return Object.values(s.armies)
+    .filter((a) => a.location === regionId && (owner === undefined || a.owner === owner))
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+}
+
+export const emptyUnits = (): UnitCounts => ({ infantry: 0, armor: 0, air: 0, naval: 0 })
+
+export const totalUnits = (u: UnitCounts) => u.infantry + u.armor + u.air + u.naval
+
+export function sumUnits(list: UnitCounts[]): UnitCounts {
+  const out = emptyUnits()
+  for (const u of list) for (const k of Object.keys(out) as UnitType[]) out[k] += u[k]
+  return out
+}
+
+export const hasTech = (n: Nation, techId: string) => n.techs.includes(techId)
+
+export interface AggregatedModifiers {
+  unitAttack: Record<UnitType, number>
+  unitDefense: Record<UnitType, number>
+  combinedArms: number
+  ignoreMountainPenalty: boolean
+  foodOutput: number
+  factoryOutput: number
+  jobsReduction: number
+  researchOutput: number
+  stability: number
+  ppPerTurn: number
+  supplyRange: number
+  seaSupplyRange: number
+  allOutput: number
+  amphibiousPenaltyReduction: number
+  seaInvasion: boolean
+  globalVision: boolean
+}
+
+export function nationModifiers(n: Nation): AggregatedModifiers {
+  const m: AggregatedModifiers = {
+    unitAttack: emptyUnits(),
+    unitDefense: emptyUnits(),
+    combinedArms: 0,
+    ignoreMountainPenalty: false,
+    foodOutput: 0,
+    factoryOutput: 0,
+    jobsReduction: 0,
+    researchOutput: 0,
+    stability: 0,
+    ppPerTurn: 0,
+    supplyRange: 0,
+    seaSupplyRange: 0,
+    allOutput: 0,
+    amphibiousPenaltyReduction: 0,
+    seaInvasion: false,
+    globalVision: false,
+  }
+  for (const id of n.techs) {
+    const tech = TECH_BY_ID[id]
+    if (!tech) continue
+    const mod: TechModifiers = tech.modifiers
+    for (const [k, v] of Object.entries(mod.unitAttack ?? {})) m.unitAttack[k as UnitType] += v
+    for (const [k, v] of Object.entries(mod.unitDefense ?? {})) m.unitDefense[k as UnitType] += v
+    m.combinedArms += mod.combinedArms ?? 0
+    m.ignoreMountainPenalty ||= !!mod.ignoreMountainPenalty
+    m.foodOutput += mod.foodOutput ?? 0
+    m.factoryOutput += mod.factoryOutput ?? 0
+    m.jobsReduction += mod.jobsReduction ?? 0
+    m.researchOutput += mod.researchOutput ?? 0
+    m.stability += mod.stability ?? 0
+    m.ppPerTurn += mod.ppPerTurn ?? 0
+    m.supplyRange += mod.supplyRange ?? 0
+    m.seaSupplyRange += mod.seaSupplyRange ?? 0
+    m.allOutput += mod.allOutput ?? 0
+    m.amphibiousPenaltyReduction += mod.amphibiousPenaltyReduction ?? 0
+    m.seaInvasion ||= !!tech.enablesSeaInvasion
+    m.globalVision ||= !!tech.globalVision
+  }
+  return m
+}
+
+export function canUseUnit(n: Nation, unit: UnitType): boolean {
+  const required: Record<UnitType, string> = {
+    infantry: 'land_rifles',
+    armor: 'land_light_tanks',
+    air: 'air_propeller',
+    naval: 'naval_gunboats',
+  }
+  return hasTech(n, required[unit])
+}
+
+export function addLog(s: GameState, kind: LogKind, text: string, nations: NationId[]) {
+  s.log.push({ turn: s.turn, kind, text, nations })
+  if (s.log.length > 300) s.log.splice(0, s.log.length - 300)
+}
+
+export const newId = (s: GameState, prefix: string) => `${prefix}${s.nextId++}`
+
+export const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+export const START_YEAR = 1936
+
+export function turnDate(turn: number): string {
+  const m = (turn - 1) % 12
+  const y = START_YEAR + Math.floor((turn - 1) / 12)
+  return `${MONTHS[m]} ${y}`
+}
