@@ -66,13 +66,19 @@ export function committedCost(s: GameState, orders: Order[]): OrderCost {
 export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Order[] = []): string | null {
   const n = s.nations[o.nationId]
   if (!n?.alive) return 'Your nation has fallen.'
+  const ruleError = checkRules(s, map, o, pending)
+  if (ruleError) return ruleError
   const spent = committedCost(s, pending)
   const cost = orderCost(s, o)
   if (cost.capital > 0 && n.resources.capital - spent.capital < cost.capital) return `Needs ${cost.capital} Capital`
   if (cost.pp > 0 && n.resources.pp - spent.pp < cost.pp) return `Needs ${cost.pp} Political Points`
   if (cost.tp > 0 && n.resources.tp - spent.tp < cost.tp) return `Needs ${cost.tp} Tech Points`
   if (cost.manpower > 0 && n.militaryPool - spent.manpower < cost.manpower) return `Needs ${cost.manpower}k military manpower`
+  return null
+}
 
+function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
+  const n = s.nations[o.nationId]
   switch (o.type) {
     case 'setPolicy': {
       const maxDraft = n.laws.includes('conscription_act') ? DRAFT_LIMITS.maxWithConscription : DRAFT_LIMITS.max

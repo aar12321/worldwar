@@ -100,7 +100,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       originalCapital: id,
       isPlayer,
       alive: true,
-      resources: { capital: 30 + w * 6, food: w * 4, pp: 20, tp: 0 },
+      resources: { capital: 30 + w * 6, food: w * 4, pp: 30, tp: 0 },
       militaryPool: w * 0.05 * ECON.militaryCapPerWorkforce * 0.5,
       taxRate: 0.25,
       draftRate: 0.05,
