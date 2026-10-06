@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { UNIT_SPECS } from '../data/unitTypes'
 import { totalUnits } from '../engine/helpers'
 import type { BattleReport, GameState, NationId } from '../engine/types'
@@ -52,6 +52,22 @@ export function BattleFX() {
   const { map } = getWorld()
   const speed = settings.fxSpeed
   const reduced = settings.reducedMotion
+  const active = !!battle
+  const savedView = useRef<{ lat: number; lng: number; altitude: number } | null>(null)
+
+  // Declared before the per-battle effect so the view is saved before the camera flies to the first battle.
+  useEffect(() => {
+    const api = globeBridge.api
+    if (!api) return
+    if (active) {
+      savedView.current ??= api.pointOfView()
+      return
+    }
+    if (savedView.current) {
+      api.pointOfView(savedView.current, reduced ? 0 : 950)
+      savedView.current = null
+    }
+  }, [active, reduced])
 
   useEffect(() => {
     if (!battle || !game) return

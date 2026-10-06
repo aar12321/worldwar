@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { TERRAIN } from '../data/terrain'
 import { armiesIn, totalUnits } from '../engine/helpers'
 import { supplyDistances, supplyRange } from '../engine/supply'
-import type { Army, GameState, RegionId, UnitType } from '../engine/types'
+import type { Army, GameState, NationId, RegionId, UnitType } from '../engine/types'
 import { visibleArmies, visibleRegions } from '../engine/visibility'
 import { canReach } from '../engine/warfare'
 import { getWorld, type CountryFeature } from '../map/world'
@@ -205,6 +205,7 @@ function regionColor(game: GameState | null, id: RegionId): string {
 
 const SIDE_COLOR = () => 'rgba(2, 6, 23, 0.75)'
 const datumCache = new Map<string, LayerDatum>()
+const arcCache = new Map<string, Arc>()
 
 export function WorldGlobe() {
   const game = useGame((s) => s.game)
@@ -289,6 +290,8 @@ export function WorldGlobe() {
     return out
   }, [game, selectedArmy, targetMode])
 
+  const vision = useMemo(() => (game ? visibleRegions(game, map, game.playerId) : null), [game])
+
   const hiddenCaptures = useMemo(() => {
     const out = new Map<RegionId, string>()
     if (!game) return out
@@ -299,6 +302,45 @@ export function WorldGlobe() {
     }
     return out
   }, [fxQueue, revealedBattleId, game])
+
+  const displayOwners = useMemo(() => {
+    const out = new Map<RegionId, NationId>()
+    if (!game) return out
+    for (const r of Object.values(game.regions)) out.set(r.id, r.owner)
+    for (const b of fxQueue) if (b.captured && b.id !== revealedBattleId && hiddenCaptures.has(b.regionId)) out.set(b.regionId, b.defender.nationId)
+    return out
+  }, [game, fxQueue, revealedBattleId, hiddenCaptures])
+
+  const [popped, setPopped] = useState<Set<RegionId>>(EMPTY_REGIONS)
+  const shownOwners = useRef<{ session: string; turn: number; owners: Map<RegionId, NationId> } | null>(null)
+  const popTimer = useRef(0)
+  useEffect(() => {
+    if (!game) {
+      shownOwners.current = null
+      return
+    }
+    const session = `${game.seed}|${game.playerId}`
+    const prev = shownOwners.current
+    shownOwners.current = { session, turn: game.turn, owners: displayOwners }
+    if (!prev || prev.session !== session || game.turn < prev.turn) return
+    const player = game.playerId
+    const notable: RegionId[] = []
+    for (const [id, owner] of displayOwners) {
+      const before = prev.owners.get(id)
+      if (before === undefined || before === owner) continue
+      if (owner === player || before === player || vision === 'all' || vision?.has(id)) notable.push(id)
+    }
+    if (!notable.length) return
+    const pulses = notable.slice(0, 6)
+    if (!reducedRef.current)
+      for (const id of pulses) {
+        const r = map.regions[id]
+        useFx.getState().addRing({ lat: r.lat, lng: r.lng, color: game.nations[displayOwners.get(id)!]?.color ?? NEON.cyan, maxRadius: 4.5 }, 1500)
+      }
+    requestAnimationFrame(() => setPopped(new Set(pulses)))
+    window.clearTimeout(popTimer.current)
+    popTimer.current = window.setTimeout(() => setPopped(EMPTY_REGIONS), 700)
+  }, [game, displayOwners, vision])
 
   const polygonColor = useCallback(
     (f: object) => {
@@ -314,12 +356,13 @@ export function WorldGlobe() {
   const polygonAltitude = useCallback(
     (f: object) => {
       const id = (f as CountryFeature).properties.regionId
+      if (popped.has(id)) return 0.045
       if (id === selectedRegion) return 0.03
       if (reachable.has(id)) return 0.022
       if (game && game.regions[id].owner === game.playerId) return 0.012
       return 0.006
     },
-    [game, selectedRegion, reachable],
+    [game, selectedRegion, reachable, popped],
   )
   const polygonStroke = useCallback(
     (f: object) => {
@@ -336,12 +379,12 @@ export function WorldGlobe() {
       const mr = map.regions[id]
       if (!game) return `<div class="globe-tip"><b>${mr.name}</b></div>`
       const owner = game.nations[game.regions[id].owner]
-      const vis = visibleRegions(game, map, game.playerId)
+      const vis = vision ?? 'all'
       const armies = vis === 'all' || vis.has(id) ? armiesIn(game, id).reduce((s, a) => s + totalUnits(a.units), 0) : null
       const rebels = game.regions[id].rebels
       return `<div class="globe-tip"><b>${mr.name}</b><div style="color:${owner.color}">${owner.name}</div><div>${TERRAIN[mr.terrain].name} · ${game.regions[id].population.toFixed(1)}M</div>${armies === null ? '<div class="dim">Armies: unknown</div>' : `<div>Divisions: ${armies.toFixed(1)}</div>`}${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
     },
-    [game],
+    [game, vision],
   )
 
   const onPolygonClick = useCallback((f: object) => {
@@ -406,7 +449,18 @@ export function WorldGlobe() {
         out.push({ startLat: r.lat, startLng: r.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha('#93c5fd', 0.04), withAlpha('#93c5fd', 0.4)], stroke: null, dash: 1, gap: 0, speed: 0, label: `Sea lane: ${r.name} to ${to.name}` })
       }
     }
-    return out
+    // three-globe joins arcs by object identity: reusing unchanged arcs means only new ones play the draw-in transition.
+    const cache = arcCache
+    const next = new Map<string, Arc>()
+    const stable = out.map((a) => {
+      const key = `${a.startLat},${a.startLng},${a.endLat},${a.endLng},${a.color.join()},${a.stroke},${a.dash},${a.gap},${a.speed},${a.label}`
+      const kept = next.get(key) ? a : (cache.get(key) ?? a)
+      next.set(key, kept)
+      return kept
+    })
+    cache.clear()
+    for (const [k, v] of next) cache.set(k, v)
+    return stable
   }, [game, orders, selectedRegion, targetMode])
 
   const arcDashTime = useCallback((a: object) => (reducedMotion ? 0 : (a as Arc).speed), [reducedMotion])
@@ -422,7 +476,7 @@ export function WorldGlobe() {
     const out: LayerDatum[] = []
     const marchById = new Map(marches.map((m) => [m.armyId, m]))
     const perRegion = new Map<RegionId, number>()
-    for (const a of visibleArmies(game, map, game.playerId)) {
+    for (const a of visibleArmies(game, map, game.playerId, vision ?? undefined)) {
       const idx = perRegion.get(a.location) ?? 0
       perRegion.set(a.location, idx + 1)
       const r = map.regions[a.location]
@@ -452,7 +506,7 @@ export function WorldGlobe() {
       }
       seen.add(a.id)
     }
-    const vis = visibleRegions(game, map, game.playerId)
+    const vis = vision ?? 'all'
     for (const r of Object.values(game.regions)) {
       const factories = r.buildings.factory
       if (factories < 2 || r.sabotaged > 0) continue
@@ -475,7 +529,7 @@ export function WorldGlobe() {
     }
     for (const key of [...cache.keys()]) if (!seen.has(key)) cache.delete(key)
     return out
-  }, [game, marches, hiddenCaptures])
+  }, [game, marches, hiddenCaptures, vision])
 
   const makeObject = useCallback((d: object) => {
     const datum = d as LayerDatum
@@ -604,7 +658,7 @@ export function WorldGlobe() {
       onPolygonHover={onPolygonHover}
       arcCurveResolution={24}
       arcCircularResolution={4}
-      arcsTransitionDuration={0}
+      arcsTransitionDuration={reducedMotion ? 0 : 520}
       arcAltitudeAutoScale={0.22}
       arcsData={arcs}
       arcColor="color"
