@@ -2,14 +2,19 @@ export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
 export type NationId = string
 export type UnitType = 'infantry' | 'armor' | 'air' | 'naval'
-export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port'
+export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'depot'
 export type TechBranch = 'land' | 'air' | 'naval' | 'infra'
 export type LawId = 'martial_law' | 'war_economy' | 'conscription_act'
 export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marshal' | 'stalwart'
 export type SpyMission = 'sabotage' | 'stealVision'
+export type Difficulty = 'easy' | 'normal' | 'hard'
+export type Personality = 'expansionist' | 'trader' | 'turtle' | 'opportunist' | 'honorable'
+export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower'
+export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms'
 
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'air', 'naval']
-export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port']
+export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'depot']
+export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower']
 
 /** Static geography, never mutated during play. */
 export interface MapRegion {
@@ -59,6 +64,8 @@ export interface Army {
   units: UnitCounts
   generalId: string | null
   outOfSupplyTurns: number
+  /** Consecutive months the army has held its position (capped at 3). */
+  entrenched: number
 }
 
 export interface Resources {
@@ -88,15 +95,78 @@ export interface Nation {
   generals: General[]
   foodShortage: boolean
   inDebt: boolean
+  /** Consecutive months spent with negative Capital. */
+  debtTurns: number
+  /** Turn until which this nation's port trade is embargoed. */
+  embargoedUntil: number
   /** Turn number until which this nation can see the given nation's armies. */
   vision: Record<NationId, number>
   aggression: number
+  personality: Personality
 }
 
-export interface PeaceOffer {
+export type ResourceBundle = Partial<Record<TradeResource, number>>
+
+export interface PeaceTerms {
+  /** Regions that change hands; each goes to the side that does not currently own it. */
+  cede: RegionId[]
+  /** Capital per month for REPARATION_MONTHS. Positive: the target pays the proposer. Negative: the proposer pays. */
+  reparations: number
+}
+
+export interface TradeTerms {
+  /** What the proposer hands over. */
+  give: ResourceBundle
+  /** What the proposer asks for in return. */
+  receive: ResourceBundle
+  /** 0 for a one-off exchange, otherwise the amounts change hands every month for this many months. */
+  months: number
+}
+
+export type ProposalDraft =
+  | { kind: 'peace'; terms: PeaceTerms }
+  | { kind: 'pact' }
+  | { kind: 'alliance' }
+  | { kind: 'trade'; terms: TradeTerms }
+  | { kind: 'callToArms'; enemy: NationId }
+
+export type Proposal = ProposalDraft & {
+  id: string
   from: NationId
   to: NationId
-  turn: number
+  created: number
+  /** Last turn on which the proposal can still be answered. */
+  expires: number
+}
+
+export interface Deal {
+  id: string
+  kind: 'trade' | 'reparations'
+  from: NationId
+  to: NationId
+  /** Paid by `from` to `to` every month. */
+  give: ResourceBundle
+  /** Paid by `to` to `from` every month. */
+  receive: ResourceBundle
+  /** Last turn on which the deal pays out. */
+  until: number
+}
+
+export interface OpinionModifier {
+  label: string
+  value: number
+  /** Amount the modifier fades toward zero each month. */
+  decay: number
+}
+
+export type DispatchKind = 'proposal' | 'accepted' | 'rejected' | 'joined' | 'ignored' | 'broken' | 'expired' | 'completed'
+
+export interface Dispatch {
+  kind: DispatchKind
+  from: NationId
+  to: NationId
+  proposalKind: ProposalKind | 'deal' | 'war'
+  text: string
 }
 
 export type EventEffect =
@@ -111,6 +181,12 @@ export type EventEffect =
   | { type: 'addBuilding'; building: BuildingType }
   | { type: 'popLoss'; fraction: number }
   | { type: 'warWeariness'; amount: number }
+  /** Changes the rival's opinion of the player. */
+  | { type: 'opinion'; amount: number; label: string }
+  /** Gives (or takes) resources from the rival. */
+  | { type: 'rivalResource'; key: keyof Resources; amount: number; perWorkforce?: number }
+  | { type: 'clearCasusBelli' }
+  | { type: 'embargo'; turns: number }
 
 export interface PendingEvent {
   eventId: string
@@ -128,9 +204,10 @@ export type Order =
   | { type: 'attack'; nationId: NationId; armyId: string; target: RegionId }
   | { type: 'assignGeneral'; nationId: NationId; armyId: string; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
-  | { type: 'offerPeace'; nationId: NationId; target: NationId }
-  | { type: 'acceptPeace'; nationId: NationId; target: NationId }
-  | { type: 'offerPact'; nationId: NationId; target: NationId }
+  | { type: 'propose'; nationId: NationId; target: NationId; proposal: ProposalDraft }
+  | { type: 'respond'; nationId: NationId; proposalId: string; accept: boolean }
+  | { type: 'cancelDeal'; nationId: NationId; dealId: string }
+  | { type: 'leaveAlliance'; nationId: NationId; target: NationId }
   | { type: 'spy'; nationId: NationId; target: RegionId; mission: SpyMission }
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
@@ -174,6 +251,7 @@ export interface LogEntry {
 export interface GameSettings {
   victoryShare: number
   seed: number
+  difficulty: Difficulty
 }
 
 export interface GameState {
@@ -190,7 +268,21 @@ export interface GameState {
   pacts: Record<string, number>
   /** "holder|target" -> turn the casus belli expires. */
   casusBelli: Record<string, number>
-  peaceOffers: PeaceOffer[]
+  /** Sorted "a|b" keys of defensive alliances. */
+  alliances: string[]
+  /** Proposals awaiting an answer from the player. */
+  proposals: Proposal[]
+  deals: Deal[]
+  /** "a>b" -> war score a has earned against b (0..100). */
+  warScore: Record<string, number>
+  /** Sorted "a|b" -> turn the war started. */
+  warStarted: Record<string, number>
+  /** "holder>target" -> remembered grievances and favours. */
+  opinions: Record<string, OpinionModifier[]>
+  /** "from>to:kind" -> last turn that proposal was made, so bots do not spam. */
+  proposalMemory: Record<string, number>
+  /** Diplomatic outcomes from the most recent turn. */
+  dispatches: Dispatch[]
   pendingEvent: PendingEvent | null
   nextEventTurn: number
   battles: BattleReport[]

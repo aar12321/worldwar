@@ -1,13 +1,14 @@
+import { addOpinion } from '../ai/opinion'
 import { EVENT_BY_ID, EVENTS, type GameEventDef } from '../data/events'
 import { TECH_BY_ID, TECHS } from '../data/techTree'
 import { BUILDING_SPECS } from '../data/unitTypes'
-import { computeEconomy } from './economy'
+import { computeEconomy, ECON } from './economy'
 import { addLog, armiesOf, clamp, regionsOf } from './helpers'
 import { createRng, type Rng } from './rng'
 import type { EventEffect, GameState, NationId, PendingEvent, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
-export function availableTechs(s: GameState, nationId: NationId): string[] {
+function availableTechs(s: GameState, nationId: NationId): string[] {
   const n = s.nations[nationId]
   return TECHS.filter((t) => !n.techs.includes(t.id) && t.requires.every((r) => n.techs.includes(r))).map((t) => t.id)
 }
@@ -48,7 +49,8 @@ export function scheduleEvent(s: GameState, map: WorldMap, nationId: NationId, r
     let idx = 0
     while (idx < weighted.length - 1 && roll >= weighted[idx].w) roll -= weighted[idx++].w
     const def = weighted[idx].def
-    const rivalId = def.needsRival ? pickRival(s, map, nationId, rng) : null
+    const candidates = def.rivalCandidates?.(s, nationId)
+    const rivalId = !def.needsRival ? null : candidates ? (candidates.length ? rng.pick(candidates) : null) : pickRival(s, map, nationId, rng)
     const regionId = def.needsRegion ? pickRegion(s, map, nationId, def.needsRegion, rng) : null
     if ((def.needsRival && !rivalId) || (def.needsRegion && !regionId)) {
       weighted.splice(idx, 1)
@@ -73,7 +75,18 @@ export function effectAmount(e: Extract<EventEffect, { type: 'resource' }>, work
 export function describeEffect(e: EventEffect, workforce: number, s: GameState, map: WorldMap, ev: PendingEvent): string {
   const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`)
   const labels = { capital: 'Capital', food: 'Food', pp: 'Political Points', tp: 'Tech Points' }
+  const rival = ev.rivalId ? s.nations[ev.rivalId].name : 'Rival'
   switch (e.type) {
+    case 'opinion':
+      return `${rival}'s opinion of you ${sign(e.amount)}`
+    case 'rivalResource': {
+      const v = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce)
+      return `${rival} ${v >= 0 ? 'receives' : 'loses'} ${Math.abs(v)} ${labels[e.key]}`
+    }
+    case 'clearCasusBelli':
+      return `${rival} drops its casus belli against you`
+    case 'embargo':
+      return `Port trade -${Math.round((1 - ECON.embargoTradeMult) * 100)}% for ${e.turns} months`
     case 'resource':
       return `${sign(effectAmount(e, workforce))} ${labels[e.key]}`
     case 'stability':
@@ -155,6 +168,23 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         break
       case 'warWeariness':
         n.warWeariness = clamp(n.warWeariness + e.amount, 0, 60)
+        break
+      case 'opinion':
+        if (ev.rivalId) addOpinion(s, ev.rivalId, nationId, e.label, e.amount, 0.4)
+        break
+      case 'rivalResource': {
+        const rival = ev.rivalId ? s.nations[ev.rivalId] : null
+        if (rival?.alive) {
+          const amount = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce)
+          rival.resources[e.key] = Math.max(e.key === 'capital' ? -9999 : 0, rival.resources[e.key] + amount)
+        }
+        break
+      }
+      case 'clearCasusBelli':
+        if (ev.rivalId) delete s.casusBelli[`${ev.rivalId}|${nationId}`]
+        break
+      case 'embargo':
+        n.embargoedUntil = Math.max(n.embargoedUntil ?? 0, s.turn + e.turns - 1)
         break
     }
   }

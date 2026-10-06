@@ -1,6 +1,7 @@
+import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
 import { UNIT_SPECS } from '../data/unitTypes'
-import { addLog, armiesOf, clamp, enemiesOf, nationModifiers } from './helpers'
+import { addLog, armiesOf, clamp, enemiesOf, nationModifiers, type AggregatedModifiers } from './helpers'
 import type { Rng } from './rng'
 import type { Buildings, GameState, MapRegion, NationId, RegionState, UnitType, WorldMap } from './types'
 import { BUILDING_TYPES, UNIT_TYPES } from './types'
@@ -20,6 +21,11 @@ export const ECON = {
   militaryCapPerWorkforce: 600,
   ppCap: 200,
   stabilityBase: 70,
+  /** Months of negative Capital before unpaid soldiers start deserting. */
+  desertionAfter: 2,
+  desertionPerMonth: 0.05,
+  maxDesertion: 0.2,
+  embargoTradeMult: 0.4,
 }
 
 export function regionWorkforce(region: RegionState, mapRegion: MapRegion): number {
@@ -54,7 +60,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const n = s.nations[nationId]
   const mods = nationModifiers(n)
   const owned = Object.values(s.regions).filter((r) => r.owner === nationId)
-  const buildings: Buildings = { factory: 0, farm: 0, university: 0, barracks: 0, port: 0 }
+  const buildings: Buildings = { factory: 0, farm: 0, university: 0, barracks: 0, port: 0, depot: 0 }
   let workforce = 0
   let baseFood = 0
   let activeFactories = 0
@@ -78,11 +84,13 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const warEconomy = n.laws.includes('war_economy')
   const outputMult = stabilityFactor * (1 + mods.allOutput) * (martial ? 0.85 : 1)
   const atWarCount = enemiesOf(s, nationId).length
+  const botBonus = n.isPlayer ? 0 : difficultyOf(s.settings.difficulty).botIncomeBonus
+  const embargoed = (n.embargoedUntil ?? 0) >= s.turn
 
-  const taxIncome = n.taxRate * civilianWorkforce * ECON.taxPerWorkforce * outputMult
+  const taxIncome = n.taxRate * civilianWorkforce * ECON.taxPerWorkforce * outputMult * (1 + botBonus)
   const factoryIncome =
-    activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + (warEconomy ? 0.25 : 0)) * outputMult
-  const tradeIncome = buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1)
+    activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + (warEconomy ? 0.25 : 0)) * outputMult * (1 + botBonus)
+  const tradeIncome = buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1)
 
   const armies = armiesOf(s, nationId)
   let upkeep = 0
@@ -153,6 +161,13 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
 
   r.capital += e.netCapital
   n.inDebt = r.capital < 0
+  n.debtTurns = n.inDebt ? (n.debtTurns ?? 0) + 1 : 0
+  if (n.debtTurns >= ECON.desertionAfter) {
+    const loss = Math.min(ECON.maxDesertion, ECON.desertionPerMonth * (n.debtTurns - ECON.desertionAfter + 1))
+    for (const a of armiesOf(s, nationId)) for (const k of UNIT_TYPES) a.units[k] *= 1 - loss
+    if (n.isPlayer || n.debtTurns === ECON.desertionAfter)
+      addLog(s, 'economy', `${n.name} cannot pay its soldiers: ${Math.round(loss * 100)}% of every army has deserted.`, [nationId])
+  }
   r.food += e.netFood
   if (r.food < 0) {
     if (!n.foodShortage) addLog(s, 'economy', `${n.name} is suffering a food shortage.`, [nationId])
@@ -188,15 +203,21 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   }
 }
 
+/** Total army strength, including the nation's technology bonuses. */
 export function militaryPower(s: GameState, nationId: NationId): number {
+  const n = s.nations[nationId]
+  if (!n) return 0
+  const mods = nationModifiers(n)
   let p = 0
-  for (const a of armiesOf(s, nationId))
-    for (const k of UNIT_TYPES) p += a.units[k] * (UNIT_SPECS[k].attack + UNIT_SPECS[k].defense) * 0.5
+  for (const a of Object.values(s.armies)) if (a.owner === nationId) p += unitPower(a.units, mods)
   return p
 }
 
-export function unitPower(units: Record<UnitType, number>): number {
+export function unitPower(units: Record<UnitType, number>, mods?: AggregatedModifiers | null): number {
   let p = 0
-  for (const k of UNIT_TYPES) p += units[k] * (UNIT_SPECS[k].attack + UNIT_SPECS[k].defense) * 0.5
+  for (const k of UNIT_TYPES) {
+    const spec = UNIT_SPECS[k]
+    p += units[k] * (spec.attack * (1 + (mods?.unitAttack[k] ?? 0)) + spec.defense * (1 + (mods?.unitDefense[k] ?? 0))) * 0.5
+  }
   return p
 }

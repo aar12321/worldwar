@@ -1,6 +1,6 @@
 import { TECH_BY_ID } from '../data/techTree'
-import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, UNIT_SPECS } from '../data/unitTypes'
-import { declareWar, expireDiplomacy, makePeace, offerPact, offerPeace } from './diplomacy'
+import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_LABELS, UNIT_SPECS } from '../data/unitTypes'
+import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, propose, respond } from './diplomacy'
 import { applyEconomy } from './economy'
 import { runSpyMission } from './espionage'
 import { scheduleEvent } from './events'
@@ -33,12 +33,19 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return o.generalId ? 'Assign general' : 'Unassign general'
     case 'declareWar':
       return `Declare war on ${nation(o.target)}`
-    case 'offerPeace':
-      return `Offer peace to ${nation(o.target)}`
-    case 'acceptPeace':
-      return `Accept peace with ${nation(o.target)}`
-    case 'offerPact':
-      return `Propose non-aggression pact to ${nation(o.target)}`
+    case 'propose':
+      return o.proposal.kind === 'callToArms'
+        ? `Call ${nation(o.target)} to arms against ${nation(o.proposal.enemy)}`
+        : `Propose ${PROPOSAL_LABELS[o.proposal.kind].toLowerCase()} to ${nation(o.target)}`
+    case 'respond': {
+      const p = s.proposals.find((x) => x.id === o.proposalId)
+      const what = p ? `${PROPOSAL_LABELS[p.kind].toLowerCase()} from ${nation(p.from)}` : 'proposal'
+      return `${o.accept ? 'Accept' : 'Decline'} ${what}`
+    }
+    case 'cancelDeal':
+      return 'Cancel deal'
+    case 'leaveAlliance':
+      return `Leave alliance with ${nation(o.target)}`
     case 'spy':
       return `${o.mission === 'sabotage' ? 'Sabotage' : 'Steal maps of'} ${region(o.target)}`
     case 'enactLaw':
@@ -51,9 +58,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 }
 
 const PHASES: Order['type'][][] = [
-  ['acceptPeace'],
+  ['respond'],
   ['setPolicy', 'enactLaw', 'repealLaw'],
-  ['declareWar', 'offerPeace', 'offerPact'],
+  ['cancelDeal', 'leaveAlliance'],
+  ['declareWar', 'propose'],
   ['research', 'build', 'recruit', 'suppressRebels', 'assignGeneral'],
   ['spy'],
 ]
@@ -67,6 +75,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   const s = structuredClone(prev)
   const rng = createRng(s.seed, s.turn)
   s.battles = []
+  s.dispatches = []
   const live = orders.filter((o) => s.nations[o.nationId]?.alive)
 
   for (const phase of PHASES) {
@@ -90,6 +99,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   resolveMoves(s, map, live, acted)
   resolveAttacks(s, map, live, rng, acted)
   resolveRebels(s, map, rng)
+  for (const a of Object.values(s.armies)) a.entrenched = acted.has(a.id) ? 0 : Math.min(3, (a.entrenched ?? 0) + 1)
 
   const alive = Object.values(s.nations)
     .filter((n) => n.alive)
@@ -98,6 +108,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   for (const id of alive) if (regionsOf(s, id).length === 0) killNation(s, id, null)
   for (const id of alive) if (s.nations[id].alive) applySupply(s, map, id)
   for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng)
+  applyDeals(s)
 
   s.turn++
   expireDiplomacy(s)
@@ -113,8 +124,14 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
 function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typeof createRng>) {
   const n = s.nations[o.nationId]
   switch (o.type) {
-    case 'acceptPeace':
-      makePeace(s, o.nationId, o.target)
+    case 'respond':
+      respond(s, map, o.nationId, o.proposalId, o.accept, rng)
+      break
+    case 'cancelDeal':
+      cancelDeal(s, o.nationId, o.dealId)
+      break
+    case 'leaveAlliance':
+      leaveAlliance(s, o.nationId, o.target)
       break
     case 'setPolicy':
       n.taxRate = o.taxRate
@@ -129,13 +146,10 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       if (o.law === 'conscription_act') n.draftRate = Math.min(n.draftRate, DRAFT_LIMITS.max)
       break
     case 'declareWar':
-      declareWar(s, o.nationId, o.target)
+      declareWar(s, map, o.nationId, o.target, rng)
       break
-    case 'offerPeace':
-      offerPeace(s, o.nationId, o.target, rng)
-      break
-    case 'offerPact':
-      offerPact(s, o.nationId, o.target, rng)
+    case 'propose':
+      propose(s, map, o.nationId, o.target, o.proposal, rng)
       break
     case 'research':
       research(s, o.nationId, o.techId)
@@ -148,7 +162,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       const existing = armiesIn(s, o.regionId, o.nationId)
       let army: Army | undefined = existing[0]
       if (!army) {
-        army = { id: newId(s, 'a'), owner: o.nationId, location: o.regionId, units: { infantry: 0, armor: 0, air: 0, naval: 0 }, generalId: null, outOfSupplyTurns: 0 }
+        army = { id: newId(s, 'a'), owner: o.nationId, location: o.regionId, units: { infantry: 0, armor: 0, air: 0, naval: 0 }, generalId: null, outOfSupplyTurns: 0, entrenched: 0 }
         s.armies[army.id] = army
       }
       army.units[o.unit] += 1

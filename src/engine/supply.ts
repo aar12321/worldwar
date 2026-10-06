@@ -9,26 +9,54 @@ export const SUPPLY = {
   surrenderAfter: 3,
 }
 
-/** Shortest supply distance from the capital to every owned region reachable through owned territory. */
+function supplyEdges(s: GameState, map: WorldMap, nationId: NationId, cur: RegionId, seaCost: number): [RegionId, number][] {
+  const out: [RegionId, number][] = []
+  for (const x of map.regions[cur].neighbors) if (s.regions[x]?.owner === nationId) out.push([x, 1])
+  if (s.regions[cur].buildings.port > 0)
+    for (const x of map.regions[cur].seaLanes) {
+      const r = s.regions[x]
+      if (r?.owner === nationId && r.buildings.port > 0) out.push([x, seaCost])
+    }
+  return out
+}
+
+/**
+ * Supply distance to every owned region that is connected to the capital.
+ * The capital and supply depots are full hubs; ports resupply one step inland and barracks feed their own region.
+ * Hubs only work while they are connected to the capital's network.
+ */
 export function supplyDistances(s: GameState, map: WorldMap, nationId: NationId): Map<RegionId, number> {
   const n = s.nations[nationId]
-  const mods = nationModifiers(n)
   const dist = new Map<RegionId, number>()
-  if (!n.alive || s.regions[n.capital]?.owner !== nationId) return dist
+  if (!n?.alive || s.regions[n.capital]?.owner !== nationId) return dist
+  const mods = nationModifiers(n)
   const seaCost = Math.max(0, SUPPLY.seaEdgeCost - mods.seaSupplyRange)
-  dist.set(n.capital, 0)
-  const frontier: RegionId[] = [n.capital]
+  const range = SUPPLY.baseRange + mods.supplyRange
+
+  const connected = new Set<RegionId>([n.capital])
+  const stack = [n.capital]
+  while (stack.length) {
+    const cur = stack.pop()!
+    for (const [next] of supplyEdges(s, map, nationId, cur, seaCost))
+      if (!connected.has(next)) {
+        connected.add(next)
+        stack.push(next)
+      }
+  }
+
+  const frontier: RegionId[] = []
+  for (const id of connected) {
+    const b = s.regions[id].buildings
+    const seed = id === n.capital || b.depot > 0 ? 0 : b.port > 0 ? range - 1 : b.barracks > 0 ? range : Infinity
+    if (seed === Infinity) continue
+    dist.set(id, seed)
+    frontier.push(id)
+  }
   while (frontier.length) {
     frontier.sort((a, b) => dist.get(a)! - dist.get(b)! || (a < b ? -1 : 1))
     const cur = frontier.shift()!
     const d = dist.get(cur)!
-    const curRegion = s.regions[cur]
-    const edges: [RegionId, number, boolean][] = map.regions[cur].neighbors.map((x) => [x, 1, false])
-    if (curRegion.buildings.port > 0) for (const x of map.regions[cur].seaLanes) edges.push([x, seaCost, true])
-    for (const [next, cost, bySea] of edges) {
-      const r = s.regions[next]
-      if (!r || r.owner !== nationId) continue
-      if (bySea && r.buildings.port <= 0) continue
+    for (const [next, cost] of supplyEdges(s, map, nationId, cur, seaCost)) {
       const nd = d + cost
       if (nd < (dist.get(next) ?? Infinity)) {
         dist.set(next, nd)

@@ -1,6 +1,7 @@
 import { ECON, regionWorkforce } from '../engine/economy'
 import { createRng } from '../engine/rng'
-import type { Army, GameSettings, GameState, General, GeneralTrait, Nation, RegionState, WorldMap } from '../engine/types'
+import type { Rng } from '../engine/rng'
+import type { Army, Difficulty, GameSettings, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
 
 export const PLAYER_COLOR = '#22d3ee'
 
@@ -25,11 +26,19 @@ export interface NewGameOptions {
   playerRegionId: string
   seed: number
   victoryShare: number
+  difficulty?: Difficulty
+}
+
+function pickPersonality(aggression: number, rng: Rng): Personality {
+  const roll = rng.next()
+  if (aggression > 0.68) return roll < 0.6 ? 'expansionist' : roll < 0.9 ? 'opportunist' : 'honorable'
+  if (aggression < 0.35) return roll < 0.4 ? 'trader' : roll < 0.75 ? 'turtle' : 'honorable'
+  return roll < 0.3 ? 'trader' : roll < 0.55 ? 'opportunist' : roll < 0.8 ? 'honorable' : roll < 0.9 ? 'turtle' : 'expansionist'
 }
 
 export function createInitialState(map: WorldMap, opts: NewGameOptions): GameState {
   const rng = createRng(opts.seed, 9999)
-  const settings: GameSettings = { victoryShare: opts.victoryShare, seed: opts.seed }
+  const settings: GameSettings = { victoryShare: opts.victoryShare, seed: opts.seed, difficulty: opts.difficulty ?? 'normal' }
   const state: GameState = {
     turn: 1,
     seed: opts.seed,
@@ -41,7 +50,14 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     wars: [],
     pacts: {},
     casusBelli: {},
-    peaceOffers: [],
+    alliances: [],
+    proposals: [],
+    deals: [],
+    warScore: {},
+    warStarted: {},
+    opinions: {},
+    proposalMemory: {},
+    dispatches: [],
     pendingEvent: null,
     nextEventTurn: 2 + rng.int(0, 2),
     battles: [],
@@ -56,7 +72,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       id,
       owner: id,
       population: mr.basePopulation,
-      buildings: { factory: 0, farm: 0, university: 0, barracks: 1, port: 0 },
+      buildings: { factory: 0, farm: 0, university: 0, barracks: 1, port: 0, depot: 0 },
       sabotaged: 0,
       rebels: 0,
     }
@@ -92,6 +108,8 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     }
 
     const isPlayer = id === opts.playerRegionId
+    const aggression = isPlayer ? 0 : rng.range(0.15, 0.9)
+    const personality = isPlayer ? 'honorable' : pickPersonality(aggression, rng)
     const nation: Nation = {
       id,
       name: mr.name,
@@ -111,8 +129,11 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       generals,
       foodShortage: false,
       inDebt: false,
+      debtTurns: 0,
+      embargoedUntil: 0,
       vision: {},
-      aggression: isPlayer ? 0 : rng.range(0.15, 0.9),
+      aggression,
+      personality,
     }
 
     const army: Army = {
@@ -122,6 +143,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       units,
       generalId: generals[0]?.id ?? null,
       outOfSupplyTurns: 0,
+      entrenched: 0,
     }
     state.regions[id] = region
     state.nations[id] = nation

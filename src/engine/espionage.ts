@@ -1,3 +1,4 @@
+import { addOpinion } from '../ai/opinion'
 import { addLog, hasTech } from './helpers'
 import type { Rng } from './rng'
 import type { GameState, NationId, RegionId, SpyMission, WorldMap } from './types'
@@ -9,6 +10,8 @@ export const SPY = {
   visionTurns: 6,
   failureCasusBelliTurns: 12,
 }
+
+export const CAUGHT_SPYING = 'Caught our spies'
 
 export function spySuccessChance(s: GameState, nationId: NationId, target: RegionId): number {
   const owner = s.nations[s.regions[target].owner]
@@ -34,6 +37,7 @@ export function runSpyMission(s: GameState, map: WorldMap, nationId: NationId, t
     }
   } else {
     s.casusBelli[`${ownerId}|${nationId}`] = s.turn + SPY.failureCasusBelliTurns
+    addOpinion(s, ownerId, nationId, CAUGHT_SPYING, -25, 0.5)
     addLog(s, 'spy', `${owner.name} caught ${n.name}'s spies in ${name}! ${owner.name} gains a casus belli.`, [nationId, ownerId])
   }
 }

@@ -29,9 +29,13 @@ export function startState(map: WorldMap, player = 'r0', seed = 1): GameState {
   return s
 }
 
-/** Hand every listed region to `owner`. */
+/** Hand every listed region to `owner`, razing military buildings like a conquest would. */
 export function giveRegions(s: GameState, owner: string, ids: string[]) {
-  for (const id of ids) s.regions[id].owner = owner
+  for (const id of ids) {
+    s.regions[id].owner = owner
+    s.regions[id].buildings.barracks = 0
+    s.regions[id].buildings.depot = 0
+  }
   for (const id of ids) {
     if (id !== owner && s.nations[id]) {
       s.nations[id].alive = false

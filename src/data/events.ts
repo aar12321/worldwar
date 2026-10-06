@@ -1,3 +1,6 @@
+import { storedOpinion } from '../ai/opinion'
+import { CAUGHT_SPYING } from '../engine/espionage'
+import { alliesOf, enemiesOf, hasCasusBelli } from '../engine/helpers'
 import type { EventEffect, GameState, NationId } from '../engine/types'
 
 export interface EventOption {
@@ -14,11 +17,29 @@ export interface GameEventDef {
   tone: 'crisis' | 'opportunity' | 'war'
   needsRival?: boolean
   needsRegion?: 'any' | 'border'
+  /** Nations this event can be about. When set, the event only fires if one exists. */
+  rivalCandidates?: (s: GameState, nationId: NationId) => NationId[]
   weight: (s: GameState, nationId: NationId) => number
   options: [EventOption, EventOption]
 }
 
 const atWarWithAnyone = (s: GameState, id: NationId) => s.wars.some((k) => k.split('|').includes(id))
+
+const embattledAllies = (s: GameState, id: NationId) => alliesOf(s, id).filter((a) => s.nations[a]?.alive && enemiesOf(s, a).length > 0).sort()
+
+const grudgeHolders = (s: GameState, id: NationId) =>
+  Object.values(s.nations)
+    .filter((n) => n.alive && n.id !== id && (storedOpinion(s, n.id, id).reduce((sum, m) => sum + m.value, 0) <= -15 || hasCasusBelli(s, n.id, id)))
+    .map((n) => n.id)
+    .sort()
+
+const spyVictims = (s: GameState, id: NationId) =>
+  Object.values(s.nations)
+    .filter((n) => n.alive && storedOpinion(s, n.id, id).some((m) => m.label === CAUGHT_SPYING && m.value <= -10))
+    .map((n) => n.id)
+    .sort()
+
+const hasPorts = (s: GameState, id: NationId) => Object.values(s.regions).some((r) => r.owner === id && r.buildings.port > 0)
 
 export const EVENTS: GameEventDef[] = [
   {
@@ -195,6 +216,79 @@ export const EVENTS: GameEventDef[] = [
         label: 'Build Something Useful',
         description: 'Redirect the lab into a new university campus instead.',
         effects: [{ type: 'addBuilding', building: 'university' }, { type: 'resource', key: 'capital', amount: -20 }],
+      },
+    ],
+  },
+  {
+    id: 'ally_aid',
+    title: 'An Ally Begs for Aid',
+    text: '{rival} is fighting for its life. Its envoy pleads for gold and grain, and reminds you of the oath your nations swore.',
+    tone: 'war',
+    needsRival: true,
+    rivalCandidates: embattledAllies,
+    weight: (s, id) => (embattledAllies(s, id).length ? 2.5 : 0),
+    options: [
+      {
+        label: 'Send Aid',
+        description: 'Ship Capital and Food to {rival}. They will remember who stood by them.',
+        effects: [
+          { type: 'resource', key: 'capital', amount: -25, perWorkforce: -1 },
+          { type: 'resource', key: 'food', amount: -8 },
+          { type: 'rivalResource', key: 'capital', amount: 25, perWorkforce: 1 },
+          { type: 'rivalResource', key: 'food', amount: 8 },
+          { type: 'opinion', amount: 25, label: 'Sent aid in our darkest hour' },
+        ],
+      },
+      {
+        label: 'Keep Your Stores',
+        description: 'Your people come first. {rival} will not forget this.',
+        effects: [{ type: 'resource', key: 'pp', amount: 5 }, { type: 'opinion', amount: -20, label: 'Abandoned us in our need' }],
+      },
+    ],
+  },
+  {
+    id: 'trade_embargo',
+    title: 'Threat of Embargo',
+    text: '{rival} accuses your merchants of smuggling and threatens to close the sea lanes to your ships unless you pay compensation.',
+    tone: 'crisis',
+    needsRival: true,
+    rivalCandidates: grudgeHolders,
+    weight: (s, id) => (hasPorts(s, id) && grudgeHolders(s, id).length ? 1.2 : 0),
+    options: [
+      {
+        label: 'Pay Compensation',
+        description: 'Hand Capital to {rival} and keep the ports open. Relations thaw.',
+        effects: [
+          { type: 'resource', key: 'capital', amount: -20, perWorkforce: -1 },
+          { type: 'rivalResource', key: 'capital', amount: 20, perWorkforce: 1 },
+          { type: 'opinion', amount: 15, label: 'Paid compensation' },
+        ],
+      },
+      {
+        label: 'Defy Them',
+        description: 'Port trade collapses for 4 months, but the nation rallies behind you.',
+        effects: [{ type: 'embargo', turns: 4 }, { type: 'stability', amount: 4 }, { type: 'opinion', amount: -10, label: 'Defied our ultimatum' }],
+      },
+    ],
+  },
+  {
+    id: 'spy_scandal',
+    title: 'Spy Scandal',
+    text: 'The agents you sent into {rival} are paraded before the world press. Their government demands a formal apology.',
+    tone: 'crisis',
+    needsRival: true,
+    rivalCandidates: spyVictims,
+    weight: (s, id) => (spyVictims(s, id).length ? 3 : 0),
+    options: [
+      {
+        label: 'Apologize',
+        description: 'Swallow your pride. {rival} drops its grievance and its casus belli against you.',
+        effects: [{ type: 'resource', key: 'pp', amount: -15 }, { type: 'opinion', amount: 25, label: 'Accepted our apology' }, { type: 'clearCasusBelli' }],
+      },
+      {
+        label: 'Deny Everything',
+        description: 'Call it a fabrication. Popular at home, poison abroad.',
+        effects: [{ type: 'resource', key: 'pp', amount: 8 }, { type: 'stability', amount: 2 }, { type: 'opinion', amount: -15, label: 'Lied to our faces' }],
       },
     ],
   },

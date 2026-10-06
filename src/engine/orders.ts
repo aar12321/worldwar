@@ -1,6 +1,7 @@
 import { TECH_BY_ID } from '../data/techTree'
-import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, UNIT_SPECS } from '../data/unitTypes'
-import { atWar, canUseUnit, hasCasusBelli, hasPact } from './helpers'
+import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, UNIT_SPECS } from '../data/unitTypes'
+import { validateProposal } from './diplomacy'
+import { atWar, canUseUnit, hasCasusBelli, hasPact, isAllied } from './helpers'
 import type { GameState, Order, WorldMap } from './types'
 import { canReach } from './warfare'
 
@@ -29,11 +30,11 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'declareWar':
       c.pp = hasCasusBelli(s, o.nationId, o.target) ? COSTS.declareWarWithCasusBelli : COSTS.declareWar
       break
-    case 'offerPeace':
-      c.pp = COSTS.offerPeace
+    case 'propose':
+      c.pp = PROPOSAL_COSTS[o.proposal.kind]
       break
-    case 'offerPact':
-      c.pp = COSTS.offerPact
+    case 'leaveAlliance':
+      c.pp = COSTS.leaveAlliance
       break
     case 'spy':
       c.capital = COSTS.spy
@@ -91,7 +92,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (r?.owner !== o.nationId) return 'You do not control this region'
       if (BUILDING_SPECS[o.building].requiresCoast && !map.regions[o.regionId].coastal) return 'Requires a coastline'
       const queued = pending.filter((p) => p.type === 'build' && p.regionId === o.regionId && p.building === o.building).length
-      if (r.buildings[o.building] + queued >= MAX_BUILDINGS_PER_TYPE) return 'Region is at capacity'
+      const cap = BUILDING_SPECS[o.building].max ?? MAX_BUILDINGS_PER_TYPE
+      if (r.buildings[o.building] + queued >= cap) return cap === 1 ? 'Already built here' : 'Region is at capacity'
       return null
     }
     case 'recruit': {
@@ -140,19 +142,29 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const t = s.nations[o.target]
       if (!t?.alive || o.target === o.nationId) return 'Invalid target'
       if (atWar(s, o.nationId, o.target)) return 'Already at war'
+      if (isAllied(s, o.nationId, o.target)) return 'You are allied'
       if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
       return null
     }
-    case 'offerPeace':
-      return atWar(s, o.nationId, o.target) ? null : 'Not at war'
-    case 'acceptPeace':
-      return s.peaceOffers.some((p) => p.from === o.target && p.to === o.nationId) ? null : 'No peace offer'
-    case 'offerPact': {
-      if (!s.nations[o.target]?.alive || o.target === o.nationId) return 'Invalid target'
-      if (atWar(s, o.nationId, o.target)) return 'Make peace first'
-      if (hasPact(s, o.nationId, o.target)) return 'Pact already in force'
+    case 'propose': {
+      if (pending.some((p) => p.type === 'propose' && p.target === o.target && p.proposal.kind === o.proposal.kind)) return 'Already proposed this month'
+      if (s.proposals.some((p) => p.from === o.nationId && p.to === o.target && p.kind === o.proposal.kind)) return 'Awaiting their answer'
+      return validateProposal(s, map, o.nationId, o.target, o.proposal)
+    }
+    case 'respond': {
+      const p = s.proposals.find((x) => x.id === o.proposalId && x.to === o.nationId)
+      if (!p) return 'No such proposal'
+      if (pending.some((x) => x.type === 'respond' && x.proposalId === o.proposalId)) return 'Already answered'
+      return o.accept ? validateProposal(s, map, p.from, p.to, p, true) : null
+    }
+    case 'cancelDeal': {
+      const d = s.deals.find((x) => x.id === o.dealId)
+      if (!d || (d.from !== o.nationId && d.to !== o.nationId)) return 'No such deal'
+      if (d.kind === 'reparations' && d.from === o.nationId) return 'Reparations are binding'
       return null
     }
+    case 'leaveAlliance':
+      return isAllied(s, o.nationId, o.target) ? null : 'Not allied'
     case 'spy': {
       const r = s.regions[o.target]
       if (!r || r.owner === o.nationId) return 'Choose a foreign region'

@@ -10,12 +10,35 @@ export const hasPact = (s: GameState, a: NationId, b: NationId) => (s.pacts[pair
 export const hasCasusBelli = (s: GameState, holder: NationId, target: NationId) =>
   (s.casusBelli[`${holder}|${target}`] ?? -1) >= s.turn
 
-export function enemiesOf(s: GameState, id: NationId): NationId[] {
+export const isAllied = (s: GameState, a: NationId, b: NationId) => a !== b && s.alliances.includes(pairKey(a, b))
+
+function partnersIn(keys: string[], id: NationId): NationId[] {
   const out: NationId[] = []
-  for (const k of s.wars) {
-    const [a, b] = k.split('|')
-    if (a === id) out.push(b)
-    else if (b === id) out.push(a)
+  const head = `${id}|`
+  const tail = `|${id}`
+  for (const k of keys) {
+    if (k.startsWith(head)) out.push(k.slice(head.length))
+    else if (k.endsWith(tail)) out.push(k.slice(0, k.length - tail.length))
+  }
+  return out
+}
+
+export const alliesOf = (s: GameState, id: NationId): NationId[] => partnersIn(s.alliances, id)
+
+export const enemiesOf = (s: GameState, id: NationId): NationId[] => partnersIn(s.wars, id)
+
+/** Every nation's partners under a list of "a|b" keys, built in one pass. */
+export function partnerIndex(keys: string[]): Map<NationId, NationId[]> {
+  const out = new Map<NationId, NationId[]>()
+  const add = (a: NationId, b: NationId) => {
+    const list = out.get(a)
+    if (list) list.push(b)
+    else out.set(a, [b])
+  }
+  for (const k of keys) {
+    const i = k.indexOf('|')
+    add(k.slice(0, i), k.slice(i + 1))
+    add(k.slice(i + 1), k.slice(0, i))
   }
   return out
 }
