@@ -26,12 +26,12 @@ export function EventModal() {
   return (
     <AnimatePresence>
       {show && def && ev && (
-        <motion.div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <motion.div className="absolute inset-0 z-50 flex items-center justify-center bg-black/75" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}>
           <motion.div
             initial={{ scale: 0.85, y: 30, opacity: 0 }}
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
             className="glass relative w-[640px] max-w-[92vw] rounded-2xl overflow-hidden"
             style={{ borderColor: `${tone.color}88`, boxShadow: `0 0 60px ${tone.color}33` }}
           >
@@ -43,7 +43,7 @@ export function EventModal() {
                 </span>
                 <span className="text-xs text-slate-400">{turnDate(game!.turn)}</span>
               </div>
-              <motion.h2 initial={{ letterSpacing: '0.5em', opacity: 0 }} animate={{ letterSpacing: '0.12em', opacity: 1 }} transition={{ duration: 0.6 }} className="font-display text-3xl font-black mt-3">
+              <motion.h2 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }} className="font-display text-3xl font-black mt-3 tracking-[0.12em]">
                 {def.title.toUpperCase()}
               </motion.h2>
               <p className="mt-4 text-lg text-slate-300 leading-relaxed">{fillEventText(def.text, game!, map, ev)}</p>

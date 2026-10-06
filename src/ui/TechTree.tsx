@@ -26,8 +26,8 @@ function TechNode({ tech, index }: { tech: Tech; index: number }) {
     <motion.button
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.03 * index }}
-      whileHover={state === 'available' ? { scale: 1.04 } : undefined}
+      transition={{ duration: 0.2, delay: Math.min(0.14, index * 0.01), ease: [0.22, 1, 0.36, 1] }}
+      whileHover={state === 'available' ? { y: -2 } : undefined}
       onClick={() => {
         if (queuedIdx >= 0) removeOrder(queuedIdx)
         else if (available) issueOrder(order)
@@ -65,7 +65,7 @@ export function TechTree() {
       initial={{ y: '100%', opacity: 0.4 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: '100%', opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 220, damping: 28 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
       className="absolute inset-x-3 top-24 bottom-3 z-40 glass rounded-2xl flex flex-col"
     >
       <div className="flex items-center justify-between px-6 py-4 border-b border-cyan-400/15">

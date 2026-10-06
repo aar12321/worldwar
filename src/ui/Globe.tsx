@@ -1,5 +1,5 @@
 import { geoInterpolate } from 'd3-geo'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
 import { TERRAIN } from '../data/terrain'
@@ -15,11 +15,16 @@ import { globeBridge, useFx } from './globeBridge'
 
 const { map, features } = getWorld()
 const UP = new THREE.Vector3(0, 1, 0)
-const MARCH_MS = 1600
+const OUTWARD = new THREE.Vector3()
+const MARCH_MS = 1400
+const REVEAL_MARCH_MS = 680
+const EMPTY_REGIONS = new Set<RegionId>()
+
+type MarchPath = { from: [number, number]; to: [number, number] }
 
 type LayerDatum =
-  | { kind: 'army'; key: string; army: Army; lat: number; lng: number; color: string; march: { from: [number, number]; to: [number, number] } | null }
-  | { kind: 'smoke'; key: string; lat: number; lng: number; intensity: number }
+  | { kind: 'army'; key: string; signature: string; army: Army; lat: number; lng: number; color: string; hold: boolean; march: MarchPath | null }
+  | { kind: 'smoke'; key: string; signature: string; lat: number; lng: number; intensity: number }
 
 interface Arc {
   startLat: number
@@ -27,21 +32,45 @@ interface Arc {
   endLat: number
   endLng: number
   color: string[]
-  stroke: number
+  stroke: number | null
   dash: number
   gap: number
   speed: number
   label: string
 }
 
+interface MarchGate {
+  held: boolean
+  delayed: boolean
+  start: number
+}
+
 function useWindowSize() {
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
   useEffect(() => {
-    const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight })
+    let frame = 0
+    const onResize = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => setSize({ w: window.innerWidth, h: window.innerHeight }))
+    }
     window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('resize', onResize)
+    }
   }, [])
   return size
+}
+
+/** three-globe disposes geometry, materials, and textures when a custom object is removed. Shared assets must survive that. */
+function retain<T extends { dispose: () => void }>(resource: T): T {
+  resource.dispose = () => {}
+  return resource
+}
+
+function disableRaycast(obj: THREE.Object3D) {
+  obj.raycast = () => {}
+  for (const child of obj.children) disableRaycast(child)
 }
 
 let smokeTexture: THREE.Texture | null = null
@@ -52,37 +81,68 @@ function getSmokeTexture() {
   const ctx = c.getContext('2d')!
   const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
   g.addColorStop(0, 'rgba(255,255,255,0.9)')
-  g.addColorStop(0.4, 'rgba(200,210,230,0.45)')
+  g.addColorStop(0.4, 'rgba(200,210,230,0.4)')
   g.addColorStop(1, 'rgba(160,170,190,0)')
   ctx.fillStyle = g
   ctx.fillRect(0, 0, 64, 64)
-  smokeTexture = new THREE.CanvasTexture(c)
+  smokeTexture = retain(new THREE.CanvasTexture(c))
   return smokeTexture
 }
 
 const unitGeometries: Record<UnitType, THREE.BufferGeometry> = {
-  infantry: new THREE.CylinderGeometry(0.28, 0.36, 1.1, 8),
-  armor: new THREE.BoxGeometry(0.9, 0.5, 0.6),
-  air: new THREE.ConeGeometry(0.35, 1, 4),
-  naval: new THREE.BoxGeometry(1.1, 0.3, 0.4),
+  infantry: retain(new THREE.CylinderGeometry(0.28, 0.36, 1.1, 6)),
+  armor: retain(new THREE.BoxGeometry(0.9, 0.5, 0.6)),
+  air: retain(new THREE.ConeGeometry(0.35, 1, 4)),
+  naval: retain(new THREE.BoxGeometry(1.1, 0.3, 0.4)),
 }
 
-const plateGeometry = new THREE.CylinderGeometry(1, 1, 0.12, 24)
-const plateMaterial = new THREE.MeshBasicMaterial({ color: '#020617', transparent: true, opacity: 0.85 })
-const ringGeometry = new THREE.RingGeometry(0.85, 1.05, 32)
+const plateGeometry = retain(new THREE.CylinderGeometry(1, 1, 0.12, 16))
+const plateMaterial = retain(new THREE.MeshBasicMaterial({ color: '#020617', transparent: true, opacity: 0.85 }))
+const ringGeometry = retain(new THREE.RingGeometry(0.85, 1.05, 20))
+const highlightMaterial = retain(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.95, side: THREE.DoubleSide }))
+
+const unitMaterials = new Map<string, THREE.MeshLambertMaterial>()
+const ringMaterials = new Map<string, THREE.MeshBasicMaterial>()
+
+function unitMaterial(color: string) {
+  let mat = unitMaterials.get(color)
+  if (!mat) {
+    const c = new THREE.Color(color)
+    const light = c.clone().lerp(new THREE.Color('#ffffff'), 0.45)
+    mat = retain(new THREE.MeshLambertMaterial({ color: light, emissive: c.clone().multiplyScalar(0.55) }))
+    unitMaterials.set(color, mat)
+  }
+  return mat
+}
+
+function ringMaterial(color: string) {
+  let mat = ringMaterials.get(color)
+  if (!mat) {
+    const light = new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.45)
+    mat = retain(new THREE.MeshBasicMaterial({ color: light, side: THREE.DoubleSide }))
+    ringMaterials.set(color, mat)
+  }
+  return mat
+}
+
+function armyScale(total: number) {
+  return Math.min(4.2, 1.6 + Math.sqrt(Math.max(total, 1)) * 0.38)
+}
 
 function buildArmyObject(d: Extract<LayerDatum, { kind: 'army' }>): THREE.Object3D {
   const group = new THREE.Group()
-  const color = new THREE.Color().setStyle(d.color)
-  const light = color.clone().lerp(new THREE.Color('#ffffff'), 0.45)
-  const mat = new THREE.MeshLambertMaterial({ color: light, emissive: color.clone().multiplyScalar(0.6) })
-  const total = totalUnits(d.army.units)
-  const scale = Math.min(4.2, 1.6 + Math.sqrt(total) * 0.38)
+  const mat = unitMaterial(d.color)
   group.add(new THREE.Mesh(plateGeometry, plateMaterial))
-  const ring = new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({ color: light, side: THREE.DoubleSide }))
+  const ring = new THREE.Mesh(ringGeometry, ringMaterial(d.color))
   ring.rotation.x = -Math.PI / 2
   ring.position.y = 0.08
   group.add(ring)
+  const highlight = new THREE.Mesh(ringGeometry, highlightMaterial)
+  highlight.rotation.x = -Math.PI / 2
+  highlight.position.y = 0.12
+  highlight.scale.setScalar(1.28)
+  highlight.visible = false
+  group.add(highlight)
   const present = (['infantry', 'armor', 'air', 'naval'] as UnitType[]).filter((k) => d.army.units[k] >= 0.5)
   present.forEach((k, i) => {
     const m = new THREE.Mesh(unitGeometries[k], mat)
@@ -92,39 +152,59 @@ function buildArmyObject(d: Extract<LayerDatum, { kind: 'army' }>): THREE.Object
     if (k === 'air') m.rotation.z = Math.PI
     group.add(m)
   })
-  group.scale.setScalar(scale)
-  group.userData = { datum: d, phase: Math.random() * Math.PI * 2 }
+  const baseScale = armyScale(totalUnits(d.army.units))
+  group.scale.setScalar(baseScale)
+  group.userData = { datum: d, phase: Math.random() * Math.PI * 2, highlight, baseScale, misses: 0 }
+  disableRaycast(group)
   return group
 }
 
 function buildSmokeObject(d: Extract<LayerDatum, { kind: 'smoke' }>): THREE.Object3D {
   const group = new THREE.Group()
-  const count = Math.min(5, 2 + Math.floor(d.intensity / 3))
+  const count = Math.min(3, 2 + Math.floor(d.intensity / 4))
   for (let i = 0; i < count; i++) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: getSmokeTexture(), transparent: true, depthWrite: false, opacity: 0 }))
-    sprite.userData = { offset: i / count, drift: (Math.random() - 0.5) * 0.6 }
+    sprite.userData = { offset: i / count, drift: (i - (count - 1) / 2) * 0.35 }
     group.add(sprite)
   }
-  group.userData = { datum: d }
+  group.userData = { datum: d, misses: 0, placedLat: Number.NaN, placedLng: Number.NaN }
+  disableRaycast(group)
   return group
 }
 
 function placeOnGlobe(obj: THREE.Object3D, lat: number, lng: number, alt: number) {
   const api = globeBridge.api
-  if (!api) return
+  if (!api) return false
   const p = api.getCoords(lat, lng, alt)
+  if (!p) return false
   obj.position.set(p.x, p.y, p.z)
-  obj.quaternion.setFromUnitVectors(UP, obj.position.clone().normalize())
+  OUTWARD.copy(obj.position).normalize()
+  obj.quaternion.setFromUnitVectors(UP, OUTWARD)
+  return true
+}
+
+function placeDatum(obj: THREE.Object3D) {
+  const d = obj.userData.datum as LayerDatum | undefined
+  if (!d) return
+  if (d.kind === 'army') {
+    const fromMarch = d.march
+    placeOnGlobe(obj, fromMarch ? fromMarch.from[1] : d.lat, fromMarch ? fromMarch.from[0] : d.lng, 0.012)
+  } else if (placeOnGlobe(obj, d.lat, d.lng, 0.01)) {
+    obj.userData.placedLat = d.lat
+    obj.userData.placedLng = d.lng
+  }
 }
 
 function regionColor(game: GameState | null, id: RegionId): string {
   if (!game) {
     const t = map.regions[id].terrain
-    const base = { plains: '#1e3a5f', forest: '#1b4d4a', mountain: '#3b3355', desert: '#4a3f2a', urban: '#2f3f63' }[t]
-    return base
+    return { plains: '#1e3a5f', forest: '#1b4d4a', mountain: '#3b3355', desert: '#4a3f2a', urban: '#2f3f63' }[t]
   }
   return game.nations[game.regions[id].owner]?.color ?? '#334155'
 }
+
+const SIDE_COLOR = () => 'rgba(2, 6, 23, 0.75)'
+const datumCache = new Map<string, LayerDatum>()
 
 export function WorldGlobe() {
   const game = useGame((s) => s.game)
@@ -135,7 +215,6 @@ export function WorldGlobe() {
   const marches = useGame((s) => s.marches)
   const marchStamp = useGame((s) => s.marchStamp)
   const reducedMotion = useGame((s) => s.settings.reducedMotion)
-  const clickRegion = useGame((s) => s.clickRegion)
   const rings = useFx((s) => s.rings)
   const fxQueue = useGame((s) => s.fxQueue)
   const revealedBattleId = useFx((s) => s.revealedBattleId)
@@ -143,20 +222,49 @@ export function WorldGlobe() {
   const [hover, setHover] = useState<RegionId | null>(null)
   const { w, h } = useWindowSize()
   const animated = useRef(new Set<THREE.Object3D>())
+  const marchGate = useRef(new Map<string, MarchGate>())
+  const marchGateStamp = useRef(0)
+  const reducedRef = useRef(reducedMotion)
+  const marchStampRef = useRef(marchStamp)
+  useEffect(() => {
+    reducedRef.current = reducedMotion
+    marchStampRef.current = marchStamp
+  }, [reducedMotion, marchStamp])
 
   const globeMaterial = useMemo(
-    () => new THREE.MeshPhongMaterial({ color: new THREE.Color('#030916'), emissive: new THREE.Color('#041026'), shininess: 12, specular: new THREE.Color('#0e7490') }),
+    () => new THREE.MeshPhongMaterial({ color: new THREE.Color('#030916'), emissive: new THREE.Color('#041026'), shininess: 8, specular: new THREE.Color('#155e75') }),
     [],
   )
 
-  useEffect(() => {
+  const inGame = !!game
+  const controlsTuned = useRef(false)
+  useLayoutEffect(() => {
     const api = ref.current
     if (!api) return
     globeBridge.api = api
+    for (const obj of animated.current) placeDatum(obj)
+    const renderer = api.renderer()
+    const ratio = Math.min(window.devicePixelRatio || 1, 1.5)
+    if (renderer.getPixelRatio() !== ratio) {
+      renderer.setPixelRatio(ratio)
+      renderer.setSize(window.innerWidth, window.innerHeight, false)
+    }
     const controls = api.controls()
-    controls.autoRotate = !game
-    controls.autoRotateSpeed = 0.35
-  }, [game])
+    controls.autoRotate = !inGame
+    controls.autoRotateSpeed = 0.22
+    controls.dampingFactor = 0.16
+    if (!controlsTuned.current) {
+      controlsTuned.current = true
+      const tune = () => {
+        const pov = api.pointOfView()
+        if (!pov) return
+        controls.rotateSpeed = Math.min(1.25, 0.5 + pov.altitude * 0.2)
+        controls.zoomSpeed = Math.min(1.5, 0.7 + pov.altitude * 0.12)
+      }
+      controls.addEventListener('change', tune)
+      tune()
+    }
+  }, [inGame])
 
   const playerId = game?.playerId ?? null
   const gameStarted = !!game
@@ -164,14 +272,14 @@ export function WorldGlobe() {
     const api = ref.current
     if (!api || !gameStarted || !playerId) return
     const cap = map.regions[playerId]
-    api.pointOfView({ lat: cap.lat, lng: cap.lng, altitude: 1.9 }, 1500)
+    api.pointOfView({ lat: cap.lat, lng: cap.lng, altitude: 1.7 }, reducedRef.current ? 0 : 900)
   }, [gameStarted, playerId])
 
   const reachable = useMemo(() => {
-    const out = new Set<RegionId>()
-    if (!game || !selectedArmy || !targetMode) return out
+    if (!game || !selectedArmy || !targetMode) return EMPTY_REGIONS
     const a = game.armies[selectedArmy]
-    if (!a) return out
+    if (!a) return EMPTY_REGIONS
+    const out = new Set<RegionId>()
     for (const id of [...map.regions[a.location].neighbors, ...map.regions[a.location].seaLanes, a.location]) {
       const owner = game.regions[id].owner
       const mine = owner === game.playerId
@@ -192,38 +300,57 @@ export function WorldGlobe() {
     return out
   }, [fxQueue, revealedBattleId, game])
 
-  const polygonColor = (f: object) => {
-    const id = (f as CountryFeature).properties.regionId
-    const base = hiddenCaptures.get(id) ?? regionColor(game, id)
-    if (reachable.has(id)) return tint(targetMode === 'attack' ? NEON.magenta : NEON.cyan, hover === id ? 0.1 : -0.05)
-    if (id === selectedRegion) return tint(base, 0.18, 0.1)
-    if (id === hover) return tint(base, 0.1)
-    return base
-  }
-  const polygonAltitude = (f: object) => {
-    const id = (f as CountryFeature).properties.regionId
-    if (id === selectedRegion) return 0.035
-    if (reachable.has(id)) return 0.025
-    if (id === hover) return 0.018
-    if (game && game.regions[id].owner === game.playerId) return 0.012
-    return 0.007
-  }
-  const polygonStroke = (f: object) => {
-    const id = (f as CountryFeature).properties.regionId
-    if (id === selectedRegion) return '#ffffff'
-    if (game && game.regions[id].owner === game.playerId) return withAlpha(NEON.cyan, 0.9)
-    return 'rgba(8, 12, 28, 0.9)'
-  }
-  const polygonLabel = (f: object) => {
-    const id = (f as CountryFeature).properties.regionId
-    const mr = map.regions[id]
-    if (!game) return `<div class="globe-tip"><b>${mr.name}</b></div>`
-    const owner = game.nations[game.regions[id].owner]
-    const vis = visibleRegions(game, map, game.playerId)
-    const armies = vis === 'all' || vis.has(id) ? armiesIn(game, id).reduce((s, a) => s + totalUnits(a.units), 0) : null
-    const rebels = game.regions[id].rebels
-    return `<div class="globe-tip"><b>${mr.name}</b><div style="color:${owner.color}">${owner.name}</div><div>${TERRAIN[mr.terrain].name} · ${game.regions[id].population.toFixed(1)}M</div>${armies === null ? '<div class="dim">Armies: unknown</div>' : `<div>Divisions: ${armies.toFixed(1)}</div>`}${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
-  }
+  const polygonColor = useCallback(
+    (f: object) => {
+      const id = (f as CountryFeature).properties.regionId
+      const base = hiddenCaptures.get(id) ?? regionColor(game, id)
+      if (reachable.has(id)) return tint(targetMode === 'attack' ? NEON.magenta : NEON.cyan, hover === id ? 0.1 : -0.05)
+      if (id === selectedRegion) return tint(base, 0.18, 0.1)
+      if (id === hover) return tint(base, 0.1)
+      return base
+    },
+    [game, hiddenCaptures, reachable, targetMode, selectedRegion, hover],
+  )
+  const polygonAltitude = useCallback(
+    (f: object) => {
+      const id = (f as CountryFeature).properties.regionId
+      if (id === selectedRegion) return 0.03
+      if (reachable.has(id)) return 0.022
+      if (game && game.regions[id].owner === game.playerId) return 0.012
+      return 0.006
+    },
+    [game, selectedRegion, reachable],
+  )
+  const polygonStroke = useCallback(
+    (f: object) => {
+      const id = (f as CountryFeature).properties.regionId
+      if (id === selectedRegion) return '#ffffff'
+      if (game && game.regions[id].owner === game.playerId) return withAlpha(NEON.cyan, 0.9)
+      return 'rgba(8, 12, 28, 0.9)'
+    },
+    [game, selectedRegion],
+  )
+  const polygonLabel = useCallback(
+    (f: object) => {
+      const id = (f as CountryFeature).properties.regionId
+      const mr = map.regions[id]
+      if (!game) return `<div class="globe-tip"><b>${mr.name}</b></div>`
+      const owner = game.nations[game.regions[id].owner]
+      const vis = visibleRegions(game, map, game.playerId)
+      const armies = vis === 'all' || vis.has(id) ? armiesIn(game, id).reduce((s, a) => s + totalUnits(a.units), 0) : null
+      const rebels = game.regions[id].rebels
+      return `<div class="globe-tip"><b>${mr.name}</b><div style="color:${owner.color}">${owner.name}</div><div>${TERRAIN[mr.terrain].name} · ${game.regions[id].population.toFixed(1)}M</div>${armies === null ? '<div class="dim">Armies: unknown</div>' : `<div>Divisions: ${armies.toFixed(1)}</div>`}${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
+    },
+    [game],
+  )
+
+  const onPolygonClick = useCallback((f: object) => {
+    useGame.getState().clickRegion((f as CountryFeature).properties.regionId)
+  }, [])
+  const onPolygonHover = useCallback((f: object | null) => {
+    const id = f ? (f as CountryFeature).properties.regionId : null
+    setHover((prev) => (prev === id ? prev : id))
+  }, [])
 
   const arcs = useMemo<Arc[]>(() => {
     if (!game) return []
@@ -235,8 +362,9 @@ export function WorldGlobe() {
       const from = map.regions[a.location]
       const to = map.regions[o.type === 'move' ? o.to : o.target]
       if (from.id === to.id) continue
-      const c = o.type === 'attack' ? NEON.magenta : NEON.cyan
-      out.push({ startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha(c, 0.25), c], stroke: o.type === 'attack' ? 0.9 : 0.6, dash: 0.35, gap: 0.12, speed: 900, label: `${o.type === 'attack' ? 'Attack' : 'Move'}: ${to.name}` })
+      const attack = o.type === 'attack'
+      const c = attack ? NEON.magenta : NEON.cyan
+      out.push({ startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha(c, 0.2), c], stroke: attack ? 0.55 : 0.4, dash: 0.4, gap: 0.18, speed: attack ? 700 : 1100, label: `${attack ? 'Attack' : 'Move'}: ${to.name}` })
     }
     const p = game.nations[game.playerId]
     if (p.alive) {
@@ -250,7 +378,18 @@ export function WorldGlobe() {
         const d = dist.get(a.location)
         const ok = d !== undefined && d <= range
         const to = map.regions[a.location]
-        out.push({ startLat: cap.lat, startLng: cap.lng, endLat: to.lat, endLng: to.lng, color: ok ? [withAlpha(NEON.green, 0.05), withAlpha(NEON.green, 0.5)] : [withAlpha(NEON.red, 0.1), NEON.red], stroke: 0.25, dash: 0.08, gap: 0.04, speed: 4000, label: ok ? `Supply line to ${to.name} (${d}/${range})` : `${to.name}: OUT OF SUPPLY` })
+        out.push({
+          startLat: cap.lat,
+          startLng: cap.lng,
+          endLat: to.lat,
+          endLng: to.lng,
+          color: ok ? [withAlpha(NEON.green, 0.02), withAlpha(NEON.green, 0.45)] : [withAlpha(NEON.red, 0.15), NEON.red],
+          stroke: null,
+          dash: ok ? 1 : 0.2,
+          gap: ok ? 0 : 0.15,
+          speed: ok ? 0 : 1600,
+          label: ok ? `Supply line to ${to.name} (${d}/${range})` : `${to.name}: OUT OF SUPPLY`,
+        })
       }
     }
     for (const b of game.battles) {
@@ -258,20 +397,28 @@ export function WorldGlobe() {
       if (b.attacker.nationId !== game.playerId && b.defender.nationId !== game.playerId) continue
       const from = map.regions[b.fromRegionId]
       const to = map.regions[b.regionId]
-      out.push({ startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha(NEON.amber, 0.1), NEON.amber], stroke: 0.5, dash: 1, gap: 0, speed: 0, label: `Battle of ${to.name}` })
+      out.push({ startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha(NEON.amber, 0.15), NEON.amber], stroke: null, dash: 1, gap: 0, speed: 0, label: `Battle of ${to.name}` })
     }
     if (selectedRegion && !targetMode) {
       const r = map.regions[selectedRegion]
       for (const id of r.seaLanes) {
         const to = map.regions[id]
-        out.push({ startLat: r.lat, startLng: r.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha('#93c5fd', 0.05), withAlpha('#93c5fd', 0.35)], stroke: 0.15, dash: 0.02, gap: 0.02, speed: 6000, label: `Sea lane: ${r.name} to ${to.name}` })
+        out.push({ startLat: r.lat, startLng: r.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha('#93c5fd', 0.04), withAlpha('#93c5fd', 0.4)], stroke: null, dash: 1, gap: 0, speed: 0, label: `Sea lane: ${r.name} to ${to.name}` })
       }
     }
     return out
   }, [game, orders, selectedRegion, targetMode])
 
+  const arcDashTime = useCallback((a: object) => (reducedMotion ? 0 : (a as Arc).speed), [reducedMotion])
+  const ringColor = useCallback((r: object) => (t: number) => withAlpha((r as { color: string }).color, Math.max(0, 1 - t)), [])
+
   const layerData = useMemo<LayerDatum[]>(() => {
-    if (!game) return []
+    const cache = datumCache
+    if (!game) {
+      cache.clear()
+      return []
+    }
+    const seen = new Set<string>()
     const out: LayerDatum[] = []
     const marchById = new Map(marches.map((m) => [m.armyId, m]))
     const perRegion = new Map<RegionId, number>()
@@ -284,60 +431,156 @@ export function WorldGlobe() {
       const lng = r.lng + (idx ? Math.cos(angle) * 1.6 : 0)
       const m = marchById.get(a.id)
       const from = m ? map.regions[m.from] : null
-      out.push({ kind: 'army', key: a.id, army: a, lat, lng, color: game.nations[a.owner]?.color ?? '#94a3b8', march: from ? { from: [from.lng, from.lat], to: [lng, lat] } : null })
+      const color = game.nations[a.owner]?.color ?? '#94a3b8'
+      const present = (['infantry', 'armor', 'air', 'naval'] as UnitType[]).filter((k) => a.units[k] >= 0.5).join(',')
+      const signature = `${a.owner}|${color}|${present}`
+      const march = from ? { from: [from.lng, from.lat] as [number, number], to: [lng, lat] as [number, number] } : null
+      const hold = !!(m && hiddenCaptures.has(m.to))
+      const prev = cache.get(a.id)
+      if (prev && prev.kind === 'army' && prev.signature === signature) {
+        prev.army = a
+        prev.lat = lat
+        prev.lng = lng
+        prev.color = color
+        prev.hold = hold
+        prev.march = march
+        out.push(prev)
+      } else {
+        const created: LayerDatum = { kind: 'army', key: a.id, signature, army: a, lat, lng, color, hold, march }
+        cache.set(a.id, created)
+        out.push(created)
+      }
+      seen.add(a.id)
     }
     const vis = visibleRegions(game, map, game.playerId)
     for (const r of Object.values(game.regions)) {
-      const f = r.buildings.factory
-      if (f < 2 || r.sabotaged > 0) continue
-      if (vis !== 'all' && !vis.has(r.id) && r.owner !== game.playerId && f < 6) continue
+      const factories = r.buildings.factory
+      if (factories < 2 || r.sabotaged > 0) continue
+      if (vis !== 'all' && !vis.has(r.id) && r.owner !== game.playerId && factories < 6) continue
+      const key = `smoke-${r.id}`
       const mr = map.regions[r.id]
-      out.push({ kind: 'smoke', key: `smoke-${r.id}`, lat: mr.lat - 1.2, lng: mr.lng + 1.4, intensity: f })
+      const signature = String(Math.min(3, 2 + Math.floor(factories / 4)))
+      const prev = cache.get(key)
+      if (prev && prev.kind === 'smoke' && prev.signature === signature) {
+        prev.lat = mr.lat - 1.2
+        prev.lng = mr.lng + 1.4
+        prev.intensity = factories
+        out.push(prev)
+      } else {
+        const created: LayerDatum = { kind: 'smoke', key, signature, lat: mr.lat - 1.2, lng: mr.lng + 1.4, intensity: factories }
+        cache.set(key, created)
+        out.push(created)
+      }
+      seen.add(key)
     }
+    for (const key of [...cache.keys()]) if (!seen.has(key)) cache.delete(key)
     return out
-  }, [game, marches])
+  }, [game, marches, hiddenCaptures])
+
+  const makeObject = useCallback((d: object) => {
+    const datum = d as LayerDatum
+    const obj = datum.kind === 'army' ? buildArmyObject(datum) : buildSmokeObject(datum)
+    animated.current.add(obj)
+    placeDatum(obj)
+    return obj
+  }, [])
+  const updateObject = useCallback((obj: THREE.Object3D, d: object) => {
+    const datum = d as LayerDatum
+    obj.userData.datum = datum
+    obj.userData.interpKey = ''
+    obj.userData.misses = 0
+    if (datum.kind === 'army') {
+      const baseScale = armyScale(totalUnits(datum.army.units))
+      obj.userData.baseScale = baseScale
+      obj.scale.setScalar(baseScale)
+    }
+    animated.current.add(obj)
+  }, [])
 
   useEffect(() => {
     let raf = 0
     const tick = () => {
+      raf = requestAnimationFrame(tick)
+      if (document.hidden) return
       const now = performance.now()
+      const reduced = reducedRef.current
+      const stamp = marchStampRef.current
+      if (marchGateStamp.current !== stamp) {
+        marchGateStamp.current = stamp
+        marchGate.current.clear()
+      }
+      const selectedId = useGame.getState().selectedArmy
       for (const obj of animated.current) {
         if (!obj.parent) {
-          animated.current.delete(obj)
+          obj.userData.misses = (obj.userData.misses ?? 0) + 1
+          if (obj.userData.misses > 2) animated.current.delete(obj)
           continue
         }
+        obj.userData.misses = 0
         const d = obj.userData.datum as LayerDatum
         if (d.kind === 'army') {
           let lat = d.lat
           let lng = d.lng
           let alt = 0.012
-          if (d.march && !reducedMotion) {
-            const t = Math.min(1, (now - marchStamp) / MARCH_MS)
-            const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
-            const [x, y] = geoInterpolate(d.march.from, d.march.to)(e)
+          if (d.march && d.hold) {
+            const gate = marchGate.current.get(d.key)
+            if (gate) gate.held = true
+            else marchGate.current.set(d.key, { held: true, delayed: true, start: now })
+            lng = d.march.from[0]
+            lat = d.march.from[1]
+          } else if (d.march && !reduced) {
+            const gates = marchGate.current
+            let gate = gates.get(d.key)
+            if (!gate) {
+              gate = { held: false, delayed: false, start: stamp }
+              gates.set(d.key, gate)
+            } else if (gate.held) {
+              gate.held = false
+              gate.delayed = true
+              gate.start = now
+            }
+            const dur = gate.delayed ? REVEAL_MARCH_MS : MARCH_MS
+            const t = Math.min(1, (now - gate.start) / dur)
+            const e = gate.delayed ? 1 - (1 - t) ** 3 : t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2
+            const interpKey = `${d.march.from[0]},${d.march.from[1]},${d.march.to[0]},${d.march.to[1]}`
+            if (obj.userData.interpKey !== interpKey) {
+              obj.userData.interp = geoInterpolate(d.march.from, d.march.to)
+              obj.userData.interpKey = interpKey
+            }
+            const [x, y] = (obj.userData.interp as (t: number) => [number, number])(e)
             lng = x
             lat = y
-            alt += Math.sin(Math.PI * e) * 0.04
+            alt += Math.sin(Math.PI * e) * 0.03
+          } else if (!reduced) {
+            alt += Math.sin(now / 1400 + obj.userData.phase) * 0.0011
           }
-          placeOnGlobe(obj, lat, lng, alt)
-          if (!reducedMotion) obj.rotateY(Math.sin(now / 900 + obj.userData.phase) * 0.15)
-        } else if (d.kind === 'smoke') {
-          placeOnGlobe(obj, d.lat, d.lng, 0.01)
+          if (placeOnGlobe(obj, lat, lng, alt) && !reduced) obj.rotateY(Math.sin(now / 1600 + obj.userData.phase) * 0.1)
+          const hi = obj.userData.highlight as THREE.Object3D | undefined
+          const selected = selectedId === d.army.id
+          if (hi) hi.visible = selected
+          const base = (obj.userData.baseScale as number) || 1
+          obj.scale.setScalar(selected && !reduced ? base * (1 + Math.sin(now / 320) * 0.035) : base)
+        } else {
+          if (obj.userData.placedLat !== d.lat || obj.userData.placedLng !== d.lng) {
+            if (placeOnGlobe(obj, d.lat, d.lng, 0.01)) {
+              obj.userData.placedLat = d.lat
+              obj.userData.placedLng = d.lng
+            }
+          }
           for (const child of obj.children) {
             const s = child as THREE.Sprite
-            const { offset, drift } = s.userData
-            const cycle = reducedMotion ? 0.5 : ((now / 3200 + offset) % 1)
-            s.position.set(drift * cycle * 3, 0.6 + cycle * 4.5, 0)
-            s.scale.setScalar(0.9 + cycle * 2.6)
-            ;(s.material as THREE.SpriteMaterial).opacity = Math.sin(Math.PI * cycle) * 0.65
+            const { offset, drift } = s.userData as { offset: number; drift: number }
+            const cycle = reduced ? 0.35 : (now / 4200 + offset) % 1
+            s.position.set(drift * cycle * 2.2, 0.5 + cycle * 3.6, 0)
+            s.scale.setScalar(0.8 + cycle * 2.1)
+            ;(s.material as THREE.SpriteMaterial).opacity = Math.sin(Math.PI * cycle) * 0.5
           }
         }
       }
-      raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [marchStamp, reducedMotion])
+  }, [])
 
   return (
     <Globe
@@ -348,41 +591,36 @@ export function WorldGlobe() {
       globeMaterial={globeMaterial}
       showGraticules
       atmosphereColor={NEON.cyan}
-      atmosphereAltitude={0.2}
+      atmosphereAltitude={0.16}
+      polygonCapCurvatureResolution={6}
+      polygonsTransitionDuration={reducedMotion ? 0 : 160}
       polygonsData={features}
       polygonCapColor={polygonColor}
-      polygonSideColor={() => 'rgba(2, 6, 23, 0.75)'}
+      polygonSideColor={SIDE_COLOR}
       polygonStrokeColor={polygonStroke}
       polygonAltitude={polygonAltitude}
       polygonLabel={polygonLabel}
-      polygonsTransitionDuration={reducedMotion ? 0 : 250}
-      onPolygonClick={(f) => clickRegion((f as CountryFeature).properties.regionId)}
-      onPolygonHover={(f) => setHover(f ? (f as CountryFeature).properties.regionId : null)}
+      onPolygonClick={onPolygonClick}
+      onPolygonHover={onPolygonHover}
+      arcCurveResolution={24}
+      arcCircularResolution={4}
+      arcsTransitionDuration={0}
+      arcAltitudeAutoScale={0.22}
       arcsData={arcs}
       arcColor="color"
       arcStroke="stroke"
       arcDashLength="dash"
       arcDashGap="gap"
-      arcDashAnimateTime={(a: object) => (reducedMotion ? 0 : (a as Arc).speed)}
-      arcAltitudeAutoScale={0.35}
+      arcDashAnimateTime={arcDashTime}
       arcLabel="label"
-      arcsTransitionDuration={0}
       customLayerData={layerData}
-      customThreeObject={(d: object) => {
-        const datum = d as LayerDatum
-        const obj = datum.kind === 'army' ? buildArmyObject(datum) : buildSmokeObject(datum)
-        animated.current.add(obj)
-        return obj
-      }}
-      customThreeObjectUpdate={(obj: THREE.Object3D, d: object) => {
-        obj.userData.datum = d
-        animated.current.add(obj)
-      }}
+      customThreeObject={makeObject}
+      customThreeObjectUpdate={updateObject}
       ringsData={rings}
-      ringColor={(r: object) => (t: number) => withAlpha((r as { color: string }).color, 1 - t)}
+      ringColor={ringColor}
       ringMaxRadius="maxRadius"
-      ringPropagationSpeed={6}
-      ringRepeatPeriod={350}
+      ringPropagationSpeed={3}
+      ringRepeatPeriod={1400}
     />
   )
 }

@@ -16,9 +16,10 @@ type Effect =
   | { id: number; kind: 'flash'; color: string }
 
 let effectId = 1
-const ROUND_MS = 1350
-const INTRO_MS = 1000
-const RESULT_MS = 1900
+const ROUND_MS = 1080
+const INTRO_MS = 720
+const RESULT_MS = 1500
+const EASE = [0.22, 1, 0.36, 1] as const
 
 function sideInfo(game: GameState, id: NationId) {
   if (id === 'rebels') return { name: 'Rebels', color: NEON.red }
@@ -60,7 +61,7 @@ export function BattleFX() {
     const region = map.regions[battle.regionId]
     const att = sideInfo(game, battle.attacker.nationId)
     const def = sideInfo(game, battle.defender.nationId)
-    globeBridge.api?.pointOfView({ lat: region.lat - 8, lng: region.lng, altitude: 1.05 }, t(850))
+    globeBridge.api?.pointOfView({ lat: region.lat - 6, lng: region.lng, altitude: 0.78 }, reduced ? 0 : t(640))
     setStage('intro')
     setRoundIdx(-1)
     setEffects([])
@@ -71,21 +72,21 @@ export function BattleFX() {
       setRoundIdx(i)
       const p = globeBridge.api?.getScreenCoords(region.lat, region.lng, 0.02) ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 }
       const total = r.attackerDamage + r.defenderDamage
-      useFx.getState().addRing({ lat: region.lat, lng: region.lng, color: i === 2 ? NEON.magenta : NEON.amber, maxRadius: 3 + Math.min(8, total * 1.5) }, t(1400))
+      useFx.getState().addRing({ lat: region.lat, lng: region.lng, color: i === 2 ? NEON.magenta : NEON.amber, maxRadius: 2.5 + Math.min(5, total) }, t(1200))
       const list: Effect[] = []
-      list.push({ id: effectId++, kind: 'pop', x: p.x - 90, y: p.y - 30, text: `-${r.defenderDamage.toFixed(1)}`, color: att.color, delay: 250 })
-      list.push({ id: effectId++, kind: 'pop', x: p.x + 90, y: p.y - 30, text: `-${r.attackerDamage.toFixed(1)}`, color: def.color, delay: 380 })
+      list.push({ id: effectId++, kind: 'pop', x: p.x - 110, y: p.y - 24, text: `-${r.defenderDamage.toFixed(1)}`, color: att.color, delay: 160 })
+      list.push({ id: effectId++, kind: 'pop', x: p.x + 110, y: p.y - 24, text: `-${r.attackerDamage.toFixed(1)}`, color: def.color, delay: 230 })
       if (!reduced) {
-        const slashes = 2 + Math.min(3, Math.round(total))
+        const slashes = Math.min(4, 2 + Math.round(total / 2))
         for (let k = 0; k < slashes; k++) {
-          list.push({ id: effectId++, kind: 'slash', x: p.x + (Math.random() - 0.5) * 120, y: p.y + (Math.random() - 0.5) * 80, angle: -35 + Math.random() * 70 + (k % 2 ? 180 : 0), color: k % 2 ? def.color : k === 0 ? '#ffffff' : att.color, delay: k * 70, length: 0.45 + Math.random() * 0.35 })
+          list.push({ id: effectId++, kind: 'slash', x: p.x + (Math.random() - 0.5) * 90, y: p.y + (Math.random() - 0.5) * 56, angle: -28 + Math.random() * 56 + (k % 2 ? 180 : 0), color: k % 2 ? def.color : k === 0 ? '#ffffff' : att.color, delay: k * 55, length: 0.28 + Math.random() * 0.16 })
         }
-        const bursts = 3 + Math.min(5, Math.round(total * 1.5))
+        const bursts = Math.min(4, 2 + Math.round(total / 2))
         for (let k = 0; k < bursts; k++) {
-          list.push({ id: effectId++, kind: 'burst', x: p.x + (Math.random() - 0.5) * 160, y: p.y + (Math.random() - 0.5) * 110, size: 50 + Math.random() * 120, color: k % 3 === 0 ? '#fff7ed' : k % 3 === 1 ? '#fb923c' : '#f43f5e', delay: 120 + k * 90 })
+          list.push({ id: effectId++, kind: 'burst', x: p.x + (Math.random() - 0.5) * 110, y: p.y + (Math.random() - 0.5) * 70, size: 70 + Math.random() * 70, color: k % 2 === 0 ? '#fff7ed' : '#fb923c', delay: 40 + k * 70 })
         }
-        list.push({ id: effectId++, kind: 'flash', color: i === 2 ? 'rgba(232,121,249,0.35)' : 'rgba(255,240,220,0.4)' })
-        useFx.getState().shake(Math.min(1.6, 0.5 + total * 0.25))
+        list.push({ id: effectId++, kind: 'flash', color: i === 2 ? 'rgba(232,121,249,0.28)' : 'rgba(255,244,230,0.32)' })
+        useFx.getState().shake(Math.min(1, 0.35 + total * 0.1))
       }
       setEffects(list)
     }
@@ -137,19 +138,19 @@ export function BattleFX() {
 
   return (
     <div className="absolute inset-0 z-[45] pointer-events-none overflow-hidden">
-      <motion.div className="absolute top-0 inset-x-0 bg-black" initial={{ height: 0 }} animate={{ height: '9vh' }} transition={{ duration: 0.4 / speed }} />
-      <motion.div className="absolute bottom-0 inset-x-0 bg-black" initial={{ height: 0 }} animate={{ height: '9vh' }} transition={{ duration: 0.4 / speed }} />
+      <motion.div className="absolute top-0 inset-x-0 h-[8vh] origin-top bg-black" initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} />
+      <motion.div className="absolute bottom-0 inset-x-0 h-[8vh] origin-bottom bg-black" initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} />
 
-      <div className="absolute top-[11vh] inset-x-0 flex flex-col items-center">
-        <motion.div key={battle.id} initial={{ x: -300, opacity: 0, skewX: -20 }} animate={{ x: 0, opacity: 1, skewX: -8 }} transition={{ type: 'spring', stiffness: 260, damping: 20 }} className="bg-gradient-to-r from-rose-600/0 via-rose-600/80 to-rose-600/0 px-16 py-1">
+      <div className="absolute top-[9vh] inset-x-0 flex flex-col items-center">
+        <motion.div key={battle.id} initial={{ opacity: 0, scaleX: 0.7 }} animate={{ opacity: 1, scaleX: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} className="bg-gradient-to-r from-rose-600/0 via-rose-600/80 to-rose-600/0 px-16 py-1">
           <span className="font-display text-sm tracking-[0.5em] text-white">ENGAGEMENT</span>
         </motion.div>
-        <motion.h2 key={`${battle.id}-t`} initial={{ letterSpacing: '1em', opacity: 0 }} animate={{ letterSpacing: '0.18em', opacity: 1 }} transition={{ duration: 0.6 / speed }} className="font-display text-4xl font-black mt-2 text-white" style={{ textShadow: '0 0 20px rgba(244,63,94,0.8), 0 0 40px rgba(244,63,94,0.4)' }}>
+        <motion.h2 key={`${battle.id}-t`} initial={{ opacity: 0, y: 10, scale: 1.04 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.32 / speed, ease: EASE }} className="font-display text-4xl font-black mt-2 text-white tracking-[0.18em]" style={{ textShadow: '0 0 20px rgba(244,63,94,0.8)' }}>
           BATTLE OF {region.name.toUpperCase()}
         </motion.h2>
         <AnimatePresence mode="wait">
           {round && stage === 'round' && (
-            <motion.div key={roundIdx} initial={{ y: 12, opacity: 0, scale: 1.3 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: -12, opacity: 0 }} transition={{ duration: 0.25 / speed }} className="mt-2 font-display text-sm tracking-[0.35em] text-amber-200">
+            <motion.div key={roundIdx} initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.18 / speed, ease: EASE }} className="mt-2 font-display text-sm tracking-[0.35em] text-amber-200">
               ROUND {roundIdx + 1} · {round.name.toUpperCase()}
             </motion.div>
           )}
@@ -161,11 +162,11 @@ export function BattleFX() {
         if (e.kind === 'slash')
           return (
             <div key={e.id} className="absolute" style={{ left: e.x, top: e.y, transform: `translate(-50%, -50%) rotate(${e.angle}deg)`, width: `${e.length * 100}vw` }}>
-              <div className="slash-streak w-full" style={{ color: e.color, background: `linear-gradient(90deg, transparent, ${e.color} 40%, #fff 50%, ${e.color} 60%, transparent)`, animationDelay: `${e.delay / speed}ms`, ['--dur' as string]: `${420 / speed}ms`, opacity: 0 }} />
+              <div className="slash-streak w-full" style={{ color: e.color, background: `linear-gradient(90deg, transparent, ${e.color} 42%, #fff 50%, ${e.color} 58%, transparent)`, animationDelay: `${e.delay / speed}ms`, ['--dur' as string]: `${260 / speed}ms`, opacity: 0 }} />
             </div>
           )
         if (e.kind === 'burst')
-          return <div key={e.id} className="burst" style={{ left: e.x, top: e.y, width: e.size, height: e.size, background: `radial-gradient(circle, #fff 0%, ${e.color} 35%, transparent 70%)`, animationDelay: `${e.delay / speed}ms`, ['--dur' as string]: `${700 / speed}ms`, opacity: 0 }} />
+          return <div key={e.id} className="burst" style={{ left: e.x, top: e.y, width: e.size, height: e.size, background: `radial-gradient(circle, #fff 0%, ${e.color} 42%, transparent 72%)`, animationDelay: `${e.delay / speed}ms`, ['--dur' as string]: `${460 / speed}ms`, opacity: 0 }} />
         return (
           <div key={e.id} className="damage-pop text-3xl" style={{ left: e.x, top: e.y, color: e.color, textShadow: `0 0 12px ${e.color}, 0 2px 0 #000`, animationDelay: `${e.delay / speed}ms`, opacity: 0 }}>
             {e.text}
@@ -173,8 +174,8 @@ export function BattleFX() {
         )
       })}
 
-      <div className="absolute bottom-[11vh] inset-x-0 flex justify-center">
-        <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 220, damping: 22 }} className="glass rounded-xl px-6 py-4 w-[720px] max-w-[92vw]">
+      <div className="absolute bottom-[9vh] inset-x-0 flex justify-center">
+        <motion.div initial={{ y: 28, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} className="glass rounded-xl px-6 py-4 w-[720px] max-w-[92vw]">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6">
             {[
               { side: battle.attacker, info: att, frac: bars.att, start: bars.attStart, label: 'ATTACKER' },
@@ -191,18 +192,21 @@ export function BattleFX() {
                   <div className="font-display text-lg font-bold" style={{ color: x.info.color, textShadow: `0 0 12px ${x.info.color}` }}>
                     {x.info.name}
                   </div>
-                  <div className={`h-2.5 rounded-full bg-slate-800 mt-2 overflow-hidden flex ${i === 2 ? 'justify-end' : ''}`}>
-                    <motion.div className="h-full rounded-full" style={{ background: x.info.color, boxShadow: `0 0 10px ${x.info.color}` }} animate={{ width: `${x.frac * 100}%` }} transition={{ duration: 0.5 / speed }} />
+                  <div className="h-2.5 rounded-full bg-slate-800 mt-2 overflow-hidden">
+                    <motion.div className={`h-full w-full rounded-full ${i === 2 ? 'origin-right' : 'origin-left'}`} style={{ background: x.info.color, boxShadow: `0 0 10px ${x.info.color}` }} initial={false} animate={{ scaleX: Math.max(0.001, x.frac) }} transition={{ duration: 0.4 / speed, ease: EASE }} />
                   </div>
                   <div className="text-xs text-slate-400 mt-1">
                     {(x.start * x.frac).toFixed(1)} / {x.start.toFixed(1)} divisions
                   </div>
                   <div className={`text-[11px] text-slate-500 mt-0.5 flex gap-2 ${i === 2 ? 'justify-end' : ''}`}>
-                    {UNIT_TYPES.filter((k) => x.side.units[k] >= 0.05).map((k) => (
-                      <span key={k}>
-                        {UNIT_SPECS[k].name} {x.side.units[k].toFixed(1)}
-                      </span>
-                    ))}
+                    {UNIT_TYPES.filter((k) => x.side.units[k] >= 0.05).map((k) => {
+                      const left = stage === 'result' ? Math.max(0, x.side.units[k] - x.side.losses[k]) : x.side.units[k] * x.frac
+                      return (
+                        <span key={k}>
+                          {UNIT_SPECS[k].name} {left.toFixed(1)}
+                        </span>
+                      )
+                    })}
                   </div>
                 </div>
               ),
@@ -214,15 +218,15 @@ export function BattleFX() {
 
       <AnimatePresence>
         {stage === 'result' && (
-          <motion.div initial={{ scale: 2.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 18 }} className="absolute inset-0 flex items-center justify-center">
-            <div className={`font-display text-6xl font-black tracking-[0.2em] -skew-x-6 px-10 py-3 ${banner.good ? 'text-cyan-100' : 'text-rose-100'}`} style={{ textShadow: banner.good ? '0 0 24px #22d3ee, 0 0 60px #22d3ee' : '0 0 24px #f43f5e, 0 0 60px #f43f5e', background: banner.good ? 'linear-gradient(90deg, transparent, rgba(34,211,238,0.25), transparent)' : 'linear-gradient(90deg, transparent, rgba(244,63,94,0.25), transparent)' }}>
+          <motion.div initial={{ scale: 1.35, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.28 / speed, ease: EASE }} className="absolute inset-0 flex items-center justify-center">
+            <div className={`font-display text-5xl font-black tracking-[0.14em] -skew-x-6 px-8 py-3 max-w-[92vw] text-center leading-none ${banner.good ? 'text-cyan-100' : 'text-rose-100'}`} style={{ textShadow: banner.good ? '0 0 24px #22d3ee' : '0 0 24px #f43f5e', background: banner.good ? 'linear-gradient(90deg, transparent, rgba(34,211,238,0.25), transparent)' : 'linear-gradient(90deg, transparent, rgba(244,63,94,0.25), transparent)' }}>
               {banner.text}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="absolute right-4 bottom-[11vh] translate-y-[-120%] flex gap-2 pointer-events-auto">
+      <div className="absolute right-4 bottom-[10vh] flex gap-2 pointer-events-auto">
         <span className="glass rounded-md px-3 py-2 text-xs text-slate-300">{remaining} battle{remaining === 1 ? '' : 's'} in report</span>
         <button className={`btn ${speed === 2 ? 'bg-cyan-400/25' : ''}`} onClick={() => updateSettings({ fxSpeed: speed === 2 ? 1 : 2 })}>
           2x

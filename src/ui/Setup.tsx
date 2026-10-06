@@ -34,13 +34,13 @@ export function Setup() {
 
   return (
     <div className="absolute inset-0 z-30 pointer-events-none">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }} className="absolute top-10 left-1/2 -translate-x-1/2 text-center">
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="absolute top-10 left-1/2 -translate-x-1/2 text-center">
         <div className="label tracking-[0.6em]">A grand strategy of conquest</div>
         <h1 className="font-display text-6xl font-black tracking-[0.25em] mt-2 neon-text">WORLDS OF OTHERS</h1>
         <div className="mt-2 h-px w-full bg-gradient-to-r from-transparent via-fuchsia-400 to-transparent" />
       </motion.div>
 
-      <motion.div initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.3, type: 'spring', stiffness: 160, damping: 22 }} className="glass pointer-events-auto absolute left-6 top-40 bottom-6 w-[380px] rounded-2xl flex flex-col overflow-hidden">
+      <motion.div initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.05, ease: [0.22, 1, 0.36, 1] }} className="glass pointer-events-auto absolute left-6 top-40 bottom-6 w-[380px] rounded-2xl flex flex-col overflow-hidden">
         <div className="p-5 border-b border-cyan-400/15">
           <div className="label">Choose your nation</div>
           <input
@@ -64,7 +64,7 @@ export function Setup() {
         </div>
       </motion.div>
 
-      <motion.div initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.45, type: 'spring', stiffness: 160, damping: 22 }} className="glass pointer-events-auto absolute right-6 bottom-6 w-[400px] rounded-2xl p-5 space-y-4">
+      <motion.div initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="glass pointer-events-auto absolute right-6 bottom-6 w-[400px] rounded-2xl p-5 space-y-4">
         {pick ? (
           <div>
             <div className="label">{tier(Math.pow(pick.basePopulation, 0.6) * (0.3 + 0.7 * pick.development))}</div>

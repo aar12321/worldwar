@@ -56,7 +56,7 @@ export function CountryPanel() {
         initial={{ x: 40, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 40, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
         className="glass absolute right-3 top-28 bottom-24 z-20 w-[360px] rounded-xl flex flex-col overflow-hidden"
       >
         <div className="p-4 border-b border-cyan-400/15 relative">

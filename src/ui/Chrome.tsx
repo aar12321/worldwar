@@ -51,8 +51,7 @@ export function OrdersTray() {
           {orders.map((o, i) => (
             <motion.button
               key={`${i}-${describeOrder(game, map, o)}`}
-              layout
-              initial={{ opacity: 0, scale: 0.8 }}
+              initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               onClick={() => removeOrder(i)}
@@ -121,8 +120,8 @@ export function GameOver() {
   const win = game.outcome === 'victory'
   const p = game.nations[game.playerId]
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur">
-      <motion.div initial={{ scale: 0.7 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 16 }} className="text-center">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }} className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80">
+      <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }} className="text-center">
         <div className={`font-display text-7xl font-black tracking-[0.3em] ${win ? 'text-cyan-200 neon-text' : 'text-rose-300 neon-text-magenta'}`}>{win ? 'HEGEMONY' : 'DEFEAT'}</div>
         <p className="mt-4 text-xl text-slate-300">
           {win

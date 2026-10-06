@@ -18,7 +18,7 @@ function PanelShell({ title, kicker, panel, children }: { title: string; kicker:
       initial={{ x: -380, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: -380, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 32 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       className="glass absolute left-20 top-28 bottom-24 z-20 w-[380px] rounded-xl flex flex-col overflow-hidden"
     >
       <div className="p-4 border-b border-cyan-400/15 flex items-start justify-between">
