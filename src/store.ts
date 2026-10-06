@@ -4,10 +4,10 @@ import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
 import { validateOrder } from './engine/orders'
 import { resolveTurn } from './engine/resolveTurn'
-import type { BattleReport, GameState, Order, RegionId } from './engine/types'
+import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
 
-const SAVE_KEY = 'worlds-of-others-save-v1'
+const SAVE_KEY = 'worlds-of-others-save-v2'
 const SETTINGS_KEY = 'worlds-of-others-settings-v1'
 
 export type Panel = 'none' | 'nation' | 'tech' | 'diplomacy' | 'log' | 'settings'
@@ -39,6 +39,7 @@ interface GameStore {
   selectedArmy: string | null
   targetMode: 'move' | 'attack' | null
   panel: Panel
+  diploFocus: NationId | null
   fxQueue: BattleReport[]
   marches: March[]
   marchStamp: number
@@ -53,6 +54,7 @@ interface GameStore {
   selectArmy(id: string | null): void
   setTargetMode(mode: 'move' | 'attack' | null): void
   setPanel(panel: Panel): void
+  openDiplomacy(nationId: NationId | null): void
   issueOrder(order: Order): boolean
   removeOrder(index: number): void
   setPolicy(taxRate: number, draftRate: number): void
@@ -62,7 +64,7 @@ interface GameStore {
   shiftFx(): void
   clearFx(): void
   updateSettings(patch: Partial<Settings>): void
-  toast(text: string, tone?: Toast['tone']): void
+  toast(text: string, tone?: Toast['tone'], ms?: number): void
   dismissToast(id: number): void
 }
 
@@ -93,6 +95,17 @@ function save(game: GameState | null) {
 
 let toastId = 1
 
+const DISPATCH_TONE: Record<Dispatch['kind'], Toast['tone']> = {
+  proposal: 'info',
+  accepted: 'success',
+  joined: 'success',
+  completed: 'success',
+  rejected: 'error',
+  ignored: 'error',
+  broken: 'error',
+  expired: 'error',
+}
+
 export const useGame = create<GameStore>((set, get) => ({
   game: null,
   orders: [],
@@ -100,6 +113,7 @@ export const useGame = create<GameStore>((set, get) => ({
   selectedArmy: null,
   targetMode: null,
   panel: 'none',
+  diploFocus: null,
   fxQueue: [],
   marches: [],
   marchStamp: 0,
@@ -144,17 +158,21 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   setPanel(panel) {
-    set((st) => ({ panel: st.panel === panel ? 'none' : panel }))
+    set((st) => ({ panel: st.panel === panel ? 'none' : panel, diploFocus: null }))
+  },
+
+  openDiplomacy(nationId) {
+    set({ panel: 'diplomacy', diploFocus: nationId })
   },
 
   issueOrder(order) {
     const { game, orders } = get()
     if (!game) return false
     const { map } = getWorld()
-    const exclusive = order.type === 'move' || order.type === 'attack'
-    const rest = exclusive
-      ? orders.filter((o) => !((o.type === 'move' || o.type === 'attack') && o.armyId === (order as { armyId: string }).armyId))
-      : orders
+    let rest = orders
+    if (order.type === 'move' || order.type === 'attack')
+      rest = orders.filter((o) => !((o.type === 'move' || o.type === 'attack') && o.armyId === order.armyId))
+    else if (order.type === 'respond') rest = orders.filter((o) => !(o.type === 'respond' && o.proposalId === order.proposalId))
     const err = validateOrder(game, map, order, rest)
     if (err) {
       get().toast(err, 'error')
@@ -211,6 +229,8 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     save(next)
     set({ game: next, orders: [], fxQueue: fx, marches, marchStamp: performance.now(), targetMode: null, selectedArmy: next.armies[get().selectedArmy ?? ''] ? get().selectedArmy : null })
+    const mine = next.dispatches.filter((d) => d.to === player || d.from === player)
+    for (const d of mine.slice(-4)) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
   },
 
   chooseEventOption(index) {
@@ -239,10 +259,10 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ settings })
   },
 
-  toast(text, tone = 'info') {
+  toast(text, tone = 'info', ms = 3500) {
     const id = toastId++
     set((st) => ({ toasts: [...st.toasts.slice(-3), { id, text, tone }] }))
-    setTimeout(() => get().dismissToast(id), 3500)
+    setTimeout(() => get().dismissToast(id), ms)
   },
 
   dismissToast(id) {

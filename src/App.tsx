@@ -9,7 +9,8 @@ import { WorldGlobe } from './ui/Globe'
 import { useFx } from './ui/globeBridge'
 import { HUD } from './ui/HUD'
 import { Setup } from './ui/Setup'
-import { DiplomacyPanel, LogPanel, NationPanel, SettingsPanel } from './ui/SidePanels'
+import { DiplomacyPanel } from './ui/Diplomacy'
+import { LogPanel, NationPanel, SettingsPanel } from './ui/SidePanels'
 import { TechTree } from './ui/TechTree'
 
 function useShortcuts() {

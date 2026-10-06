@@ -1,50 +1,13 @@
-import { motion } from 'framer-motion'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { GENERAL_TRAITS } from '../data/startingNations'
-import { COSTS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS } from '../data/unitTypes'
-import { militaryPower } from '../engine/economy'
-import { armiesOf, atWar, enemiesOf, hasCasusBelli, hasPact, regionsOf, turnDate } from '../engine/helpers'
-import { validateOrder } from '../engine/orders'
-import type { LawId, LogKind, NationId, Order } from '../engine/types'
+import { DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS } from '../data/unitTypes'
+import { armiesOf, regionsOf, turnDate } from '../engine/helpers'
+import type { LawId, LogKind } from '../engine/types'
 import { getWorld } from '../map/world'
-import { useGame, type Panel } from '../store'
+import { useGame } from '../store'
 import { ArmyCard } from './ArmyOrders'
 import { signed, usePlayerView } from './hooks'
-
-function PanelShell({ title, kicker, panel, children }: { title: string; kicker: string; panel: Panel; children: ReactNode }) {
-  const setPanel = useGame((s) => s.setPanel)
-  return (
-    <motion.aside
-      initial={{ x: -380, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: -380, opacity: 0 }}
-      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="glass absolute left-20 top-28 bottom-24 z-20 w-[380px] rounded-xl flex flex-col overflow-hidden"
-    >
-      <div className="p-4 border-b border-cyan-400/15 flex items-start justify-between">
-        <div>
-          <div className="label">{kicker}</div>
-          <h2 className="font-display text-lg font-bold tracking-[0.18em] neon-text">{title}</h2>
-        </div>
-        <button className="text-slate-400 hover:text-white text-sm" onClick={() => setPanel(panel)}>
-          close
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto scroll-thin p-4 space-y-5">{children}</div>
-    </motion.aside>
-  )
-}
-
-function OrderButton({ order, label, sub, tone = '' }: { order: Order; label: string; sub?: string; tone?: string }) {
-  const view = usePlayerView()!
-  const issueOrder = useGame((s) => s.issueOrder)
-  const err = validateOrder(view.game, getWorld().map, order, view.orders)
-  return (
-    <button className={`btn ${tone}`} disabled={!!err} title={err ?? sub ?? ''} onClick={() => issueOrder(order)}>
-      {label}
-    </button>
-  )
-}
+import { OrderButton, PanelShell } from './panel'
 
 export function NationPanel() {
   const view = usePlayerView()
@@ -153,92 +116,6 @@ export function NationPanel() {
             <ArmyCard army={a} game={game} />
           </div>
         ))}
-      </section>
-    </PanelShell>
-  )
-}
-
-export function DiplomacyPanel() {
-  const view = usePlayerView()
-  const selectRegion = useGame((s) => s.selectRegion)
-  const issueOrder = useGame((s) => s.issueOrder)
-  if (!view) return null
-  const { game, player, orders } = view
-  const { map } = getWorld()
-  const neighbors = new Set<NationId>()
-  for (const id of regionsOf(game, player.id))
-    for (const nb of [...map.regions[id].neighbors, ...map.regions[id].seaLanes]) {
-      const o = game.regions[nb]?.owner
-      if (o && o !== player.id) neighbors.add(o)
-    }
-  for (const e of enemiesOf(game, player.id)) neighbors.add(e)
-  const offers = game.peaceOffers.filter((o) => o.to === player.id)
-  const majors = Object.values(game.nations)
-    .filter((n) => n.alive && n.id !== player.id && !neighbors.has(n.id))
-    .sort((a, b) => regionsOf(game, b.id).length - regionsOf(game, a.id).length || militaryPower(game, b.id) - militaryPower(game, a.id))
-    .slice(0, 6)
-  const myPower = militaryPower(game, player.id)
-
-  const row = (id: NationId) => {
-    const n = game.nations[id]
-    const war = atWar(game, player.id, id)
-    const pact = hasPact(game, player.id, id)
-    const cb = hasCasusBelli(game, player.id, id)
-    const theirCb = hasCasusBelli(game, id, player.id)
-    const power = militaryPower(game, id)
-    return (
-      <div key={id} className={`rounded-lg border p-3 ${war ? 'border-rose-500/50 bg-rose-500/5' : 'border-slate-700/70 bg-slate-900/40'}`}>
-        <div className="flex items-center justify-between">
-          <button className="flex items-center gap-2 hover:underline" onClick={() => selectRegion(n.capital)}>
-            <span className="w-2.5 h-2.5 rounded-full" style={{ background: n.color }} />
-            <span className="font-semibold">{n.name}</span>
-          </button>
-          <span className={`text-[10px] font-display tracking-widest ${war ? 'text-rose-400' : pact ? 'text-emerald-300' : 'text-slate-400'}`}>{war ? 'AT WAR' : pact ? `PACT to ${turnDate(game.pacts[[player.id, id].sort().join('|')])}` : 'PEACE'}</span>
-        </div>
-        <div className="text-xs text-slate-400 mt-1">
-          {regionsOf(game, id).length} regions · power {power.toFixed(0)} ({power > myPower ? 'stronger' : 'weaker'} than you)
-          {cb && <span className="text-amber-300"> · you hold a casus belli</span>}
-          {theirCb && <span className="text-rose-300"> · they hold a casus belli on you</span>}
-        </div>
-        <div className="flex gap-2 mt-2">
-          {war ? (
-            <OrderButton order={{ type: 'offerPeace', nationId: player.id, target: id }} label={`Offer Peace (${COSTS.offerPeace})`} />
-          ) : (
-            <>
-              <OrderButton order={{ type: 'declareWar', nationId: player.id, target: id }} label={`War (${cb ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} PP)`} tone="btn-red" />
-              <OrderButton order={{ type: 'offerPact', nationId: player.id, target: id }} label={`Pact (${COSTS.offerPact})`} />
-            </>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <PanelShell title="DIPLOMACY" kicker={`${enemiesOf(game, player.id).length} active wars`} panel="diplomacy">
-      {offers.length > 0 && (
-        <section className="space-y-2">
-          <div className="label text-amber-300">Incoming peace offers</div>
-          {offers.map((o) => {
-            const queued = orders.some((x) => x.type === 'acceptPeace' && x.target === o.from)
-            return (
-              <div key={o.from} className="rounded-lg border border-amber-400/50 bg-amber-400/5 p-3 flex items-center justify-between">
-                <span>{game.nations[o.from].name} sues for peace.</span>
-                <button className="btn" disabled={queued} onClick={() => issueOrder({ type: 'acceptPeace', nationId: player.id, target: o.from })}>
-                  {queued ? 'Accepting' : 'Accept'}
-                </button>
-              </div>
-            )
-          })}
-        </section>
-      )}
-      <section className="space-y-2">
-        <div className="label">Neighbors and belligerents</div>
-        {[...neighbors].sort().map(row)}
-      </section>
-      <section className="space-y-2">
-        <div className="label">Great powers</div>
-        {majors.map((n) => row(n.id))}
       </section>
     </PanelShell>
   )

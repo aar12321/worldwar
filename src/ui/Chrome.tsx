@@ -17,7 +17,11 @@ const NAV: { panel: Panel; label: string; key: string }[] = [
 export function NavRail() {
   const panel = useGame((s) => s.panel)
   const setPanel = useGame((s) => s.setPanel)
-  const offers = useGame((s) => (s.game ? s.game.peaceOffers.filter((o) => o.to === s.game!.playerId).length : 0))
+  const offers = useGame((s) => {
+    if (!s.game) return 0
+    const unanswered = s.game.proposals.filter((p) => p.to === s.game!.playerId && !s.orders.some((o) => o.type === 'respond' && o.proposalId === p.id))
+    return unanswered.length
+  })
   return (
     <nav className="glass absolute left-3 top-28 z-30 rounded-xl p-1.5 flex flex-col gap-1.5">
       {NAV.map((n) => (
@@ -29,7 +33,9 @@ export function NavRail() {
         >
           <span className="font-display text-[10px] font-bold tracking-widest">{n.label.toUpperCase()}</span>
           {n.key && <span className="text-[9px] text-slate-500 mt-0.5">{n.key}</span>}
-          {n.panel === 'diplomacy' && offers > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" />}
+          {n.panel === 'diplomacy' && offers > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-amber-400 text-[9px] font-bold text-slate-950 flex items-center justify-center shadow-[0_0_8px_#fbbf24] animate-pulse">{offers}</span>
+          )}
         </button>
       ))}
     </nav>

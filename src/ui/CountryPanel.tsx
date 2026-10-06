@@ -1,19 +1,23 @@
 import { AnimatePresence, motion } from 'framer-motion'
+import { useMemo } from 'react'
+import { perceivedPower } from '../ai/diplomat'
+import { opinionLabel, opinionOf } from '../ai/opinion'
+import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, COSTS, UNIT_SPECS } from '../data/unitTypes'
 import { militaryPower } from '../engine/economy'
 import { spySuccessChance } from '../engine/espionage'
-import { armiesIn, atWar, hasCasusBelli, hasPact } from '../engine/helpers'
+import { armiesIn, atWar, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { supplyDistances, supplyRange } from '../engine/supply'
 import type { Order } from '../engine/types'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
-import { visibleRegions } from '../engine/visibility'
+import { netWarScore } from '../engine/warscore'
 import { garrisonStrength } from '../engine/warfare'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { ArmyCard } from './ArmyOrders'
-import { usePlayerView } from './hooks'
+import { usePlayerView, usePlayerVision } from './hooks'
 
 function ActionButton({ order, label, sub, tone = '' }: { order: Order; label: string; sub?: string; tone?: string }) {
   const view = usePlayerView()!
@@ -32,22 +36,27 @@ export function CountryPanel() {
   const view = usePlayerView()
   const selected = useGame((s) => s.selectedRegion)
   const selectRegion = useGame((s) => s.selectRegion)
+  const openDiplomacy = useGame((s) => s.openDiplomacy)
+  const vis = usePlayerVision()
   const { map } = getWorld()
-  if (!view || !selected) return null
-  const { game, player, orders } = view
+  const game = view?.game
+  const supply = useMemo(() => (game ? supplyDistances(game, map, game.playerId) : null), [game, map])
+  if (!view || !selected || !game || !supply) return null
+  const { player, orders } = view
   const region = game.regions[selected]
   const mr = map.regions[selected]
   const owner = game.nations[region.owner]
   const mine = region.owner === player.id
-  const vis = visibleRegions(game, map, player.id)
   const canSee = vis === 'all' || vis.has(selected)
   const armies = canSee ? armiesIn(game, selected) : []
-  const dist = mine ? supplyDistances(game, map, player.id).get(selected) : undefined
+  const dist = mine ? supply.get(selected) : undefined
   const range = supplyRange(game, player.id)
   const queuedBuilds = (b: string) => orders.filter((o) => o.type === 'build' && o.regionId === selected && o.building === b).length
   const queuedRecruits = (u: string) => orders.filter((o) => o.type === 'recruit' && o.regionId === selected && o.unit === u).length
   const war = !mine && atWar(game, player.id, owner.id)
   const pact = !mine && hasPact(game, player.id, owner.id)
+  const allied = !mine && isAllied(game, player.id, owner.id)
+  const opinion = mine ? 0 : opinionOf(game, map, owner.id, player.id)
 
   return (
     <AnimatePresence>
@@ -70,8 +79,20 @@ export function CountryPanel() {
             <span style={{ color: owner.color }}>{owner.name}</span>
             {owner.capital === selected && <span className="text-[10px] font-display tracking-widest text-amber-300">CAPITAL</span>}
             {war && <span className="text-[10px] font-display tracking-widest text-rose-400">AT WAR</span>}
+            {allied && <span className="text-[10px] font-display tracking-widest text-cyan-300">ALLIED</span>}
             {pact && <span className="text-[10px] font-display tracking-widest text-emerald-300">PACT</span>}
           </div>
+          {!mine && (
+            <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
+              <span className="rounded border border-fuchsia-400/40 text-fuchsia-200 px-1.5 py-px font-display tracking-wider text-[9px]" title={PERSONALITIES[owner.personality].description}>
+                {PERSONALITIES[owner.personality].name.toUpperCase()}
+              </span>
+              <span>
+                {opinionLabel(opinion)} toward you ({opinion > 0 ? '+' : ''}
+                {opinion})
+              </span>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-2 mt-3 text-center">
             <div className="rounded bg-slate-900/60 py-1.5">
               <div className="label">Pop</div>
@@ -104,10 +125,10 @@ export function CountryPanel() {
         <div className="flex-1 overflow-y-auto scroll-thin p-4 space-y-5">
           <section>
             <div className="label mb-2">Infrastructure</div>
-            <div className="grid grid-cols-5 gap-1.5 text-center">
+            <div className="grid grid-cols-6 gap-1 text-center">
               {BUILDING_TYPES.map((b) => (
-                <div key={b} className="rounded bg-slate-900/60 py-1.5" title={BUILDING_SPECS[b].description}>
-                  <div className="text-[10px] text-slate-400">{BUILDING_SPECS[b].name}</div>
+                <div key={b} className="rounded bg-slate-900/60 py-1.5 min-w-0" title={`${BUILDING_SPECS[b].name}: ${BUILDING_SPECS[b].description}`}>
+                  <div className="text-[9px] text-slate-400 truncate px-0.5">{b === 'depot' ? 'Depot' : b === 'university' ? 'Univ.' : BUILDING_SPECS[b].name}</div>
                   <div className="text-sm font-semibold">
                     {region.buildings[b]}
                     {mine && queuedBuilds(b) > 0 && <span className="text-emerald-300 text-xs"> +{queuedBuilds(b)}</span>}
@@ -155,12 +176,15 @@ export function CountryPanel() {
             <section className="space-y-2">
               <div className="label">Statecraft vs {owner.name}</div>
               <div className="text-sm text-slate-400">
-                Est. military power: <span className="text-slate-100">{militaryPower(game, owner.id).toFixed(0)}</span> (yours {militaryPower(game, player.id).toFixed(0)})
+                Est. military power: <span className="text-slate-100">~{perceivedPower(game, map, player.id, owner.id, vis).toFixed(0)}</span> (yours {militaryPower(game, player.id).toFixed(0)})
+                {war && <span> · war score {netWarScore(game, player.id, owner.id)}</span>}
               </div>
               <div className="grid grid-cols-2 gap-1.5">
-                {war ? (
-                  <ActionButton order={{ type: 'offerPeace', nationId: player.id, target: owner.id }} label="Offer Peace" sub={`${COSTS.offerPeace} PP`} />
-                ) : (
+                <button className="btn btn-primary flex flex-col items-start gap-0.5 text-left" onClick={() => openDiplomacy(owner.id)}>
+                  <span>{war ? 'Negotiate Peace' : 'Negotiate'}</span>
+                  <span className="font-ui normal-case tracking-normal text-[11px] text-slate-300">{war ? 'Set peace terms' : 'Trade, pacts, alliances'}</span>
+                </button>
+                {!war && !allied && (
                   <ActionButton
                     order={{ type: 'declareWar', nationId: player.id, target: owner.id }}
                     label="Declare War"
@@ -168,7 +192,6 @@ export function CountryPanel() {
                     tone="btn-red"
                   />
                 )}
-                {!war && <ActionButton order={{ type: 'offerPact', nationId: player.id, target: owner.id }} label="Non-Aggression" sub={`${COSTS.offerPact} PP`} />}
                 <ActionButton order={{ type: 'spy', nationId: player.id, target: selected, mission: 'sabotage' }} label="Sabotage" sub={`${COSTS.spy} Cap · ${Math.round(spySuccessChance(game, player.id, selected) * 100)}%`} tone="btn-magenta" />
                 <ActionButton order={{ type: 'spy', nationId: player.id, target: selected, mission: 'stealVision' }} label="Steal Maps" sub={`${COSTS.spy} Cap · ${Math.round(spySuccessChance(game, player.id, selected) * 100)}%`} tone="btn-magenta" />
               </div>

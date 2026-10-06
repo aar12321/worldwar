@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
+import { DIFFICULTY } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
+import type { Difficulty } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 
@@ -19,6 +21,7 @@ export function Setup() {
   const hasSave = useGame((s) => s.hasSave)
   const [query, setQuery] = useState('')
   const [share, setShare] = useState(0.6)
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal')
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6))
 
   const nations = useMemo(
@@ -101,6 +104,17 @@ export function Setup() {
             ))}
           </div>
         </div>
+        <div>
+          <div className="label mb-2">Rivals</div>
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => (
+              <button key={d} onClick={() => setDifficulty(d)} title={DIFFICULTY[d].description} className={`rounded-md border p-2 text-left ${difficulty === d ? 'border-cyan-400/70 bg-cyan-400/10' : 'border-slate-700 hover:border-slate-500'}`}>
+                <div className="text-xs font-semibold">{DIFFICULTY[d].name}</div>
+                <div className="text-[10px] text-slate-400 leading-tight">{DIFFICULTY[d].description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex items-center gap-2 text-sm">
           <span className="label">World seed</span>
           <input type="number" value={seed} onChange={(e) => setSeed(Math.floor(+e.target.value) || 0)} className="w-28 rounded bg-slate-950/70 border border-slate-700 px-2 py-1" />
@@ -114,7 +128,7 @@ export function Setup() {
               Continue
             </button>
           )}
-          <button className="btn btn-primary flex-[2] py-3" disabled={!pick} onClick={() => pick && newGame({ playerRegionId: pick.id, seed, victoryShare: share })}>
+          <button className="btn btn-primary flex-[2] py-3" disabled={!pick} onClick={() => pick && newGame({ playerRegionId: pick.id, seed, victoryShare: share, difficulty })}>
             Begin Campaign
           </button>
         </div>

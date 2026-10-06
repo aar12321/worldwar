@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { committedCost, type OrderCost } from '../engine/orders'
-import type { GameState, Nation, Order } from '../engine/types'
+import type { GameState, Nation, Order, RegionId } from '../engine/types'
+import { visibleRegions } from '../engine/visibility'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 
@@ -35,6 +36,12 @@ export function usePlayerView(): PlayerView | null {
       pendingPolicy,
     }
   }, [game, orders])
+}
+
+/** The player's fog of war, recomputed only when the game state changes. */
+export function usePlayerVision(): Set<RegionId> | 'all' {
+  const game = useGame((s) => s.game)
+  return useMemo(() => (game ? visibleRegions(game, getWorld().map, game.playerId) : new Set<RegionId>()), [game])
 }
 
 export const fmt = (v: number, digits = 0) =>
