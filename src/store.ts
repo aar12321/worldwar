@@ -195,8 +195,8 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   endTurn() {
-    const { game, orders, settings } = get()
-    if (!game || game.pendingEvent || game.outcome !== 'playing') return
+    const { game, orders, settings, fxQueue } = get()
+    if (!game || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
     const { map } = getWorld()
     const botOrders = generateAllBotOrders(game, map)
     const next = resolveTurn(game, map, [...orders, ...botOrders])

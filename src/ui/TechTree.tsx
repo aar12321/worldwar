@@ -31,9 +31,10 @@ function TechNode({ tech, index }: { tech: Tech; index: number }) {
       onClick={() => {
         if (queuedIdx >= 0) removeOrder(queuedIdx)
         else if (available) issueOrder(order)
+        else if (err) useGame.getState().toast(err, 'error')
       }}
-      disabled={state === 'owned' || state === 'locked'}
-      className="relative w-full text-left rounded-lg p-3 border transition-shadow disabled:cursor-default"
+      disabled={state === 'owned'}
+      className={`relative w-full text-left rounded-lg p-3 border transition-shadow disabled:cursor-default ${state === 'locked' ? 'cursor-help' : ''}`}
       style={{
         borderColor: state === 'locked' ? 'rgba(71,85,105,0.5)' : color,
         background: owned ? `linear-gradient(135deg, ${color}33, rgba(2,6,23,0.85))` : state === 'queued' ? `${color}22` : 'rgba(2,6,23,0.7)',

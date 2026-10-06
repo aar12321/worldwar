@@ -24,6 +24,7 @@ function useShortcuts() {
         else if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
       } else if (e.key === 'Enter') {
+        e.preventDefault()
         st.endTurn()
       } else {
         const map: Record<string, 'tech' | 'nation' | 'diplomacy' | 'log'> = { t: 'tech', n: 'nation', d: 'diplomacy', l: 'log' }
