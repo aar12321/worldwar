@@ -48,7 +48,7 @@ function OpinionMeter({ report }: { report: OpinionReport }) {
     <div>
       <button className="w-full text-left" onClick={() => setOpen((o) => !o)} title="Click for the reasons behind their opinion">
         <div className="flex justify-between text-[11px]">
-          <span className="text-slate-400">Opinion of you {open ? '-' : '+'}</span>
+          <span className="text-slate-400">{open ? 'Why they feel this way' : 'Opinion of you'}</span>
           <span style={{ color }}>
             {opinionLabel(v)} ({v > 0 ? '+' : ''}
             {v})
@@ -364,7 +364,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           {persona.name.toUpperCase()}
         </span>
         <span>
-          {regionsOf(game, id).length} regions · power ~{power.toFixed(0)} ({power > ctx.myPower ? 'stronger' : 'weaker'})
+          {regionsOf(game, id).length === 1 ? '1 region' : `${regionsOf(game, id).length} regions`} · power ~{power.toFixed(0)} ({power > ctx.myPower ? 'stronger' : 'weaker'})
         </span>
       </div>
       {(cb || theirCb) && (
