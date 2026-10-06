@@ -147,7 +147,11 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return null
     }
     case 'propose': {
-      if (pending.some((p) => p.type === 'propose' && p.target === o.target && p.proposal.kind === o.proposal.kind)) return 'Already proposed this month'
+      if (
+        pending.some((p) => p.type === 'propose' && p.target === o.target && p.proposal.kind === o.proposal.kind) ||
+        s.proposalMemory[`${o.nationId}>${o.target}:${o.proposal.kind}`] === s.turn
+      )
+        return 'Already proposed this month'
       if (s.proposals.some((p) => p.from === o.nationId && p.to === o.target && p.kind === o.proposal.kind)) return 'Awaiting their answer'
       return validateProposal(s, map, o.nationId, o.target, o.proposal)
     }
