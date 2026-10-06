@@ -16,8 +16,11 @@ interface FxState {
   rings: FxRing[]
   shakeKey: number
   shakeStrength: number
+  /** Battle whose outcome has been revealed by the cinematic (its result banner is showing). */
+  revealedBattleId: string | null
   addRing(ring: Omit<FxRing, 'id'>, ttlMs: number): void
   shake(strength: number): void
+  reveal(battleId: string | null): void
 }
 
 let ringId = 1
@@ -26,6 +29,10 @@ export const useFx = create<FxState>((set) => ({
   rings: [],
   shakeKey: 0,
   shakeStrength: 1,
+  revealedBattleId: null,
+  reveal(battleId) {
+    set({ revealedBattleId: battleId })
+  },
   addRing(ring, ttlMs) {
     const id = ringId++
     set((s) => ({ rings: [...s.rings, { ...ring, id }] }))

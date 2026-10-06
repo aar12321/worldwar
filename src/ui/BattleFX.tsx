@@ -98,6 +98,7 @@ export function BattleFX() {
     at(cursor, () => {
       setStage('result')
       setEffects([])
+      useFx.getState().reveal(battle.id)
     })
     cursor += RESULT_MS
     at(cursor, () => shiftFx())

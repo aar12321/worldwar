@@ -137,6 +137,8 @@ export function WorldGlobe() {
   const reducedMotion = useGame((s) => s.settings.reducedMotion)
   const clickRegion = useGame((s) => s.clickRegion)
   const rings = useFx((s) => s.rings)
+  const fxQueue = useGame((s) => s.fxQueue)
+  const revealedBattleId = useFx((s) => s.revealedBattleId)
   const ref = useRef<GlobeMethods | undefined>(undefined)
   const [hover, setHover] = useState<RegionId | null>(null)
   const { w, h } = useWindowSize()
@@ -179,9 +181,20 @@ export function WorldGlobe() {
     return out
   }, [game, selectedArmy, targetMode])
 
+  const hiddenCaptures = useMemo(() => {
+    const out = new Map<RegionId, string>()
+    if (!game) return out
+    for (const b of [...fxQueue].reverse()) {
+      if (!b.captured || b.id === revealedBattleId) continue
+      const prev = game.nations[b.defender.nationId]
+      if (prev) out.set(b.regionId, prev.color)
+    }
+    return out
+  }, [fxQueue, revealedBattleId, game])
+
   const polygonColor = (f: object) => {
     const id = (f as CountryFeature).properties.regionId
-    const base = regionColor(game, id)
+    const base = hiddenCaptures.get(id) ?? regionColor(game, id)
     if (reachable.has(id)) return tint(targetMode === 'attack' ? NEON.magenta : NEON.cyan, hover === id ? 0.1 : -0.05)
     if (id === selectedRegion) return tint(base, 0.18, 0.1)
     if (id === hover) return tint(base, 0.1)
