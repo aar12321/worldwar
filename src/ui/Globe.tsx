@@ -67,19 +67,28 @@ const unitGeometries: Record<UnitType, THREE.BufferGeometry> = {
   naval: new THREE.BoxGeometry(1.1, 0.3, 0.4),
 }
 
+const plateGeometry = new THREE.CylinderGeometry(1, 1, 0.12, 24)
+const plateMaterial = new THREE.MeshBasicMaterial({ color: '#020617', transparent: true, opacity: 0.85 })
+const ringGeometry = new THREE.RingGeometry(0.85, 1.05, 32)
+
 function buildArmyObject(d: Extract<LayerDatum, { kind: 'army' }>): THREE.Object3D {
   const group = new THREE.Group()
   const color = new THREE.Color().setStyle(d.color)
-  const mat = new THREE.MeshLambertMaterial({ color, emissive: color.clone().multiplyScalar(0.55) })
+  const light = color.clone().lerp(new THREE.Color('#ffffff'), 0.45)
+  const mat = new THREE.MeshLambertMaterial({ color: light, emissive: color.clone().multiplyScalar(0.6) })
   const total = totalUnits(d.army.units)
-  const scale = Math.min(2.4, 0.7 + Math.sqrt(total) * 0.22)
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.12, 20), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55 }))
-  group.add(base)
+  const scale = Math.min(4.2, 1.6 + Math.sqrt(total) * 0.38)
+  group.add(new THREE.Mesh(plateGeometry, plateMaterial))
+  const ring = new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({ color: light, side: THREE.DoubleSide }))
+  ring.rotation.x = -Math.PI / 2
+  ring.position.y = 0.08
+  group.add(ring)
   const present = (['infantry', 'armor', 'air', 'naval'] as UnitType[]).filter((k) => d.army.units[k] >= 0.5)
   present.forEach((k, i) => {
     const m = new THREE.Mesh(unitGeometries[k], mat)
-    const offset = (i - (present.length - 1) / 2) * 0.75
-    m.position.set(offset, k === 'air' ? 1.5 : 0.5, 0)
+    const offset = (i - (present.length - 1) / 2) * 0.48
+    m.scale.setScalar(0.62)
+    m.position.set(offset, k === 'air' ? 1.2 : 0.4, (i % 2) * 0.25 - 0.1)
     if (k === 'air') m.rotation.z = Math.PI
     group.add(m)
   })
@@ -305,9 +314,9 @@ export function WorldGlobe() {
             const s = child as THREE.Sprite
             const { offset, drift } = s.userData
             const cycle = reducedMotion ? 0.5 : ((now / 3200 + offset) % 1)
-            s.position.set(drift * cycle * 2, 0.4 + cycle * 3.2, 0)
-            s.scale.setScalar(0.5 + cycle * 1.8)
-            ;(s.material as THREE.SpriteMaterial).opacity = Math.sin(Math.PI * cycle) * 0.45
+            s.position.set(drift * cycle * 3, 0.6 + cycle * 4.5, 0)
+            s.scale.setScalar(0.9 + cycle * 2.6)
+            ;(s.material as THREE.SpriteMaterial).opacity = Math.sin(Math.PI * cycle) * 0.65
           }
         }
       }
