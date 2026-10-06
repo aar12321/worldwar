@@ -78,7 +78,7 @@ export function suppliedRegions(s: GameState, map: WorldMap, nationId: NationId)
   return out
 }
 
-export function isArmySupplied(
+function isArmySupplied(
   s: GameState,
   dist: Map<RegionId, number>,
   range: number,

@@ -37,7 +37,7 @@ export function perceivedPower(s: GameState, map: WorldMap, viewer: NationId, ta
 }
 
 /** How badly `n` wants more of a resource right now (1 = normal market value). */
-export function needFor(s: GameState, id: NationId, r: TradeResource, econ: EconomyReport): number {
+function needFor(s: GameState, id: NationId, r: TradeResource, econ: EconomyReport): number {
   const n = s.nations[id]
   switch (r) {
     case 'food':
@@ -56,7 +56,7 @@ export function needFor(s: GameState, id: NationId, r: TradeResource, econ: Econ
   }
 }
 
-export function valueFor(s: GameState, id: NationId, b: ResourceBundle, prices: MarketPrices, econ: EconomyReport): number {
+function valueFor(s: GameState, id: NationId, b: ResourceBundle, prices: MarketPrices, econ: EconomyReport): number {
   return bundleEntries(b).reduce((sum, [r, v]) => sum + v * prices[r] * needFor(s, id, r, econ), 0)
 }
 

@@ -113,7 +113,7 @@ function bestGeneral(n: Nation, armies: Army[]) {
 }
 
 /** Defense bonus for armies that have dug in: +10% after two months in place, +20% after three. */
-export function entrenchmentBonus(armies: Army[]): number {
+function entrenchmentBonus(armies: Army[]): number {
   let units = 0
   let weighted = 0
   for (const a of armies) {

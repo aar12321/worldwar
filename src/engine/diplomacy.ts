@@ -14,7 +14,7 @@ export const PACT_TURNS = 24
 export const PROPOSAL_TURNS = 3
 
 /** Rejections and lapsed offers between two bots are not news; everything involving the player is. */
-export function pushDispatch(s: GameState, d: Dispatch) {
+function pushDispatch(s: GameState, d: Dispatch) {
   const involvesPlayer = d.from === s.playerId || d.to === s.playerId
   if (!involvesPlayer && (d.kind === 'rejected' || d.kind === 'expired')) return
   s.dispatches.push(d)
@@ -63,7 +63,7 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   }
 }
 
-export function makePeace(s: GameState, a: NationId, b: NationId) {
+function makePeace(s: GameState, a: NationId, b: NationId) {
   const key = pairKey(a, b)
   s.wars = s.wars.filter((k) => k !== key)
   delete s.warStarted[key]
@@ -138,7 +138,7 @@ function startDeal(s: GameState, deal: Omit<Deal, 'id'>) {
 }
 
 /** Carries out an accepted proposal. Returns why it could not be honoured, or null. */
-export function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): string | null {
+function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): string | null {
   const err = validateProposal(s, map, p.from, p.to, p, true)
   if (err) return err
   switch (p.kind) {

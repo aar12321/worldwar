@@ -46,7 +46,7 @@ export function hasCombinedArms(u: UnitCounts): boolean {
   return u.infantry >= COMBAT.minPresence && u.armor >= COMBAT.minPresence && u.air >= COMBAT.minPresence
 }
 
-export function terrainMultiplier(terrain: Terrain, unit: UnitType, mods: AggregatedModifiers | null): number {
+function terrainMultiplier(terrain: Terrain, unit: UnitType, mods: AggregatedModifiers | null): number {
   const base = TERRAIN[terrain].unit[unit]
   return mods?.ignoreMountainPenalty && terrain === 'mountain' ? Math.max(1, base) : base
 }

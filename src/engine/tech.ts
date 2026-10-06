@@ -2,15 +2,6 @@ import { TECH_BY_ID } from '../data/techTree'
 import { addLog } from './helpers'
 import type { GameState, NationId } from './types'
 
-export type TechStatus = 'owned' | 'available' | 'locked'
-
-export function techStatus(s: GameState, nationId: NationId, techId: string): TechStatus {
-  const n = s.nations[nationId]
-  if (n.techs.includes(techId)) return 'owned'
-  const t = TECH_BY_ID[techId]
-  return t.requires.every((r) => n.techs.includes(r)) ? 'available' : 'locked'
-}
-
 export function research(s: GameState, nationId: NationId, techId: string): boolean {
   const n = s.nations[nationId]
   const t = TECH_BY_ID[techId]

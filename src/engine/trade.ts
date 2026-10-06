@@ -7,7 +7,7 @@ export type MarketPrices = Record<TradeResource, number>
 
 export const stockOf = (n: Nation, r: TradeResource) => (r === 'manpower' ? n.militaryPool : n.resources[r])
 
-export function adjustStock(n: Nation, r: TradeResource, delta: number) {
+function adjustStock(n: Nation, r: TradeResource, delta: number) {
   if (r === 'manpower') n.militaryPool = Math.max(0, n.militaryPool + delta)
   else n.resources[r] += delta
 }

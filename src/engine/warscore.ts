@@ -15,7 +15,7 @@ export const MAX_REPARATIONS = 30
 
 const scoreKey = (a: NationId, b: NationId) => `${a}>${b}`
 
-export function addWarScore(s: GameState, a: NationId, b: NationId, amount: number) {
+function addWarScore(s: GameState, a: NationId, b: NationId, amount: number) {
   const key = scoreKey(a, b)
   s.warScore[key] = clamp((s.warScore[key] ?? 0) + amount, 0, WARSCORE.max)
 }
