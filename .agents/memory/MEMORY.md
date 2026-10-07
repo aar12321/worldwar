@@ -1,0 +1,1 @@
+- [WebGL verification](webgl-verification.md) — the default capture browser may lack WebGL; verify the globe with software rendering before blaming the app.
