@@ -62,6 +62,7 @@ export const PROPOSAL_COSTS: Record<ProposalKind, number> = {
   alliance: 25,
   trade: 5,
   callToArms: 10,
+  arms: 10,
 }
 
 export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
@@ -70,6 +71,36 @@ export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
   alliance: 'Defensive alliance',
   trade: 'Trade deal',
   callToArms: 'Call to arms',
+  arms: 'Weapons contract',
+}
+
+/** Repeatable drilling at a home muster. Rank 0 is Green; rank 5 is Guard. */
+export const TRAINING = {
+  max: 5,
+  bonusPerLevel: 0.08,
+  ranks: ['Green', 'Trained', 'Regular', 'Veteran', 'Elite', 'Guard'] as const,
+}
+
+export function trainingCost(level: number): number {
+  return 12 * (Math.max(0, Math.min(TRAINING.max, Math.floor(level))) + 1)
+}
+
+export function trainingRank(level: number): string {
+  const i = Math.max(0, Math.min(TRAINING.max, Math.floor(level)))
+  return TRAINING.ranks[i]
+}
+
+/** Domestic industry and foreign arms deals. One live contract per unit type. */
+export const ARMS = {
+  maxTier: 3,
+  months: 8,
+  attackPerTier: 0.1,
+  domesticCost: [50, 90, 140] as const,
+  /** Monthly price a seller of that tier usually asks. */
+  foreignPay: [8, 16, 28] as const,
+  maxPay: 200,
+  minMonths: 3,
+  maxMonths: 8,
 }
 
 export interface MarketSpec {

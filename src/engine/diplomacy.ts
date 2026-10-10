@@ -1,6 +1,7 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
-import { PROPOSAL_LABELS } from '../data/unitTypes'
+import { ARMS, PROPOSAL_LABELS, UNIT_SPECS } from '../data/unitTypes'
+import { breakArmsBetween, grantArmsContract, validateArmsTerms } from './arms'
 import { addLog, alliesOf, atWar, hasPact, isAllied, newId, pairKey } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
@@ -32,6 +33,7 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   clearWarScore(s, a, b)
   delete s.casusBelli[`${a}|${b}`]
   delete s.pacts[key]
+  breakArmsBetween(s, a, b)
   s.nations[b].warWeariness = Math.max(0, s.nations[b].warWeariness - 5)
   s.proposals = s.proposals.filter((p) => !((p.from === a && p.to === b) || (p.from === b && p.to === a)) || p.kind === 'peace')
   addOpinion(s, b, a, 'Declared war on us', -40, 0.4)
@@ -94,6 +96,8 @@ export function validateProposal(s: GameState, map: WorldMap, from: NationId, to
     case 'trade':
       if (atWar(s, from, to)) return 'Cannot trade with an enemy'
       return validateTradeTerms(s, d.terms, from, to)
+    case 'arms':
+      return validateArmsTerms(s, from, to, d.terms)
     case 'callToArms': {
       const enemy = s.nations[d.enemy]
       if (!isAllied(s, from, to)) return 'Only allies can be called to arms'
@@ -130,6 +134,11 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
     }
     case 'callToArms':
       return `Declare war on ${name(s, p.enemy)} at ${name(s, p.from)}'s side`
+    case 'arms': {
+      const buyer = p.terms.seller === p.from ? p.to : p.from
+      const bonus = Math.round(p.terms.tier * ARMS.attackPerTier * 100)
+      return `${name(s, p.terms.seller)} supplies ${UNIT_SPECS[p.terms.unit].name} (tier ${p.terms.tier}, +${bonus}% attack) to ${name(s, buyer)} for ${p.terms.payPerMonth} Capital a month, for ${p.terms.months} months`
+    }
   }
 }
 
@@ -184,6 +193,12 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
       declareWar(s, map, p.to, p.enemy, rng, false)
       addOpinion(s, p.from, p.to, 'Answered our call to arms', 20, 0.3)
       return null
+    case 'arms': {
+      const buyer = p.terms.seller === p.from ? p.to : p.from
+      grantArmsContract(s, buyer, { unit: p.terms.unit, tier: p.terms.tier, supplier: p.terms.seller, payPerMonth: p.terms.payPerMonth, months: p.terms.months })
+      addOpinion(s, p.terms.seller, buyer, 'Bought our weapons', 4, 0.25)
+      return null
+    }
   }
 }
 
@@ -294,6 +309,8 @@ function stillRelevant(s: GameState, p: Proposal): boolean {
       return !hasPact(s, p.from, p.to) && !atWar(s, p.from, p.to)
     case 'trade':
       return !atWar(s, p.from, p.to)
+    case 'arms':
+      return !atWar(s, p.from, p.to) && !!s.nations[p.terms.seller]?.alive
   }
 }
 

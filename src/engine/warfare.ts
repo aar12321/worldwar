@@ -1,4 +1,6 @@
 import { addOpinion, forgetNation } from '../ai/opinion'
+import { TRAINING } from '../data/unitTypes'
+import { combatMods, contractNote } from './arms'
 import { regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
 import { recordBattle } from './warscore'
@@ -6,6 +8,7 @@ import {
   addLog,
   armiesIn,
   atWar,
+  createArmy,
   emptyUnits,
   hasTech,
   nationModifiers,
@@ -47,6 +50,8 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
   const n = s.nations[id]
   if (!n.alive) return
   n.alive = false
+  n.contracts = []
+  for (const other of Object.values(s.nations)) other.contracts = (other.contracts ?? []).filter((c) => c.supplier !== id)
   for (const a of Object.values(s.armies)) if (a.owner === id) delete s.armies[a.id]
   const involves = (k: string) => k.split(/[|>]/).includes(id)
   s.wars = s.wars.filter((k) => !involves(k))
@@ -112,6 +117,18 @@ function bestGeneral(n: Nation, armies: Army[]) {
   return null
 }
 
+/** Training bonus diluted by untrained garrison troops, so a green militia does not inherit an elite army's drill. */
+function trainingBonus(armies: Army[], extra: UnitCounts | null): number {
+  let units = extra ? totalUnits(extra) : 0
+  let weighted = 0
+  for (const a of armies) {
+    const t = totalUnits(a.units)
+    units += t
+    weighted += t * Math.max(0, Math.min(TRAINING.max, a.training ?? 0))
+  }
+  return units > 0 ? (weighted / units) * TRAINING.bonusPerLevel : 0
+}
+
 /** Defense bonus for armies that have dug in: +10% after two months in place, +20% after three. */
 function entrenchmentBonus(armies: Army[]): number {
   let units = 0
@@ -124,20 +141,29 @@ function entrenchmentBonus(armies: Army[]): number {
   return units > 0 ? Math.round((weighted / units) * 100) / 100 : 0
 }
 
-function makeCombatant(n: Nation | null, armies: Army[], extra: UnitCounts | null, notes: string[], penalty: number, defending = false): Combatant {
+function makeCombatant(s: GameState, n: Nation | null, armies: Army[], extra: UnitCounts | null, notes: string[], penalty: number, defending = false): Combatant {
   let p = penalty
   if (n?.foodShortage) {
     p *= 0.7
     notes.push('food shortage (-30%)')
+  }
+  const drilled = trainingBonus(armies, extra)
+  if (drilled > 0.005) {
+    p *= 1 + drilled
+    notes.push(`training (+${Math.round(drilled * 100)}%)`)
   }
   const dug = defending ? entrenchmentBonus(armies) : 0
   if (dug > 0) {
     p *= 1 + dug
     notes.push(`entrenched (+${Math.round(dug * 100)}%)`)
   }
+  if (n && !defending) {
+    const arms = contractNote(n, s.turn)
+    if (arms) notes.push(arms)
+  }
   return {
     units: sumUnits([...armies.map((a) => a.units), ...(extra ? [extra] : [])]),
-    mods: n ? nationModifiers(n) : null,
+    mods: n ? combatMods(n, s.turn) : null,
     general: n ? bestGeneral(n, armies) : null,
     penalty: p,
     penaltyNotes: notes,
@@ -209,14 +235,14 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
       attPenalty *= 1 - 0.4 * (1 - reduction)
       attNotes.push(`amphibious assault (-${Math.round(40 * (1 - reduction))}%)`)
     }
-    const attacker = makeCombatant(attackerNation, armies, null, attNotes, attPenalty)
+    const attacker = makeCombatant(s, attackerNation, armies, null, attNotes, attPenalty)
 
     const defenderNation = suppression ? null : s.nations[defenderId]
     const defArmies = suppression ? [] : armiesIn(s, g.target, defenderId)
     const garrison = emptyUnits()
     if (suppression) garrison.infantry = targetRegion.rebels
     else garrison.infantry = garrisonStrength(s, map, g.target)
-    const defender = makeCombatant(defenderNation, defArmies, garrison, [], 1, true)
+    const defender = makeCombatant(s, defenderNation, defArmies, garrison, [], 1, true)
     const wasCapital = !suppression && s.nations[defenderId]?.capital === g.target
 
     const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
@@ -239,14 +265,26 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
         transferRegion(s, map, g.target, g.nationId)
         captured = true
         const lead = survivors[0]
+        let leadUnits = totalUnits(lead.units)
         for (const a of survivors.slice(1)) {
+          const extra = totalUnits(a.units)
+          const sum = leadUnits + extra
+          if (sum > 0) lead.training = Math.max(0, Math.min(TRAINING.max, Math.round(((lead.training ?? 0) * leadUnits + (a.training ?? 0) * extra) / sum)))
+          leadUnits = sum
           for (const k of UNIT_TYPES) lead.units[k] += a.units[k]
           if (!lead.generalId) lead.generalId = a.generalId
           delete s.armies[a.id]
         }
         if (!mr.coastal && lead.units.naval > 0) {
-          const fleet: Army = { id: newId(s, 'a'), owner: g.nationId, location: lead.location, units: { ...emptyUnits(), naval: lead.units.naval }, generalId: null, outOfSupplyTurns: lead.outOfSupplyTurns, entrenched: 0 }
-          s.armies[fleet.id] = fleet
+          const origin = lead.location
+          const fleet = createArmy(s, {
+            owner: g.nationId,
+            location: origin,
+            units: { ...emptyUnits(), naval: lead.units.naval },
+            homeTerritoryId: openMuster(s, map, origin, g.nationId),
+            training: lead.training ?? 0,
+          })
+          fleet.outOfSupplyTurns = lead.outOfSupplyTurns
           used.add(fleet.id)
           lead.units.naval = 0
         }
@@ -294,7 +332,7 @@ export function resolveRebels(s: GameState, map: WorldMap, rng: Rng) {
     const defArmies = armiesIn(s, region.id, ownerId)
     const garrison = { ...emptyUnits(), infantry: garrisonStrength(s, map, region.id) }
     const attacker: Combatant = { units: rebels, mods: null, general: null, penalty: 1, penaltyNotes: [] }
-    const defender = makeCombatant(owner, defArmies, garrison, [], 1, true)
+    const defender = makeCombatant(s, owner, defArmies, garrison, [], 1, true)
     const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
     distributeLosses(defArmies, outcome.defenderLosses, garrison)
     region.rebels = Math.max(0, region.rebels - outcome.attackerLosses.infantry)
@@ -323,6 +361,15 @@ export function resolveRebels(s: GameState, map: WorldMap, rng: Rng) {
   }
 }
 
+function openMuster(s: GameState, map: WorldMap, regionId: RegionId, owner: NationId): string {
+  for (const id of map.territoriesByRegion[regionId] ?? []) {
+    let taken = false
+    for (const a of Object.values(s.armies)) if (a.homeTerritoryId === id && a.owner === owner) taken = true
+    if (!taken) return id
+  }
+  return ''
+}
+
 function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: number) {
   const mr = map.regions[regionId]
   const oldOwner = s.regions[regionId].owner
@@ -334,6 +381,7 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
     existing.resources = { capital: 20, food: 10, pp: 10, tp: existing.resources.tp }
     existing.stability = 55
     existing.warWeariness = 0
+    existing.contracts = []
   } else {
     nationId = `free-${regionId}-${s.turn}`
     const base = existing ?? s.nations[oldOwner]
@@ -358,11 +406,16 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
       embargoedUntil: 0,
       foodShortage: false,
       inDebt: false,
+      contracts: [],
     }
   }
   transferRegion(s, map, regionId, nationId, false)
-  const army: Army = { id: newId(s, 'a'), owner: nationId, location: regionId, units: { ...emptyUnits(), infantry: strength }, generalId: null, outOfSupplyTurns: 0, entrenched: 0 }
-  s.armies[army.id] = army
+  createArmy(s, {
+    owner: nationId,
+    location: regionId,
+    units: { ...emptyUnits(), infantry: strength },
+    homeTerritoryId: map.territoriesByRegion[regionId]?.[0] ?? '',
+  })
   const key = pairKey(nationId, oldOwner)
   if (s.nations[oldOwner]?.alive && !s.wars.includes(key)) {
     s.wars.push(key)

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { GENERAL_TRAITS } from '../data/startingNations'
-import { DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS } from '../data/unitTypes'
+import { ARMS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, UNIT_SPECS } from '../data/unitTypes'
+import { weaponTiers } from '../engine/arms'
 import { armiesOf, regionsOf, turnDate } from '../engine/helpers'
+import { UNIT_TYPES } from '../engine/types'
 import type { LawId, LogKind } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
@@ -91,6 +93,33 @@ export function NationPanel() {
       </section>
 
       <section className="space-y-2">
+        <div className="label">Weapons contracts</div>
+        <p className="text-xs text-slate-500">A domestic contract sharpens one unit type for {ARMS.months} months. Signing again replaces it. Higher tiers need more factories. You can also buy weapons through diplomacy.</p>
+        {UNIT_TYPES.map((u) => {
+          const active = (player.contracts ?? []).find((c) => c.unit === u && c.until >= game.turn)
+          const tier = weaponTiers(player, game.turn)[u]
+          return (
+            <div key={u} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-display text-xs tracking-wider">{UNIT_SPECS[u].name.toUpperCase()}</span>
+                {active ? (
+                  <span className="text-[10px] font-display tracking-widest text-amber-300">TIER {tier} · {active.supplier ? game.nations[active.supplier]?.name ?? 'FOREIGN' : 'DOMESTIC'}</span>
+                ) : (
+                  <span className="text-[10px] font-display tracking-widest text-slate-500">NONE</span>
+                )}
+              </div>
+              {active && <p className="text-[11px] text-slate-400">+{(active.tier * ARMS.attackPerTier * 100).toFixed(0)}% attack through {turnDate(active.until)}{active.payPerMonth > 0 ? ` · ${active.payPerMonth} Capital/month` : ''}.</p>}
+              <div className="grid grid-cols-3 gap-1.5">
+                {([1, 2, 3] as const).map((level) => (
+                  <OrderButton key={level} order={{ type: 'signContract', nationId: player.id, unit: u, tier: level }} label={`T${level} · ${ARMS.domesticCost[level - 1]}`} />
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </section>
+
+      <section className="space-y-2">
         <div className="label">General Staff</div>
         {player.generals.map((g) => {
           const assigned = armies.find((a) => a.generalId === g.id)
@@ -112,7 +141,10 @@ export function NationPanel() {
         <div className="label">Armies ({armies.length})</div>
         {armies.map((a) => (
           <div key={a.id}>
-            <div className="text-xs text-slate-400 mb-1">{getWorld().map.regions[a.location].name}</div>
+            <div className="text-xs text-slate-400 mb-1">
+              {getWorld().map.regions[a.location].name}
+              {getWorld().map.territories[a.homeTerritoryId] ? ` · home ${getWorld().map.territories[a.homeTerritoryId].name}` : ''}
+            </div>
             <ArmyCard army={a} game={game} />
           </div>
         ))}

@@ -10,7 +10,7 @@ export type SpyMission = 'sabotage' | 'stealVision'
 export type Difficulty = 'easy' | 'normal' | 'hard'
 export type Personality = 'expansionist' | 'trader' | 'turtle' | 'opportunist' | 'honorable'
 export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower'
-export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms'
+export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms' | 'arms'
 
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'air', 'naval']
 export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'depot']
@@ -32,9 +32,22 @@ export interface MapRegion {
   development: number
 }
 
+/** A muster ground inside a country. Armies are raised and trained here. */
+export interface Territory {
+  id: string
+  regionId: RegionId
+  name: string
+  lat: number
+  lng: number
+  /** 0 is the heartland muster, where the starting army is based. */
+  index: number
+}
+
 export interface WorldMap {
   regions: Record<RegionId, MapRegion>
   order: RegionId[]
+  territories: Record<string, Territory>
+  territoriesByRegion: Record<RegionId, string[]>
 }
 
 export type Buildings = Record<BuildingType, number>
@@ -66,6 +79,10 @@ export interface Army {
   outOfSupplyTurns: number
   /** Consecutive months the army has held its position (capped at 3). */
   entrenched: number
+  /** Muster this army is raised from. Empty when it has no base. */
+  homeTerritoryId: string
+  /** 0–5. Each rank adds combat power. */
+  training: number
 }
 
 export interface Resources {
@@ -103,6 +120,30 @@ export interface Nation {
   vision: Record<NationId, number>
   aggression: number
   personality: Personality
+  /** Live weapons contracts. One per unit type. */
+  contracts: ArmsContract[]
+}
+
+export interface ArmsContract {
+  id: string
+  unit: UnitType
+  /** 1–3. Each tier is +10% attack for this unit type. */
+  tier: number
+  /** Nation selling the weapons, or null for domestic industry. */
+  supplier: NationId | null
+  /** Last turn the bonus applies. */
+  until: number
+  /** Capital the buyer pays the supplier each month. 0 for domestic contracts. */
+  payPerMonth: number
+}
+
+export interface ArmsTerms {
+  unit: UnitType
+  tier: number
+  months: number
+  payPerMonth: number
+  /** One of the two parties. The other pays. */
+  seller: NationId
 }
 
 export type ResourceBundle = Partial<Record<TradeResource, number>>
@@ -129,6 +170,7 @@ export type ProposalDraft =
   | { kind: 'alliance' }
   | { kind: 'trade'; terms: TradeTerms }
   | { kind: 'callToArms'; enemy: NationId }
+  | { kind: 'arms'; terms: ArmsTerms }
 
 export type Proposal = ProposalDraft & {
   id: string
@@ -198,7 +240,10 @@ export interface PendingEvent {
 export type Order =
   | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number }
   | { type: 'build'; nationId: NationId; regionId: RegionId; building: BuildingType }
-  | { type: 'recruit'; nationId: NationId; regionId: RegionId; unit: UnitType }
+  | { type: 'recruit'; nationId: NationId; territoryId: string; unit: UnitType }
+  | { type: 'train'; nationId: NationId; armyId: string }
+  | { type: 'rebase'; nationId: NationId; armyId: string; territoryId: string }
+  | { type: 'signContract'; nationId: NationId; unit: UnitType; tier: number }
   | { type: 'research'; nationId: NationId; techId: string }
   | { type: 'move'; nationId: NationId; armyId: string; to: RegionId }
   | { type: 'attack'; nationId: NationId; armyId: string; target: RegionId }

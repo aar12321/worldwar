@@ -4,10 +4,10 @@ import { perceivedPower } from '../ai/diplomat'
 import { opinionLabel, opinionOf } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
-import { BUILDING_SPECS, COSTS, UNIT_SPECS } from '../data/unitTypes'
+import { TRAINING, BUILDING_SPECS, COSTS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
 import { militaryPower } from '../engine/economy'
 import { spySuccessChance } from '../engine/espionage'
-import { armiesIn, atWar, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
+import { armiesIn, armyIsHome, atWar, boundArmy, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { supplyDistances, supplyRange } from '../engine/supply'
 import type { Order } from '../engine/types'
@@ -52,7 +52,8 @@ export function CountryPanel() {
   const dist = mine ? supply.get(selected) : undefined
   const range = supplyRange(game, player.id)
   const queuedBuilds = (b: string) => orders.filter((o) => o.type === 'build' && o.regionId === selected && o.building === b).length
-  const queuedRecruits = (u: string) => orders.filter((o) => o.type === 'recruit' && o.regionId === selected && o.unit === u).length
+  const queuedRecruits = (territoryId: string, u: string) => orders.filter((o) => o.type === 'recruit' && o.territoryId === territoryId && o.unit === u).length
+  const territoryIds = map.territoriesByRegion[selected] ?? []
   const war = !mine && atWar(game, player.id, owner.id)
   const pact = !mine && hasPact(game, player.id, owner.id)
   const allied = !mine && isAllied(game, player.id, owner.id)
@@ -145,21 +146,56 @@ export function CountryPanel() {
             )}
           </section>
 
-          {mine && (
-            <section>
-              <div className="label mb-2">Recruit Divisions</div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {UNIT_TYPES.map((u) => (
-                  <ActionButton
-                    key={u}
-                    order={{ type: 'recruit', nationId: player.id, regionId: selected, unit: u }}
-                    label={`${UNIT_SPECS[u].name}${queuedRecruits(u) ? ` (+${queuedRecruits(u)})` : ''}`}
-                    sub={`${UNIT_SPECS[u].capitalCost} Cap · ${UNIT_SPECS[u].manpowerCost}k men`}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
+          <section className="space-y-2">
+            <div className="label">Muster territories</div>
+            <p className="text-[11px] text-slate-500">Each territory raises one army. You can recruit and train only while that army is standing here.</p>
+            {territoryIds.map((tid) => {
+              const t = map.territories[tid]
+              const showForces = mine || canSee
+              const bound = showForces ? boundArmy(game, tid, region.owner) : undefined
+              const home = !!bound && armyIsHome(game, map, bound)
+              const away = !!bound && !home
+              const canRaise = mine && (!bound || home)
+              const myArmiesHere = mine ? armies.filter((a) => a.owner === player.id && a.homeTerritoryId !== tid) : []
+              return (
+                <div key={tid} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-2.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-display text-[11px] tracking-wider">{t.name.toUpperCase()}</span>
+                    <span className={`text-[10px] font-display tracking-widest ${!showForces ? 'text-slate-500' : home ? 'text-cyan-300' : away ? 'text-amber-300' : 'text-slate-500'}`}>
+                      {!showForces ? 'HIDDEN' : home ? trainingRank(bound.training ?? 0) : away ? 'ARMY AWAY' : 'EMPTY'}
+                    </span>
+                  </div>
+                  {bound && home && (
+                    <p className="text-[11px] text-slate-400">
+                      Army {bound.id.toUpperCase()} · training {bound.training ?? 0}/{TRAINING.max}
+                    </p>
+                  )}
+                  {bound && away && <p className="text-[11px] text-amber-200/90">Its army is in {map.regions[bound.location]?.name ?? 'the field'}. March it home to recruit or train.</p>}
+                  {showForces && !bound && <p className="text-[11px] text-slate-500">No army. The first division raised here summons one.</p>}
+                  {!showForces && <p className="text-[11px] text-slate-500">Forces at this muster are not visible.</p>}
+                  {canRaise && (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {UNIT_TYPES.map((u) => (
+                        <ActionButton
+                          key={u}
+                          order={{ type: 'recruit', nationId: player.id, territoryId: tid, unit: u }}
+                          label={`${UNIT_SPECS[u].name}${queuedRecruits(tid, u) ? ` (+${queuedRecruits(tid, u)})` : ''}`}
+                          sub={`${UNIT_SPECS[u].capitalCost} Cap · ${UNIT_SPECS[u].manpowerCost}k men`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {mine && bound && home && (bound.training ?? 0) < TRAINING.max && (
+                    <ActionButton order={{ type: 'train', nationId: player.id, armyId: bound.id }} label={`Train to ${trainingRank((bound.training ?? 0) + 1)}`} sub="Capital cost rises with each rank" tone="btn-primary" />
+                  )}
+                  {mine && !bound &&
+                    myArmiesHere.map((a) => (
+                      <ActionButton key={a.id} order={{ type: 'rebase', nationId: player.id, armyId: a.id, territoryId: tid }} label={`Re-base army ${a.id.toUpperCase()} here`} sub="Bind this army to the empty muster" />
+                    ))}
+                </div>
+              )
+            })}
+          </section>
 
           <section>
             <div className="label mb-2">Armies {canSee ? '' : '(not visible)'}</div>

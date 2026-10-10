@@ -1,21 +1,24 @@
 import { GENERAL_TRAITS } from '../data/startingNations'
-import { UNIT_SPECS } from '../data/unitTypes'
+import { TRAINING, UNIT_SPECS, trainingRank } from '../data/unitTypes'
+import { combatMods, weaponTiers } from '../engine/arms'
 import { unitPower } from '../engine/economy'
-import { totalUnits } from '../engine/helpers'
+import { formatDivisions, totalUnits } from '../engine/helpers'
 import type { Army, GameState, UnitType } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
+import { UNIT_GLYPH } from './labels'
 
-const UNIT_GLYPH: Record<UnitType, string> = { infantry: 'INF', armor: 'ARM', air: 'AIR', naval: 'NAV' }
-
-export function UnitStrip({ units }: { units: Army['units'] }) {
+export function UnitStrip({ units, tiers }: { units: Army['units']; tiers?: Partial<Record<UnitType, number>> }) {
+  const present = UNIT_TYPES.filter((k) => units[k] >= 0.05)
+  if (!present.length) return <p className="text-[11px] text-slate-500">No divisions yet.</p>
   return (
-    <div className="flex gap-1.5">
-      {UNIT_TYPES.filter((k) => units[k] >= 0.05).map((k) => (
+    <div className="flex flex-wrap gap-1.5">
+      {present.map((k) => (
         <span key={k} className="rounded bg-slate-800/80 px-1.5 py-0.5 text-[11px] font-semibold text-slate-200" title={UNIT_SPECS[k].name}>
           <span className="text-cyan-300/80 font-display text-[9px] mr-1">{UNIT_GLYPH[k]}</span>
-          {units[k].toFixed(1)}
+          {UNIT_SPECS[k].name} {formatDivisions(units[k])}
+          {tiers?.[k] ? <span className="text-amber-300"> T{tiers[k]}</span> : null}
         </span>
       ))}
     </div>
@@ -39,6 +42,10 @@ export function ArmyCard({ army, game }: { army: Army; game: GameState }) {
   const general = owner.generals.find((g) => g.id === army.generalId)
   const pendingGeneral = orders.find((o) => o.type === 'assignGeneral' && o.armyId === army.id)
   const generalValue = pendingGeneral && pendingGeneral.type === 'assignGeneral' ? pendingGeneral.generalId ?? '' : army.generalId ?? ''
+  const home = map.territories[army.homeTerritoryId]
+  const rank = Math.max(0, Math.min(TRAINING.max, army.training ?? 0))
+  const tiers = weaponTiers(owner, game.turn)
+  const power = unitPower(army.units, combatMods(owner, game.turn), rank)
 
   return (
     <div
@@ -50,9 +57,18 @@ export function ArmyCard({ army, game }: { army: Army; game: GameState }) {
           <span className="w-2 h-2 rounded-full" style={{ background: owner.color, boxShadow: `0 0 8px ${owner.color}` }} />
           <span className="font-display text-[11px] tracking-wider">{mine ? `ARMY ${army.id.toUpperCase()}` : owner.name.toUpperCase()}</span>
         </div>
-        <span className="text-xs text-slate-400">{totalUnits(army.units).toFixed(1)} div · pow {unitPower(army.units).toFixed(1)}</span>
+        <span className="text-xs text-slate-400">{formatDivisions(totalUnits(army.units))} div · pow {power.toFixed(1)}</span>
       </div>
-      <UnitStrip units={army.units} />
+      <UnitStrip units={army.units} tiers={tiers} />
+      <div className="mt-1.5">
+        <div className="flex justify-between text-[11px]">
+          <span className="text-cyan-200">{trainingRank(rank)}{home ? ` · ${home.name}` : ''}</span>
+          <span className="text-slate-500">{rank}/{TRAINING.max}</span>
+        </div>
+        <div className="mt-1 h-1 rounded-full bg-slate-800 overflow-hidden">
+          <div className="h-full rounded-full bg-cyan-400" style={{ width: `${(rank / TRAINING.max) * 100}%` }} />
+        </div>
+      </div>
       {mine && army.outOfSupplyTurns > 0 && (
         <div className="mt-1.5 text-xs text-rose-300">OUT OF SUPPLY for {army.outOfSupplyTurns} month(s). Surrenders at 3.</div>
       )}

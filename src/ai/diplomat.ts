@@ -1,6 +1,8 @@
 import { PERSONALITIES } from '../data/personalities'
+import { ARMS } from '../data/unitTypes'
+import { combatMods } from '../engine/arms'
 import { computeEconomy, militaryPower, unitPower, type EconomyReport } from '../engine/economy'
-import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, nationModifiers, pairKey } from '../engine/helpers'
+import { alliesOf, atWar, canUseUnit, enemiesOf, factoryCount, hasCasusBelli, hasPact, isAllied, pairKey } from '../engine/helpers'
 import type { Rng } from '../engine/rng'
 import { bundleEmpty, bundleEntries, marketPrices, stockOf, type MarketPrices } from '../engine/trade'
 import type { Army, GameState, NationId, Proposal, RegionId, ResourceBundle, TradeResource, WorldMap } from '../engine/types'
@@ -24,12 +26,12 @@ export function perceivedPower(s: GameState, map: WorldMap, viewer: NationId, ta
   const n = s.nations[target]
   if (!n) return 0
   const seen = vis ?? visibleRegions(s, map, viewer)
-  const mods = nationModifiers(n)
+  const mods = combatMods(n, s.turn)
   let visible = 0
   let hidden = 0
   for (const a of armies ?? Object.values(s.armies)) {
     if (a.owner !== target) continue
-    const p = unitPower(a.units, mods)
+    const p = unitPower(a.units, mods, a.training ?? 0)
     if (seen === 'all' || seen.has(a.location)) visible += p
     else hidden += p
   }
@@ -188,6 +190,22 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       if (eP > myP * 1.2) return verdict(false, `${enemyName} is too strong for us`)
       if (me.warWeariness > 20) return verdict(false, 'our people are weary of war')
       return verdict(false, 'we will not bleed for you')
+    }
+    case 'arms': {
+      const { tier, payPerMonth, seller, unit } = p.terms
+      const list = ARMS.foreignPay[tier - 1] ?? ARMS.foreignPay[0]
+      const trader = me.personality === 'trader'
+      if (botId === seller) {
+        if (!canUseUnit(me, unit) || factoryCount(s, botId) < tier) return verdict(false, 'we cannot build those weapons')
+        const want = list * (trader ? 0.9 : 1.25) * (op < -15 ? 1.4 : op > 25 ? 0.85 : 1)
+        if (payPerMonth + noise / 20 >= want) return verdict(true, trader ? 'a profitable arms contract' : 'we can spare the weapons')
+        return verdict(false, 'the price is too low')
+      }
+      const atWarNow = enemiesOf(s, botId).length > 0
+      const max = list * (atWarNow ? 1.5 : 1.15)
+      if (payPerMonth > max + Math.max(0, noise) / 10) return verdict(false, 'too expensive')
+      if (atWarNow || trader || payPerMonth <= list) return verdict(true, 'we need the weapons')
+      return verdict(false, 'we have no need of these weapons')
     }
   }
 }

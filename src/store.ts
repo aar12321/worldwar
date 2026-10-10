@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { generateAllBotOrders } from './ai/bot'
+import { normalizeGame } from './engine/migrate'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
 import { validateOrder } from './engine/orders'
@@ -132,7 +133,7 @@ export const useGame = create<GameStore>((set, get) => ({
     try {
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
-      const game = JSON.parse(raw) as GameState
+      const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
       set({ game, orders: [], selectedRegion: game.playerId, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [] })
     } catch {
       get().toast('Save file is corrupted.', 'error')
@@ -173,6 +174,9 @@ export const useGame = create<GameStore>((set, get) => ({
     if (order.type === 'move' || order.type === 'attack')
       rest = orders.filter((o) => !((o.type === 'move' || o.type === 'attack') && o.armyId === order.armyId))
     else if (order.type === 'respond') rest = orders.filter((o) => !(o.type === 'respond' && o.proposalId === order.proposalId))
+    else if (order.type === 'train') rest = orders.filter((o) => !(o.type === 'train' && o.armyId === order.armyId))
+    else if (order.type === 'rebase') rest = orders.filter((o) => !(o.type === 'rebase' && o.armyId === order.armyId))
+    else if (order.type === 'signContract') rest = orders.filter((o) => !(o.type === 'signContract' && o.unit === order.unit))
     const err = validateOrder(game, map, order, rest)
     if (err) {
       get().toast(err, 'error')

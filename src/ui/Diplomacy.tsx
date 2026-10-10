@@ -3,14 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { perceivedPower } from '../ai/diplomat'
 import { coalitionActive, nationNeighbors, opinionLabel, opinionReport, type OpinionReport } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
-import { COSTS, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS } from '../data/unitTypes'
+import { ARMS, COSTS, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS, UNIT_SPECS } from '../data/unitTypes'
 import { describeProposal } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
 import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey, regionsOf, turnDate } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { bundleValue, describeBundle, marketPrices, stockOf } from '../engine/trade'
-import type { Deal, Dispatch, NationId, Proposal, RegionId, ResourceBundle, TradeResource } from '../engine/types'
-import { TRADE_RESOURCES } from '../engine/types'
+import type { Deal, Dispatch, NationId, Proposal, RegionId, ResourceBundle, TradeResource, UnitType } from '../engine/types'
+import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
 import { MAX_REPARATIONS, netWarScore, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
@@ -244,6 +244,86 @@ function TradeComposer({ target }: { target: NationId }) {
   )
 }
 
+function ArmsComposer({ target }: { target: NationId }) {
+  const view = usePlayerView()!
+  const { player } = view
+  const [unit, setUnit] = useState<UnitType>('infantry')
+  const [tier, setTier] = useState(1)
+  const [months, setMonths] = useState(6)
+  const [pay, setPay] = useState<number>(ARMS.foreignPay[0])
+  const [selling, setSelling] = useState(false)
+  const seller = selling ? player.id : target
+  const bonus = Math.round(tier * ARMS.attackPerTier * 100)
+  return (
+    <div className="space-y-2 rounded-lg bg-slate-950/50 p-2.5">
+      <div className="flex gap-1.5">
+        <button className={`btn flex-1 ${selling ? '' : 'bg-cyan-400/25'}`} onClick={() => setSelling(false)}>
+          Buy
+        </button>
+        <button className={`btn flex-1 ${selling ? 'bg-cyan-400/25' : ''}`} onClick={() => setSelling(true)}>
+          Sell
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <label className="space-y-1">
+          <span className="label">Unit</span>
+          <select className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1" value={unit} onChange={(e) => setUnit(e.target.value as UnitType)}>
+            {UNIT_TYPES.map((u) => (
+              <option key={u} value={u}>
+                {UNIT_SPECS[u].name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1">
+          <span className="label">Tier</span>
+          <select
+            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1"
+            value={tier}
+            onChange={(e) => {
+              const next = +e.target.value
+              setTier(next)
+              setPay(ARMS.foreignPay[next - 1])
+            }}
+          >
+            {[1, 2, 3].map((level) => (
+              <option key={level} value={level}>
+                Tier {level} (+{level * 10}% attack)
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-slate-400">Duration</span>
+        <select className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5" value={months} onChange={(e) => setMonths(+e.target.value)}>
+          {[3, 6, ARMS.maxMonths].map((m) => (
+            <option key={m} value={m}>
+              {m} months
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <div className="flex justify-between text-xs">
+          <span className="text-slate-400">{selling ? 'They pay / month' : 'You pay / month'}</span>
+          <span>{pay} Capital</span>
+        </div>
+        <input type="range" className="w-full" min={1} max={ARMS.maxPay} step={1} value={pay} onChange={(e) => setPay(+e.target.value)} />
+      </div>
+      <p className="text-[11px] text-slate-400">
+        {selling ? 'You' : 'They'} must have the technology and {tier} {tier === 1 ? 'factory' : 'factories'}. The buyer gains +{bonus}% {UNIT_SPECS[unit].name} attack. War or an embargo cancels it.
+      </p>
+      <OrderButton
+        order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'arms', terms: { unit, tier, months, payPerMonth: pay, seller } } }}
+        label={`${selling ? 'Offer weapons' : 'Request weapons'} (${PROPOSAL_COSTS.arms} PP)`}
+        showError
+        tone="btn-primary"
+      />
+    </div>
+  )
+}
+
 function RegionPick({ ids, picked, toggle }: { ids: RegionId[]; picked: RegionId[]; toggle: (id: RegionId) => void }) {
   const view = usePlayerView()!
   const { map } = getWorld()
@@ -329,7 +409,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const { game, player } = view
   const { map } = getWorld()
   const ref = useRef<HTMLDivElement>(null)
-  const [mode, setMode] = useState<'none' | 'trade' | 'peace'>('none')
+  const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'arms'>('none')
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [focused])
@@ -346,7 +426,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
   const status = war ? 'AT WAR' : allied ? 'ALLIED' : pact ? `PACT TO ${turnDate(game.pacts[pairKey(player.id, id)]).toUpperCase()}` : 'PEACE'
   const statusColor = war ? 'text-rose-400' : allied ? 'text-cyan-300' : pact ? 'text-emerald-300' : 'text-slate-400'
-  const toggle = (m: 'trade' | 'peace') => setMode((cur) => (cur === m ? 'none' : m))
+  const toggle = (m: 'trade' | 'peace' | 'arms') => setMode((cur) => (cur === m ? 'none' : m))
   return (
     <div
       ref={ref}
@@ -390,6 +470,9 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
             <button className={`btn ${mode === 'trade' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('trade')}>
               Trade
             </button>
+            <button className={`btn ${mode === 'arms' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('arms')}>
+              Weapons
+            </button>
             {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label={`Leave alliance (${COSTS.leaveAlliance})`} tone="btn-red" />}
           </>
         )}
@@ -409,7 +492,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
       <AnimatePresence initial={false}>
         {mode !== 'none' && (
           <motion.div key={mode} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
-            {mode === 'trade' ? <TradeComposer target={id} /> : <PeaceComposer target={id} />}
+            {mode === 'trade' ? <TradeComposer target={id} /> : mode === 'arms' ? <ArmsComposer target={id} /> : <PeaceComposer target={id} />}
           </motion.div>
         )}
       </AnimatePresence>

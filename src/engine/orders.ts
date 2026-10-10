@@ -1,7 +1,7 @@
 import { TECH_BY_ID } from '../data/techTree'
-import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, UNIT_SPECS } from '../data/unitTypes'
+import { ARMS, BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAINING, UNIT_SPECS, trainingCost } from '../data/unitTypes'
 import { validateProposal } from './diplomacy'
-import { atWar, canUseUnit, hasCasusBelli, hasPact, isAllied } from './helpers'
+import { armyIsHome, atWar, boundArmy, canUseUnit, factoryCount, hasCasusBelli, hasPact, isAllied } from './helpers'
 import type { GameState, Order, WorldMap } from './types'
 import { canReach } from './warfare'
 
@@ -23,6 +23,12 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'recruit':
       c.capital = UNIT_SPECS[o.unit].capitalCost
       c.manpower = UNIT_SPECS[o.unit].manpowerCost
+      break
+    case 'train':
+      c.capital = trainingCost(s.armies[o.armyId]?.training ?? 0)
+      break
+    case 'signContract':
+      c.capital = ARMS.domesticCost[o.tier - 1] ?? 0
       break
     case 'research':
       c.tp = TECH_BY_ID[o.techId]?.cost ?? 0
@@ -97,11 +103,44 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return null
     }
     case 'recruit': {
-      const r = s.regions[o.regionId]
-      if (r?.owner !== o.nationId) return 'You do not control this region'
+      const t = map.territories[o.territoryId]
+      if (!t) return 'Unknown territory'
+      const r = s.regions[t.regionId]
+      if (r?.owner !== o.nationId) return 'You do not control this territory'
       if (!canUseUnit(n, o.unit)) return 'Technology required'
       const spec = UNIT_SPECS[o.unit]
       if (r.buildings[spec.requiresBuilding] <= 0) return `Requires a ${BUILDING_SPECS[spec.requiresBuilding].name}`
+      const bound = boundArmy(s, t.id, o.nationId)
+      if (bound && !armyIsHome(s, map, bound)) return 'Army must return to this muster to recruit'
+      return null
+    }
+    case 'train': {
+      const a = s.armies[o.armyId]
+      if (!a || a.owner !== o.nationId) return 'Not your army'
+      if (!armyIsHome(s, map, a)) return 'Army must be at its home muster'
+      if ((a.training ?? 0) >= TRAINING.max) return 'Already fully trained'
+      if (pending.some((p) => p.type === 'train' && p.armyId === a.id)) return 'Already training'
+      return null
+    }
+    case 'rebase': {
+      const a = s.armies[o.armyId]
+      if (!a || a.owner !== o.nationId) return 'Not your army'
+      const t = map.territories[o.territoryId]
+      if (!t) return 'Unknown territory'
+      if (s.regions[t.regionId]?.owner !== o.nationId) return 'You do not control this territory'
+      if (a.location !== t.regionId) return 'Army must be standing in that country'
+      if (a.homeTerritoryId === t.id) return 'Already based here'
+      const occupant = boundArmy(s, t.id, o.nationId)
+      if (occupant && occupant.id !== a.id) return 'That muster already has an army'
+      if (pending.some((p) => p.type === 'rebase' && p.territoryId === t.id && p.armyId !== a.id)) return 'That muster already has an army'
+      return null
+    }
+    case 'signContract': {
+      if (!Number.isInteger(o.tier) || o.tier < 1 || o.tier > ARMS.maxTier) return 'Invalid tier'
+      if (!canUseUnit(n, o.unit)) return 'Technology required'
+      const factories = factoryCount(s, o.nationId)
+      if (factories < o.tier) return factories === 0 ? 'Requires a Factory' : `Needs ${o.tier} factories`
+      if (pending.some((p) => p.type === 'signContract' && p.unit === o.unit)) return 'Already queued'
       return null
     }
     case 'research': {

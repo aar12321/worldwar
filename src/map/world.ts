@@ -4,7 +4,8 @@ import { feature, neighbors } from 'topojson-client'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import worldTopology from 'world-atlas/countries-110m.json'
 import { COUNTRY_STATS, EXCLUDED_COUNTRIES, STRATEGIC_SEA_LANES } from '../data/countries'
-import type { MapRegion, RegionId, WorldMap } from '../engine/types'
+import { indexTerritories, musterTerritories } from '../data/territories'
+import type { MapRegion, RegionId, Territory, WorldMap } from '../engine/types'
 
 export type CountryFeature = Feature<Polygon | MultiPolygon, { name: string; regionId: RegionId }>
 
@@ -118,7 +119,10 @@ export function buildWorld(): BuiltWorld {
   }
 
   const order = Object.keys(regions).sort()
-  return { map: { regions, order }, features }
+  const musters: Territory[] = []
+  for (const id of order) musters.push(...musterTerritories(regions[id]))
+  const { territories, territoriesByRegion } = indexTerritories(musters)
+  return { map: { regions, order, territories, territoriesByRegion }, features }
 }
 
 let cached: BuiltWorld | null = null

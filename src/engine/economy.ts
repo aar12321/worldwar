@@ -1,6 +1,7 @@
 import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
-import { UNIT_SPECS } from '../data/unitTypes'
+import { TRAINING, UNIT_SPECS } from '../data/unitTypes'
+import { combatMods } from './arms'
 import { addLog, armiesOf, clamp, enemiesOf, nationModifiers, type AggregatedModifiers } from './helpers'
 import type { Rng } from './rng'
 import type { Buildings, GameState, MapRegion, NationId, RegionState, UnitType, WorldMap } from './types'
@@ -203,21 +204,22 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   }
 }
 
-/** Total army strength, including the nation's technology bonuses. */
+/** Total army strength, including technology, training, and weapons contracts. */
 export function militaryPower(s: GameState, nationId: NationId): number {
   const n = s.nations[nationId]
   if (!n) return 0
-  const mods = nationModifiers(n)
+  const mods = combatMods(n, s.turn)
   let p = 0
-  for (const a of Object.values(s.armies)) if (a.owner === nationId) p += unitPower(a.units, mods)
+  for (const a of Object.values(s.armies)) if (a.owner === nationId) p += unitPower(a.units, mods, a.training ?? 0)
   return p
 }
 
-export function unitPower(units: Record<UnitType, number>, mods?: AggregatedModifiers | null): number {
+export function unitPower(units: Record<UnitType, number>, mods?: AggregatedModifiers | null, training = 0): number {
   let p = 0
   for (const k of UNIT_TYPES) {
     const spec = UNIT_SPECS[k]
     p += units[k] * (spec.attack * (1 + (mods?.unitAttack[k] ?? 0)) + spec.defense * (1 + (mods?.unitDefense[k] ?? 0))) * 0.5
   }
-  return p
+  const rank = Math.max(0, Math.min(TRAINING.max, training))
+  return p * (1 + rank * TRAINING.bonusPerLevel)
 }

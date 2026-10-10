@@ -14,8 +14,8 @@ npm run build      # type-check + production bundle
 ## How to play
 
 1. Pick a nation on the main menu (search the list or click the globe), choose a victory condition (25% / 40% / 60% of world population), and begin.
-2. Click a region to open its panel: build Factories, Farms, Universities, Barracks, and Ports; recruit Infantry, Armor, Air Wings, and Fleets.
-3. Select an army, press **Attack** (or **Move**), then click a highlighted region on the globe to draw a front. Assign a general for trait bonuses.
+2. Click a region to open its panel: build Factories, Farms, Universities, Barracks, and Ports. Each country holds a few muster territories. An empty muster summons one army, and you can recruit or train that army only while it is standing there.
+3. Train an army up to five times, from Green to Guard, for up to +40% combat power. Sign a weapons contract on the Nation panel, or buy arms from another nation, to sharpen one unit type. Select an army, press **Attack** (or **Move**), then click a highlighted region on the globe to draw a front. Assign a general for trait bonuses.
 4. Balance the five resources in the HUD (hover any resource for a breakdown):
    - **Manpower**: civilians work; the draft rate moves them into the military pool.
    - **Capital**: taxes, factories, and port trade, minus upkeep.

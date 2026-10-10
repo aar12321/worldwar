@@ -10,6 +10,7 @@ import { visibleArmies, visibleRegions } from '../engine/visibility'
 import { canReach } from '../engine/warfare'
 import { getWorld, type CountryFeature } from '../map/world'
 import { useGame } from '../store'
+import { armyCaption } from './labels'
 import { NEON, tint, withAlpha } from './colors'
 import { globeBridge, useFx } from './globeBridge'
 
@@ -204,6 +205,42 @@ function regionColor(game: GameState | null, id: RegionId): string {
 }
 
 const SIDE_COLOR = () => 'rgba(2, 6, 23, 0.75)'
+
+interface Marker {
+  key: string
+  lat: number
+  lng: number
+  text: string
+  kind: 'army' | 'territory'
+}
+
+function paintMarker(d: object): HTMLElement {
+  const marker = d as Marker
+  const el = document.createElement('div')
+  el.textContent = marker.text
+  el.style.pointerEvents = 'none'
+  el.style.whiteSpace = 'nowrap'
+  el.style.fontFamily = 'ui-sans-serif, system-ui, sans-serif'
+  if (marker.kind === 'army') {
+    el.style.color = '#e2e8f0'
+    el.style.fontSize = '10px'
+    el.style.fontWeight = '600'
+    el.style.background = 'rgba(2,6,23,0.78)'
+    el.style.border = '1px solid rgba(34,211,238,0.55)'
+    el.style.borderRadius = '999px'
+    el.style.padding = '1px 6px'
+    el.style.transform = 'translate(-50%, 14px)'
+  } else {
+    el.style.color = '#fde68a'
+    el.style.fontSize = '10px'
+    el.style.letterSpacing = '0.08em'
+    el.style.textTransform = 'uppercase'
+    el.style.fontWeight = '700'
+    el.style.textShadow = '0 1px 2px #020617'
+    el.style.transform = 'translate(-50%, -16px)'
+  }
+  return el
+}
 const datumCache = new Map<string, LayerDatum>()
 const arcCache = new Map<string, Arc>()
 
@@ -475,20 +512,30 @@ export function WorldGlobe() {
     const seen = new Set<string>()
     const out: LayerDatum[] = []
     const marchById = new Map(marches.map((m) => [m.armyId, m]))
-    const perRegion = new Map<RegionId, number>()
+    const visitors = new Map<RegionId, number>()
     for (const a of visibleArmies(game, map, game.playerId, vision ?? undefined)) {
-      const idx = perRegion.get(a.location) ?? 0
-      perRegion.set(a.location, idx + 1)
-      const r = map.regions[a.location]
-      const angle = idx * 2.1
-      const lat = r.lat + (idx ? Math.sin(angle) * 1.6 : 0)
-      const lng = r.lng + (idx ? Math.cos(angle) * 1.6 : 0)
+      const home = map.territories[a.homeTerritoryId]
+      const atHome = !!home && a.location === home.regionId
+      let lat: number
+      let lng: number
+      if (atHome) {
+        lat = home.lat
+        lng = home.lng
+      } else {
+        const r = map.regions[a.location]
+        const idx = visitors.get(a.location) ?? 0
+        visitors.set(a.location, idx + 1)
+        const angle = idx * 2.1
+        lat = r.lat + (idx ? Math.sin(angle) * 1.6 : 0)
+        lng = r.lng + (idx ? Math.cos(angle) * 1.6 : 0)
+      }
       const m = marchById.get(a.id)
       const from = m ? map.regions[m.from] : null
+      const fromHome = !!(home && m && m.from === home.regionId)
       const color = game.nations[a.owner]?.color ?? '#94a3b8'
       const present = (['infantry', 'armor', 'air', 'naval'] as UnitType[]).filter((k) => a.units[k] >= 0.5).join(',')
-      const signature = `${a.owner}|${color}|${present}`
-      const march = from ? { from: [from.lng, from.lat] as [number, number], to: [lng, lat] as [number, number] } : null
+      const signature = `${a.owner}|${color}|${present}|${a.training ?? 0}`
+      const march = from ? { from: [fromHome ? home.lng : from.lng, fromHome ? home.lat : from.lat] as [number, number], to: [lng, lat] as [number, number] } : null
       const hold = !!(m && hiddenCaptures.has(m.to))
       const prev = cache.get(a.id)
       if (prev && prev.kind === 'army' && prev.signature === signature) {
@@ -530,6 +577,41 @@ export function WorldGlobe() {
     for (const key of [...cache.keys()]) if (!seen.has(key)) cache.delete(key)
     return out
   }, [game, marches, hiddenCaptures, vision])
+
+  const markers = useMemo<Marker[]>(() => {
+    const out: Marker[] = []
+    if (game) {
+      const marching = new Set(marches.map((m) => m.armyId))
+      const visitors = new Map<RegionId, number>()
+      for (const a of visibleArmies(game, map, game.playerId, vision ?? undefined)) {
+        if (marching.has(a.id)) continue
+        const home = map.territories[a.homeTerritoryId]
+        const atHome = !!home && a.location === home.regionId
+        let lat: number
+        let lng: number
+        if (atHome) {
+          lat = home.lat
+          lng = home.lng
+        } else {
+          const r = map.regions[a.location]
+          if (!r) continue
+          const idx = visitors.get(a.location) ?? 0
+          visitors.set(a.location, idx + 1)
+          const angle = idx * 2.1
+          lat = r.lat + (idx ? Math.sin(angle) * 1.6 : 0)
+          lng = r.lng + (idx ? Math.cos(angle) * 1.6 : 0)
+        }
+        out.push({ key: `army-${a.id}`, lat, lng, text: armyCaption(a), kind: 'army' })
+      }
+    }
+    if (selectedRegion) {
+      for (const id of map.territoriesByRegion[selectedRegion] ?? []) {
+        const t = map.territories[id]
+        out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, text: t.name, kind: 'territory' })
+      }
+    }
+    return out
+  }, [game, marches, vision, selectedRegion])
 
   const makeObject = useCallback((d: object) => {
     const datum = d as LayerDatum
@@ -670,6 +752,15 @@ export function WorldGlobe() {
       customLayerData={layerData}
       customThreeObject={makeObject}
       customThreeObjectUpdate={updateObject}
+      htmlElementsData={markers}
+      htmlLat="lat"
+      htmlLng="lng"
+      htmlAltitude={0.02}
+      htmlElement={paintMarker}
+      htmlTransitionDuration={reducedMotion ? 0 : 400}
+      htmlElementVisibilityModifier={(el, isVisible) => {
+        el.style.opacity = isVisible ? '1' : '0'
+      }}
       ringsData={rings}
       ringColor={ringColor}
       ringMaxRadius="maxRadius"

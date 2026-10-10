@@ -134,6 +134,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       vision: {},
       aggression,
       personality,
+      contracts: [],
     }
 
     const army: Army = {
@@ -144,6 +145,8 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       generalId: generals[0]?.id ?? null,
       outOfSupplyTurns: 0,
       entrenched: 0,
+      homeTerritoryId: map.territoriesByRegion[id]?.[0] ?? '',
+      training: 0,
     }
     state.regions[id] = region
     state.nations[id] = nation

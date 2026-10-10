@@ -52,7 +52,7 @@ export function OrdersTray() {
     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 max-w-[70vw]">
       <div className="glass rounded-xl px-3 py-2 flex items-center gap-2 overflow-x-auto scroll-thin">
         <span className="label whitespace-nowrap mr-1">Orders ({orders.length})</span>
-        {orders.length === 0 && <span className="text-sm text-slate-500 whitespace-nowrap">Select a region to build, recruit, or command armies.</span>}
+        {orders.length === 0 && <span className="text-sm text-slate-500 whitespace-nowrap">Select a region to build, raise armies at a muster, or give orders.</span>}
         <AnimatePresence initial={false}>
           {orders.map((o, i) => (
             <motion.button

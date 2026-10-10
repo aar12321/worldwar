@@ -1,4 +1,5 @@
 import { createInitialState } from '../../data/startingNations'
+import { heartland, indexTerritories } from '../../data/territories'
 import type { GameState, MapRegion, Terrain, WorldMap } from '../types'
 
 /** A straight chain of regions r0 - r1 - ... - r{n-1}, all plains unless overridden. */
@@ -20,7 +21,9 @@ export function lineMap(n: number, terrain: Partial<Record<number, Terrain>> = {
       development: 0.6,
     }
   }
-  return { regions, order: Object.keys(regions).sort() }
+  const order = Object.keys(regions).sort()
+  const { territories, territoriesByRegion } = indexTerritories(order.map((id) => heartland(regions[id])))
+  return { regions, order, territories, territoriesByRegion }
 }
 
 export function startState(map: WorldMap, player = 'r0', seed = 1): GameState {
