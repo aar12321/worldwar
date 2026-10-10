@@ -66,8 +66,8 @@ export function validateTradeTerms(s: GameState, terms: TradeTerms, proposer: Na
     }
   if (bundleEmpty(terms.give) && bundleEmpty(terms.receive)) return 'The deal is empty'
   const mine = shortfall(s.nations[proposer], terms.give)
-  if (mine) return `You lack the ${MARKET[mine].name}`
+  if (mine) return `Not enough ${MARKET[mine].name.toLowerCase()}`
   const theirs = shortfall(s.nations[target], terms.receive)
-  if (theirs) return `${s.nations[target].name} lacks the ${MARKET[theirs].name}`
+  if (theirs) return `${s.nations[target].name} does not have enough ${MARKET[theirs].name.toLowerCase()}`
   return null
 }

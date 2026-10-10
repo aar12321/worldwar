@@ -117,8 +117,8 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
       const toTarget = p.terms.cede.filter((id) => s.regions[id]?.owner === p.from).map((id) => map.regions[id].name)
       if (toProposer.length) parts.push(`${name(s, p.to)} cedes ${toProposer.join(', ')}`)
       if (toTarget.length) parts.push(`${name(s, p.from)} cedes ${toTarget.join(', ')}`)
-      if (p.terms.reparations > 0) parts.push(`${name(s, p.to)} pays ${p.terms.reparations} Capital/month for ${REPARATION_MONTHS} months`)
-      if (p.terms.reparations < 0) parts.push(`${name(s, p.from)} pays ${-p.terms.reparations} Capital/month for ${REPARATION_MONTHS} months`)
+      if (p.terms.reparations > 0) parts.push(`${name(s, p.to)} pays ${p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
+      if (p.terms.reparations < 0) parts.push(`${name(s, p.from)} pays ${-p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
       return parts.length ? parts.join('; ') : 'White peace: no territory or payments change hands'
     }
     case 'pact':
@@ -137,7 +137,7 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
     case 'arms': {
       const buyer = p.terms.seller === p.from ? p.to : p.from
       const bonus = Math.round(p.terms.tier * ARMS.attackPerTier * 100)
-      return `${name(s, p.terms.seller)} supplies ${UNIT_SPECS[p.terms.unit].name} (tier ${p.terms.tier}, +${bonus}% attack) to ${name(s, buyer)} for ${p.terms.payPerMonth} Capital a month, for ${p.terms.months} months`
+      return `${name(s, p.terms.seller)} supplies ${UNIT_SPECS[p.terms.unit].name} weapons (level ${p.terms.tier}, +${bonus}% attack) to ${name(s, buyer)} for ${p.terms.payPerMonth} money a month, for ${p.terms.months} months`
     }
   }
 }

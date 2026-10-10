@@ -222,23 +222,18 @@ function paintMarker(d: object): HTMLElement {
   el.style.pointerEvents = 'none'
   el.style.whiteSpace = 'nowrap'
   el.style.fontFamily = 'ui-sans-serif, system-ui, sans-serif'
+  el.style.color = '#f5f5f7'
+  el.style.fontSize = '11px'
+  el.style.fontWeight = '600'
+  el.style.letterSpacing = '-0.01em'
+  el.style.background = 'rgba(0,0,0,0.62)'
+  el.style.border = '0.5px solid rgba(255,255,255,0.22)'
+  el.style.borderRadius = '999px'
+  el.style.padding = '2px 8px'
   if (marker.kind === 'army') {
-    el.style.color = '#e2e8f0'
-    el.style.fontSize = '10px'
-    el.style.fontWeight = '600'
-    el.style.background = 'rgba(2,6,23,0.78)'
-    el.style.border = '1px solid rgba(34,211,238,0.55)'
-    el.style.borderRadius = '999px'
-    el.style.padding = '1px 6px'
-    el.style.transform = 'translate(-50%, 14px)'
+    el.style.transform = 'translate(-50%, 12px)'
   } else {
-    el.style.color = '#fde68a'
-    el.style.fontSize = '10px'
-    el.style.letterSpacing = '0.08em'
-    el.style.textTransform = 'uppercase'
-    el.style.fontWeight = '700'
-    el.style.textShadow = '0 1px 2px #020617'
-    el.style.transform = 'translate(-50%, -16px)'
+    el.style.transform = 'translate(-50%, -18px)'
   }
   return el
 }
@@ -406,7 +401,7 @@ export function WorldGlobe() {
     (f: object) => {
       const id = (f as CountryFeature).properties.regionId
       if (id === selectedRegion) return '#ffffff'
-      if (game && game.regions[id].owner === game.playerId) return withAlpha(NEON.cyan, 0.9)
+      if (game && game.regions[id].owner === game.playerId) return '#0A84FF'
       return 'rgba(8, 12, 28, 0.9)'
     },
     [game, selectedRegion],
@@ -420,7 +415,8 @@ export function WorldGlobe() {
       const vis = vision ?? 'all'
       const armies = vis === 'all' || vis.has(id) ? armiesIn(game, id).reduce((s, a) => s + totalUnits(a.units), 0) : null
       const rebels = game.regions[id].rebels
-      return `<div class="globe-tip"><b>${mr.name}</b><div style="color:${owner.color}">${owner.name}</div><div>${TERRAIN[mr.terrain].name} · ${game.regions[id].population.toFixed(1)}M</div>${armies === null ? '<div class="dim">Armies: unknown</div>' : `<div>Divisions: ${armies.toFixed(1)}</div>`}${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
+      const yours = game.regions[id].owner === game.playerId
+      return `<div class="globe-tip"><b>${mr.name}</b><div style="color:${owner.color}">${yours ? 'Your country' : owner.name}</div><div>${TERRAIN[mr.terrain].name} · ${game.regions[id].population.toFixed(1)} million people</div>${armies === null ? '<div class="dim">Armies hidden</div>' : `<div>${armies.toFixed(1)} divisions</div>`}${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
     },
     [game, vision],
   )
@@ -469,7 +465,7 @@ export function WorldGlobe() {
           dash: ok ? 1 : 0.2,
           gap: ok ? 0 : 0.15,
           speed: ok ? 0 : 1600,
-          label: ok ? `Supply line to ${to.name} (${d}/${range})` : `${to.name}: OUT OF SUPPLY`,
+          label: ok ? `${to.name} is supplied` : `${to.name} is cut off`,
         })
       }
     }
@@ -738,7 +734,7 @@ export function WorldGlobe() {
       backgroundColor="rgba(0,0,0,0)"
       globeMaterial={globeMaterial}
       showGraticules
-      atmosphereColor={NEON.cyan}
+      atmosphereColor="#9ec9ff"
       atmosphereAltitude={0.16}
       polygonCapCurvatureResolution={6}
       polygonsTransitionDuration={reducedMotion ? 0 : 160}

@@ -5,9 +5,10 @@ import type { TechBranch } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { fmt, usePlayerView } from './hooks'
+import { speak } from './plain'
 
 const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra']
-const BRANCH_COLOR: Record<TechBranch, string> = { land: '#fbbf24', air: '#22d3ee', naval: '#60a5fa', infra: '#e879f9' }
+const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2' }
 
 function TechNode({ tech, index }: { tech: Tech; index: number }) {
   const view = usePlayerView()!
@@ -31,27 +32,25 @@ function TechNode({ tech, index }: { tech: Tech; index: number }) {
       onClick={() => {
         if (queuedIdx >= 0) removeOrder(queuedIdx)
         else if (available) issueOrder(order)
-        else if (err) useGame.getState().toast(err, 'error')
+        else if (err) useGame.getState().toast(speak(err), 'error')
       }}
       disabled={state === 'owned'}
-      className={`relative w-full text-left rounded-lg p-3 border transition-shadow disabled:cursor-default ${state === 'locked' ? 'cursor-help' : ''}`}
+      className={`relative w-full text-left rounded-2xl p-3 border transition-colors disabled:cursor-default ${state === 'locked' ? 'cursor-help border-white/10 bg-white/4' : 'border-white/10'}`}
       style={{
-        borderColor: state === 'locked' ? 'rgba(71,85,105,0.5)' : color,
-        background: owned ? `linear-gradient(135deg, ${color}33, rgba(2,6,23,0.85))` : state === 'queued' ? `${color}22` : 'rgba(2,6,23,0.7)',
-        boxShadow: owned ? `0 0 18px ${color}55, inset 0 0 12px ${color}22` : state === 'available' ? `0 0 10px ${color}44` : 'none',
-        opacity: state === 'locked' ? 0.5 : 1,
+        background: owned ? `${color}22` : state === 'queued' ? 'rgba(255,255,255,0.08)' : state === 'available' ? 'rgba(255,255,255,0.06)' : undefined,
+        opacity: state === 'locked' ? 0.55 : 1,
       }}
-      title={err ?? ''}
+      title={err ? speak(err) : ''}
     >
       <div className="flex items-center justify-between">
-        <span className="font-display text-[10px] tracking-widest" style={{ color }}>
-          TIER {tech.tier}
+        <span className="text-[12px] font-semibold" style={{ color }}>
+          Step {tech.tier}
         </span>
-        <span className="text-[11px] font-semibold text-slate-300">{owned ? 'ACQUIRED' : state === 'queued' ? 'QUEUED (click to cancel)' : `${tech.cost} TP`}</span>
+        <span className="text-[12px] font-medium text-white/60">{owned ? 'Yours' : state === 'queued' ? 'Queued' : `${tech.cost} research`}</span>
       </div>
-      <div className="font-display text-sm font-bold mt-1 tracking-wide">{tech.name}</div>
-      <div className="text-xs text-slate-400 mt-1 leading-snug">{tech.description}</div>
-      {state === 'locked' && err && <div className="text-[11px] text-rose-300/80 mt-1">{err}</div>}
+      <div className="text-[15px] font-semibold tracking-tight mt-1">{tech.name}</div>
+      <div className="text-[12px] text-white/55 mt-1 leading-snug">{tech.description}</div>
+      {state === 'locked' && err && <div className="text-[12px] text-[#ff8a84] mt-1">{speak(err)}</div>}
     </motion.button>
   )
 }
@@ -67,20 +66,20 @@ export function TechTree() {
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: '100%', opacity: 0 }}
       transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-      className="absolute inset-x-3 top-24 bottom-3 z-40 glass rounded-2xl flex flex-col"
+      className="absolute inset-x-4 top-24 bottom-36 z-40 glass rounded-[22px] flex flex-col"
     >
-      <div className="flex items-center justify-between px-6 py-4 border-b border-cyan-400/15">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
         <div>
-          <div className="label">Research Directorate</div>
-          <h2 className="font-display text-2xl font-black tracking-[0.2em] neon-text">TECHNOLOGY TREE</h2>
+          <h2 className="text-[28px] font-semibold tracking-tight">Research</h2>
+          <p className="text-[13px] text-white/55 mt-0.5">Click a technology to queue it. It finishes when the month ends.</p>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
           <div className="text-right">
-            <div className="label">Available Tech Points</div>
-            <div className="font-display text-xl text-cyan-200">{fmt(player.resources.tp - committed.tp)}</div>
+            <div className="label">Available</div>
+            <div className="text-[22px] font-semibold tabular-nums">{fmt(player.resources.tp - committed.tp)}</div>
           </div>
-          <button className="btn" onClick={() => setPanel('tech')}>
-            Close
+          <button className="icon-close" aria-label="Close" onClick={() => setPanel('tech')}>
+            ×
           </button>
         </div>
       </div>
@@ -88,8 +87,8 @@ export function TechTree() {
         <div className="grid grid-cols-4 gap-5 min-w-[960px]">
           {BRANCHES.map((b) => (
             <div key={b} className="space-y-3">
-              <div className="font-display text-xs tracking-[0.25em] pb-2 border-b" style={{ color: BRANCH_COLOR[b], borderColor: `${BRANCH_COLOR[b]}55` }}>
-                {BRANCH_LABELS[b].toUpperCase()}
+              <div className="text-[13px] font-semibold pb-2 border-b border-white/10" style={{ color: BRANCH_COLOR[b] }}>
+                {BRANCH_LABELS[b]}
               </div>
               {TECHS.filter((t) => t.branch === b)
                 .sort((x, y) => x.tier - y.tier)
@@ -102,7 +101,7 @@ export function TechTree() {
             </div>
           ))}
         </div>
-        <p className="text-xs text-slate-500 mt-6">Research is queued now and completes when the month ends. Tech Points come from universities and your workforce.</p>
+        <p className="text-[12px] text-white/40 mt-6">Research comes from universities and the people working in your country.</p>
       </div>
     </motion.div>
   )

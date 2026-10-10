@@ -38,6 +38,6 @@ export function runSpyMission(s: GameState, map: WorldMap, nationId: NationId, t
   } else {
     s.casusBelli[`${ownerId}|${nationId}`] = s.turn + SPY.failureCasusBelliTurns
     addOpinion(s, ownerId, nationId, CAUGHT_SPYING, -25, 0.5)
-    addLog(s, 'spy', `${owner.name} caught ${n.name}'s spies in ${name}! ${owner.name} gains a casus belli.`, [nationId, ownerId])
+    addLog(s, 'spy', `${owner.name} caught ${n.name}'s spies in ${name}. ${owner.name} can now declare war more cheaply.`, [nationId, ownerId])
   }
 }

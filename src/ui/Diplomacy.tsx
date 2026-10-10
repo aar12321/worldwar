@@ -115,7 +115,7 @@ function InboxCard({ p }: { p: Proposal }) {
           <Dot color={from.color} />
           <span className="font-semibold truncate">{from.name}</span>
         </span>
-        <span className="text-[10px] font-display tracking-widest text-amber-300 whitespace-nowrap">{PROPOSAL_LABELS[p.kind].toUpperCase()}</span>
+        <span className="text-[12px] font-medium text-[#ffd60a] whitespace-nowrap">{PROPOSAL_LABELS[p.kind]}</span>
       </div>
       <p className="text-sm text-slate-300">{describeProposal(game, map, p)}.</p>
       <div className="flex items-center justify-between gap-2">
@@ -236,10 +236,10 @@ function TradeComposer({ target }: { target: NationId }) {
         </select>
       </div>
       <div className="text-[11px] text-slate-400">
-        Market value: you give <span className="text-slate-100">{gv.toFixed(0)}</span>, you get <span className="text-slate-100">{rv.toFixed(0)}</span> Capital.{' '}
+        Market value: you give <span className="text-white">{gv.toFixed(0)}</span>, you get <span className="text-white">{rv.toFixed(0)}</span> money.{' '}
         {rv > 0 && gv / rv < 1 && 'They will want more for it, unless they are short of what you offer.'}
       </div>
-      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label={`Offer deal (${PROPOSAL_COSTS.trade} PP)`} showError tone="btn-primary" />
+      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label={`Offer deal · ${PROPOSAL_COSTS.trade} influence`} showError tone="btn-primary" />
     </div>
   )
 }
@@ -307,7 +307,7 @@ function ArmsComposer({ target }: { target: NationId }) {
       <div>
         <div className="flex justify-between text-xs">
           <span className="text-slate-400">{selling ? 'They pay / month' : 'You pay / month'}</span>
-          <span>{pay} Capital</span>
+          <span>{pay} money</span>
         </div>
         <input type="range" className="w-full" min={1} max={ARMS.maxPay} step={1} value={pay} onChange={(e) => setPay(+e.target.value)} />
       </div>
@@ -316,7 +316,7 @@ function ArmsComposer({ target }: { target: NationId }) {
       </p>
       <OrderButton
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'arms', terms: { unit, tier, months, payPerMonth: pay, seller } } }}
-        label={`${selling ? 'Offer weapons' : 'Request weapons'} (${PROPOSAL_COSTS.arms} PP)`}
+        label={`${selling ? 'Offer weapons' : 'Request weapons'} · ${PROPOSAL_COSTS.arms} influence`}
         showError
         tone="btn-primary"
       />
@@ -384,11 +384,11 @@ function PeaceComposer({ target }: { target: NationId }) {
           <span>{reparations === 0 ? 'None' : reparations > 0 ? `They pay ${reparations}/mo` : `You pay ${-reparations}/mo`}</span>
         </div>
         <input type="range" className="w-full" min={-MAX_REPARATIONS} max={MAX_REPARATIONS} step={1} value={reparations} onChange={(e) => setReparations(+e.target.value)} />
-        <div className="text-[10px] text-slate-500">Paid in Capital for {REPARATION_MONTHS} months.</div>
+        <div className="text-[12px] text-white/45">Paid in money for {REPARATION_MONTHS} months.</div>
       </div>
       <OrderButton
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
-        label={`${live.length === 0 && reparations === 0 ? 'Offer white peace' : 'Send terms'} (${PROPOSAL_COSTS.peace} PP)`}
+        label={`${live.length === 0 && reparations === 0 ? 'Offer white peace' : 'Send terms'} · ${PROPOSAL_COSTS.peace} influence`}
         showError
         tone="btn-primary"
       />
@@ -425,7 +425,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const power = perceivedPower(game, map, player.id, id, ctx.vision)
   const persona = PERSONALITIES[n.personality]
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
-  const status = war ? 'AT WAR' : allied ? 'ALLIED' : pact ? `PACT TO ${turnDate(game.pacts[pairKey(player.id, id)]).toUpperCase()}` : 'PEACE'
+  const status = war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
   const statusColor = war ? 'text-rose-400' : allied ? 'text-cyan-300' : pact ? 'text-emerald-300' : 'text-slate-400'
   const toggle = (m: 'trade' | 'peace' | 'arms') => setMode((cur) => (cur === m ? 'none' : m))
   return (
@@ -438,11 +438,11 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           <Dot color={n.color} />
           <span className="font-semibold truncate">{n.name}</span>
         </button>
-        <span className={`text-[10px] font-display tracking-widest whitespace-nowrap ${statusColor}`}>{status}</span>
+        <span className={`text-[12px] font-medium whitespace-nowrap ${statusColor}`}>{status}</span>
       </div>
       <div className="flex items-center gap-2 text-[11px] text-slate-400">
-        <span className="rounded border border-fuchsia-400/40 text-fuchsia-200 px-1.5 py-px font-display tracking-wider text-[9px]" title={persona.description}>
-          {persona.name.toUpperCase()}
+        <span className="chip" title={persona.description}>
+          {persona.name}
         </span>
         <span>
           {regionsOf(game, id).length === 1 ? '1 region' : `${regionsOf(game, id).length} regions`} · power ~{power.toFixed(0)} ({power > ctx.myPower ? 'stronger' : 'weaker'})
@@ -450,8 +450,8 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
       </div>
       {(cb || theirCb) && (
         <div className="text-[11px]">
-          {cb && <span className="text-amber-300">You hold a casus belli. </span>}
-          {theirCb && <span className="text-rose-300">They hold a casus belli on you.</span>}
+          {cb && <span className="text-[#ffd60a]">You have a grievance, so war is cheaper. </span>}
+          {theirCb && <span className="text-[#ff8a84]">They have a grievance against you.</span>}
         </div>
       )}
       <OpinionMeter report={report} />
@@ -474,15 +474,15 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
                 {treaties ? 'Hide treaties' : 'Treaties'}
               </button>
             )}
-            {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label={`Leave alliance (${COSTS.leaveAlliance})`} tone="btn-quiet" />}
+            {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label={`Leave alliance · ${COSTS.leaveAlliance} influence`} tone="btn-quiet" />}
           </>
         )}
       </div>
       {treaties && !war && !allied && (
         <div className="flex flex-wrap gap-1.5">
-          {!pact && <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'pact' } }} label={`Pact (${PROPOSAL_COSTS.pact})`} />}
-          <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'alliance' } }} label={`Alliance (${PROPOSAL_COSTS.alliance})`} />
-          <OrderButton order={{ type: 'declareWar', nationId: player.id, target: id }} label={`War (${cb ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} PP)`} tone="btn-red" />
+          {!pact && <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'pact' } }} label={`Peace pact · ${PROPOSAL_COSTS.pact} influence`} />}
+          <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'alliance' } }} label={`Alliance · ${PROPOSAL_COSTS.alliance} influence`} />
+          <OrderButton order={{ type: 'declareWar', nationId: player.id, target: id }} label={`Declare war · ${cb ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} influence`} tone="btn-red" />
         </div>
       )}
       {callable.length > 0 && (
@@ -491,7 +491,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
             <OrderButton
               key={e}
               order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'callToArms', enemy: e } }}
-              label={`Call to arms vs ${game.nations[e].name} (${PROPOSAL_COSTS.callToArms})`}
+              label={`Call to arms vs ${game.nations[e].name} · ${PROPOSAL_COSTS.callToArms} influence`}
               tone="btn-magenta"
             />
           ))}
@@ -547,7 +547,7 @@ export function DiplomacyPanel() {
     .slice(0, 6)
 
   return (
-    <PanelShell title="DIPLOMACY" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} awaiting you`} panel="diplomacy">
+    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. Offers are answered when the month ends.`} panel="diplomacy">
       {ctx.coalition && (
         <div className="rounded-lg border border-rose-500/50 bg-rose-500/10 p-3 text-xs text-rose-200">
           Your growing power alarms the world. Neighbors now distrust you and are quicker to band together against you.

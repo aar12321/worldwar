@@ -74,7 +74,7 @@ export function effectAmount(e: Extract<EventEffect, { type: 'resource' }>, work
 
 export function describeEffect(e: EventEffect, workforce: number, s: GameState, map: WorldMap, ev: PendingEvent): string {
   const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`)
-  const labels = { capital: 'Capital', food: 'Food', pp: 'Political Points', tp: 'Tech Points' }
+  const labels = { capital: 'money', food: 'food', pp: 'influence', tp: 'research' }
   const rival = ev.rivalId ? s.nations[ev.rivalId].name : 'Rival'
   switch (e.type) {
     case 'opinion':
@@ -84,7 +84,7 @@ export function describeEffect(e: EventEffect, workforce: number, s: GameState, 
       return `${rival} ${v >= 0 ? 'receives' : 'loses'} ${Math.abs(v)} ${labels[e.key]}`
     }
     case 'clearCasusBelli':
-      return `${rival} drops its casus belli against you`
+      return `${rival} drops its grievance against you`
     case 'embargo':
       return `Port trade -${Math.round((1 - ECON.embargoTradeMult) * 100)}% for ${e.turns} months`
     case 'resource':
@@ -92,13 +92,13 @@ export function describeEffect(e: EventEffect, workforce: number, s: GameState, 
     case 'stability':
       return `${sign(e.amount)} Stability`
     case 'militaryPool':
-      return e.fraction > 0 ? `-${Math.round(e.fraction * 100)}% Military Manpower` : `+${Math.round(-e.fraction * 100)}% Military Manpower`
+      return e.fraction > 0 ? `-${Math.round(e.fraction * 100)}% soldiers` : `+${Math.round(-e.fraction * 100)}% soldiers`
     case 'armyAttrition':
       return `-${Math.round(e.fraction * 100)}% strength to all armies`
     case 'unlockRandomTech':
       return 'Unlock a random available technology'
     case 'casusBelliForRival':
-      return `${ev.rivalId ? s.nations[ev.rivalId].name : 'Rival'} gains a casus belli for ${e.turns} months`
+      return `${ev.rivalId ? s.nations[ev.rivalId].name : 'Rival'} gains a grievance for ${e.turns} months`
     case 'spawnRebels':
       return `Rebels (${e.strength} divisions) rise in ${ev.regionId ? map.regions[ev.regionId].name : 'a province'}`
     case 'loseBuilding':

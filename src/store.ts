@@ -7,6 +7,7 @@ import { validateOrder } from './engine/orders'
 import { resolveTurn } from './engine/resolveTurn'
 import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
+import { speak } from './ui/plain'
 
 const SAVE_KEY = 'worlds-of-others-save-v2'
 const SETTINGS_KEY = 'worlds-of-others-settings-v1'
@@ -25,6 +26,8 @@ export interface Settings {
   turnTimer: number
   fxSpeed: 1 | 2
   battleFx: boolean
+  /** Quiet “what to do” prompt on the globe. */
+  showTips: boolean
 }
 
 export interface Toast {
@@ -74,6 +77,7 @@ const defaultSettings: Settings = {
   turnTimer: 0,
   fxSpeed: 1,
   battleFx: true,
+  showTips: true,
 }
 
 function loadSettings(): Settings {
@@ -265,7 +269,8 @@ export const useGame = create<GameStore>((set, get) => ({
 
   toast(text, tone = 'info', ms = 3500) {
     const id = toastId++
-    set((st) => ({ toasts: [...st.toasts.slice(-3), { id, text, tone }] }))
+    const shown = tone === 'error' ? speak(text) : text
+    set((st) => ({ toasts: [...st.toasts.slice(-3), { id, text: shown, tone }] }))
     setTimeout(() => get().dismissToast(id), ms)
   },
 

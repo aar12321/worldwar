@@ -31,11 +31,11 @@ function resultBanner(b: BattleReport, playerId: NationId): { text: string; good
   const playerAttacking = b.attacker.nationId === playerId
   const attackerWon = b.winner === 'attacker'
   if (playerAttacking) {
-    if (b.defender.nationId === 'rebels') return attackerWon ? { text: 'REBELLION CRUSHED', good: true } : { text: 'REBELS HOLD OUT', good: false }
-    return attackerWon && b.captured ? { text: 'TERRITORY CAPTURED', good: true } : { text: 'ASSAULT REPULSED', good: false }
+    if (b.defender.nationId === 'rebels') return attackerWon ? { text: 'Rebellion crushed', good: true } : { text: 'Rebels hold out', good: false }
+    return attackerWon && b.captured ? { text: 'Territory captured', good: true } : { text: 'Assault repulsed', good: false }
   }
-  if (attackerWon && b.captured) return { text: b.attacker.nationId === 'rebels' ? 'REGION SECEDES' : 'TERRITORY LOST', good: false }
-  return { text: 'THE LINE HOLDS', good: true }
+  if (attackerWon && b.captured) return { text: b.attacker.nationId === 'rebels' ? 'The region breaks away' : 'Territory lost', good: false }
+  return { text: 'The line holds', good: true }
 }
 
 export function BattleFX() {
@@ -159,15 +159,15 @@ export function BattleFX() {
 
       <div className="absolute top-[9vh] inset-x-0 flex flex-col items-center">
         <motion.div key={battle.id} initial={{ opacity: 0, scaleX: 0.7 }} animate={{ opacity: 1, scaleX: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} className="bg-gradient-to-r from-rose-600/0 via-rose-600/80 to-rose-600/0 px-16 py-1">
-          <span className="font-display text-sm tracking-[0.5em] text-white">ENGAGEMENT</span>
+          <span className="text-[13px] font-semibold tracking-tight text-white/80">Battle</span>
         </motion.div>
-        <motion.h2 key={`${battle.id}-t`} initial={{ opacity: 0, y: 10, scale: 1.04 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.32 / speed, ease: EASE }} className="font-display text-4xl font-black mt-2 text-white tracking-[0.18em]" style={{ textShadow: '0 0 20px rgba(244,63,94,0.8)' }}>
-          BATTLE OF {region.name.toUpperCase()}
+        <motion.h2 key={`${battle.id}-t`} initial={{ opacity: 0, y: 10, scale: 1.04 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.32 / speed, ease: EASE }} className="text-[36px] font-semibold mt-1 text-white tracking-tight">
+          {region.name}
         </motion.h2>
         <AnimatePresence mode="wait">
           {round && stage === 'round' && (
-            <motion.div key={roundIdx} initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.18 / speed, ease: EASE }} className="mt-2 font-display text-sm tracking-[0.35em] text-amber-200">
-              ROUND {roundIdx + 1} · {round.name.toUpperCase()}
+            <motion.div key={roundIdx} initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.18 / speed, ease: EASE }} className="mt-2 text-[13px] font-medium text-[#ffd60a]">
+              Round {roundIdx + 1} · {round.name}
             </motion.div>
           )}
         </AnimatePresence>
@@ -194,18 +194,18 @@ export function BattleFX() {
         <motion.div initial={{ y: 28, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} className="glass rounded-xl px-6 py-4 w-[720px] max-w-[92vw]">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6">
             {[
-              { side: battle.attacker, info: att, frac: bars.att, start: bars.attStart, label: 'ATTACKER' },
+              { side: battle.attacker, info: att, frac: bars.att, start: bars.attStart, label: 'Attacker' },
               null,
-              { side: battle.defender, info: def, frac: bars.def, start: bars.defStart, label: 'DEFENDER' },
+              { side: battle.defender, info: def, frac: bars.def, start: bars.defStart, label: 'Defender' },
             ].map((x, i) =>
               x === null ? (
-                <div key="vs" className="font-display text-3xl font-black italic text-white/80" style={{ textShadow: '0 0 18px rgba(232,121,249,0.7)' }}>
-                  VS
+                <div key="vs" className="text-[13px] font-semibold text-white/40">
+                  vs
                 </div>
               ) : (
                 <div key={i} className={i === 2 ? 'text-right' : ''}>
                   <div className="label">{x.label}</div>
-                  <div className="font-display text-lg font-bold" style={{ color: x.info.color, textShadow: `0 0 12px ${x.info.color}` }}>
+                  <div className="text-[17px] font-semibold tracking-tight" style={{ color: x.info.color }}>
                     {x.info.name}
                   </div>
                   <div className="h-2.5 rounded-full bg-slate-800 mt-2 overflow-hidden">
@@ -235,7 +235,7 @@ export function BattleFX() {
       <AnimatePresence>
         {stage === 'result' && (
           <motion.div initial={{ scale: 1.35, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.28 / speed, ease: EASE }} className="absolute inset-0 flex items-center justify-center">
-            <div className={`font-display text-5xl font-black tracking-[0.14em] -skew-x-6 px-8 py-3 max-w-[92vw] text-center leading-none ${banner.good ? 'text-cyan-100' : 'text-rose-100'}`} style={{ textShadow: banner.good ? '0 0 24px #22d3ee' : '0 0 24px #f43f5e', background: banner.good ? 'linear-gradient(90deg, transparent, rgba(34,211,238,0.25), transparent)' : 'linear-gradient(90deg, transparent, rgba(244,63,94,0.25), transparent)' }}>
+            <div className={`text-[44px] font-semibold tracking-tight px-8 py-3 max-w-[92vw] text-center leading-none ${banner.good ? 'text-white' : 'text-[#ffb4af]'}`}>
               {banner.text}
             </div>
           </motion.div>

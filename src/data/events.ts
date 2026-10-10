@@ -76,7 +76,7 @@ export const EVENTS: GameEventDef[] = [
       },
       {
         label: 'Execute',
-        description: 'Make an example of the traitor. Gain Political Points and keep the peace.',
+        description: 'Make an example of the traitor. Gain influence and keep the peace.',
         effects: [{ type: 'resource', key: 'pp', amount: 20 }],
       },
     ],
@@ -96,7 +96,7 @@ export const EVENTS: GameEventDef[] = [
       },
       {
         label: 'Negotiate Autonomy',
-        description: 'Buy off the separatist leaders. Costs Capital and Political Points, and looks weak.',
+        description: 'Buy off the separatist leaders. Costs money and influence, and looks weak.',
         effects: [{ type: 'resource', key: 'capital', amount: -30, perWorkforce: -1 }, { type: 'resource', key: 'pp', amount: -10 }, { type: 'stability', amount: -4 }],
       },
     ],
@@ -130,12 +130,12 @@ export const EVENTS: GameEventDef[] = [
     options: [
       {
         label: 'Sign the Deal',
-        description: 'A flood of Capital, but nationalists call it treason.',
+        description: 'A flood of money, but nationalists call it treason.',
         effects: [{ type: 'resource', key: 'capital', amount: 50, perWorkforce: 3 }, { type: 'resource', key: 'pp', amount: -10 }, { type: 'stability', amount: -3 }],
       },
       {
         label: 'Refuse',
-        description: 'Stand proud. Gain Political Points.',
+        description: 'Stand proud. Gain influence.',
         effects: [{ type: 'resource', key: 'pp', amount: 12 }],
       },
     ],
@@ -209,7 +209,7 @@ export const EVENTS: GameEventDef[] = [
     options: [
       {
         label: 'Fund the Research',
-        description: 'Spend Capital for a burst of Tech Points.',
+        description: 'Spend money for a burst of research.',
         effects: [{ type: 'resource', key: 'capital', amount: -30, perWorkforce: -1 }, { type: 'resource', key: 'tp', amount: 25, perWorkforce: 1 }],
       },
       {
@@ -230,7 +230,7 @@ export const EVENTS: GameEventDef[] = [
     options: [
       {
         label: 'Send Aid',
-        description: 'Ship Capital and Food to {rival}. They will remember who stood by them.',
+        description: 'Ship money and food to {rival}. They will remember who stood by them.',
         effects: [
           { type: 'resource', key: 'capital', amount: -25, perWorkforce: -1 },
           { type: 'resource', key: 'food', amount: -8 },
@@ -257,7 +257,7 @@ export const EVENTS: GameEventDef[] = [
     options: [
       {
         label: 'Pay Compensation',
-        description: 'Hand Capital to {rival} and keep the ports open. Relations thaw.',
+        description: 'Hand money to {rival} and keep the ports open. Relations thaw.',
         effects: [
           { type: 'resource', key: 'capital', amount: -20, perWorkforce: -1 },
           { type: 'rivalResource', key: 'capital', amount: 20, perWorkforce: 1 },
@@ -282,7 +282,7 @@ export const EVENTS: GameEventDef[] = [
     options: [
       {
         label: 'Apologize',
-        description: 'Swallow your pride. {rival} drops its grievance and its casus belli against you.',
+        description: 'Swallow your pride. {rival} drops its grievance against you.',
         effects: [{ type: 'resource', key: 'pp', amount: -15 }, { type: 'opinion', amount: 25, label: 'Accepted our apology' }, { type: 'clearCasusBelli' }],
       },
       {

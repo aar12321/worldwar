@@ -8,7 +8,6 @@ import type { Army, GameState, UnitType } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { UNIT_GLYPH } from './labels'
 
 export function UnitStrip({ units, tiers }: { units: Army['units']; tiers?: Partial<Record<UnitType, number>> }) {
   const present = UNIT_TYPES.filter((k) => units[k] >= 0.05)
@@ -16,10 +15,9 @@ export function UnitStrip({ units, tiers }: { units: Army['units']; tiers?: Part
   return (
     <div className="flex flex-wrap gap-1.5">
       {present.map((k) => (
-        <span key={k} className="rounded bg-slate-800/80 px-1.5 py-0.5 text-[11px] font-semibold text-slate-200" title={UNIT_SPECS[k].name}>
-          <span className="text-cyan-300/80 font-display text-[9px] mr-1">{UNIT_GLYPH[k]}</span>
+        <span key={k} className="rounded-full bg-white/8 px-2 py-0.5 text-[12px] font-medium text-white/90" title={UNIT_SPECS[k].name}>
           {UNIT_SPECS[k].name} {formatDivisions(units[k])}
-          {tiers?.[k] ? <span className="text-amber-300"> T{tiers[k]}</span> : null}
+          {tiers?.[k] ? <span className="text-[#ffd60a]"> · weapons {tiers[k]}</span> : null}
         </span>
       ))}
     </div>
@@ -40,28 +38,28 @@ export function ArmyCard({ army, game }: { army: Army; game: GameState }) {
 
   return (
     <div
-      className={`rounded-lg border p-2.5 transition-colors ${selected ? 'border-cyan-300/70 bg-cyan-400/10 shadow-[0_0_18px_rgba(34,211,238,0.25)]' : 'border-slate-700/70 bg-slate-900/40'} ${mine ? 'cursor-pointer' : ''}`}
+      className={`inset-card p-3 transition-colors ${selected ? 'ring-1 ring-white/35' : ''} ${mine ? 'cursor-pointer' : ''}`}
       onClick={() => mine && selectArmy(army.id)}
     >
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full" style={{ background: owner.color, boxShadow: `0 0 8px ${owner.color}` }} />
-          <span className="font-display text-[11px] tracking-wider">{mine ? `ARMY ${army.id.toUpperCase()}` : owner.name.toUpperCase()}</span>
+          <span className="w-2 h-2 rounded-full" style={{ background: owner.color }} />
+          <span className="text-[14px] font-semibold tracking-tight">{mine ? map.territories[army.homeTerritoryId]?.name ?? 'Your army' : owner.name}</span>
         </div>
-        <span className="text-xs text-slate-400">{formatDivisions(totalUnits(army.units))} div · pow {power.toFixed(1)}</span>
+        <span className="text-[12px] text-white/45">{formatDivisions(totalUnits(army.units))} div · strength {power.toFixed(1)}</span>
       </div>
       <UnitStrip units={army.units} tiers={tiers} />
       <div className="mt-1.5">
         <div className="flex justify-between text-[11px]">
-          <span className="text-cyan-200">{trainingRank(rank)}{home ? ` · ${home.name}` : ''}</span>
-          <span className="text-slate-500">{rank}/{TRAINING.max}</span>
+          <span className="text-white/70">{trainingRank(rank)}{home ? ` · ${home.name}` : ''}</span>
+          <span className="text-white/40">{rank}/{TRAINING.max}</span>
         </div>
-        <div className="mt-1 h-1 rounded-full bg-slate-800 overflow-hidden">
-          <div className="h-full rounded-full bg-cyan-400" style={{ width: `${(rank / TRAINING.max) * 100}%` }} />
+        <div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden">
+          <div className="h-full rounded-full bg-[#0a84ff]" style={{ width: `${(rank / TRAINING.max) * 100}%` }} />
         </div>
       </div>
       {mine && army.outOfSupplyTurns > 0 && (
-        <div className="mt-1.5 text-xs text-rose-300">OUT OF SUPPLY for {army.outOfSupplyTurns} month(s). Surrenders at 3.</div>
+        <div className="mt-1.5 text-[12px] text-[#ff8a84]">Cut off from supplies for {army.outOfSupplyTurns} month{army.outOfSupplyTurns === 1 ? '' : 's'}. Surrenders after 3.</div>
       )}
       {mine && (
         <ArmyControls army={army} game={game} />
@@ -92,7 +90,8 @@ export function ArmyControls({ army, game }: { army: Army; game: GameState }) {
         <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
           <div className="flex gap-2">
             <button
-              className={`btn flex-1 ${selected && targetMode === 'move' ? 'bg-cyan-400/25' : ''}`}
+              className={`btn flex-1 ${selected && targetMode === 'move' ? 'bg-white/20' : ''}`}
+              title="March into a neighboring country you are allowed to enter."
               onClick={() => {
                 selectArmy(army.id)
                 setTargetMode(selected && targetMode === 'move' ? null : 'move')
@@ -101,7 +100,8 @@ export function ArmyControls({ army, game }: { army: Army; game: GameState }) {
               Move
             </button>
             <button
-              className={`btn btn-magenta flex-1 ${selected && targetMode === 'attack' ? 'bg-fuchsia-400/25' : ''}`}
+              className={`btn btn-magenta flex-1 ${selected && targetMode === 'attack' ? 'bg-[#bf5af2]/40' : ''}`}
+              title="Fight a neighboring country. You must already be at war."
               onClick={() => {
                 selectArmy(army.id)
                 setTargetMode(selected && targetMode === 'attack' ? null : 'attack')
@@ -110,23 +110,24 @@ export function ArmyControls({ army, game }: { army: Army; game: GameState }) {
               Attack
             </button>
           </div>
+          <p className="text-[11px] text-white/40">Move into a neighbor you can enter. Attack only works during a war.</p>
           {pending && (
-            <div className="flex items-center justify-between rounded bg-slate-800/70 px-2 py-1 text-xs">
-              <span className={pending.type === 'attack' ? 'text-fuchsia-300' : 'text-cyan-300'}>
-                {pending.type === 'attack' ? 'Front: attack ' : 'Moving to '}
+            <div className="flex items-center justify-between rounded-xl bg-white/8 px-2.5 py-1.5 text-[12px]">
+              <span>
+                {pending.type === 'attack' ? 'Attacking ' : 'Moving to '}
                 {map.regions[pending.type === 'attack' ? pending.target : pending.type === 'move' ? pending.to : army.location].name}
               </span>
-              <button className="text-slate-400 hover:text-white" onClick={() => removeOrder(pendingIdx)}>
-                cancel
+              <button className="text-white/50 hover:text-white" onClick={() => removeOrder(pendingIdx)}>
+                Cancel
               </button>
             </div>
           )}
           <button type="button" className="btn btn-quiet w-full text-left" onClick={() => setStaffOpen((open) => !open)}>
-            {general ? `${general.name} · ${GENERAL_TRAITS[general.trait].name}` : 'Assign a general'}
+            {general ? `Commander · ${general.name}` : 'Choose a commander'}
           </button>
           {staffOpen && (
             <select
-              className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-xs"
+              className="field w-full px-2 py-1.5 text-[13px]"
               value={generalValue}
               onChange={(e) => issueOrder({ type: 'assignGeneral', nationId: game.playerId, armyId: army.id, generalId: e.target.value || null })}
             >
@@ -138,7 +139,7 @@ export function ArmyControls({ army, game }: { army: Army; game: GameState }) {
               ))}
             </select>
           )}
-          {staffOpen && general && <div className="text-[11px] text-slate-400">{GENERAL_TRAITS[general.trait].description}</div>}
+          {staffOpen && general && <div className="text-[12px] text-white/50">{GENERAL_TRAITS[general.trait].name}: {GENERAL_TRAITS[general.trait].description}</div>}
         </div>
   )
 }

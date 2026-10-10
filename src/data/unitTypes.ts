@@ -28,12 +28,12 @@ export interface BuildingSpec {
 }
 
 export const BUILDING_SPECS: Record<BuildingType, BuildingSpec> = {
-  factory: { name: 'Factory', cost: 40, description: '+Capital each turn; lets you build air wings.' },
-  farm: { name: 'Farm', cost: 25, description: '+Food each turn.' },
-  university: { name: 'University', cost: 45, description: '+Tech Points each turn.' },
-  barracks: { name: 'Barracks', cost: 30, description: 'Recruit infantry and armor; strengthens the garrison and keeps local troops supplied.' },
-  port: { name: 'Port', cost: 35, description: 'Trade income, fleets, sea supply, and sea invasions. Supplies armies one step inland.', requiresCoast: true },
-  depot: { name: 'Supply Depot', cost: 30, description: 'A forward logistics hub: armies within full supply range of it stay fed. Razed on capture.', max: 1 },
+  factory: { name: 'Factory', cost: 40, description: 'Earns money each month. Required before you can build air wings.' },
+  farm: { name: 'Farm', cost: 25, description: 'Grows food each month.' },
+  university: { name: 'University', cost: 45, description: 'Produces research each month.' },
+  barracks: { name: 'Barracks', cost: 30, description: 'Lets you recruit infantry and armor, and keeps nearby troops supplied.' },
+  port: { name: 'Port', cost: 35, description: 'Trade, fleets, and invasions by sea. Coastal countries only.', requiresCoast: true },
+  depot: { name: 'Supply Depot', cost: 30, description: 'Feeds armies farther from your capital. Lost if the country is captured.', max: 1 },
 }
 
 export interface LawSpec {
@@ -114,10 +114,10 @@ export interface MarketSpec {
 
 /** World market. Prices rise when the median nation is short of a resource and fall when it is plentiful. */
 export const MARKET: Record<TradeResource, MarketSpec> = {
-  capital: { name: 'Capital', short: 'Cap', base: 1, reference: 120 },
+  capital: { name: 'Money', short: 'Money', base: 1, reference: 120 },
   food: { name: 'Food', short: 'Food', base: 1.3, reference: 60 },
-  tp: { name: 'Tech Points', short: 'TP', base: 2.2, reference: 40 },
-  manpower: { name: 'Manpower (k)', short: 'Men', base: 0.12, reference: 400 },
+  tp: { name: 'Research', short: 'Research', base: 2.2, reference: 40 },
+  manpower: { name: 'Soldiers', short: 'Soldiers', base: 0.12, reference: 400 },
 }
 
 export const TRADE_LIMITS = { maxMonths: 12, maxAmount: 500 }

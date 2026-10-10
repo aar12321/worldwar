@@ -66,7 +66,7 @@ export function validatePeaceTerms(s: GameState, map: WorldMap, terms: PeaceTerm
     if (!r || seen.has(id)) return 'Invalid region in terms'
     seen.add(id)
     if (r.owner !== proposer && r.owner !== target) return `${map.regions[id].name} is not held by either side`
-    if (s.nations[r.owner].capital === id) return 'Capitals cannot be ceded'
+    if (s.nations[r.owner].capital === id) return 'A capital city cannot be given away'
   }
   if (!Number.isFinite(terms.reparations) || Math.abs(terms.reparations) > MAX_REPARATIONS) return `Reparations are capped at ${MAX_REPARATIONS} per month`
   if (!checkBudget) return null
