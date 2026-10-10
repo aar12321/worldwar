@@ -410,6 +410,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const { map } = getWorld()
   const ref = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'arms'>('none')
+  const [treaties, setTreaties] = useState(false)
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [focused])
@@ -457,26 +458,33 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
       {war && <WarScoreBar target={id} />}
       <div className="flex flex-wrap gap-1.5">
         {war ? (
-          <button className={`btn ${mode === 'peace' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('peace')}>
+          <button className={`btn btn-primary ${mode === 'peace' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('peace')}>
             Negotiate peace
           </button>
         ) : (
           <>
-            {!allied && (
-              <OrderButton order={{ type: 'declareWar', nationId: player.id, target: id }} label={`War (${cb ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} PP)`} tone="btn-red" />
-            )}
-            {!allied && !pact && <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'pact' } }} label={`Pact (${PROPOSAL_COSTS.pact})`} />}
-            {!allied && <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'alliance' } }} label={`Alliance (${PROPOSAL_COSTS.alliance})`} />}
-            <button className={`btn ${mode === 'trade' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('trade')}>
+            <button className={`btn btn-primary ${mode === 'trade' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('trade')}>
               Trade
             </button>
             <button className={`btn ${mode === 'arms' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('arms')}>
               Weapons
             </button>
-            {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label={`Leave alliance (${COSTS.leaveAlliance})`} tone="btn-red" />}
+            {!allied && (
+              <button type="button" className="btn btn-quiet" onClick={() => setTreaties((open) => !open)}>
+                {treaties ? 'Hide treaties' : 'Treaties'}
+              </button>
+            )}
+            {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label={`Leave alliance (${COSTS.leaveAlliance})`} tone="btn-quiet" />}
           </>
         )}
       </div>
+      {treaties && !war && !allied && (
+        <div className="flex flex-wrap gap-1.5">
+          {!pact && <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'pact' } }} label={`Pact (${PROPOSAL_COSTS.pact})`} />}
+          <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'alliance' } }} label={`Alliance (${PROPOSAL_COSTS.alliance})`} />
+          <OrderButton order={{ type: 'declareWar', nationId: player.id, target: id }} label={`War (${cb ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} PP)`} tone="btn-red" />
+        </div>
+      )}
       {callable.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {callable.map((e) => (

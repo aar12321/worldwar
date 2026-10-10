@@ -112,6 +112,19 @@ body,
   background: linear-gradient(90deg, rgba(34, 211, 238, 0.35), rgba(232, 121, 249, 0.3));
   box-shadow: 0 0 18px rgba(34, 211, 238, 0.35);
 }
+.btn-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: #94a3b8;
+  box-shadow: none;
+  letter-spacing: 0.08em;
+  padding: 0.25rem 0.45rem;
+}
+.btn-quiet:hover:not(:disabled) {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+}
 
 .label {
   font-family: var(--font-display);

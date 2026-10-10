@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import { GENERAL_TRAITS } from '../data/startingNations'
-import { ARMS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, UNIT_SPECS } from '../data/unitTypes'
+import { ARMS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
 import { weaponTiers } from '../engine/arms'
-import { armiesOf, regionsOf, turnDate } from '../engine/helpers'
+import { armiesOf, formatDivisions, regionsOf, totalUnits, turnDate } from '../engine/helpers'
 import { UNIT_TYPES } from '../engine/types'
-import type { LawId, LogKind } from '../engine/types'
+import type { Army, LawId, LogKind, UnitType } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { ArmyCard } from './ArmyOrders'
 import { signed, usePlayerView } from './hooks'
 import { OrderButton, PanelShell } from './panel'
 
@@ -70,23 +69,20 @@ export function NationPanel() {
           const active = player.laws.includes(law)
           const queued = orders.findIndex((o) => (o.type === 'enactLaw' || o.type === 'repealLaw') && o.law === law)
           return (
-            <div key={law} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3">
-              <div className="flex items-center justify-between">
+            <div key={law} className="rounded-lg border border-slate-700/70 bg-slate-900/40 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
                 <span className="font-display text-xs tracking-wider">{LAW_SPECS[law].name.toUpperCase()}</span>
-                {active && <span className="text-[10px] font-display tracking-widest text-emerald-300">IN FORCE</span>}
-              </div>
-              <p className="text-xs text-slate-400 mt-1">{LAW_SPECS[law].description}</p>
-              <div className="mt-2">
                 {queued >= 0 ? (
-                  <button className="btn" onClick={() => removeOrder(queued)}>
-                    Cancel ({orders[queued].type === 'enactLaw' ? 'enacting' : 'repealing'})
+                  <button className="btn btn-quiet" onClick={() => removeOrder(queued)}>
+                    Cancel
                   </button>
                 ) : active ? (
-                  <OrderButton order={{ type: 'repealLaw', nationId: player.id, law }} label="Repeal" />
+                  <OrderButton order={{ type: 'repealLaw', nationId: player.id, law }} label="Repeal" tone="btn-quiet" />
                 ) : (
-                  <OrderButton order={{ type: 'enactLaw', nationId: player.id, law }} label={`Enact (${LAW_SPECS[law].cost} PP)`} tone="btn-magenta" />
+                  <OrderButton order={{ type: 'enactLaw', nationId: player.id, law }} label={`Enact · ${LAW_SPECS[law].cost}`} tone="btn-quiet" />
                 )}
               </div>
+              <p className="text-[11px] text-slate-500 mt-1">{active ? 'In force. ' : ''}{LAW_SPECS[law].description}</p>
             </div>
           )
         })}
@@ -94,29 +90,10 @@ export function NationPanel() {
 
       <section className="space-y-2">
         <div className="label">Weapons contracts</div>
-        <p className="text-xs text-slate-500">A domestic contract sharpens one unit type for {ARMS.months} months. Signing again replaces it. Higher tiers need more factories. You can also buy weapons through diplomacy.</p>
-        {UNIT_TYPES.map((u) => {
-          const active = (player.contracts ?? []).find((c) => c.unit === u && c.until >= game.turn)
-          const tier = weaponTiers(player, game.turn)[u]
-          return (
-            <div key={u} className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-display text-xs tracking-wider">{UNIT_SPECS[u].name.toUpperCase()}</span>
-                {active ? (
-                  <span className="text-[10px] font-display tracking-widest text-amber-300">TIER {tier} · {active.supplier ? game.nations[active.supplier]?.name ?? 'FOREIGN' : 'DOMESTIC'}</span>
-                ) : (
-                  <span className="text-[10px] font-display tracking-widest text-slate-500">NONE</span>
-                )}
-              </div>
-              {active && <p className="text-[11px] text-slate-400">+{(active.tier * ARMS.attackPerTier * 100).toFixed(0)}% attack through {turnDate(active.until)}{active.payPerMonth > 0 ? ` · ${active.payPerMonth} Capital/month` : ''}.</p>}
-              <div className="grid grid-cols-3 gap-1.5">
-                {([1, 2, 3] as const).map((level) => (
-                  <OrderButton key={level} order={{ type: 'signContract', nationId: player.id, unit: u, tier: level }} label={`T${level} · ${ARMS.domesticCost[level - 1]}`} />
-                ))}
-              </div>
-            </div>
-          )
-        })}
+        <p className="text-xs text-slate-500">Pick a tier, then sign. One live contract per unit type. Diplomacy can buy the same bonus from abroad.</p>
+        {UNIT_TYPES.map((u) => (
+          <ContractRow key={u} unit={u} />
+        ))}
       </section>
 
       <section className="space-y-2">
@@ -139,17 +116,70 @@ export function NationPanel() {
 
       <section className="space-y-2">
         <div className="label">Armies ({armies.length})</div>
+        <p className="text-[11px] text-slate-500">Choose an army to command it from its country.</p>
         {armies.map((a) => (
-          <div key={a.id}>
-            <div className="text-xs text-slate-400 mb-1">
-              {getWorld().map.regions[a.location].name}
-              {getWorld().map.territories[a.homeTerritoryId] ? ` · home ${getWorld().map.territories[a.homeTerritoryId].name}` : ''}
-            </div>
-            <ArmyCard army={a} game={game} />
-          </div>
+          <ArmyRosterRow key={a.id} army={a} />
         ))}
       </section>
     </PanelShell>
+  )
+}
+
+function ContractRow({ unit }: { unit: UnitType }) {
+  const view = usePlayerView()!
+  const { game, player } = view
+  const active = (player.contracts ?? []).find((c) => c.unit === unit && c.until >= game.turn)
+  const liveTier = weaponTiers(player, game.turn)[unit] ?? 0
+  const initialTier = (liveTier === 2 || liveTier === 3 ? liveTier : 1) as 1 | 2 | 3
+  const [tier, setTier] = useState<1 | 2 | 3>(initialTier)
+  const bonus = Math.round(tier * ARMS.attackPerTier * 100)
+  const supplier = active?.supplier ? game.nations[active.supplier]?.name ?? 'Foreign' : 'Domestic'
+  return (
+    <div className="rounded-lg border border-slate-700/70 bg-slate-900/40 px-3 py-2 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-display text-xs tracking-wider">{UNIT_SPECS[unit].name.toUpperCase()}</span>
+        <span className={`text-[10px] font-display tracking-widest ${active ? 'text-amber-300' : 'text-slate-500'}`}>{active ? `TIER ${liveTier} · ${supplier.toUpperCase()}` : 'NONE'}</span>
+      </div>
+      {active && (
+        <p className="text-[11px] text-slate-400">
+          +{Math.round(active.tier * ARMS.attackPerTier * 100)}% attack through {turnDate(active.until)}
+          {active.payPerMonth > 0 ? ` · ${active.payPerMonth} Capital/month` : ''}.
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <div className="flex rounded-md border border-slate-700 overflow-hidden">
+          {([1, 2, 3] as const).map((level) => (
+            <button key={level} type="button" className={`px-2.5 py-1 font-display text-[10px] tracking-widest ${tier === level ? 'bg-cyan-400/25 text-cyan-50' : 'text-slate-400 hover:text-slate-200'}`} onClick={() => setTier(level)}>
+              T{level}
+            </button>
+          ))}
+        </div>
+        <OrderButton className="flex-1" order={{ type: 'signContract', nationId: player.id, unit, tier }} label={`${active ? 'Replace' : 'Sign'} · ${ARMS.domesticCost[tier - 1]}`} sub={`+${bonus}% attack for ${ARMS.months} months`} />
+      </div>
+    </div>
+  )
+}
+
+function ArmyRosterRow({ army }: { army: Army }) {
+  const selected = useGame((s) => s.selectedArmy === army.id)
+  const selectArmy = useGame((s) => s.selectArmy)
+  const { map } = getWorld()
+  const home = map.territories[army.homeTerritoryId]
+  return (
+    <button
+      type="button"
+      onClick={() => selectArmy(selected ? null : army.id)}
+      className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${selected ? 'border-cyan-300/70 bg-cyan-400/10' : 'border-slate-700/70 bg-slate-900/40 hover:border-slate-500'}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-display text-[11px] tracking-wider">ARMY {army.id.toUpperCase()}</span>
+        <span className="text-xs text-slate-400">{formatDivisions(totalUnits(army.units))} div</span>
+      </div>
+      <div className="text-[11px] text-slate-500 mt-0.5">
+        {map.regions[army.location]?.name ?? 'In the field'} · {trainingRank(army.training ?? 0)}
+        {home ? ` · ${home.name}` : ''}
+      </div>
+    </button>
   )
 }
 

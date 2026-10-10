@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { GENERAL_TRAITS } from '../data/startingNations'
 import { TRAINING, UNIT_SPECS, trainingRank } from '../data/unitTypes'
 import { combatMods, weaponTiers } from '../engine/arms'
@@ -28,20 +29,10 @@ export function UnitStrip({ units, tiers }: { units: Army['units']; tiers?: Part
 export function ArmyCard({ army, game }: { army: Army; game: GameState }) {
   const { map } = getWorld()
   const selectedArmy = useGame((s) => s.selectedArmy)
-  const targetMode = useGame((s) => s.targetMode)
-  const orders = useGame((s) => s.orders)
   const selectArmy = useGame((s) => s.selectArmy)
-  const setTargetMode = useGame((s) => s.setTargetMode)
-  const issueOrder = useGame((s) => s.issueOrder)
-  const removeOrder = useGame((s) => s.removeOrder)
   const mine = army.owner === game.playerId
   const owner = game.nations[army.owner]
   const selected = selectedArmy === army.id
-  const pendingIdx = orders.findIndex((o) => (o.type === 'move' || o.type === 'attack') && o.armyId === army.id)
-  const pending = pendingIdx >= 0 ? orders[pendingIdx] : null
-  const general = owner.generals.find((g) => g.id === army.generalId)
-  const pendingGeneral = orders.find((o) => o.type === 'assignGeneral' && o.armyId === army.id)
-  const generalValue = pendingGeneral && pendingGeneral.type === 'assignGeneral' ? pendingGeneral.generalId ?? '' : army.generalId ?? ''
   const home = map.territories[army.homeTerritoryId]
   const rank = Math.max(0, Math.min(TRAINING.max, army.training ?? 0))
   const tiers = weaponTiers(owner, game.turn)
@@ -73,23 +64,32 @@ export function ArmyCard({ army, game }: { army: Army; game: GameState }) {
         <div className="mt-1.5 text-xs text-rose-300">OUT OF SUPPLY for {army.outOfSupplyTurns} month(s). Surrenders at 3.</div>
       )}
       {mine && (
+        <ArmyControls army={army} game={game} />
+      )}
+    </div>
+  )
+}
+
+export function ArmyControls({ army, game }: { army: Army; game: GameState }) {
+  const [staffOpen, setStaffOpen] = useState(false)
+  const { map } = getWorld()
+  const selectedArmy = useGame((s) => s.selectedArmy)
+  const targetMode = useGame((s) => s.targetMode)
+  const orders = useGame((s) => s.orders)
+  const selectArmy = useGame((s) => s.selectArmy)
+  const setTargetMode = useGame((s) => s.setTargetMode)
+  const issueOrder = useGame((s) => s.issueOrder)
+  const removeOrder = useGame((s) => s.removeOrder)
+  const owner = game.nations[army.owner]
+  const selected = selectedArmy === army.id
+  const pendingIdx = orders.findIndex((o) => (o.type === 'move' || o.type === 'attack') && o.armyId === army.id)
+  const pending = pendingIdx >= 0 ? orders[pendingIdx] : null
+  const pendingGeneral = orders.find((o) => o.type === 'assignGeneral' && o.armyId === army.id)
+  const generalValue = pendingGeneral && pendingGeneral.type === 'assignGeneral' ? pendingGeneral.generalId ?? '' : army.generalId ?? ''
+  const general = owner.generals.find((g) => g.id === generalValue)
+
+  return (
         <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center gap-2">
-            <span className="label">General</span>
-            <select
-              className="flex-1 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-xs"
-              value={generalValue}
-              onChange={(e) => issueOrder({ type: 'assignGeneral', nationId: game.playerId, armyId: army.id, generalId: e.target.value || null })}
-            >
-              <option value="">None</option>
-              {owner.generals.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name} ({GENERAL_TRAITS[g.trait].name})
-                </option>
-              ))}
-            </select>
-          </div>
-          {general && <div className="text-[11px] text-slate-400">{GENERAL_TRAITS[general.trait].description}</div>}
           <div className="flex gap-2">
             <button
               className={`btn flex-1 ${selected && targetMode === 'move' ? 'bg-cyan-400/25' : ''}`}
@@ -121,8 +121,24 @@ export function ArmyCard({ army, game }: { army: Army; game: GameState }) {
               </button>
             </div>
           )}
+          <button type="button" className="btn btn-quiet w-full text-left" onClick={() => setStaffOpen((open) => !open)}>
+            {general ? `${general.name} · ${GENERAL_TRAITS[general.trait].name}` : 'Assign a general'}
+          </button>
+          {staffOpen && (
+            <select
+              className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-xs"
+              value={generalValue}
+              onChange={(e) => issueOrder({ type: 'assignGeneral', nationId: game.playerId, armyId: army.id, generalId: e.target.value || null })}
+            >
+              <option value="">None</option>
+              {owner.generals.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name} ({GENERAL_TRAITS[g.trait].name})
+                </option>
+              ))}
+            </select>
+          )}
+          {staffOpen && general && <div className="text-[11px] text-slate-400">{GENERAL_TRAITS[general.trait].description}</div>}
         </div>
-      )}
-    </div>
   )
 }

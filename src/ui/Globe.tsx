@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
 import { TERRAIN } from '../data/terrain'
+import { trainingRank } from '../data/unitTypes'
 import { armiesIn, totalUnits } from '../engine/helpers'
 import { supplyDistances, supplyRange } from '../engine/supply'
 import type { Army, GameState, NationId, RegionId, UnitType } from '../engine/types'
@@ -583,8 +584,11 @@ export function WorldGlobe() {
     if (game) {
       const marching = new Set(marches.map((m) => m.armyId))
       const visitors = new Map<RegionId, number>()
+      const occupied = new Set<string>()
       for (const a of visibleArmies(game, map, game.playerId, vision ?? undefined)) {
         if (marching.has(a.id)) continue
+        const inView = !!selectedRegion && a.location === selectedRegion
+        if (a.owner !== game.playerId && !inView && a.id !== selectedArmy) continue
         const home = map.territories[a.homeTerritoryId]
         const atHome = !!home && a.location === home.regionId
         let lat: number
@@ -601,17 +605,25 @@ export function WorldGlobe() {
           lat = r.lat + (idx ? Math.sin(angle) * 1.6 : 0)
           lng = r.lng + (idx ? Math.cos(angle) * 1.6 : 0)
         }
-        out.push({ key: `army-${a.id}`, lat, lng, text: armyCaption(a), kind: 'army' })
+        if (atHome && inView && home) occupied.add(home.id)
+        const caption = atHome && inView && home ? `${home.name} · ${trainingRank(a.training ?? 0)}` : armyCaption(a)
+        out.push({ key: `army-${a.id}`, lat, lng, text: caption, kind: 'army' })
       }
-    }
-    if (selectedRegion) {
+      if (selectedRegion) {
+        for (const id of map.territoriesByRegion[selectedRegion] ?? []) {
+          if (occupied.has(id)) continue
+          const t = map.territories[id]
+          out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, text: t.name, kind: 'territory' })
+        }
+      }
+    } else if (selectedRegion) {
       for (const id of map.territoriesByRegion[selectedRegion] ?? []) {
         const t = map.territories[id]
         out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, text: t.name, kind: 'territory' })
       }
     }
     return out
-  }, [game, marches, vision, selectedRegion])
+  }, [game, marches, vision, selectedRegion, selectedArmy])
 
   const makeObject = useCallback((d: object) => {
     const datum = d as LayerDatum

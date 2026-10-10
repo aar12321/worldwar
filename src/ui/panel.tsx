@@ -30,12 +30,12 @@ export function PanelShell({ title, kicker, panel, children }: { title: string; 
   )
 }
 
-export function OrderButton({ order, label, sub, tone = '', showError = false }: { order: Order; label: string; sub?: string; tone?: string; showError?: boolean }) {
+export function OrderButton({ order, label, sub, tone = '', showError = false, className = '' }: { order: Order; label: string; sub?: string; tone?: string; showError?: boolean; className?: string }) {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
   const err = validateOrder(view.game, getWorld().map, order, view.orders)
   return (
-    <button className={`btn ${tone} ${showError ? 'flex flex-col items-start gap-0.5 text-left' : ''}`} disabled={!!err} title={err ?? sub ?? ''} onClick={() => issueOrder(order)}>
+    <button className={`btn ${tone} ${className} ${showError ? 'flex flex-col items-start gap-0.5 text-left' : ''}`} disabled={!!err} title={err ?? sub ?? ''} onClick={() => issueOrder(order)}>
       <span>{label}</span>
       {showError && (err || sub) && <span className="font-ui normal-case tracking-normal text-[11px] text-slate-400">{err ?? sub}</span>}
     </button>
