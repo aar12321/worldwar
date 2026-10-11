@@ -331,6 +331,7 @@ export interface GameState {
   /** Diplomatic outcomes from the most recent turn. */
   dispatches: Dispatch[]
   pendingEvent: PendingEvent | null
+  /** Turn when the next surprise decision may appear. New games wait until turn 21. */
   nextEventTurn: number
   battles: BattleReport[]
   log: LogEntry[]

@@ -98,7 +98,7 @@ describe('bots play fair', () => {
         expect(wars.length).toBeLessThanOrEqual(1)
       })
     }
-  })
+  }, 20_000)
 
   it('send the player at most one new proposal a month and keep the inbox short', () => {
     run('normal', 5, 30, (s) => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { getWorld } from '../../map/world'
-import { applyEventChoice, scheduleEvent } from '../events'
+import { createInitialState } from '../../data/startingNations'
+import { FIRST_EVENT_TURN, applyEventChoice, scheduleEvent } from '../events'
+import { normalizeGame } from '../migrate'
 import { validateOrder } from '../orders'
 import { resolveTurn } from '../resolveTurn'
 import { createRng } from '../rng'
@@ -95,23 +96,44 @@ describe('decision events', () => {
     expect(resolveTurn(s, map, [])).toBe(s)
   })
 
-  it('events fire every 2 to 4 turns on the real map', () => {
-    const { map: world } = getWorld()
-    let s = startState(world, 'germany', 3)
-    s.nextEventTurn = 2
+  it('a new game keeps surprise decisions quiet for twenty turns', () => {
+    const fresh = createInitialState(lineMap(3), { playerRegionId: 'r0', seed: 4, victoryShare: 0.4 })
+    expect(fresh.turn).toBe(1)
+    expect(fresh.pendingEvent).toBeNull()
+    expect(fresh.nextEventTurn).toBe(FIRST_EVENT_TURN)
+
+    const map = lineMap(4)
+    let s = startState(map, 'r0', 3)
+    s.nextEventTurn = FIRST_EVENT_TURN
     const fired: number[] = []
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 45; i++) {
+      s = resolveTurn(s, map, [])
+      if (s.turn < FIRST_EVENT_TURN) expect(s.pendingEvent).toBeNull()
       if (s.pendingEvent) {
         fired.push(s.turn)
-        s = applyEventChoice(s, world, 1)
+        s = applyEventChoice(s, map, 1)
       }
-      s = resolveTurn(s, world, [])
     }
-    expect(fired.length).toBeGreaterThanOrEqual(5)
-    for (let i = 1; i < fired.length; i++) {
-      expect(fired[i] - fired[i - 1]).toBeGreaterThanOrEqual(2)
-      expect(fired[i] - fired[i - 1]).toBeLessThanOrEqual(4)
-    }
+    expect(fired).toEqual([21, 41])
+  })
+
+  it('an early save does not spring a surprise that was about to appear', () => {
+    const map = lineMap(2)
+    const early = startState(map)
+    early.turn = 4
+    early.nextEventTurn = 6
+    early.pendingEvent = { eventId: 'bread_riot', turn: 4, rivalId: null, regionId: null }
+    normalizeGame(early, map)
+    expect(early.pendingEvent).toBeNull()
+    expect(early.nextEventTurn).toBe(FIRST_EVENT_TURN)
+
+    const late = startState(map)
+    late.turn = 30
+    late.nextEventTurn = 32
+    late.pendingEvent = { eventId: 'bread_riot', turn: 30, rivalId: null, regionId: null }
+    normalizeGame(late, map)
+    expect(late.pendingEvent?.eventId).toBe('bread_riot')
+    expect(late.nextEventTurn).toBe(32)
   })
 
   it('scheduler never picks an event whose requirements are unmet', () => {

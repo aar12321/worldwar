@@ -1,4 +1,5 @@
 import { asTraining } from '../data/unitTypes'
+import { FIRST_EVENT_TURN } from './events'
 import type { GameState, WorldMap } from './types'
 
 /** Fills fields added after a save was written, so an older game can still load. */
@@ -16,6 +17,11 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
       a.homeTerritoryId = regionList.find((id) => !used.has(id)) ?? ''
     }
     if (a.homeTerritoryId) used.add(a.homeTerritoryId)
+  }
+  if (game.turn < FIRST_EVENT_TURN) {
+    game.pendingEvent = null
+    const scheduled = Number.isFinite(game.nextEventTurn) ? game.nextEventTurn : FIRST_EVENT_TURN
+    game.nextEventTurn = Math.max(scheduled, FIRST_EVENT_TURN)
   }
   return game
 }

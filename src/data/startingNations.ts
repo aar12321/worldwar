@@ -1,5 +1,6 @@
 import { emptyTraining } from './unitTypes'
 import { ECON, regionWorkforce } from '../engine/economy'
+import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
 import type { Army, Difficulty, GameSettings, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
@@ -40,6 +41,8 @@ function pickPersonality(aggression: number, rng: Rng): Personality {
 
 export function createInitialState(map: WorldMap, opts: NewGameOptions): GameState {
   const rng = createRng(opts.seed, 9999)
+  // The old early-surprise roll stays so a seed still builds the same generals and personalities.
+  void rng.int(0, 2)
   const settings: GameSettings = { victoryShare: opts.victoryShare, seed: opts.seed, difficulty: opts.difficulty ?? 'normal' }
   const state: GameState = {
     turn: 1,
@@ -61,7 +64,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     proposalMemory: {},
     dispatches: [],
     pendingEvent: null,
-    nextEventTurn: 2 + rng.int(0, 2),
+    nextEventTurn: FIRST_EVENT_TURN,
     battles: [],
     log: [],
     nextId: 1,

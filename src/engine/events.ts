@@ -8,6 +8,11 @@ import { createRng, type Rng } from './rng'
 import type { EventEffect, GameState, NationId, PendingEvent, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
+/** Opening month is turn 1. The first surprise waits until this turn, twenty months later. */
+export const FIRST_EVENT_TURN = 21
+/** Months between surprise decisions once they start. */
+export const EVENT_GAP_TURNS = 20
+
 function availableTechs(s: GameState, nationId: NationId): string[] {
   const n = s.nations[nationId]
   return TECHS.filter((t) => !n.techs.includes(t.id) && t.requires.every((r) => n.techs.includes(r))).map((t) => t.id)

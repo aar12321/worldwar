@@ -4,7 +4,7 @@ import { applyArmsContracts, grantArmsContract, pruneArmsContracts } from './arm
 import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, propose, respond } from './diplomacy'
 import { applyEconomy } from './economy'
 import { runSpyMission } from './espionage'
-import { scheduleEvent } from './events'
+import { EVENT_GAP_TURNS, scheduleEvent } from './events'
 import { addLog, armiesOf, armyIsHome, boundArmy, createArmy, emptyUnits, regionsOf } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
@@ -134,7 +134,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   const player = s.nations[s.playerId]
   if (player.alive && s.turn >= s.nextEventTurn) {
     s.pendingEvent = scheduleEvent(s, map, s.playerId, rng)
-    s.nextEventTurn = s.turn + rng.int(2, 4)
+    s.nextEventTurn = s.turn + EVENT_GAP_TURNS
   }
   s.outcome = checkOutcome(s)
   return s
