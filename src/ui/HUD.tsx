@@ -116,8 +116,9 @@ const Row = ({ k, v, warn }: { k: string; v: string; warn?: boolean }) => (
 function attention(view: NonNullable<ReturnType<typeof usePlayerView>>): string | null {
   const { player, econ } = view
   if (player.foodShortage) return 'Food shortage. Armies fight weaker until you grow or buy more food.'
-  if (player.inDebt) return 'Out of money. The country grows less stable until income covers spending.'
-  if (player.stability < 35) return 'Stability is low. Rebels can rise. Lower taxes, or crack down in a troubled country.'
+  if (player.inDebt) return 'Out of money. Unpaid soldiers start to desert.'
+  if (econ.warMonths >= 15 && player.stability < 70) return `A war has lasted ${econ.warMonths} months. Stability falls until it ends.`
+  if (player.stability < 35) return 'Stability is low. Rebels can rise. End the long war, or crack down in a troubled country.'
   if (econ.netFood < 0) return 'You are eating more food than you grow. Build farms before stocks run out.'
   return null
 }
@@ -194,7 +195,7 @@ export function HUD() {
             <Row k="Trade" v={signed(econ.tradeIncome)} />
             <Row k="Upkeep" v={signed(-econ.upkeep)} warn />
             <Row k="Spent this month" v={fmt(-committed.capital)} />
-            {player.inDebt && <p className="text-[12px] text-[#ff6961]">In debt. Stability is falling.</p>}
+            {player.inDebt && <p className="text-[12px] text-[#ff6961]">In debt. Unpaid soldiers will desert.</p>}
           </Resource>
           <Resource label="Food" amount={player.resources.food} delta={signed(econ.netFood)} warn={player.foodShortage || econ.netFood < 0}>
             <Row k="Grown" v={signed(econ.foodProduction)} />
@@ -209,11 +210,11 @@ export function HUD() {
             <Row k="Universities" v={`${econ.buildings.university}`} />
             <p className="text-[12px] text-white/55">Open Research to buy technologies. They finish when the month ends.</p>
           </Resource>
-          <Resource label="Stability" amount={player.stability} format={(v) => Math.round(v).toString()} suffix="%" warn={player.stability < 35}>
+          <Resource label="Stability" amount={player.stability} format={(v) => Math.round(v).toString()} suffix="%" warn={player.stability < 50}>
             <Row k="Heading toward" v={`${Math.round(econ.stabilityTarget)}%`} />
-            <Row k="Tax rate" v={`${Math.round(view.pendingPolicy.taxRate * 100)}%`} warn={view.pendingPolicy.taxRate > 0.2} />
-            <Row k="War weariness" v={player.warWeariness.toFixed(0)} warn={player.warWeariness > 15} />
-            <p className="text-[12px] text-white/45 pt-1">Below 30%, rebels may rise. Low stability reduces everything you produce.</p>
+            <Row k="Tax rate" v={`${Math.round(view.pendingPolicy.taxRate * 100)}%`} warn={view.pendingPolicy.taxRate > 0.35} />
+            <Row k="Longest war" v={econ.warMonths === 0 ? 'At peace' : `${econ.warMonths} months`} warn={econ.warMonths >= 15} />
+            <p className="text-[12px] text-white/45 pt-1">Stability stays high. After a war lasts 15 months, it falls. Below 30%, rebels may rise.</p>
           </Resource>
         </div>
 

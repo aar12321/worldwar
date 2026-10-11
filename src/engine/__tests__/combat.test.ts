@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { hasCombinedArms, resolveBattle, sidePower, type Combatant } from '../combat'
+import { createArmy } from '../helpers'
 import { createRng } from '../rng'
 import { resolveTurn } from '../resolveTurn'
 import { giveRegions, lineMap, startState } from './fixtures'
@@ -61,6 +62,54 @@ describe('attacks through resolveTurn', () => {
     expect(next.armies[army.id].location).toBe('r1')
     expect(next.battles[0].captured).toBe(true)
     expect(next.nations.r1.alive).toBe(false)
+  })
+
+  it('every territory attacks together, and only the army that can reach moves in', () => {
+    const map = lineMap(4)
+    const s = startState(map)
+    s.wars = ['r0|r1']
+    const home = Object.values(s.armies).find((a) => a.owner === 'r0')!
+    home.units = { infantry: 4, armor: 0, air: 0, naval: 0 }
+    const far = createArmy(s, { owner: 'r0', location: 'r3', units: { infantry: 24, armor: 0, air: 0, naval: 0 }, homeTerritoryId: 'r0:far' })
+    const defender = Object.values(s.armies).find((a) => a.owner === 'r1')!
+    defender.units = { infantry: 12, armor: 0, air: 0, naval: 0 }
+    const next = resolveTurn(s, map, [{ type: 'attack', nationId: 'r0', armyId: home.id, target: 'r1' }])
+    expect(next.battles[0].attacker.units.infantry).toBeCloseTo(28)
+    expect(next.regions.r1.owner).toBe('r0')
+    expect(next.armies[home.id].location).toBe('r1')
+    expect(next.armies[far.id].location).toBe('r3')
+    expect(next.armies[far.id].units.infantry).toBeLessThan(24)
+    expect(next.armies[home.id].units.infantry).toBeGreaterThan(0)
+  })
+
+  it('the defender fights with every territory', () => {
+    const map = lineMap(3)
+    const s = startState(map)
+    s.wars = ['r0|r1']
+    const attacker = Object.values(s.armies).find((a) => a.owner === 'r0')!
+    attacker.units = { infantry: 14, armor: 0, air: 0, naval: 0 }
+    const local = Object.values(s.armies).find((a) => a.owner === 'r1')!
+    local.units = { infantry: 1, armor: 0, air: 0, naval: 0 }
+    const far = createArmy(s, { owner: 'r1', location: 'r2', units: { infantry: 40, armor: 0, air: 0, naval: 0 }, homeTerritoryId: 'r1:far' })
+    const next = resolveTurn(s, map, [{ type: 'attack', nationId: 'r0', armyId: attacker.id, target: 'r1' }])
+    expect(next.battles[0].defender.units.infantry).toBeGreaterThan(30)
+    expect(next.regions.r1.owner).toBe('r1')
+    expect(next.armies[far.id].location).toBe('r2')
+    expect(next.armies[far.id].units.infantry).toBeLessThan(40)
+  })
+
+  it('a nation commits its armies to one battle a month', () => {
+    const map = lineMap(3)
+    const s = startState(map)
+    s.wars = ['r0|r1', 'r0|r2']
+    const home = Object.values(s.armies).find((a) => a.owner === 'r0')!
+    home.units = { infantry: 30, armor: 0, air: 0, naval: 0 }
+    const far = createArmy(s, { owner: 'r0', location: 'r1', units: { infantry: 10, armor: 0, air: 0, naval: 0 }, homeTerritoryId: 'r0:far' })
+    const next = resolveTurn(s, map, [
+      { type: 'attack', nationId: 'r0', armyId: home.id, target: 'r1' },
+      { type: 'attack', nationId: 'r0', armyId: far.id, target: 'r2' },
+    ])
+    expect(next.battles.filter((b) => b.attacker.nationId === 'r0')).toHaveLength(1)
   })
 
   it('cannot attack a nation you are not at war with', () => {

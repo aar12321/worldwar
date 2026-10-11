@@ -82,9 +82,9 @@ export function CountryPanel() {
   const built = BUILDING_TYPES.filter((b) => region.buildings[b] > 0)
   const supplyCut = mine && (dist === undefined || dist > range)
   const purpose = mine
-    ? 'Your country. Each district holds one army. It fights as one force. Train the units inside it from Armies.'
+    ? 'Your country. Each district trains its own army. When you attack, every district fights together.'
     : war
-      ? `At war with ${owner.name}. Attack from an army in a neighboring country.`
+      ? `At war with ${owner.name}. Attack from a neighboring country. Every city of yours joins.`
       : allied
         ? `${owner.name} is an ally. You can ask them to join a war.`
         : pact
@@ -204,7 +204,7 @@ export function CountryPanel() {
               <section className="space-y-2">
                 <div>
                   <div className="text-[13px] font-semibold">Districts</div>
-                  <p className="text-[12px] text-white/50 mt-0.5">One army each. Raise units here. They fight together, and train separately while the army is home.</p>
+                  <p className="text-[12px] text-white/50 mt-0.5">One army each. They train here. When you attack, every city fights together.</p>
                 </div>
                 {territoryIds.map((tid) => (
                   <MusterCard key={tid} territoryId={tid} />

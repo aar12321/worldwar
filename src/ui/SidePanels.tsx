@@ -54,7 +54,7 @@ export function NationPanel() {
             <span className="font-semibold tabular-nums">{Math.round(tax * 100)}%</span>
           </div>
           <input type="range" className="w-full" min={TAX_LIMITS.min} max={TAX_LIMITS.max} step={0.01} value={tax} onChange={(e) => setTax(+e.target.value)} onMouseUp={() => setPolicy(tax, draft)} onKeyUp={() => setPolicy(tax, draft)} onTouchEnd={() => setPolicy(tax, draft)} />
-          <div className="text-[12px] text-white/45">Higher taxes bring in more money, and unsettle the country once they pass 20%.</div>
+          <div className="text-[12px] text-white/45">Higher taxes bring in more money. Past 20%, stability dips a little.</div>
         </div>
         <div>
           <div className="flex justify-between text-[14px]">
@@ -118,7 +118,7 @@ export function NationPanel() {
       {tab === 'armies' && (
       <section className="space-y-3">
         <div className="space-y-1 text-[13px] text-white/70">
-          <p>Every army fights as one force. Infantry, armor, planes, and ships inside it train separately, and only in their city.</p>
+          <p>An attack sends every city together. Each city trains its own infantry, armor, planes, and ships.</p>
           <p>Add a general and every unit trains for free each month. With no general, you pay for each unit. You have {player.generals.length} general{player.generals.length === 1 ? '' : 's'}, and each one can be added to a single army.</p>
         </div>
         {armies.length === 0 && <p className="text-[13px] text-white/45">No armies yet. Open one of your countries and raise one.</p>}
@@ -248,8 +248,8 @@ export function SettingsPanel() {
       <div className="text-[13px] text-white/55 pt-2 space-y-2">
         <div className="text-[13px] font-semibold text-white">How to play</div>
         <p>Click a country. If it is yours, raise an army in a district or open Build. If it is not, talk or declare war.</p>
-        <p>Open Nation, then Armies, to see every army. They fight as one force. Add a general and each unit trains for free every month. Without a general, you pay to train each unit in its city.</p>
-        <p>Select an army, press Move or Attack, then click a highlighted country.</p>
+        <p>Open Nation, then Armies, to see every army. An attack sends every city together. Add a general and each unit trains for free every month. Without a general, you pay to train each unit in its city.</p>
+        <p>Select an army, press Attack, then click a highlighted country. Every army joins. Move still marches only the army you picked.</p>
         <p>Press End month. Every nation acts at the same time.</p>
         <p>Win by controlling the share of the world’s people you chose at the start.</p>
         <div className="label pt-2">Shortcuts</div>

@@ -83,7 +83,7 @@ export function TargetHint() {
       {targetMode && (
         <motion.div initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} className="absolute top-28 left-1/2 -translate-x-1/2 z-30">
           <div className="glass rounded-full px-4 py-2 text-[13px] flex items-center gap-3">
-            <span className="font-semibold">{targetMode === 'attack' ? 'Choose where to attack' : 'Choose where to move'}</span>
+            <span className="font-semibold">{targetMode === 'attack' ? 'Every army will attack' : 'Choose where to move'}</span>
             <span className="text-white/60">Click a highlighted country.</span>
             <button className="btn btn-quiet" onClick={() => setTargetMode(null)}>
               Cancel

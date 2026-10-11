@@ -38,7 +38,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'move':
       return `Move army to ${region(o.to)}`
     case 'attack':
-      return `Attack ${region(o.target)}`
+      return `Attack ${region(o.target)} with every army`
     case 'assignGeneral': {
       const place = map.territories[s.armies[o.armyId]?.homeTerritoryId]?.name ?? 'the army'
       if (!o.generalId) return `Remove the general from ${place}`
