@@ -115,7 +115,7 @@ function estimateDefense(s: GameState, map: WorldMap, ctx: TurnContext, regionId
   const r = s.regions[regionId]
   const owner = s.nations[r.owner]
   const mods = owner ? combatMods(owner, s.turn) : null
-  const armyPower = (ctx.armies.get(r.owner) ?? []).filter((a) => a.location === regionId).reduce((sum, a) => sum + unitPower(a.units, mods, a.training), 0)
+  const armyPower = (ctx.armies.get(r.owner) ?? []).reduce((sum, a) => sum + unitPower(a.units, mods, a.training), 0)
   return (armyPower + garrisonStrength(s, map, regionId) * UNIT_SPECS.infantry.defense) * TERRAIN[map.regions[regionId].terrain].defense
 }
 
@@ -468,27 +468,31 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
     if (o.target !== playerId) warTargets.add(o.target)
   }
   const borderGoals = new Set(owned.filter((id) => map.regions[id].neighbors.some((nb) => fronts.has(s.regions[nb]?.owner))))
-  const committed = new Map<RegionId, number>()
   const mods = combatMods(n, s.turn)
-  for (const a of myArmies) {
-    if (s.regions[a.location].rebels > 0) {
-      tryAdd({ type: 'attack', nationId, armyId: a.id, target: a.location })
-      continue
+  const nationPower = myArmies.reduce((sum, a) => sum + unitPower(a.units, mods, a.training), 0)
+  const rebel = myArmies.find((a) => (s.regions[a.location]?.rebels ?? 0) > 0)
+  let fighting = false
+  if (rebel) fighting = tryAdd({ type: 'attack', nationId, armyId: rebel.id, target: rebel.location })
+  if (!fighting) {
+    let best: { id: RegionId; def: number; armyId: string } | null = null
+    for (const a of myArmies) {
+      const options = [...map.regions[a.location].neighbors, ...map.regions[a.location].seaLanes].filter(
+        (id) => warTargets.has(s.regions[id]?.owner) && canReach(s, map, nationId, a.location, id, 'attack').ok,
+      )
+      for (const id of options) {
+        const def = estimateDefense(s, map, ctx, id)
+        if (!best || def < best.def || (def === best.def && (id < best.id || (id === best.id && a.id < best.armyId)))) best = { id, def, armyId: a.id }
+      }
     }
-    const options = [...map.regions[a.location].neighbors, ...map.regions[a.location].seaLanes]
-      .filter((id) => warTargets.has(s.regions[id]?.owner) && canReach(s, map, nationId, a.location, id, 'attack').ok)
-      .map((id) => ({ id, def: estimateDefense(s, map, ctx, id) - (committed.get(id) ?? 0) }))
-      .sort((x, y) => x.def - y.def || (x.id < y.id ? -1 : 1))
-    const power = unitPower(a.units, mods, a.training)
-    const target = options[0]
-    if (target && power > target.def * attackRatio) {
-      if (tryAdd({ type: 'attack', nationId, armyId: a.id, target: target.id })) committed.set(target.id, (committed.get(target.id) ?? 0) + power)
-      continue
-    }
-    if (mistake === 'idle' || a.outOfSupplyTurns > 0) continue
-    if (borderGoals.size && !borderGoals.has(a.location)) {
-      const step = stepToward(s, map, nationId, a.location, borderGoals)
-      if (step) tryAdd({ type: 'move', nationId, armyId: a.id, to: step })
+    if (best && nationPower > best.def * attackRatio) fighting = tryAdd({ type: 'attack', nationId, armyId: best.armyId, target: best.id })
+  }
+  if (!fighting && mistake !== 'idle') {
+    for (const a of myArmies) {
+      if (a.outOfSupplyTurns > 0) continue
+      if (borderGoals.size && !borderGoals.has(a.location)) {
+        const step = stepToward(s, map, nationId, a.location, borderGoals)
+        if (step) tryAdd({ type: 'move', nationId, armyId: a.id, to: step })
+      }
     }
   }
 

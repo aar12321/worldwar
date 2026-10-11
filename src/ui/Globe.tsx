@@ -344,15 +344,21 @@ export function WorldGlobe() {
   }, [gameStarted, playerId])
 
   const reachable = useMemo(() => {
-    if (!game || !selectedArmy || !targetMode) return EMPTY_REGIONS
-    const a = game.armies[selectedArmy]
-    if (!a) return EMPTY_REGIONS
+    if (!game || !targetMode) return EMPTY_REGIONS
     const out = new Set<RegionId>()
-    for (const id of [...map.regions[a.location].neighbors, ...map.regions[a.location].seaLanes, a.location]) {
-      const owner = game.regions[id].owner
-      const mine = owner === game.playerId
-      if (targetMode === 'move' && mine && id !== a.location && canReach(game, map, game.playerId, a.location, id, 'move').ok) out.add(id)
-      if (targetMode === 'attack' && canReach(game, map, game.playerId, a.location, id, 'attack').ok && (!mine || game.regions[id].rebels > 0)) out.add(id)
+    const armies =
+      targetMode === 'attack'
+        ? Object.values(game.armies).filter((a) => a.owner === game.playerId)
+        : selectedArmy && game.armies[selectedArmy]
+          ? [game.armies[selectedArmy]]
+          : []
+    for (const a of armies) {
+      for (const id of [...map.regions[a.location].neighbors, ...map.regions[a.location].seaLanes, a.location]) {
+        const owner = game.regions[id].owner
+        const mine = owner === game.playerId
+        if (targetMode === 'move' && mine && id !== a.location && canReach(game, map, game.playerId, a.location, id, 'move').ok) out.add(id)
+        if (targetMode === 'attack' && canReach(game, map, game.playerId, a.location, id, 'attack').ok && (!mine || game.regions[id].rebels > 0)) out.add(id)
+      }
     }
     return out
   }, [game, selectedArmy, targetMode])
@@ -471,11 +477,29 @@ export function WorldGlobe() {
       const a = game.armies[o.armyId]
       if (!a) continue
       const from = map.regions[a.location]
-      const to = map.regions[o.type === 'move' ? o.to : o.target]
-      if (from.id === to.id) continue
       const attack = o.type === 'attack'
+      const to = map.regions[attack ? o.target : o.to]
+      if (!attack && from.id === to.id) continue
       const c = attack ? NEON.magenta : NEON.cyan
-      out.push({ startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha(c, 0.2), c], stroke: attack ? 0.55 : 0.4, dash: 0.4, gap: 0.18, speed: attack ? 700 : 1100, label: `${attack ? 'Attack' : 'Move'}: ${to.name}` })
+      const origins = attack
+        ? [...new Set(Object.values(game.armies).filter((army) => army.owner === o.nationId).map((army) => army.location))]
+        : [from.id]
+      origins.forEach((origin, index) => {
+        const start = map.regions[origin]
+        if (!start || start.id === to.id) return
+        out.push({
+          startLat: start.lat,
+          startLng: start.lng,
+          endLat: to.lat,
+          endLng: to.lng,
+          color: [withAlpha(c, 0.2), c],
+          stroke: attack ? 0.55 : 0.4,
+          dash: 0.4,
+          gap: 0.18,
+          speed: attack ? 700 : 1100,
+          label: attack ? (index === 0 ? `All armies attack ${to.name}` : '') : `Move: ${to.name}`,
+        })
+      })
     }
     const p = game.nations[game.playerId]
     if (p.alive) {

@@ -28,6 +28,20 @@ export const alliesOf = (s: GameState, id: NationId): NationId[] => partnersIn(s
 
 export const enemiesOf = (s: GameState, id: NationId): NationId[] => partnersIn(s.wars, id)
 
+/** Stability stays high until a war has lasted this many months. */
+export const LONG_WAR_MONTHS = 15
+
+/** Months the nation's longest current war has been going. Peace is 0. */
+export function warMonths(s: GameState, id: NationId): number {
+  let longest = 0
+  for (const enemy of enemiesOf(s, id)) {
+    const started = s.warStarted[pairKey(id, enemy)]
+    if (typeof started !== 'number') continue
+    longest = Math.max(longest, Math.max(0, s.turn - started))
+  }
+  return longest
+}
+
 /** Every nation's partners under a list of "a|b" keys, built in one pass. */
 export function partnerIndex(keys: string[]): Map<NationId, NationId[]> {
   const out = new Map<NationId, NationId[]>()

@@ -2,7 +2,7 @@ import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
 import { TRAINING, UNIT_SPECS, clampTraining, type UnitTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
-import { addLog, armiesOf, clamp, enemiesOf, nationModifiers, type AggregatedModifiers } from './helpers'
+import { addLog, armiesOf, clamp, enemiesOf, LONG_WAR_MONTHS, nationModifiers, warMonths, type AggregatedModifiers } from './helpers'
 import type { Rng } from './rng'
 import type { Buildings, GameState, MapRegion, NationId, RegionState, UnitType, WorldMap } from './types'
 import { BUILDING_TYPES, UNIT_TYPES } from './types'
@@ -20,8 +20,8 @@ export const ECON = {
   tpPerUniversity: 2.5,
   militaryRegenPerWorkforce: 60,
   militaryCapPerWorkforce: 600,
-  ppCap: 200,
-  stabilityBase: 70,
+  ppCap: 300,
+  stabilityBase: 94,
   /** Months of negative Capital before unpaid soldiers start deserting. */
   desertionAfter: 2,
   desertionPerMonth: 0.05,
@@ -53,6 +53,8 @@ export interface EconomyReport {
   militaryCap: number
   civilianManpower: number
   stabilityTarget: number
+  /** Months the longest current war has lasted. */
+  warMonths: number
   divisions: number
   population: number
 }
@@ -109,23 +111,25 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const foodProduction = baseFood + buildings.farm * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput)
   const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce + armyFood
 
-  const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn
+  const ppGain = 8 + n.stability / 25 + mods.ppPerTurn
   const tpGain =
     0.5 + workforce * 0.04 + buildings.university * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput) * outputMult
 
-  const highTax = Math.max(0, n.taxRate - 0.2) * 150
-  const lowTax = Math.max(0, 0.2 - n.taxRate) * 50
+  const highTax = Math.max(0, n.taxRate - 0.2) * 30
+  const lowTax = Math.max(0, 0.2 - n.taxRate) * 8
+  const fought = warMonths(s, nationId)
+  const longWarDrag = fought < LONG_WAR_MONTHS ? 0 : 48 + (fought - LONG_WAR_MONTHS) * 4
   const stabilityTarget = clamp(
     ECON.stabilityBase -
+      longWarDrag -
       highTax +
       lowTax -
-      (n.foodShortage ? 25 : 0) -
-      (n.inDebt ? 15 : 0) -
-      n.warWeariness * 0.5 +
-      (martial ? 15 : 0) -
-      (warEconomy ? 10 : 0) +
+      (n.foodShortage ? 8 : 0) -
+      (n.inDebt ? 4 : 0) +
+      (martial ? 6 : 0) -
+      (warEconomy ? 6 : 0) +
       mods.stability -
-      rebelRegions * 3,
+      rebelRegions * 2,
     0,
     100,
   )
@@ -150,6 +154,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     militaryCap: workforce * n.draftRate * ECON.militaryCapPerWorkforce,
     civilianManpower: population * (1 - n.draftRate),
     stabilityTarget,
+    warMonths: fought,
     divisions,
     population,
   }
@@ -183,8 +188,9 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   n.militaryPool = Math.min(e.militaryCap, n.militaryPool + e.militaryRegen)
 
   n.stability = clamp(n.stability + (e.stabilityTarget - n.stability) * 0.25, 0, 100)
-  const atWar = enemiesOf(s, nationId).length > 0
-  n.warWeariness = clamp(n.warWeariness + (atWar ? 0.8 : -2), 0, 60)
+  const atWar = e.warMonths > 0 || enemiesOf(s, nationId).length > 0
+  const wear = !atWar ? -4 : e.warMonths < LONG_WAR_MONTHS ? -1 : 3
+  n.warWeariness = clamp(n.warWeariness + wear, 0, 60)
 
   const owned = Object.values(s.regions)
     .filter((x) => x.owner === nationId)

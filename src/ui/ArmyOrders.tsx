@@ -58,7 +58,7 @@ export function ArmyCard({ army, game }: { army: Army; game: GameState }) {
           ))}
         </div>
       )}
-      <p className="mt-1.5 text-[12px] text-white/45">{atHome ? 'In the city. These units fight as one army.' : `Away in ${map.regions[army.location]?.name ?? 'the field'}.`}</p>
+      <p className="mt-1.5 text-[12px] text-white/45">{atHome ? 'In the city. An attack brings every city with it.' : `Away in ${map.regions[army.location]?.name ?? 'the field'}.`}</p>
       {mine && army.outOfSupplyTurns > 0 && (
         <div className="mt-1.5 text-[12px] text-[#ff8a84]">Cut off from supplies for {army.outOfSupplyTurns} month{army.outOfSupplyTurns === 1 ? '' : 's'}. Surrenders after 3.</div>
       )}
@@ -94,7 +94,7 @@ export function ArmyControls({ army }: { army: Army }) {
         </button>
         <button
           className={`btn btn-magenta flex-1 ${selected && targetMode === 'attack' ? 'bg-[#bf5af2]/40' : ''}`}
-          title="Fight a neighboring country. You must already be at war."
+          title="Every city attacks together. One army has to be able to reach the country."
           onClick={() => {
             selectArmy(army.id)
             setTargetMode(selected && targetMode === 'attack' ? null : 'attack')
@@ -103,11 +103,11 @@ export function ArmyControls({ army }: { army: Army }) {
           Attack
         </button>
       </div>
-      <p className="text-[11px] text-white/40">The whole army moves or attacks together. Press a button, then click a highlighted neighbor.</p>
+      <p className="text-[11px] text-white/40">Attack sends every city together. Move still marches only this army. Press a button, then click a highlighted country.</p>
       {pending && (
         <div className="flex items-center justify-between rounded-xl bg-white/8 px-2.5 py-1.5 text-[12px]">
           <span>
-            {pending.type === 'attack' ? 'Attacking ' : 'Moving to '}
+            {pending.type === 'attack' ? 'Every army attacks ' : 'Moving to '}
             {map.regions[pending.type === 'attack' ? pending.target : pending.type === 'move' ? pending.to : army.location].name}
           </span>
           <button className="text-white/50 hover:text-white" onClick={() => removeOrder(pendingIdx)}>
@@ -188,7 +188,7 @@ export function ArmyManager({ army }: { army: Army }) {
       <div className="space-y-2">
         <div>
           <div className="label">Units in this army</div>
-          <p className="text-[12px] text-white/45 mt-0.5">They attack together. Each one trains on its own, and only in this city.</p>
+          <p className="text-[12px] text-white/45 mt-0.5">All of your cities attack as one army. This city trains its own units.</p>
         </div>
         {present.length === 0 && <p className="text-[12px] text-white/45">No troops yet. Raise them from the city.</p>}
         {!atHome && present.length > 0 && <p className="text-[12px] text-[#ffd60a]">Training waits until the army returns to {place}.</p>}

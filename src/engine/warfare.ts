@@ -7,16 +7,19 @@ import { recordBattle } from './warscore'
 import {
   addLog,
   armiesIn,
+  armiesOf,
   atWar,
   createArmy,
   emptyUnits,
   hasTech,
+  LONG_WAR_MONTHS,
   nationModifiers,
   newId,
   pairKey,
   regionsOf,
   sumUnits,
   totalUnits,
+  warMonths,
 } from './helpers'
 import type { Rng } from './rng'
 import type { Army, BattleReport, GameState, Nation, NationId, Order, RegionId, UnitCounts, WorldMap } from './types'
@@ -184,6 +187,30 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
   return out
 }
 
+/** A fleet cannot occupy an inland country, so it stays where the attack started. */
+function detachFleet(s: GameState, map: WorldMap, lead: Army, used: Set<string>) {
+  const mr = map.regions[lead.location]
+  if (!mr || mr.coastal || lead.units.naval <= 0) return
+  const origin = lead.location
+  const fleetTraining = emptyTraining()
+  fleetTraining.naval = lead.training.naval
+  const fleet = createArmy(s, {
+    owner: lead.owner,
+    location: origin,
+    units: { ...emptyUnits(), naval: lead.units.naval },
+    homeTerritoryId: openMuster(s, map, origin, lead.owner),
+    training: fleetTraining,
+  })
+  fleet.outOfSupplyTurns = lead.outOfSupplyTurns
+  used.add(fleet.id)
+  lead.units.naval = 0
+}
+
+function addBattleWeariness(s: GameState, nation: Nation, loss: number) {
+  if (loss <= 0 || warMonths(s, nation.id) < LONG_WAR_MONTHS) return
+  nation.warWeariness = Math.min(60, nation.warWeariness + loss * 0.2)
+}
+
 export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng: Rng, used: Set<string>) {
   const groups = new Map<string, { nationId: NationId; target: RegionId; armyIds: string[] }>()
   for (const o of orders) {
@@ -204,22 +231,26 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
     const suppression = defenderId === g.nationId
     if (suppression ? targetRegion.rebels <= 0 : !atWar(s, g.nationId, defenderId)) continue
 
-    let bySea = false
-    const armies: Army[] = []
+    const spearhead: Army[] = []
+    let bySea = true
     for (const id of g.armyIds) {
       const a = s.armies[id]
       if (!a || a.owner !== g.nationId || used.has(id) || totalUnits(a.units) < 0.1) continue
       const reach = canReach(s, map, g.nationId, a.location, g.target, 'attack')
       if (!reach.ok) continue
-      bySea ||= reach.bySea
-      armies.push(a)
+      bySea &&= reach.bySea
+      spearhead.push(a)
     }
-    if (!armies.length) continue
-    for (const a of armies) used.add(a.id)
+    if (!spearhead.length) continue
+    const joined = armiesOf(s, g.nationId).filter((a) => !used.has(a.id) && totalUnits(a.units) >= 0.1)
+    const defenderNation = suppression ? null : s.nations[defenderId]
+    const defArmies = suppression ? [] : armiesOf(s, defenderId).filter((a) => !used.has(a.id) && totalUnits(a.units) >= 0.1)
+    for (const a of joined) used.add(a.id)
+    for (const a of defArmies) used.add(a.id)
 
     const attNotes: string[] = []
     let attPenalty = 1
-    if (armies.some((a) => a.outOfSupplyTurns > 0)) {
+    if (spearhead.some((a) => a.outOfSupplyTurns > 0)) {
       attPenalty *= 0.6
       attNotes.push('out of supply (-40%)')
     }
@@ -228,10 +259,8 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
       attPenalty *= 1 - 0.4 * (1 - reduction)
       attNotes.push(`amphibious assault (-${Math.round(40 * (1 - reduction))}%)`)
     }
-    const attacker = makeCombatant(s, attackerNation, armies, null, attNotes, attPenalty)
+    const attacker = makeCombatant(s, attackerNation, joined, null, attNotes, attPenalty)
 
-    const defenderNation = suppression ? null : s.nations[defenderId]
-    const defArmies = suppression ? [] : armiesIn(s, g.target, defenderId)
     const garrison = emptyUnits()
     if (suppression) garrison.infantry = targetRegion.rebels
     else garrison.infantry = garrisonStrength(s, map, g.target)
@@ -239,52 +268,33 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
     const wasCapital = !suppression && s.nations[defenderId]?.capital === g.target
 
     const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
-    distributeLosses(armies, outcome.attackerLosses)
+    distributeLosses(joined, outcome.attackerLosses)
     distributeLosses(defArmies, outcome.defenderLosses, garrison)
 
     const attLoss = totalUnits(outcome.attackerLosses)
     const defLoss = totalUnits(outcome.defenderLosses)
-    attackerNation.warWeariness = Math.min(60, attackerNation.warWeariness + attLoss * 0.6)
-    if (defenderNation) defenderNation.warWeariness = Math.min(60, defenderNation.warWeariness + defLoss * 0.6)
+    addBattleWeariness(s, attackerNation, attLoss)
+    if (defenderNation) addBattleWeariness(s, defenderNation, defLoss)
 
-    const fromRegionId = armies[0].location
+    const fromRegionId = spearhead[0].location
     let captured = false
     if (suppression) {
       targetRegion.rebels = outcome.winner === 'attacker' ? 0 : garrison.infantry
     } else if (outcome.winner === 'attacker') {
       pruneArmies(s)
-      const survivors = armies.filter((a) => s.armies[a.id])
-      if (survivors.length) {
+      const alive = (a: Army) => !!s.armies[a.id]
+      const occupiers = spearhead.filter(alive)
+      if (!occupiers.length) {
+        const reserve = joined.filter(alive)
+        if (reserve.length) occupiers.push(reserve[0])
+      }
+      if (occupiers.length) {
         transferRegion(s, map, g.target, g.nationId)
         captured = true
-        const lead = survivors[0]
-        for (const a of survivors.slice(1)) {
-          for (const k of UNIT_TYPES) {
-            const have = lead.units[k]
-            const extra = a.units[k]
-            const sum = have + extra
-            if (sum > 0) lead.training[k] = Math.max(0, Math.min(TRAINING.max, Math.round((lead.training[k] * have + a.training[k] * extra) / sum)))
-            lead.units[k] += extra
-          }
-          if (!lead.generalId) lead.generalId = a.generalId
-          delete s.armies[a.id]
+        for (const lead of occupiers) {
+          detachFleet(s, map, lead, used)
+          lead.location = g.target
         }
-        if (!mr.coastal && lead.units.naval > 0) {
-          const origin = lead.location
-          const fleetTraining = emptyTraining()
-          fleetTraining.naval = lead.training.naval
-          const fleet = createArmy(s, {
-            owner: g.nationId,
-            location: origin,
-            units: { ...emptyUnits(), naval: lead.units.naval },
-            homeTerritoryId: openMuster(s, map, origin, g.nationId),
-            training: fleetTraining,
-          })
-          fleet.outOfSupplyTurns = lead.outOfSupplyTurns
-          used.add(fleet.id)
-          lead.units.naval = 0
-        }
-        lead.location = g.target
       }
     }
     pruneArmies(s)

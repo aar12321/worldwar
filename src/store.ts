@@ -5,6 +5,7 @@ import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
 import { validateOrder } from './engine/orders'
 import { resolveTurn } from './engine/resolveTurn'
+import { canReach } from './engine/warfare'
 import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
 import { speak } from './ui/plain'
@@ -223,10 +224,20 @@ export const useGame = create<GameStore>((set, get) => ({
   clickRegion(id) {
     const { targetMode, selectedArmy, game } = get()
     if (targetMode && selectedArmy && game) {
+      let armyId = selectedArmy
+      if (targetMode === 'attack') {
+        const { map } = getWorld()
+        const selected = game.armies[selectedArmy]
+        const selectedCan = !!selected && canReach(game, map, game.playerId, selected.location, id, 'attack').ok
+        if (!selectedCan) {
+          const spear = Object.values(game.armies).find((a) => a.owner === game.playerId && canReach(game, map, game.playerId, a.location, id, 'attack').ok)
+          if (spear) armyId = spear.id
+        }
+      }
       const ok =
         targetMode === 'move'
           ? get().issueOrder({ type: 'move', nationId: game.playerId, armyId: selectedArmy, to: id })
-          : get().issueOrder({ type: 'attack', nationId: game.playerId, armyId: selectedArmy, target: id })
+          : get().issueOrder({ type: 'attack', nationId: game.playerId, armyId, target: id })
       if (ok) {
         const { map } = getWorld()
         get().toast(`${targetMode === 'move' ? 'Move' : 'Attack'} order issued: ${map.regions[id].name}`, 'success')

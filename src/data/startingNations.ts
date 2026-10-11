@@ -127,7 +127,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       militaryPool: w * 0.05 * ECON.militaryCapPerWorkforce * 0.5,
       taxRate: 0.25,
       draftRate: 0.05,
-      stability: 65,
+      stability: 92,
       warWeariness: 0,
       techs,
       laws: [],
