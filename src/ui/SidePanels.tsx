@@ -117,10 +117,9 @@ export function NationPanel() {
 
       {tab === 'armies' && (
       <section className="space-y-3">
-        <div className="space-y-1.5 text-[13px] text-white/70">
-          <p>Every army fights as one force. It moves and attacks together.</p>
-          <p>Infantry, armor, planes, and ships inside that army train separately, and only while the army is in its city.</p>
-          <p>Add a general and those units train for free every month. With no general, you pay for each unit you train. You have {player.generals.length} general{player.generals.length === 1 ? '' : 's'}, and each one can be added to a single army.</p>
+        <div className="space-y-1 text-[13px] text-white/70">
+          <p>Every army fights as one force. Infantry, armor, planes, and ships inside it train separately, and only in their city.</p>
+          <p>Add a general and every unit trains for free each month. With no general, you pay for each unit. You have {player.generals.length} general{player.generals.length === 1 ? '' : 's'}, and each one can be added to a single army.</p>
         </div>
         {armies.length === 0 && <p className="text-[13px] text-white/45">No armies yet. Open one of your countries and raise one.</p>}
         {[...armies]

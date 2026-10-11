@@ -127,9 +127,9 @@ function ringMaterial(color: string) {
 }
 
 function armyScale(total: number, mine: boolean) {
-  const base = mine ? 6.2 : 2.1
-  const grow = mine ? 0.72 : 0.38
-  const cap = mine ? 11 : 4.6
+  const base = mine ? 2.45 : 1.6
+  const grow = mine ? 0.46 : 0.38
+  const cap = mine ? 5.2 : 4.2
   return Math.min(cap, base + Math.sqrt(Math.max(total, 1)) * grow)
 }
 
@@ -141,13 +141,6 @@ function buildArmyObject(d: Extract<LayerDatum, { kind: 'army' }>): THREE.Object
   ring.rotation.x = -Math.PI / 2
   ring.position.y = 0.08
   group.add(ring)
-  if (d.mine) {
-    const halo = new THREE.Mesh(ringGeometry, ringMaterial('#ffffff'))
-    halo.rotation.x = -Math.PI / 2
-    halo.position.y = 0.16
-    halo.scale.setScalar(1.7)
-    group.add(halo)
-  }
   const highlight = new THREE.Mesh(ringGeometry, highlightMaterial)
   highlight.rotation.x = -Math.PI / 2
   highlight.position.y = 0.12
@@ -158,7 +151,7 @@ function buildArmyObject(d: Extract<LayerDatum, { kind: 'army' }>): THREE.Object
   present.forEach((k, i) => {
     const m = new THREE.Mesh(unitGeometries[k], mat)
     const offset = (i - (present.length - 1) / 2) * 0.48
-    m.scale.setScalar(d.mine ? 1.05 : 0.7)
+    m.scale.setScalar(d.mine ? 0.84 : 0.62)
     m.position.set(offset, k === 'air' ? 1.2 : 0.4, (i % 2) * 0.25 - 0.1)
     if (k === 'air') m.rotation.z = Math.PI
     group.add(m)
@@ -573,7 +566,7 @@ export function WorldGlobe() {
       const color = game.nations[a.owner]?.color ?? '#94a3b8'
       const mine = a.owner === game.playerId
       const present = (['infantry', 'armor', 'air', 'naval'] as UnitType[]).filter((k) => a.units[k] >= 0.5).join(',')
-      const signature = `${a.owner}|${color}|${present}|${mine ? 1 : 0}`
+      const signature = `${a.owner}|${color}|${present}|${mine ? 1 : 0}|v2`
       const march = from ? { from: [fromHome ? home.lng : from.lng, fromHome ? home.lat : from.lat] as [number, number], to: [lng, lat] as [number, number] } : null
       const hold = !!(m && hiddenCaptures.has(m.to))
       const prev = cache.get(a.id)
@@ -711,7 +704,7 @@ export function WorldGlobe() {
         if (d.kind === 'army') {
           let lat = d.lat
           let lng = d.lng
-          let alt = d.mine ? 0.03 : 0.012
+          let alt = d.mine ? 0.02 : 0.012
           if (d.march && d.hold) {
             const gate = marchGate.current.get(d.key)
             if (gate) gate.held = true

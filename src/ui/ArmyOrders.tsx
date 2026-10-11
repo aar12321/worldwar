@@ -149,7 +149,7 @@ export function ArmyManager({ army }: { army: Army }) {
   }
 
   return (
-    <div className={`inset-card p-3 space-y-3 ${selected ? 'ring-1 ring-white/35' : ''}`}>
+    <div className={`inset-card p-3 space-y-2.5 ${selected ? 'ring-1 ring-white/35' : ''}`}>
       <button type="button" className="w-full text-left" onClick={() => selectArmy(selected ? null : army.id)}>
         <div className="flex items-start justify-between gap-2">
           <span className="text-[16px] font-semibold tracking-tight">{place}</span>
@@ -196,7 +196,7 @@ export function ArmyManager({ army }: { army: Army }) {
           const rank = Math.max(0, Math.min(TRAINING.max, army.training[unit] ?? 0))
           const queued = orders.findIndex((o) => o.type === 'train' && o.armyId === army.id && o.unit === unit)
           return (
-            <div key={unit} className="rounded-xl bg-black/20 px-2.5 py-2 space-y-1.5">
+            <div key={unit} className="rounded-xl bg-black/20 px-2.5 py-1.5 space-y-1">
               <div className="flex items-center justify-between gap-2 text-[13px]">
                 <span className="font-medium">{UNIT_SPECS[unit].name} · {formatDivisions(army.units[unit])}</span>
                 <span className="text-white/55">{trainingRank(rank)} · {rank}/{TRAINING.max}</span>
