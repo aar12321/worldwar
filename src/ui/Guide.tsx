@@ -22,8 +22,8 @@ export function Guide() {
     title = 'Raise your first army'
     body = `Click ${player.name}, then press Raise an army. If that button is unavailable, build a barracks first.`
   } else {
-    title = 'Give an army an order'
-    body = 'Click the country where your army is standing. Press Move or Attack, then click a highlighted neighbor.'
+    title = 'Your armies are in one place'
+    body = 'Open Nation, then Armies. Each army fights as one. Add a general to train every unit for free, or pay to train a unit yourself.'
   }
   return (
     <div className="pointer-events-auto self-center w-full max-w-md">

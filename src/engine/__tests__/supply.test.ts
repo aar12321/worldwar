@@ -40,7 +40,7 @@ describe('supply lines', () => {
     expect(s.armies[army.id]).toBeUndefined()
   })
 
-  it('a logistician general tolerates one extra step', () => {
+  it('a general does not extend the supply range', () => {
     const s = startState(map)
     giveRegions(s, 'r0', ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'])
     const army = Object.values(s.armies).find((a) => a.owner === 'r0')!
@@ -48,6 +48,6 @@ describe('supply lines', () => {
     army.generalId = 'g'
     army.location = `r${SUPPLY.baseRange + 1}`
     applySupply(s, map, 'r0')
-    expect(s.armies[army.id].outOfSupplyTurns).toBe(0)
+    expect(s.armies[army.id].outOfSupplyTurns).toBe(1)
   })
 })

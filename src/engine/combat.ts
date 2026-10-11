@@ -2,13 +2,12 @@ import { TERRAIN } from '../data/terrain'
 import { UNIT_SPECS } from '../data/unitTypes'
 import { emptyUnits, totalUnits, type AggregatedModifiers } from './helpers'
 import type { Rng } from './rng'
-import type { BattleRound, GeneralTrait, Terrain, UnitCounts, UnitType } from './types'
+import type { BattleRound, Terrain, UnitCounts, UnitType } from './types'
 import { UNIT_TYPES } from './types'
 
 export interface Combatant {
   units: UnitCounts
   mods: AggregatedModifiers | null
-  general: GeneralTrait | null
   /** Multiplier applied to all combat power (supply, food, amphibious). */
   penalty: number
   penaltyNotes: string[]
@@ -51,15 +50,6 @@ function terrainMultiplier(terrain: Terrain, unit: UnitType, mods: AggregatedMod
   return mods?.ignoreMountainPenalty && terrain === 'mountain' ? Math.max(1, base) : base
 }
 
-function generalMultiplier(general: GeneralTrait | null, unit: UnitType, terrain: Terrain, defending: boolean): number {
-  if (!general) return 1
-  if (general === 'mountaineer' && (terrain === 'mountain' || terrain === 'forest')) return 1.3
-  if (general === 'blitz' && unit === 'armor' && !defending) return 1.25
-  if (general === 'air_marshal' && unit === 'air') return 1.25
-  if (general === 'stalwart' && defending) return 1.25
-  return 1
-}
-
 /** Combat power of one side for a round. */
 export function sidePower(
   c: Combatant,
@@ -74,7 +64,7 @@ export function sidePower(
     const spec = UNIT_SPECS[k]
     const base = defending ? spec.defense : spec.attack
     const tech = 1 + (defending ? (c.mods?.unitDefense[k] ?? 0) : (c.mods?.unitAttack[k] ?? 0))
-    power += c.units[k] * weights[k] * base * tech * terrainMultiplier(terrain, k, c.mods) * generalMultiplier(c.general, k, terrain, defending)
+    power += c.units[k] * weights[k] * base * tech * terrainMultiplier(terrain, k, c.mods)
   }
   if (hasCombinedArms(c.units)) {
     const bonus = COMBAT.combinedArmsBonus + (c.mods?.combinedArms ?? 0)

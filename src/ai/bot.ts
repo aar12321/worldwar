@@ -6,12 +6,12 @@ import { ARMS, TRAINING, UNIT_SPECS } from '../data/unitTypes'
 import { combatMods } from '../engine/arms'
 import { recentlyProposed } from '../engine/diplomacy'
 import { computeEconomy, unitPower, type EconomyReport } from '../engine/economy'
-import { armyIsHome, atWar, boundArmy, canUseUnit, clamp, factoryCount, hasCasusBelli, hasPact, isAllied, partnerIndex } from '../engine/helpers'
+import { armyIsHome, atWar, boundArmy, canUseUnit, clamp, factoryCount, hasCasusBelli, hasPact, isAllied, partnerIndex, totalUnits } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { createRng, type Rng } from '../engine/rng'
 import { marketPrices, stockOf, type MarketPrices } from '../engine/trade'
 import type { Army, BuildingType, GameState, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
-import { TRADE_RESOURCES } from '../engine/types'
+import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
 import { visibleRegions } from '../engine/visibility'
 import { canReach, garrisonStrength } from '../engine/warfare'
 import { MAX_REPARATIONS, netWarScore, regionValue } from '../engine/warscore'
@@ -77,7 +77,7 @@ export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
   for (const n of Object.values(s.nations)) {
     if (!n.alive) continue
     const mods = combatMods(n, s.turn)
-    power.set(n.id, (armies.get(n.id) ?? []).reduce((sum, a) => sum + unitPower(a.units, mods, a.training ?? 0), 0))
+    power.set(n.id, (armies.get(n.id) ?? []).reduce((sum, a) => sum + unitPower(a.units, mods, a.training), 0))
   }
   const player = s.playerId
   const enemies = partnerIndex(s.wars)
@@ -115,7 +115,7 @@ function estimateDefense(s: GameState, map: WorldMap, ctx: TurnContext, regionId
   const r = s.regions[regionId]
   const owner = s.nations[r.owner]
   const mods = owner ? combatMods(owner, s.turn) : null
-  const armyPower = (ctx.armies.get(r.owner) ?? []).filter((a) => a.location === regionId).reduce((sum, a) => sum + unitPower(a.units, mods, a.training ?? 0), 0)
+  const armyPower = (ctx.armies.get(r.owner) ?? []).filter((a) => a.location === regionId).reduce((sum, a) => sum + unitPower(a.units, mods, a.training), 0)
   return (armyPower + garrisonStrength(s, map, regionId) * UNIT_SPECS.infantry.defense) * TERRAIN[map.regions[regionId].terrain].defense
 }
 
@@ -220,6 +220,17 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   const draft = atWarNow ? (n.warWeariness > 30 ? 0.07 : 0.1) : 0.05
   if (Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft })
 
+  const takenGenerals = new Set(myArmies.map((a) => a.generalId).filter((id): id is string => !!id))
+  const freeGenerals = n.generals.filter((g) => !takenGenerals.has(g.id))
+  const needsGeneral = myArmies
+    .filter((a) => !a.generalId && totalUnits(a.units) >= 0.1)
+    .sort((a, b) => Number(!armyIsHome(s, map, a)) - Number(!armyIsHome(s, map, b)) || (a.id < b.id ? -1 : 1))
+  for (const a of needsGeneral) {
+    const g = freeGenerals.shift()
+    if (!g) break
+    tryAdd({ type: 'assignGeneral', nationId, armyId: a.id, generalId: g.id })
+  }
+
   const reserve = 15
   let budget = Math.max(0, n.resources.capital - reserve)
 
@@ -269,12 +280,13 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       const wantsArmy = atWarNow || rng.chance(0.25 + n.aggression * persona.aggression * 0.2)
       const trainHome = () => {
         const ready = myArmies
-          .filter((a) => armyIsHome(s, map, a) && (a.training ?? 0) < TRAINING.max)
-          .sort((a, b) => (a.training ?? 0) - (b.training ?? 0) || (a.id < b.id ? -1 : 1))
+          .filter((a) => armyIsHome(s, map, a) && !a.generalId)
+          .flatMap((a) => UNIT_TYPES.filter((unit) => a.units[unit] >= 0.05 && a.training[unit] < TRAINING.max).map((unit) => ({ a, unit, rank: a.training[unit] })))
+          .sort((x, y) => x.rank - y.rank || (x.a.id < y.a.id ? -1 : 1) || (x.unit < y.unit ? -1 : 1))
         let trained = 0
-        for (const a of ready) {
+        for (const row of ready) {
           if (trained >= 2) break
-          if (tryAdd({ type: 'train', nationId, armyId: a.id })) trained++
+          if (tryAdd({ type: 'train', nationId, armyId: row.a.id, unit: row.unit })) trained++
         }
         return trained > 0
       }
@@ -467,7 +479,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       .filter((id) => warTargets.has(s.regions[id]?.owner) && canReach(s, map, nationId, a.location, id, 'attack').ok)
       .map((id) => ({ id, def: estimateDefense(s, map, ctx, id) - (committed.get(id) ?? 0) }))
       .sort((x, y) => x.def - y.def || (x.id < y.id ? -1 : 1))
-    const power = unitPower(a.units, mods, a.training ?? 0)
+    const power = unitPower(a.units, mods, a.training)
     const target = options[0]
     if (target && power > target.def * attackRatio) {
       if (tryAdd({ type: 'attack', nationId, armyId: a.id, target: target.id })) committed.set(target.id, (committed.get(target.id) ?? 0) + power)

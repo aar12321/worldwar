@@ -1,4 +1,5 @@
 import { TECH_BY_ID, type TechModifiers } from '../data/techTree'
+import { asTraining, type UnitTraining } from '../data/unitTypes'
 import type { Army, GameState, LogKind, Nation, NationId, RegionId, UnitCounts, UnitType, WorldMap } from './types'
 
 export const pairKey = (a: NationId, b: NationId) => (a < b ? `${a}|${b}` : `${b}|${a}`)
@@ -178,7 +179,7 @@ export const newId = (s: GameState, prefix: string) => `${prefix}${s.nextId++}`
 
 export function createArmy(
   s: GameState,
-  spec: { owner: NationId; location: RegionId; units: UnitCounts; homeTerritoryId: string; training?: number },
+  spec: { owner: NationId; location: RegionId; units: UnitCounts; homeTerritoryId: string; training?: number | UnitTraining },
 ): Army {
   const army: Army = {
     id: newId(s, 'a'),
@@ -189,7 +190,7 @@ export function createArmy(
     outOfSupplyTurns: 0,
     entrenched: 0,
     homeTerritoryId: spec.homeTerritoryId,
-    training: spec.training ?? 0,
+    training: asTraining(spec.training, spec.units),
   }
   s.armies[army.id] = army
   return army

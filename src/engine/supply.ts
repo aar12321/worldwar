@@ -85,11 +85,8 @@ function isArmySupplied(
   armyId: string,
 ): boolean {
   const a = s.armies[armyId]
-  const n = s.nations[a.owner]
-  const general = n.generals.find((g) => g.id === a.generalId)
-  const tolerance = general?.trait === 'logistician' ? 1 : 0
   const d = dist.get(a.location)
-  return d !== undefined && d <= range + tolerance
+  return d !== undefined && d <= range
 }
 
 export function applySupply(s: GameState, map: WorldMap, nationId: NationId) {
@@ -97,7 +94,6 @@ export function applySupply(s: GameState, map: WorldMap, nationId: NationId) {
   const dist = supplyDistances(s, map, nationId)
   const range = supplyRange(s, nationId)
   for (const a of armiesOf(s, nationId)) {
-    const general = n.generals.find((g) => g.id === a.generalId)
     const foodLoss = n.foodShortage ? 0.05 : 0
     if (isArmySupplied(s, dist, range, a.id)) {
       a.outOfSupplyTurns = 0
@@ -108,7 +104,7 @@ export function applySupply(s: GameState, map: WorldMap, nationId: NationId) {
         addLog(s, 'war', `${n.name}'s starving army in ${map.regions[a.location].name} surrendered after ${a.outOfSupplyTurns} months without supply.`, [nationId])
         continue
       }
-      const loss = SUPPLY.attrition * (general?.trait === 'logistician' ? 0.5 : 1)
+      const loss = SUPPLY.attrition
       for (const k of UNIT_TYPES) a.units[k] *= 1 - loss
       if (a.outOfSupplyTurns === 1)
         addLog(s, 'war', `${n.name}'s army in ${map.regions[a.location].name} is out of supply!`, [nationId])

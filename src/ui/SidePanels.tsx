@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { GENERAL_TRAITS } from '../data/startingNations'
-import { ARMS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
+import { ARMS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, UNIT_SPECS } from '../data/unitTypes'
 import { weaponTiers } from '../engine/arms'
-import { armiesOf, formatDivisions, regionsOf, totalUnits, turnDate } from '../engine/helpers'
+import { armiesOf, regionsOf, turnDate } from '../engine/helpers'
 import { UNIT_TYPES } from '../engine/types'
-import type { Army, LawId, LogKind, UnitType } from '../engine/types'
+import type { LawId, LogKind, UnitType } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
+import { ArmyManager } from './ArmyOrders'
 import { signed, usePlayerView } from './hooks'
 import { OrderButton, PanelShell } from './panel'
 
@@ -16,7 +16,8 @@ export function NationPanel() {
   const removeOrder = useGame((s) => s.removeOrder)
   const [tax, setTax] = useState(view?.pendingPolicy.taxRate ?? 0.25)
   const [draft, setDraft] = useState(view?.pendingPolicy.draftRate ?? 0.05)
-  const [tab, setTab] = useState<'economy' | 'laws' | 'arms' | 'armies'>('economy')
+  const tab = useGame((s) => s.nationTab)
+  const setNationTab = useGame((s) => s.setNationTab)
   const pTax = view?.pendingPolicy.taxRate
   const pDraft = view?.pendingPolicy.draftRate
   useEffect(() => {
@@ -39,7 +40,7 @@ export function NationPanel() {
           ['arms', 'Weapons'],
           ['armies', 'Armies'],
         ] as const).map(([id, label]) => (
-          <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>
+          <button key={id} type="button" aria-pressed={tab === id} onClick={() => setNationTab(id)}>
             {label}
           </button>
         ))}
@@ -115,33 +116,19 @@ export function NationPanel() {
       )}
 
       {tab === 'armies' && (
-      <>
-      <section className="space-y-2">
-        <div className="text-[13px] font-semibold">Commanders</div>
-        {player.generals.map((g) => {
-          const assigned = armies.find((a) => a.generalId === g.id)
-          return (
-            <div key={g.id} className="flex justify-between gap-3 text-[13px] inset-card px-3 py-2">
-              <div>
-                <div className="font-semibold">{g.name}</div>
-                <div className="text-[12px] text-white/50">
-                  {GENERAL_TRAITS[g.trait].name}: {GENERAL_TRAITS[g.trait].description}
-                </div>
-              </div>
-              <span className="text-[12px] text-white/45 whitespace-nowrap">{assigned ? getWorld().map.territories[assigned.homeTerritoryId]?.name ?? 'Assigned' : 'Free'}</span>
-            </div>
-          )
-        })}
+      <section className="space-y-3">
+        <div className="space-y-1.5 text-[13px] text-white/70">
+          <p>Every army fights as one force. It moves and attacks together.</p>
+          <p>Infantry, armor, planes, and ships inside that army train separately, and only while the army is in its city.</p>
+          <p>Add a general and those units train for free every month. With no general, you pay for each unit you train. You have {player.generals.length} general{player.generals.length === 1 ? '' : 's'}, and each one can be added to a single army.</p>
+        </div>
+        {armies.length === 0 && <p className="text-[13px] text-white/45">No armies yet. Open one of your countries and raise one.</p>}
+        {[...armies]
+          .sort((a, b) => (getWorld().map.territories[a.homeTerritoryId]?.name ?? a.id).localeCompare(getWorld().map.territories[b.homeTerritoryId]?.name ?? b.id))
+          .map((a) => (
+            <ArmyManager key={a.id} army={a} />
+          ))}
       </section>
-
-      <section className="space-y-2 pt-2">
-        <div className="text-[13px] font-semibold">Armies ({armies.length})</div>
-        <p className="text-[12px] text-white/45">Select an army, then open its country on the globe to move or attack.</p>
-        {armies.map((a) => (
-          <ArmyRosterRow key={a.id} army={a} />
-        ))}
-      </section>
-      </>
       )}
     </PanelShell>
   )
@@ -179,29 +166,6 @@ function ContractRow({ unit }: { unit: UnitType }) {
         <OrderButton className="flex-1" showError order={{ type: 'signContract', nationId: player.id, unit, tier }} label={`${active ? 'Replace' : 'Sign'} · ${ARMS.domesticCost[tier - 1]} money`} sub={`+${bonus}% attack for ${ARMS.months} months`} />
       </div>
     </div>
-  )
-}
-
-function ArmyRosterRow({ army }: { army: Army }) {
-  const selected = useGame((s) => s.selectedArmy === army.id)
-  const selectArmy = useGame((s) => s.selectArmy)
-  const { map } = getWorld()
-  const home = map.territories[army.homeTerritoryId]
-  return (
-    <button
-      type="button"
-      onClick={() => selectArmy(selected ? null : army.id)}
-      className={`w-full text-left inset-card px-3 py-2 transition-colors ${selected ? 'ring-1 ring-white/40' : 'hover:bg-white/10'}`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[14px] font-semibold tracking-tight">{home?.name ?? 'Army'}</span>
-        <span className="text-xs text-slate-400">{formatDivisions(totalUnits(army.units))} div</span>
-      </div>
-      <div className="text-[11px] text-slate-500 mt-0.5">
-        {map.regions[army.location]?.name ?? 'In the field'} · {trainingRank(army.training ?? 0)}
-        {home ? ` · ${home.name}` : ''}
-      </div>
-    </button>
   )
 }
 
@@ -285,6 +249,7 @@ export function SettingsPanel() {
       <div className="text-[13px] text-white/55 pt-2 space-y-2">
         <div className="text-[13px] font-semibold text-white">How to play</div>
         <p>Click a country. If it is yours, raise an army in a district or open Build. If it is not, talk or declare war.</p>
+        <p>Open Nation, then Armies, to see every army. They fight as one force. Add a general and each unit trains for free every month. Without a general, you pay to train each unit in its city.</p>
         <p>Select an army, press Move or Attack, then click a highlighted country.</p>
         <p>Press End month. Every nation acts at the same time.</p>
         <p>Win by controlling the share of the world’s people you chose at the start.</p>

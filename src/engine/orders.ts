@@ -25,7 +25,7 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.manpower = UNIT_SPECS[o.unit].manpowerCost
       break
     case 'train':
-      c.capital = trainingCost(s.armies[o.armyId]?.training ?? 0)
+      c.capital = trainingCost(s.armies[o.armyId]?.training[o.unit] ?? 0)
       break
     case 'signContract':
       c.capital = ARMS.domesticCost[o.tier - 1] ?? 0
@@ -118,8 +118,12 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const a = s.armies[o.armyId]
       if (!a || a.owner !== o.nationId) return 'Not your army'
       if (!armyIsHome(s, map, a)) return 'Army must be at its home muster'
-      if ((a.training ?? 0) >= TRAINING.max) return 'Already fully trained'
-      if (pending.some((p) => p.type === 'train' && p.armyId === a.id)) return 'Already training'
+      if ((a.units[o.unit] ?? 0) < 0.05) return 'No troops of that type'
+      if ((a.training[o.unit] ?? 0) >= TRAINING.max) return 'Already fully trained'
+      const assigning = pending.find((p) => p.type === 'assignGeneral' && p.armyId === a.id)
+      const generalId = assigning && assigning.type === 'assignGeneral' ? assigning.generalId : a.generalId
+      if (generalId) return 'A general trains this army for free'
+      if (pending.some((p) => p.type === 'train' && p.armyId === a.id && p.unit === o.unit)) return 'Already training'
       return null
     }
     case 'rebase': {

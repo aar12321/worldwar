@@ -1,13 +1,17 @@
-import { trainingRank } from '../data/unitTypes'
-import { formatDivisions } from '../engine/helpers'
-import type { Army, UnitType } from '../engine/types'
-import { UNIT_TYPES } from '../engine/types'
+import { formatDivisions, totalUnits } from '../engine/helpers'
+import type { Army, Order } from '../engine/types'
 
-const UNIT_GLYPH: Record<UnitType, string> = { infantry: 'INF', armor: 'ARM', air: 'AIR', naval: 'NAV' }
-
-export function armyCaption(army: Army): string {
-  const bits = UNIT_TYPES.filter((k) => army.units[k] >= 0.05).map((k) => `${UNIT_GLYPH[k]} ${formatDivisions(army.units[k])}`)
-  return `${bits.join(' · ') || 'Empty'} · ${trainingRank(army.training ?? 0)}`
+/** The general a queued order will leave on this army, or the one already there. */
+export function generalChoice(armyId: string, current: string | null, orders: Order[]): string | null {
+  const pending = orders.find((o) => o.type === 'assignGeneral' && o.armyId === armyId)
+  if (pending && pending.type === 'assignGeneral') return pending.generalId
+  return current
 }
 
-export { UNIT_GLYPH }
+export function armyMarkerText(army: Army, place: string, away: boolean): { title: string; detail: string } {
+  const count = formatDivisions(totalUnits(army.units))
+  return {
+    title: place,
+    detail: away ? `Away · ${count} divisions` : `${count} divisions`,
+  }
+}

@@ -1,4 +1,4 @@
-import { TRAINING } from '../data/unitTypes'
+import { asTraining } from '../data/unitTypes'
 import type { GameState, WorldMap } from './types'
 
 /** Fills fields added after a save was written, so an older game can still load. */
@@ -9,7 +9,7 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   const used = new Set<string>()
   const armies = Object.values(game.armies).sort((a, b) => (a.id < b.id ? -1 : 1))
   for (const a of armies) {
-    a.training = Math.max(0, Math.min(TRAINING.max, Math.floor(Number.isFinite(a.training) ? a.training : 0)))
+    a.training = asTraining(a.training, a.units)
     const known = !!map.territories[a.homeTerritoryId] && !used.has(a.homeTerritoryId)
     if (!known) {
       const regionList = map.territoriesByRegion[a.location] ?? []

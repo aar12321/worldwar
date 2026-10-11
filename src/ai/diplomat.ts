@@ -31,7 +31,7 @@ export function perceivedPower(s: GameState, map: WorldMap, viewer: NationId, ta
   let hidden = 0
   for (const a of armies ?? Object.values(s.armies)) {
     if (a.owner !== target) continue
-    const p = unitPower(a.units, mods, a.training ?? 0)
+    const p = unitPower(a.units, mods, a.training)
     if (seen === 'all' || seen.has(a.location)) visible += p
     else hidden += p
   }

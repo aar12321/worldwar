@@ -1,5 +1,5 @@
 import { addOpinion, forgetNation } from '../ai/opinion'
-import { TRAINING } from '../data/unitTypes'
+import { TRAINING, emptyTraining } from '../data/unitTypes'
 import { combatMods, contractNote } from './arms'
 import { regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
@@ -109,22 +109,16 @@ function pruneArmies(s: GameState) {
   for (const a of Object.values(s.armies)) if (totalUnits(a.units) < 0.1) delete s.armies[a.id]
 }
 
-function bestGeneral(n: Nation, armies: Army[]) {
-  for (const a of armies) {
-    const g = n.generals.find((x) => x.id === a.generalId)
-    if (g) return g.trait
-  }
-  return null
-}
-
-/** Training bonus diluted by untrained garrison troops, so a green militia does not inherit an elite army's drill. */
+/** Training bonus diluted by green troops, so each unit type keeps the drill it earned. */
 function trainingBonus(armies: Army[], extra: UnitCounts | null): number {
   let units = extra ? totalUnits(extra) : 0
   let weighted = 0
   for (const a of armies) {
-    const t = totalUnits(a.units)
-    units += t
-    weighted += t * Math.max(0, Math.min(TRAINING.max, a.training ?? 0))
+    for (const k of UNIT_TYPES) {
+      const n = a.units[k]
+      units += n
+      weighted += n * Math.max(0, Math.min(TRAINING.max, a.training[k] ?? 0))
+    }
   }
   return units > 0 ? (weighted / units) * TRAINING.bonusPerLevel : 0
 }
@@ -164,7 +158,6 @@ function makeCombatant(s: GameState, n: Nation | null, armies: Army[], extra: Un
   return {
     units: sumUnits([...armies.map((a) => a.units), ...(extra ? [extra] : [])]),
     mods: n ? combatMods(n, s.turn) : null,
-    general: n ? bestGeneral(n, armies) : null,
     penalty: p,
     penaltyNotes: notes,
   }
@@ -265,24 +258,27 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
         transferRegion(s, map, g.target, g.nationId)
         captured = true
         const lead = survivors[0]
-        let leadUnits = totalUnits(lead.units)
         for (const a of survivors.slice(1)) {
-          const extra = totalUnits(a.units)
-          const sum = leadUnits + extra
-          if (sum > 0) lead.training = Math.max(0, Math.min(TRAINING.max, Math.round(((lead.training ?? 0) * leadUnits + (a.training ?? 0) * extra) / sum)))
-          leadUnits = sum
-          for (const k of UNIT_TYPES) lead.units[k] += a.units[k]
+          for (const k of UNIT_TYPES) {
+            const have = lead.units[k]
+            const extra = a.units[k]
+            const sum = have + extra
+            if (sum > 0) lead.training[k] = Math.max(0, Math.min(TRAINING.max, Math.round((lead.training[k] * have + a.training[k] * extra) / sum)))
+            lead.units[k] += extra
+          }
           if (!lead.generalId) lead.generalId = a.generalId
           delete s.armies[a.id]
         }
         if (!mr.coastal && lead.units.naval > 0) {
           const origin = lead.location
+          const fleetTraining = emptyTraining()
+          fleetTraining.naval = lead.training.naval
           const fleet = createArmy(s, {
             owner: g.nationId,
             location: origin,
             units: { ...emptyUnits(), naval: lead.units.naval },
             homeTerritoryId: openMuster(s, map, origin, g.nationId),
-            training: lead.training ?? 0,
+            training: fleetTraining,
           })
           fleet.outOfSupplyTurns = lead.outOfSupplyTurns
           used.add(fleet.id)
@@ -331,7 +327,7 @@ export function resolveRebels(s: GameState, map: WorldMap, rng: Rng) {
     const rebels = { ...emptyUnits(), infantry: region.rebels }
     const defArmies = armiesIn(s, region.id, ownerId)
     const garrison = { ...emptyUnits(), infantry: garrisonStrength(s, map, region.id) }
-    const attacker: Combatant = { units: rebels, mods: null, general: null, penalty: 1, penaltyNotes: [] }
+    const attacker: Combatant = { units: rebels, mods: null, penalty: 1, penaltyNotes: [] }
     const defender = makeCombatant(s, owner, defArmies, garrison, [], 1, true)
     const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
     distributeLosses(defArmies, outcome.defenderLosses, garrison)

@@ -4,11 +4,11 @@ import { perceivedPower } from '../ai/diplomat'
 import { opinionLabel, opinionOf } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
-import { TRAINING, BUILDING_SPECS, COSTS, UNIT_SPECS, trainingCost, trainingRank } from '../data/unitTypes'
+import { BUILDING_SPECS, COSTS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
 import { weaponTiers } from '../engine/arms'
 import { militaryPower } from '../engine/economy'
 import { spySuccessChance } from '../engine/espionage'
-import { armiesIn, armyIsHome, atWar, boundArmy, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
+import { armiesIn, armyIsHome, atWar, boundArmy, formatDivisions, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { supplyDistances, supplyRange } from '../engine/supply'
 import type { Order, UnitType } from '../engine/types'
@@ -18,6 +18,7 @@ import { garrisonStrength } from '../engine/warfare'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { ArmyCard, ArmyControls, UnitStrip } from './ArmyOrders'
+import { generalChoice } from './labels'
 import { usePlayerView, usePlayerVision } from './hooks'
 import { speak } from './plain'
 
@@ -81,7 +82,7 @@ export function CountryPanel() {
   const built = BUILDING_TYPES.filter((b) => region.buildings[b] > 0)
   const supplyCut = mine && (dist === undefined || dist > range)
   const purpose = mine
-    ? 'Your country. Each district holds one army. Raise it here, then move or attack.'
+    ? 'Your country. Each district holds one army. It fights as one force. Train the units inside it from Armies.'
     : war
       ? `At war with ${owner.name}. Attack from an army in a neighboring country.`
       : allied
@@ -203,7 +204,7 @@ export function CountryPanel() {
               <section className="space-y-2">
                 <div>
                   <div className="text-[13px] font-semibold">Districts</div>
-                  <p className="text-[12px] text-white/50 mt-0.5">One army each. You can recruit and train only while that army is standing here.</p>
+                  <p className="text-[12px] text-white/50 mt-0.5">One army each. Raise units here. They fight together, and train separately while the army is home.</p>
                 </div>
                 {territoryIds.map((tid) => (
                   <MusterCard key={tid} territoryId={tid} />
@@ -311,6 +312,7 @@ function MusterCard({ territoryId }: { territoryId: string }) {
   const selected = useGame((s) => s.selectedRegion)!
   const selectedArmy = useGame((s) => s.selectedArmy)
   const selectArmy = useGame((s) => s.selectArmy)
+  const openNation = useGame((s) => s.openNation)
   const { map } = getWorld()
   const vis = usePlayerVision()
   const [moreUnits, setMoreUnits] = useState(false)
@@ -325,14 +327,16 @@ function MusterCard({ territoryId }: { territoryId: string }) {
   const away = !!bound && !home
   const canRaise = mine && (!bound || home)
   const selectedHere = !!bound && selectedArmy === bound.id && mine && home
-  const rank = bound?.training ?? 0
   const queued = (unit: UnitType) => view.orders.filter((o) => o.type === 'recruit' && o.territoryId === territoryId && o.unit === unit).length
   const infantryQueued = queued('infantry')
   const extras = UNIT_TYPES.filter((unit) => unit !== 'infantry')
   const rebaseArmy = selectedArmy ? game.armies[selectedArmy] : undefined
   const canRebase = mine && !bound && !!rebaseArmy && rebaseArmy.owner === player.id && rebaseArmy.location === selected && rebaseArmy.homeTerritoryId !== territoryId
   const tiers = bound ? weaponTiers(game.nations[bound.owner], game.turn) : undefined
-  const status = !showForces ? 'Hidden' : home ? trainingRank(rank) : away ? 'Away' : 'Empty'
+  const generalId = bound ? generalChoice(bound.id, bound.generalId, view.orders) : null
+  const general = generalId ? game.nations[bound?.owner ?? '']?.generals.find((g) => g.id === generalId) : null
+  const present = bound ? UNIT_TYPES.filter((unit) => bound.units[unit] >= 0.05) : []
+  const status = !showForces ? 'Hidden' : home ? 'In the city' : away ? 'Away' : 'Empty'
 
   return (
     <div className={`inset-card p-3 space-y-2 ${selectedHere ? 'ring-1 ring-white/35' : ''}`}>
@@ -347,18 +351,23 @@ function MusterCard({ territoryId }: { territoryId: string }) {
         <span className={`text-[12px] font-medium ${!showForces ? 'text-white/40' : home ? 'text-[#8ec5ff]' : away ? 'text-[#ffd60a]' : 'text-white/40'}`}>{status}</span>
       </div>
       {bound && home && <UnitStrip units={bound.units} tiers={tiers} />}
-      {bound && home && (
-        <div>
-          <div className="flex justify-between text-[11px] text-white/45 mb-1">
-            <span>Training</span>
-            <span>
-              {rank}/{TRAINING.max}
-            </span>
-          </div>
-          <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-            <div className="h-full rounded-full bg-[#0a84ff]" style={{ width: `${(Math.min(TRAINING.max, rank) / TRAINING.max) * 100}%` }} />
-          </div>
+      {bound && showForces && present.length > 0 && (
+        <div className="space-y-1">
+          {present.map((unit) => (
+            <div key={unit} className="flex justify-between text-[12px]">
+              <span className="text-white/75">{UNIT_SPECS[unit].name} {formatDivisions(bound.units[unit])}</span>
+              <span className="text-white/45">{trainingRank(bound.training[unit] ?? 0)}</span>
+            </div>
+          ))}
         </div>
+      )}
+      {mine && bound && home && (
+        <p className="text-[12px] text-white/55">{general ? `${general.name} trains these units for free each month.` : 'No general. You pay to train each unit.'}</p>
+      )}
+      {mine && bound && (
+        <button type="button" className="btn btn-quiet w-full" onClick={() => openNation('armies')}>
+          Open Armies
+        </button>
       )}
       {away && bound && <p className="text-[12px] text-[#ffd60a]">In {map.regions[bound.location]?.name ?? 'the field'}. March it home to recruit or train.</p>}
       {!showForces && <p className="text-[12px] text-white/45">You cannot see the army that belongs here.</p>}
@@ -370,10 +379,7 @@ function MusterCard({ territoryId }: { territoryId: string }) {
           tone="btn-primary"
         />
       )}
-      {mine && bound && home && rank < TRAINING.max && (
-        <ActionButton order={{ type: 'train', nationId: player.id, armyId: bound.id }} label={`Train to ${trainingRank(rank + 1)}`} sub={`${trainingCost(rank)} money. Better training wins more fights.`} tone="btn-primary" />
-      )}
-      {mine && bound && home && <ArmyControls army={bound} game={game} />}
+      {mine && bound && home && <ArmyControls army={bound} />}
       {canRaise && (
         <div className="space-y-1.5">
           <button type="button" className="btn btn-quiet" onClick={() => setMoreUnits((open) => !open)}>

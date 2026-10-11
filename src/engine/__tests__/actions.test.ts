@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { storedOpinion } from '../../ai/opinion'
 import { EVENTS } from '../../data/events'
-import { COSTS, PROPOSAL_COSTS } from '../../data/unitTypes'
+import { COSTS, PROPOSAL_COSTS, trainingCost } from '../../data/unitTypes'
 import { getWorld } from '../../map/world'
 import { combatMods } from '../arms'
 import { computeEconomy, unitPower } from '../economy'
@@ -68,8 +68,8 @@ const ROWS: Row[] = [
   },
   {
     name: 'train',
-    order: (s) => ({ type: 'train', nationId: P, armyId: armyOf(s, P).id }),
-    check: (n) => expect(armyOf(n, P).training).toBe(1),
+    order: (s) => ({ type: 'train', nationId: P, armyId: armyOf(s, P).id, unit: 'infantry' }),
+    check: (n) => expect(armyOf(n, P).training.infantry).toBe(1),
   },
   {
     name: 'signContract',
@@ -529,10 +529,10 @@ describe('musters, training, and arms', () => {
     const s = base()
     const army = armyOf(s, P)
     army.location = 'r1'
-    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id })).toMatch(/home muster/)
+    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' })).toMatch(/home muster/)
     army.location = 'r0'
-    army.training = 5
-    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id })).toMatch(/fully trained/)
+    army.training = { infantry: 5, armor: 5, air: 5, naval: 5 }
+    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' })).toMatch(/fully trained/)
     expect(unitPower(units, null, 5)).toBeCloseTo(unitPower(units, null, 0) * 1.4)
 
     army.units = { infantry: 80, armor: 0, air: 0, naval: 0 }
@@ -581,12 +581,60 @@ describe('musters, training, and arms', () => {
     const saved = startState(lineMap(1))
     const army = armyOf(saved, 'r0')
     const raw = structuredClone(saved)
-    ;(raw.armies[army.id] as { homeTerritoryId?: string; training?: number }).homeTerritoryId = undefined
-    ;(raw.armies[army.id] as { training?: number }).training = undefined
+    ;(raw.armies[army.id] as unknown as { homeTerritoryId?: string; training?: number }).homeTerritoryId = undefined
+    ;(raw.armies[army.id] as unknown as { training?: number }).training = undefined
     for (const n of Object.values(raw.nations)) (n as { contracts?: unknown }).contracts = undefined
     normalizeGame(raw, lineMap(1))
     expect(raw.armies[army.id].homeTerritoryId).toBe('r0:0')
-    expect(raw.armies[army.id].training).toBe(0)
+    expect(raw.armies[army.id].training).toEqual({ infantry: 0, armor: 0, air: 0, naval: 0 })
     expect(raw.nations.r0.contracts).toEqual([])
+
+    const ranked = structuredClone(saved)
+    const rankedArmy = armyOf(ranked, 'r0')
+    rankedArmy.units = { infantry: 3, armor: 0, air: 2, naval: 0 }
+    ;(ranked.armies[rankedArmy.id] as unknown as { training?: number }).training = 4
+    normalizeGame(ranked, lineMap(1))
+    expect(ranked.armies[rankedArmy.id].training).toEqual({ infantry: 4, armor: 0, air: 4, naval: 0 })
+  })
+
+  it('trains each unit on its own, and a general does it for free while the army is home', () => {
+    const s = base()
+    const army = armyOf(s, P)
+    army.units = { infantry: 6, armor: 2, air: 0, naval: 0 }
+    army.training = { infantry: 0, armor: 1, air: 0, naval: 0 }
+    const generalId = s.nations[P].generals[0].id
+    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id, unit: 'air' })).toMatch(/No troops/)
+    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' }, [{ type: 'assignGeneral', nationId: P, armyId: army.id, generalId }])).toMatch(/general/i)
+
+    const paid = resolveTurn(structuredClone(s), map, [
+      { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' },
+      { type: 'train', nationId: P, armyId: army.id, unit: 'armor' },
+    ])
+    expect(paid.armies[army.id].training.infantry).toBe(1)
+    expect(paid.armies[army.id].training.armor).toBe(2)
+    expect(paid.armies[army.id].training.air).toBe(0)
+    const idle = resolveTurn(structuredClone(s), map, [])
+    expect(idle.nations[P].resources.capital - paid.nations[P].resources.capital).toBe(trainingCost(0) + trainingCost(1))
+
+    const withGeneral = structuredClone(s)
+    withGeneral.armies[army.id].generalId = generalId
+    const free = resolveTurn(withGeneral, map, [])
+    expect(free.armies[army.id].training.infantry).toBe(1)
+    expect(free.armies[army.id].training.armor).toBe(2)
+    expect(free.nations[P].resources.capital).toBe(idle.nations[P].resources.capital)
+
+    const both = resolveTurn(structuredClone(s), map, [
+      { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' },
+      { type: 'assignGeneral', nationId: P, armyId: army.id, generalId },
+    ])
+    expect(both.armies[army.id].generalId).toBe(generalId)
+    expect(both.armies[army.id].training.infantry).toBe(1)
+    expect(both.armies[army.id].training.armor).toBe(2)
+    expect(both.nations[P].resources.capital).toBe(idle.nations[P].resources.capital)
+
+    const away = structuredClone(withGeneral)
+    away.armies[army.id].location = 'r1'
+    const parked = resolveTurn(away, map, [])
+    expect(parked.armies[army.id].training).toEqual(army.training)
   })
 })

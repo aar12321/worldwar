@@ -13,6 +13,7 @@ const SAVE_KEY = 'worlds-of-others-save-v2'
 const SETTINGS_KEY = 'worlds-of-others-settings-v1'
 
 export type Panel = 'none' | 'nation' | 'tech' | 'diplomacy' | 'log' | 'settings'
+export type NationTab = 'economy' | 'laws' | 'arms' | 'armies'
 
 export interface March {
   armyId: string
@@ -43,6 +44,7 @@ interface GameStore {
   selectedArmy: string | null
   targetMode: 'move' | 'attack' | null
   panel: Panel
+  nationTab: NationTab
   diploFocus: NationId | null
   fxQueue: BattleReport[]
   marches: March[]
@@ -58,6 +60,8 @@ interface GameStore {
   selectArmy(id: string | null): void
   setTargetMode(mode: 'move' | 'attack' | null): void
   setPanel(panel: Panel): void
+  setNationTab(tab: NationTab): void
+  openNation(tab: NationTab): void
   openDiplomacy(nationId: NationId | null): void
   issueOrder(order: Order): boolean
   removeOrder(index: number): void
@@ -118,6 +122,7 @@ export const useGame = create<GameStore>((set, get) => ({
   selectedArmy: null,
   targetMode: null,
   panel: 'none',
+  nationTab: 'economy',
   diploFocus: null,
   fxQueue: [],
   marches: [],
@@ -166,6 +171,14 @@ export const useGame = create<GameStore>((set, get) => ({
     set((st) => ({ panel: st.panel === panel ? 'none' : panel, diploFocus: null }))
   },
 
+  setNationTab(tab) {
+    set({ nationTab: tab })
+  },
+
+  openNation(tab) {
+    set({ panel: 'nation', nationTab: tab, diploFocus: null })
+  },
+
   openDiplomacy(nationId) {
     set({ panel: 'diplomacy', diploFocus: nationId })
   },
@@ -178,7 +191,11 @@ export const useGame = create<GameStore>((set, get) => ({
     if (order.type === 'move' || order.type === 'attack')
       rest = orders.filter((o) => !((o.type === 'move' || o.type === 'attack') && o.armyId === order.armyId))
     else if (order.type === 'respond') rest = orders.filter((o) => !(o.type === 'respond' && o.proposalId === order.proposalId))
-    else if (order.type === 'train') rest = orders.filter((o) => !(o.type === 'train' && o.armyId === order.armyId))
+    else if (order.type === 'train') rest = orders.filter((o) => !(o.type === 'train' && o.armyId === order.armyId && o.unit === order.unit))
+    else if (order.type === 'assignGeneral') {
+      rest = orders.filter((o) => !(o.type === 'assignGeneral' && (o.armyId === order.armyId || (!!order.generalId && o.generalId === order.generalId))))
+      if (order.generalId) rest = rest.filter((o) => !(o.type === 'train' && o.armyId === order.armyId))
+    }
     else if (order.type === 'rebase') rest = orders.filter((o) => !(o.type === 'rebase' && o.armyId === order.armyId))
     else if (order.type === 'signContract') rest = orders.filter((o) => !(o.type === 'signContract' && o.unit === order.unit))
     const err = validateOrder(game, map, order, rest)

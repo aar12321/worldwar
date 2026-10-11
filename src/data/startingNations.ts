@@ -1,3 +1,4 @@
+import { emptyTraining } from './unitTypes'
 import { ECON, regionWorkforce } from '../engine/economy'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
@@ -7,12 +8,13 @@ export const PLAYER_COLOR = '#22d3ee'
 
 const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dmitri', 'Saoirse', 'Tariq', 'Mei', 'Lucien', 'Zofia', 'Kwame', 'Elena', 'Hugo', 'Anika', 'Mateo', 'Yara', 'Bogdan', 'Ines']
 const GENERAL_LAST = ['Varga', 'Okafor', 'Takeda', 'Brandt', 'Montoya', 'Haddad', 'Volkov', 'Byrne', 'Rahman', 'Lin', 'Moreau', 'Nowak', 'Mensah', 'Petrova', 'Lindqvist', 'Sato', 'Reyes', 'Kader', 'Horvat', 'Silva']
+/** Names kept for older saves. A general's only effect is free training at home. */
 export const GENERAL_TRAITS: Record<GeneralTrait, { name: string; description: string }> = {
-  mountaineer: { name: 'Mountaineer', description: '+30% attack and defense in mountains and forests.' },
-  logistician: { name: 'Logistician', description: '+1 supply tolerance, halves out-of-supply attrition.' },
-  blitz: { name: 'Blitzkrieg', description: '+25% armor attack.' },
-  air_marshal: { name: 'Air Marshal', description: '+25% air attack.' },
-  stalwart: { name: 'Stalwart', description: '+25% defense.' },
+  mountaineer: { name: 'General', description: 'Trains every unit in this city for free each month.' },
+  logistician: { name: 'General', description: 'Trains every unit in this city for free each month.' },
+  blitz: { name: 'General', description: 'Trains every unit in this city for free each month.' },
+  air_marshal: { name: 'General', description: 'Trains every unit in this city for free each month.' },
+  stalwart: { name: 'General', description: 'Trains every unit in this city for free each month.' },
 }
 const TRAITS = Object.keys(GENERAL_TRAITS) as GeneralTrait[]
 
@@ -142,11 +144,11 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       owner: id,
       location: id,
       units,
-      generalId: generals[0]?.id ?? null,
+      generalId: null,
       outOfSupplyTurns: 0,
       entrenched: 0,
       homeTerritoryId: map.territoriesByRegion[id]?.[0] ?? '',
-      training: 0,
+      training: emptyTraining(),
     }
     state.regions[id] = region
     state.nations[id] = nation

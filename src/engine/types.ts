@@ -67,6 +67,7 @@ export interface RegionState {
 export interface General {
   id: string
   name: string
+  /** Kept so older saves still load. It no longer changes combat or supply. */
   trait: GeneralTrait
 }
 
@@ -75,14 +76,15 @@ export interface Army {
   owner: NationId
   location: RegionId
   units: UnitCounts
+  /** Set when a general has been added. They train every unit here for free each month, while the army is home. */
   generalId: string | null
   outOfSupplyTurns: number
   /** Consecutive months the army has held its position (capped at 3). */
   entrenched: number
   /** Muster this army is raised from. Empty when it has no base. */
   homeTerritoryId: string
-  /** 0–5. Each rank adds combat power. */
-  training: number
+  /** Drill rank 0–5 for each unit type. The army attacks as one; each unit trains on its own. */
+  training: Record<UnitType, number>
 }
 
 export interface Resources {
@@ -241,7 +243,7 @@ export type Order =
   | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number }
   | { type: 'build'; nationId: NationId; regionId: RegionId; building: BuildingType }
   | { type: 'recruit'; nationId: NationId; territoryId: string; unit: UnitType }
-  | { type: 'train'; nationId: NationId; armyId: string }
+  | { type: 'train'; nationId: NationId; armyId: string; unit: UnitType }
   | { type: 'rebase'; nationId: NationId; armyId: string; territoryId: string }
   | { type: 'signContract'; nationId: NationId; unit: UnitType; tier: number }
   | { type: 'research'; nationId: NationId; techId: string }

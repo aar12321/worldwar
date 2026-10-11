@@ -8,7 +8,6 @@ const even = { infantry: 1, armor: 1, air: 1, naval: 1 }
 const side = (units: Partial<Combatant['units']>): Combatant => ({
   units: { infantry: 0, armor: 0, air: 0, naval: 0, ...units },
   mods: null,
-  general: null,
   penalty: 1,
   penaltyNotes: [],
 })

@@ -5,12 +5,12 @@ import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, pro
 import { applyEconomy } from './economy'
 import { runSpyMission } from './espionage'
 import { scheduleEvent } from './events'
-import { addLog, armiesOf, boundArmy, createArmy, emptyUnits, regionsOf } from './helpers'
+import { addLog, armiesOf, armyIsHome, boundArmy, createArmy, emptyUnits, regionsOf } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
 import { applySupply } from './supply'
 import { research } from './tech'
-import type { GameState, Order, WorldMap } from './types'
+import { UNIT_TYPES, type GameState, type Order, type WorldMap } from './types'
 import { checkOutcome } from './victory'
 import { killNation, resolveAttacks, resolveMoves, resolveRebels } from './warfare'
 
@@ -24,8 +24,11 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Build ${BUILDING_SPECS[o.building].name} in ${region(o.regionId)}`
     case 'recruit':
       return `Recruit ${UNIT_SPECS[o.unit].name} at ${map.territories[o.territoryId]?.name ?? o.territoryId}`
-    case 'train':
-      return 'Train army'
+    case 'train': {
+      const place = map.territories[s.armies[o.armyId]?.homeTerritoryId]?.name
+      const what = UNIT_SPECS[o.unit].name
+      return place ? `Train ${what} in ${place}` : `Train ${what}`
+    }
     case 'rebase':
       return `Re-base army at ${map.territories[o.territoryId]?.name ?? o.territoryId}`
     case 'signContract':
@@ -36,8 +39,12 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Move army to ${region(o.to)}`
     case 'attack':
       return `Attack ${region(o.target)}`
-    case 'assignGeneral':
-      return o.generalId ? 'Assign general' : 'Unassign general'
+    case 'assignGeneral': {
+      const place = map.territories[s.armies[o.armyId]?.homeTerritoryId]?.name ?? 'the army'
+      if (!o.generalId) return `Remove the general from ${place}`
+      const name = s.nations[o.nationId]?.generals.find((g) => g.id === o.generalId)?.name
+      return name ? `Add ${name} to ${place}` : `Add a general to ${place}`
+    }
     case 'declareWar':
       return `Declare war on ${nation(o.target)}`
     case 'propose':
@@ -69,7 +76,8 @@ const PHASES: Order['type'][][] = [
   ['setPolicy', 'enactLaw', 'repealLaw'],
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'propose'],
-  ['research', 'build', 'recruit', 'train', 'rebase', 'signContract', 'suppressRebels', 'assignGeneral'],
+  ['research', 'build', 'recruit', 'rebase', 'signContract', 'suppressRebels', 'assignGeneral'],
+  ['train'],
   ['spy'],
 ]
 
@@ -102,6 +110,8 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
       executeOrder(s, map, o, rng)
     }
   }
+
+  drillWithGenerals(s, map)
 
   const acted = new Set<string>()
   resolveMoves(s, map, live, acted)
@@ -176,8 +186,11 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     }
     case 'train': {
       const a = s.armies[o.armyId]
-      a.training = Math.min(5, (a.training ?? 0) + 1)
-      if (n.isPlayer) addLog(s, 'info', `${map.territories[a.homeTerritoryId]?.name ?? 'The army'} is now ${trainingRank(a.training)}.`, [o.nationId])
+      a.training[o.unit] = Math.min(5, (a.training[o.unit] ?? 0) + 1)
+      if (n.isPlayer) {
+        const place = map.territories[a.homeTerritoryId]?.name ?? 'The army'
+        addLog(s, 'info', `${place}: ${UNIT_SPECS[o.unit].name} is now ${trainingRank(a.training[o.unit])}.`, [o.nationId])
+      }
       break
     }
     case 'rebase':
@@ -204,5 +217,25 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     default:
       break
+  }
+}
+
+/** A general drills every unit that is home, one rank per month, at no cost. */
+function drillWithGenerals(s: GameState, map: WorldMap) {
+  const armies = Object.values(s.armies).sort((a, b) => (a.id < b.id ? -1 : 1))
+  for (const a of armies) {
+    if (!a.generalId || !armyIsHome(s, map, a)) continue
+    const n = s.nations[a.owner]
+    if (!n?.alive) continue
+    const rose: string[] = []
+    for (const k of UNIT_TYPES) {
+      if (a.units[k] < 0.05 || a.training[k] >= 5) continue
+      a.training[k] += 1
+      rose.push(`${UNIT_SPECS[k].name} is now ${trainingRank(a.training[k])}`)
+    }
+    if (!rose.length || !n.isPlayer) continue
+    const name = n.generals.find((g) => g.id === a.generalId)?.name ?? 'Your general'
+    const place = map.territories[a.homeTerritoryId]?.name ?? 'the city'
+    addLog(s, 'info', `${name} drilled ${place} for free. ${rose.join('. ')}.`, [a.owner])
   }
 }

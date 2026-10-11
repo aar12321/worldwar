@@ -3,7 +3,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
 import { TERRAIN } from '../data/terrain'
-import { trainingRank } from '../data/unitTypes'
 import { armiesIn, totalUnits } from '../engine/helpers'
 import { supplyDistances, supplyRange } from '../engine/supply'
 import type { Army, GameState, NationId, RegionId, UnitType } from '../engine/types'
@@ -11,7 +10,7 @@ import { visibleArmies, visibleRegions } from '../engine/visibility'
 import { canReach } from '../engine/warfare'
 import { getWorld, type CountryFeature } from '../map/world'
 import { useGame } from '../store'
-import { armyCaption } from './labels'
+import { armyMarkerText } from './labels'
 import { NEON, tint, withAlpha } from './colors'
 import { globeBridge, useFx } from './globeBridge'
 
@@ -25,7 +24,7 @@ const EMPTY_REGIONS = new Set<RegionId>()
 type MarchPath = { from: [number, number]; to: [number, number] }
 
 type LayerDatum =
-  | { kind: 'army'; key: string; signature: string; army: Army; lat: number; lng: number; color: string; hold: boolean; march: MarchPath | null }
+  | { kind: 'army'; key: string; signature: string; army: Army; lat: number; lng: number; color: string; hold: boolean; march: MarchPath | null; mine: boolean }
   | { kind: 'smoke'; key: string; signature: string; lat: number; lng: number; intensity: number }
 
 interface Arc {
@@ -127,8 +126,11 @@ function ringMaterial(color: string) {
   return mat
 }
 
-function armyScale(total: number) {
-  return Math.min(4.2, 1.6 + Math.sqrt(Math.max(total, 1)) * 0.38)
+function armyScale(total: number, mine: boolean) {
+  const base = mine ? 6.2 : 2.1
+  const grow = mine ? 0.72 : 0.38
+  const cap = mine ? 11 : 4.6
+  return Math.min(cap, base + Math.sqrt(Math.max(total, 1)) * grow)
 }
 
 function buildArmyObject(d: Extract<LayerDatum, { kind: 'army' }>): THREE.Object3D {
@@ -139,6 +141,13 @@ function buildArmyObject(d: Extract<LayerDatum, { kind: 'army' }>): THREE.Object
   ring.rotation.x = -Math.PI / 2
   ring.position.y = 0.08
   group.add(ring)
+  if (d.mine) {
+    const halo = new THREE.Mesh(ringGeometry, ringMaterial('#ffffff'))
+    halo.rotation.x = -Math.PI / 2
+    halo.position.y = 0.16
+    halo.scale.setScalar(1.7)
+    group.add(halo)
+  }
   const highlight = new THREE.Mesh(ringGeometry, highlightMaterial)
   highlight.rotation.x = -Math.PI / 2
   highlight.position.y = 0.12
@@ -149,12 +158,12 @@ function buildArmyObject(d: Extract<LayerDatum, { kind: 'army' }>): THREE.Object
   present.forEach((k, i) => {
     const m = new THREE.Mesh(unitGeometries[k], mat)
     const offset = (i - (present.length - 1) / 2) * 0.48
-    m.scale.setScalar(0.62)
+    m.scale.setScalar(d.mine ? 1.05 : 0.7)
     m.position.set(offset, k === 'air' ? 1.2 : 0.4, (i % 2) * 0.25 - 0.1)
     if (k === 'air') m.rotation.z = Math.PI
     group.add(m)
   })
-  const baseScale = armyScale(totalUnits(d.army.units))
+  const baseScale = armyScale(totalUnits(d.army.units), d.mine)
   group.scale.setScalar(baseScale)
   group.userData = { datum: d, phase: Math.random() * Math.PI * 2, highlight, baseScale, misses: 0 }
   disableRaycast(group)
@@ -211,28 +220,60 @@ interface Marker {
   key: string
   lat: number
   lng: number
-  text: string
+  title: string
+  detail?: string
   kind: 'army' | 'territory'
+  tone: 'yours' | 'picked' | 'other'
 }
 
 function paintMarker(d: object): HTMLElement {
   const marker = d as Marker
   const el = document.createElement('div')
-  el.textContent = marker.text
   el.style.pointerEvents = 'none'
   el.style.whiteSpace = 'nowrap'
-  el.style.fontFamily = 'ui-sans-serif, system-ui, sans-serif'
-  el.style.color = '#f5f5f7'
-  el.style.fontSize = '11px'
-  el.style.fontWeight = '600'
-  el.style.letterSpacing = '-0.01em'
-  el.style.background = 'rgba(0,0,0,0.62)'
-  el.style.border = '0.5px solid rgba(255,255,255,0.22)'
-  el.style.borderRadius = '999px'
-  el.style.padding = '2px 8px'
-  if (marker.kind === 'army') {
-    el.style.transform = 'translate(-50%, 12px)'
+  el.style.textAlign = 'center'
+  el.style.fontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif'
+  el.style.letterSpacing = '-0.015em'
+  const title = document.createElement('div')
+  title.textContent = marker.title
+  el.appendChild(title)
+  if (marker.detail) {
+    const sub = document.createElement('div')
+    sub.textContent = marker.detail
+    sub.style.fontWeight = '560'
+    sub.style.opacity = '0.92'
+    sub.style.fontSize = '11px'
+    sub.style.marginTop = '1px'
+    el.appendChild(sub)
+  }
+  if (marker.kind === 'army' && marker.tone !== 'other') {
+    const picked = marker.tone === 'picked'
+    el.style.color = picked ? '#0A84FF' : '#ffffff'
+    el.style.fontSize = '14px'
+    el.style.fontWeight = '700'
+    el.style.background = picked ? '#ffffff' : '#0A84FF'
+    el.style.border = '2px solid #ffffff'
+    el.style.borderRadius = '16px'
+    el.style.padding = '5px 12px'
+    el.style.boxShadow = '0 8px 22px rgba(0,0,0,0.45)'
+    el.style.transform = 'translate(-50%, 18px)'
+  } else if (marker.kind === 'army') {
+    el.style.color = '#f5f5f7'
+    el.style.fontSize = '12px'
+    el.style.fontWeight = '650'
+    el.style.background = 'rgba(0,0,0,0.78)'
+    el.style.border = '1px solid rgba(255,255,255,0.35)'
+    el.style.borderRadius = '14px'
+    el.style.padding = '4px 10px'
+    el.style.transform = 'translate(-50%, 14px)'
   } else {
+    el.style.color = '#f5f5f7'
+    el.style.fontSize = '11px'
+    el.style.fontWeight = '600'
+    el.style.background = 'rgba(0,0,0,0.62)'
+    el.style.border = '0.5px solid rgba(255,255,255,0.22)'
+    el.style.borderRadius = '999px'
+    el.style.padding = '2px 8px'
     el.style.transform = 'translate(-50%, -18px)'
   }
   return el
@@ -530,8 +571,9 @@ export function WorldGlobe() {
       const from = m ? map.regions[m.from] : null
       const fromHome = !!(home && m && m.from === home.regionId)
       const color = game.nations[a.owner]?.color ?? '#94a3b8'
+      const mine = a.owner === game.playerId
       const present = (['infantry', 'armor', 'air', 'naval'] as UnitType[]).filter((k) => a.units[k] >= 0.5).join(',')
-      const signature = `${a.owner}|${color}|${present}|${a.training ?? 0}`
+      const signature = `${a.owner}|${color}|${present}|${mine ? 1 : 0}`
       const march = from ? { from: [fromHome ? home.lng : from.lng, fromHome ? home.lat : from.lat] as [number, number], to: [lng, lat] as [number, number] } : null
       const hold = !!(m && hiddenCaptures.has(m.to))
       const prev = cache.get(a.id)
@@ -542,9 +584,10 @@ export function WorldGlobe() {
         prev.color = color
         prev.hold = hold
         prev.march = march
+        prev.mine = mine
         out.push(prev)
       } else {
-        const created: LayerDatum = { kind: 'army', key: a.id, signature, army: a, lat, lng, color, hold, march }
+        const created: LayerDatum = { kind: 'army', key: a.id, signature, army: a, lat, lng, color, hold, march, mine }
         cache.set(a.id, created)
         out.push(created)
       }
@@ -584,7 +627,9 @@ export function WorldGlobe() {
       for (const a of visibleArmies(game, map, game.playerId, vision ?? undefined)) {
         if (marching.has(a.id)) continue
         const inView = !!selectedRegion && a.location === selectedRegion
-        if (a.owner !== game.playerId && !inView && a.id !== selectedArmy) continue
+        const mine = a.owner === game.playerId
+        const picked = a.id === selectedArmy
+        if (!mine && !inView && !picked) continue
         const home = map.territories[a.homeTerritoryId]
         const atHome = !!home && a.location === home.regionId
         let lat: number
@@ -602,20 +647,21 @@ export function WorldGlobe() {
           lng = r.lng + (idx ? Math.cos(angle) * 1.6 : 0)
         }
         if (atHome && inView && home) occupied.add(home.id)
-        const caption = atHome && inView && home ? `${home.name} · ${trainingRank(a.training ?? 0)}` : armyCaption(a)
-        out.push({ key: `army-${a.id}`, lat, lng, text: caption, kind: 'army' })
+        const place = atHome && home ? home.name : map.regions[a.location]?.name ?? 'In the field'
+        const label = armyMarkerText(a, place, !atHome)
+        out.push({ key: `army-${a.id}`, lat, lng, title: label.title, detail: label.detail, kind: 'army', tone: picked ? 'picked' : mine ? 'yours' : 'other' })
       }
       if (selectedRegion) {
         for (const id of map.territoriesByRegion[selectedRegion] ?? []) {
           if (occupied.has(id)) continue
           const t = map.territories[id]
-          out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, text: t.name, kind: 'territory' })
+          out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, title: t.name, kind: 'territory', tone: 'other' })
         }
       }
     } else if (selectedRegion) {
       for (const id of map.territoriesByRegion[selectedRegion] ?? []) {
         const t = map.territories[id]
-        out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, text: t.name, kind: 'territory' })
+        out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, title: t.name, kind: 'territory', tone: 'other' })
       }
     }
     return out
@@ -634,7 +680,7 @@ export function WorldGlobe() {
     obj.userData.interpKey = ''
     obj.userData.misses = 0
     if (datum.kind === 'army') {
-      const baseScale = armyScale(totalUnits(datum.army.units))
+      const baseScale = armyScale(totalUnits(datum.army.units), datum.mine)
       obj.userData.baseScale = baseScale
       obj.scale.setScalar(baseScale)
     }
@@ -665,7 +711,7 @@ export function WorldGlobe() {
         if (d.kind === 'army') {
           let lat = d.lat
           let lng = d.lng
-          let alt = 0.012
+          let alt = d.mine ? 0.03 : 0.012
           if (d.march && d.hold) {
             const gate = marchGate.current.get(d.key)
             if (gate) gate.held = true
@@ -763,7 +809,7 @@ export function WorldGlobe() {
       htmlElementsData={markers}
       htmlLat="lat"
       htmlLng="lng"
-      htmlAltitude={0.02}
+      htmlAltitude={(d: object) => ((d as Marker).kind === 'army' && (d as Marker).tone !== 'other' ? 0.05 : 0.02)}
       htmlElement={paintMarker}
       htmlTransitionDuration={reducedMotion ? 0 : 400}
       htmlElementVisibilityModifier={(el, isVisible) => {
