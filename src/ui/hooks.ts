@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { committedCost, type OrderCost } from '../engine/orders'
 import type { GameState, Nation, Order, RegionId } from '../engine/types'
@@ -42,6 +42,16 @@ export function usePlayerView(): PlayerView | null {
 export function usePlayerVision(): Set<RegionId> | 'all' {
   const game = useGame((s) => s.game)
   return useMemo(() => (game ? visibleRegions(game, getWorld().map, game.playerId) : new Set<RegionId>()), [game])
+}
+
+export function useNarrow(max = 900): boolean {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < max)
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < max)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [max])
+  return narrow
 }
 
 export const fmt = (v: number, digits = 0) =>

@@ -363,6 +363,87 @@ input[type='range'] {
   animation: pulse-ring 1.8s ease-out infinite;
 }
 
+.hud-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tip-bubble {
+  display: none;
+  position: absolute;
+  z-index: 70;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(28, 28, 30, 0.94);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  color: rgba(245, 245, 247, 0.88);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  pointer-events: none;
+}
+.group\/tip:hover .tip-bubble,
+.group\/tip:focus-within .tip-bubble {
+  display: block;
+}
+
+@media (max-width: 1100px) {
+  .hud-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hud-resources {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  .nav-dock {
+    left: 8px !important;
+    right: 8px !important;
+    top: auto !important;
+    bottom: 8px !important;
+    transform: none !important;
+    width: auto !important;
+  }
+  .nav-dock > div {
+    flex-direction: row;
+    overflow-x: auto;
+    justify-content: space-between;
+  }
+  .nav-btn {
+    width: auto !important;
+    min-width: 0 !important;
+    height: 46px !important;
+    flex: 1 1 0;
+    padding: 0 2px;
+  }
+  .nav-btn span {
+    font-size: 10px;
+  }
+  .side-panel {
+    left: 8px !important;
+    right: 8px !important;
+    top: auto !important;
+    width: auto !important;
+    height: min(56vh, 520px);
+    bottom: 88px !important;
+  }
+  .orders-tray {
+    bottom: 88px !important;
+    max-width: calc(100vw - 16px) !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pulse-cta {
     animation: none;

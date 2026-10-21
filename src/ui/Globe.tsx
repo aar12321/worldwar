@@ -217,16 +217,28 @@ interface Marker {
   detail?: string
   kind: 'army' | 'territory'
   tone: 'yours' | 'picked' | 'other'
+  territoryId?: string
+  /** Dot only. The name stays in the tooltip. */
+  compact?: boolean
 }
 
 function paintMarker(d: object): HTMLElement {
   const marker = d as Marker
   const el = document.createElement('div')
-  el.style.pointerEvents = 'none'
+  el.style.pointerEvents = marker.kind === 'territory' ? 'auto' : 'none'
+  el.style.cursor = marker.kind === 'territory' ? 'pointer' : 'default'
   el.style.whiteSpace = 'nowrap'
   el.style.textAlign = 'center'
   el.style.fontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif'
   el.style.letterSpacing = '-0.015em'
+  if (marker.kind === 'territory' && marker.territoryId) {
+    el.title = marker.detail ? `${marker.title}. ${marker.detail}` : marker.title
+    el.addEventListener('click', (event) => {
+      event.stopPropagation()
+      event.preventDefault()
+      useGame.getState().focusTerritory(marker.territoryId!)
+    })
+  }
   const title = document.createElement('div')
   title.textContent = marker.title
   el.appendChild(title)
@@ -259,14 +271,26 @@ function paintMarker(d: object): HTMLElement {
     el.style.borderRadius = '14px'
     el.style.padding = '4px 10px'
     el.style.transform = 'translate(-50%, 14px)'
+  } else if (marker.compact) {
+    const picked = marker.tone === 'picked'
+    el.style.width = picked ? '14px' : '11px'
+    el.style.height = picked ? '14px' : '11px'
+    el.style.borderRadius = '999px'
+    el.style.background = picked ? '#0A84FF' : '#f5f5f7'
+    el.style.border = picked ? '2px solid #ffffff' : '2px solid rgba(10,132,255,0.95)'
+    el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.45)'
+    el.style.transform = 'translate(-50%, -50%)'
+    for (const child of el.children) (child as HTMLElement).style.display = 'none'
   } else {
-    el.style.color = '#f5f5f7'
+    const picked = marker.tone === 'picked'
+    el.style.color = picked ? '#0A84FF' : '#f5f5f7'
     el.style.fontSize = '11px'
-    el.style.fontWeight = '600'
-    el.style.background = 'rgba(0,0,0,0.62)'
-    el.style.border = '0.5px solid rgba(255,255,255,0.22)'
+    el.style.fontWeight = '650'
+    el.style.background = picked ? '#ffffff' : 'rgba(0,0,0,0.72)'
+    el.style.border = picked ? '2px solid #0A84FF' : '0.5px solid rgba(255,255,255,0.28)'
     el.style.borderRadius = '999px'
     el.style.padding = '2px 8px'
+    el.style.boxShadow = '0 4px 14px rgba(0,0,0,0.35)'
     el.style.transform = 'translate(-50%, -18px)'
   }
   return el
@@ -278,6 +302,8 @@ export function WorldGlobe() {
   const game = useGame((s) => s.game)
   const orders = useGame((s) => s.orders)
   const selectedRegion = useGame((s) => s.selectedRegion)
+  const selectedTerritory = useGame((s) => s.selectedTerritory)
+  const panel = useGame((s) => s.panel)
   const selectedArmy = useGame((s) => s.selectedArmy)
   const targetMode = useGame((s) => s.targetMode)
   const marches = useGame((s) => s.marches)
@@ -480,7 +506,7 @@ export function WorldGlobe() {
     const p = game.nations[game.playerId]
     if (p.alive) {
       const dist = supplyDistances(game, map, p.id)
-      const range = supplyRange(game, p.id)
+      const range = supplyRange(game, p.id, map)
       const cap = map.regions[p.capital]
       const seen = new Set<RegionId>()
       for (const a of Object.values(game.armies)) {
@@ -512,6 +538,22 @@ export function WorldGlobe() {
     }
     if (selectedRegion && !targetMode) {
       const r = map.regions[selectedRegion]
+      for (const id of map.territoriesByRegion[selectedRegion] ?? []) {
+        const territory = map.territories[id]
+        if (!territory || territory.index === 0) continue
+        out.push({
+          startLat: r.lat,
+          startLng: r.lng,
+          endLat: territory.lat,
+          endLng: territory.lng,
+          color: [withAlpha('#ffffff', 0.04), withAlpha('#ffffff', 0.38)],
+          stroke: 0.28,
+          dash: 1,
+          gap: 0,
+          speed: 0,
+          label: territory.name,
+        })
+      }
       for (const id of r.seaLanes) {
         const to = map.regions[id]
         out.push({ startLat: r.lat, startLng: r.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha('#93c5fd', 0.04), withAlpha('#93c5fd', 0.4)], stroke: null, dash: 1, gap: 0, speed: 0, label: `Sea lane: ${r.name} to ${to.name}` })
@@ -644,21 +686,43 @@ export function WorldGlobe() {
         const label = armyMarkerText(a, place, !atHome)
         out.push({ key: `army-${a.id}`, lat, lng, title: label.title, detail: label.detail, kind: 'army', tone: picked ? 'picked' : mine ? 'yours' : 'other' })
       }
-      if (selectedRegion) {
-        for (const id of map.territoriesByRegion[selectedRegion] ?? []) {
-          if (occupied.has(id)) continue
-          const t = map.territories[id]
-          out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, title: t.name, kind: 'territory', tone: 'other' })
-        }
+      const labeled = new Set<string>()
+      const managing = panel === 'territories' || panel === 'military'
+      const pushTerritory = (id: string, forceLabel: boolean) => {
+        if (occupied.has(id) || out.some((marker) => marker.key === `pin-${id}`)) return
+        const t = map.territories[id]
+        if (!t) return
+        const picked = id === selectedTerritory
+        const label = forceLabel || picked || (managing && labeled.size < 24)
+        if (label) labeled.add(id)
+        const owner = game.regions[t.regionId]?.owner
+        const dev = game.territoryDev?.[id]
+        const level = dev ? dev.housing + dev.works + dev.granary + dev.roads + dev.civic : 0
+        out.push({
+          key: `pin-${id}`,
+          lat: t.lat,
+          lng: t.lng,
+          title: t.name,
+          detail: level > 0 ? `Development ${level}` : 'Undeveloped',
+          kind: 'territory',
+          tone: picked ? 'picked' : owner === game.playerId ? 'yours' : 'other',
+          territoryId: id,
+          compact: !label,
+        })
+      }
+      if (selectedRegion) for (const id of map.territoriesByRegion[selectedRegion] ?? []) pushTerritory(id, true)
+      for (const region of Object.values(game.regions)) {
+        if (region.owner !== game.playerId) continue
+        for (const id of map.territoriesByRegion[region.id] ?? []) pushTerritory(id, false)
       }
     } else if (selectedRegion) {
       for (const id of map.territoriesByRegion[selectedRegion] ?? []) {
         const t = map.territories[id]
-        out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, title: t.name, kind: 'territory', tone: 'other' })
+        out.push({ key: `pin-${id}`, lat: t.lat, lng: t.lng, title: t.name, kind: 'territory', tone: id === selectedTerritory ? 'picked' : 'other', territoryId: id })
       }
     }
     return out
-  }, [game, marches, vision, selectedRegion, selectedArmy])
+  }, [game, marches, vision, selectedRegion, selectedArmy, selectedTerritory, panel])
 
   const makeObject = useCallback((d: object) => {
     const datum = d as LayerDatum

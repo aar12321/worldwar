@@ -13,17 +13,17 @@ export function Guide() {
   if (!show || !view || selected || panel !== 'none' || targetMode) return null
   const { game, player, orders } = view
   const armies = armiesOf(game, player.id)
-  let title = 'Click your country'
-  let body = `${player.name} is outlined in blue. Click it to raise an army, build, or look around.`
+  let title = 'Your land is on the map'
+  let body = `${player.name} is split into territories. Open Land to develop them, or Military to train units into the army that holds each one.`
   if (orders.length > 0) {
     title = 'Your month is planned'
-    body = 'The orders along the bottom all happen together when you press End month. Click one to take it back.'
+    body = 'Orders along the bottom all happen together when you press End month. Click one to take it back.'
   } else if (armies.length === 0) {
     title = 'Raise your first army'
-    body = `Click ${player.name}, then press Raise an army. If that button is unavailable, build a barracks first.`
+    body = `Click ${player.name}, then press Raise an army. Or open Military and queue training. A barracks is required.`
   } else {
-    title = 'Your armies are in one place'
-    body = 'Open Nation, then Armies. Each army fights as one. Add a general to train every unit for free, or pay to train a unit yourself.'
+    title = 'Train, then march'
+    body = 'Open Military to queue infantry, armor, planes, or ships. They join that territory’s army and fight with it. Select the army and press Attack.'
   }
   return (
     <div className="pointer-events-auto self-center w-full max-w-md">

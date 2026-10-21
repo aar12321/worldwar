@@ -10,8 +10,10 @@ import { useFx } from './ui/globeBridge'
 import { HUD } from './ui/HUD'
 import { Setup } from './ui/Setup'
 import { DiplomacyPanel } from './ui/Diplomacy'
+import { MilitaryPanel } from './ui/MilitaryPanel'
 import { LogPanel, NationPanel, SettingsPanel } from './ui/SidePanels'
 import { TechTree } from './ui/TechTree'
+import { TerritoriesPanel } from './ui/TerritoriesPanel'
 
 function useShortcuts() {
   useEffect(() => {
@@ -28,7 +30,14 @@ function useShortcuts() {
         e.preventDefault()
         st.endTurn()
       } else {
-        const map: Record<string, 'tech' | 'nation' | 'diplomacy' | 'log'> = { t: 'tech', n: 'nation', d: 'diplomacy', l: 'log' }
+        const map: Record<string, 'tech' | 'nation' | 'diplomacy' | 'log' | 'territories' | 'military'> = {
+          t: 'tech',
+          n: 'nation',
+          d: 'diplomacy',
+          l: 'log',
+          r: 'territories',
+          m: 'military',
+        }
         const panel = map[e.key.toLowerCase()]
         if (panel) st.setPanel(panel)
       }
@@ -76,6 +85,8 @@ export default function App() {
           <NavRail />
           <TargetHint />
           <AnimatePresence>
+            {panel === 'territories' && <TerritoriesPanel key="territories" />}
+            {panel === 'military' && <MilitaryPanel key="military" />}
             {panel === 'nation' && <NationPanel key="nation" />}
             {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
             {panel === 'log' && <LogPanel key="log" />}

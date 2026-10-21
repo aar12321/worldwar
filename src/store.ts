@@ -7,12 +7,13 @@ import { validateOrder } from './engine/orders'
 import { resolveTurn } from './engine/resolveTurn'
 import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
+import { globeBridge } from './ui/globeBridge'
 import { speak } from './ui/plain'
 
 const SAVE_KEY = 'worlds-of-others-save-v2'
 const SETTINGS_KEY = 'worlds-of-others-settings-v1'
 
-export type Panel = 'none' | 'nation' | 'tech' | 'diplomacy' | 'log' | 'settings'
+export type Panel = 'none' | 'nation' | 'tech' | 'diplomacy' | 'log' | 'settings' | 'territories' | 'military'
 export type NationTab = 'economy' | 'laws' | 'arms' | 'armies'
 
 export interface March {
@@ -41,6 +42,7 @@ interface GameStore {
   game: GameState | null
   orders: Order[]
   selectedRegion: RegionId | null
+  selectedTerritory: string | null
   selectedArmy: string | null
   targetMode: 'move' | 'attack' | null
   panel: Panel
@@ -57,6 +59,9 @@ interface GameStore {
   loadGame(): void
   quitToMenu(): void
   selectRegion(id: RegionId | null): void
+  focusTerritory(id: string): void
+  openTerritory(id?: string): void
+  openMilitary(id?: string): void
   selectArmy(id: string | null): void
   setTargetMode(mode: 'move' | 'attack' | null): void
   setPanel(panel: Panel): void
@@ -104,6 +109,13 @@ function save(game: GameState | null) {
 
 let toastId = 1
 
+function heartlandOf(state: { game: GameState | null; selectedRegion: RegionId | null }): string | null {
+  const game = state.game
+  if (!game) return null
+  const regionId = state.selectedRegion && game.regions[state.selectedRegion]?.owner === game.playerId ? state.selectedRegion : game.playerId
+  return getWorld().map.territoriesByRegion[regionId]?.[0] ?? null
+}
+
 const DISPATCH_TONE: Record<Dispatch['kind'], Toast['tone']> = {
   proposal: 'info',
   accepted: 'success',
@@ -119,6 +131,7 @@ export const useGame = create<GameStore>((set, get) => ({
   game: null,
   orders: [],
   selectedRegion: null,
+  selectedTerritory: null,
   selectedArmy: null,
   targetMode: null,
   panel: 'none',
@@ -135,7 +148,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const { map } = getWorld()
     const game = createInitialState(map, opts)
     save(game)
-    set({ game, orders: [], selectedRegion: game.playerId, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], hasSave: true })
+    set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], hasSave: true })
   },
 
   loadGame() {
@@ -143,18 +156,38 @@ export const useGame = create<GameStore>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
       const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
-      set({ game, orders: [], selectedRegion: game.playerId, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [] })
+      set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [] })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
   },
 
   quitToMenu() {
-    set({ game: null, orders: [], selectedRegion: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [] })
+    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [] })
   },
 
   selectRegion(id) {
-    set({ selectedRegion: id, targetMode: null })
+    set({ selectedRegion: id, selectedTerritory: null, targetMode: null })
+  },
+
+  focusTerritory(id) {
+    const territory = getWorld().map.territories[id]
+    if (!territory) return
+    set({ selectedTerritory: id, selectedRegion: territory.regionId, targetMode: null })
+    const api = globeBridge.api
+    if (api) api.pointOfView({ lat: territory.lat, lng: territory.lng, altitude: 0.58 }, get().settings.reducedMotion ? 0 : 700)
+  },
+
+  openTerritory(id) {
+    const territoryId = id ?? get().selectedTerritory ?? heartlandOf(get())
+    const territory = territoryId ? getWorld().map.territories[territoryId] : null
+    set({ panel: 'territories', diploFocus: null, selectedTerritory: territoryId, ...(territory ? { selectedRegion: territory.regionId } : {}) })
+  },
+
+  openMilitary(id) {
+    const territoryId = id ?? get().selectedTerritory ?? heartlandOf(get())
+    const territory = territoryId ? getWorld().map.territories[territoryId] : null
+    set({ panel: 'military', diploFocus: null, selectedTerritory: territoryId, ...(territory ? { selectedRegion: territory.regionId } : {}) })
   },
 
   selectArmy(id) {
@@ -197,6 +230,8 @@ export const useGame = create<GameStore>((set, get) => ({
       if (order.generalId) rest = rest.filter((o) => !(o.type === 'train' && o.armyId === order.armyId))
     }
     else if (order.type === 'rebase') rest = orders.filter((o) => !(o.type === 'rebase' && o.armyId === order.armyId))
+    else if (order.type === 'develop') rest = orders.filter((o) => !(o.type === 'develop' && o.territoryId === order.territoryId && o.upgrade === order.upgrade))
+    else if (order.type === 'cancelTrain') rest = orders.filter((o) => !(o.type === 'cancelTrain' && o.jobId === order.jobId))
     else if (order.type === 'signContract') rest = orders.filter((o) => !(o.type === 'signContract' && o.unit === order.unit))
     const err = validateOrder(game, map, order, rest)
     if (err) {

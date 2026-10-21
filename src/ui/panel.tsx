@@ -15,7 +15,7 @@ export function PanelShell({ title, kicker, panel, children }: { title: string; 
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: -380, opacity: 0 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="glass absolute left-4 top-24 bottom-36 z-20 w-[400px] rounded-[22px] flex flex-col overflow-hidden"
+      className="glass side-panel absolute left-[92px] top-24 bottom-28 z-20 w-[min(440px,calc(100vw-140px))] rounded-[22px] flex flex-col overflow-hidden"
     >
       <div className="px-4 py-3.5 border-b border-white/10 flex items-start justify-between gap-3">
         <div>

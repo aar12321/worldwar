@@ -12,6 +12,17 @@ export interface UnitSpec {
   requiresBuilding: BuildingType
 }
 
+/** Months after the order resolves before the unit joins its territory's army. */
+export const TRAIN_MONTHS: Record<UnitType, number> = {
+  infantry: 1,
+  armor: 2,
+  air: 2,
+  naval: 3,
+}
+
+/** Waiting jobs allowed at one territory, not counting the one already in production. */
+export const TRAIN_QUEUE_LIMIT = 4
+
 export const UNIT_SPECS: Record<UnitType, UnitSpec> = {
   infantry: { name: 'Infantry', attack: 1, defense: 1.2, capitalCost: 10, manpowerCost: 10, upkeep: 0.6, food: 0.3, requiresBuilding: 'barracks' },
   armor: { name: 'Armor', attack: 2.4, defense: 1.6, capitalCost: 25, manpowerCost: 5, upkeep: 1.4, food: 0.2, requiresBuilding: 'barracks' },

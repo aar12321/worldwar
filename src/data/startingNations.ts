@@ -52,6 +52,8 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     nations: {},
     regions: {},
     armies: {},
+    territoryDev: {},
+    trainingQueue: [],
     wars: [],
     pacts: {},
     casusBelli: {},

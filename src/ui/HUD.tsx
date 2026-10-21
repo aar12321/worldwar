@@ -1,7 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { developmentBonus } from '../engine/development'
 import { turnDate } from '../engine/helpers'
 import { populationShare } from '../engine/victory'
+import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { Guide } from './Guide'
 import { fmt, signed, usePlayerView } from './hooks'
@@ -145,12 +147,13 @@ export function HUD() {
   const { game, player, econ, committed } = view
   const share = populationShare(game, player.id)
   const goal = game.settings.victoryShare
+  const land = developmentBonus(game, getWorld().map, player.id)
   const note = attention(view)
   const endLabel = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle playing' : 'End month'
 
   return (
     <div className="absolute top-0 inset-x-0 z-30 flex flex-col gap-2 p-3 pointer-events-none">
-      <div className="flex items-start justify-between gap-3">
+      <div className="hud-row">
         <div className="glass rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-3 min-w-56">
           <div className="w-1.5 self-stretch rounded-full" style={{ background: player.color }} />
           <div>
@@ -179,7 +182,7 @@ export function HUD() {
           </div>
         </div>
 
-        <div className="glass rounded-2xl px-1.5 py-1 pointer-events-auto flex flex-wrap items-stretch">
+        <div className="hud-resources glass rounded-2xl px-1.5 py-1 pointer-events-auto flex items-stretch overflow-x-auto scroll-thin">
           <Resource label="Soldiers" amount={player.militaryPool - committed.manpower} suffix="k" delta={`${signed(econ.militaryRegen, 0)}k`}>
             <Row k="Civilians" v={`${fmt(econ.civilianManpower, 1)} million`} />
             <Row k="Soldiers ready" v={`${fmt(player.militaryPool - committed.manpower)}k`} />
@@ -192,6 +195,7 @@ export function HUD() {
             <Row k="Taxes" v={signed(econ.taxIncome)} />
             <Row k="Factories" v={signed(econ.factoryIncome)} />
             <Row k="Trade" v={signed(econ.tradeIncome)} />
+            <Row k="Territories" v={signed(land.capital)} />
             <Row k="Upkeep" v={signed(-econ.upkeep)} warn />
             <Row k="Spent this month" v={fmt(-committed.capital)} />
             {player.inDebt && <p className="text-[12px] text-[#ff6961]">In debt. Stability is falling.</p>}
@@ -200,6 +204,7 @@ export function HUD() {
             <Row k="Grown" v={signed(econ.foodProduction)} />
             <Row k="Eaten" v={signed(-econ.foodConsumption)} warn />
             <Row k="Farms" v={`${econ.buildings.farm}`} />
+            <Row k="Territories" v={signed(land.food)} />
             {player.foodShortage && <p className="text-[12px] text-[#ff6961]">Shortage: armies fight at reduced strength and slowly starve.</p>}
           </Resource>
           <Resource label="Influence" amount={player.resources.pp - committed.pp} delta={signed(econ.ppGain)}>
@@ -224,9 +229,12 @@ export function HUD() {
               <div className={`text-lg font-semibold tabular-nums ${remaining <= 10 ? 'text-[#ff6961]' : 'text-white'}`}>{blocked ? '—' : `${remaining}s`}</div>
             </div>
           )}
-          <button className={`btn btn-primary px-5 py-3 text-[14px] ${blocked ? '' : 'pulse-cta'}`} disabled={blocked} onClick={endTurn} title="End the month (Enter)">
-            {endLabel}
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            {view.orders.length > 0 && <span className="text-[11px] font-semibold text-white/55 px-1">{view.orders.length} order{view.orders.length === 1 ? '' : 's'} queued</span>}
+            <button className={`btn btn-primary px-5 py-3 text-[14px] ${blocked ? '' : 'pulse-cta'}`} disabled={blocked} onClick={endTurn} title="End the month (Enter)">
+              {endLabel}
+            </button>
+          </div>
         </div>
       </div>
       {note && <div className="self-center max-w-xl rounded-full bg-black/55 border border-white/10 px-4 py-1.5 text-[13px] text-[#ffd60a]">{note}</div>}

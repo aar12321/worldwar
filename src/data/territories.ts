@@ -1,36 +1,52 @@
 import { clamp } from '../engine/helpers'
 import type { MapRegion, RegionId, Territory, WorldMap } from '../engine/types'
 
-const COMPASS = ['Heartland', 'Northern', 'Southern', 'Eastern', 'Western']
+const COMPASS = ['Heartland', 'Northern', 'Southern', 'Eastern', 'Western', 'Central', 'Upland', 'Frontier']
 
-/** Real district names for the largest countries. Index 0 is the heartland muster. */
+/** Real district names for the largest countries. Index 0 is the heartland. */
 const NAMED: Record<string, string[]> = {
-  'United States of America': ['The Heartland', 'The Eastern Seaboard', 'The West', 'The South', 'The Great Lakes'],
-  Russia: ['Muscovy', 'Siberia', 'The Urals', 'The Far East', 'The Caucasus'],
-  China: ['The North China Plain', 'The South', 'The West', 'Manchuria', 'The Coast'],
-  India: ['The Gangetic Plain', 'The Deccan', 'The South', 'The West', 'The Northeast'],
-  Brazil: ['The Southeast', 'The Amazon', 'The Northeast', 'The South', 'The Center-West'],
-  Canada: ['The Heartland', 'The West', 'The Maritimes', 'The Prairies', 'The North'],
-  Australia: ['The Southeast', 'The East Coast', 'The West', 'The North', 'The Interior'],
+  'United States of America': ['The Heartland', 'The Eastern Seaboard', 'The West', 'The South', 'The Great Lakes', 'The Plains', 'The Southwest', 'The Pacific Northwest'],
+  Russia: ['Muscovy', 'Siberia', 'The Urals', 'The Far East', 'The Caucasus', 'The Volga', 'The Arctic', 'Central Asia'],
+  China: ['The North China Plain', 'The South', 'The West', 'Manchuria', 'The Coast', 'The Southwest', 'The Northwest', 'The Yangtze'],
+  India: ['The Gangetic Plain', 'The Deccan', 'The South', 'The West', 'The Northeast', 'The Coast', 'The Himalayas', 'Central India'],
+  Brazil: ['The Southeast', 'The Amazon', 'The Northeast', 'The South', 'The Center-West', 'The Coast', 'The Interior', 'The North'],
+  Canada: ['The Heartland', 'The West', 'The Maritimes', 'The Prairies', 'The North', 'The Pacific', 'Quebec', 'The Arctic'],
+  Australia: ['The Southeast', 'The East Coast', 'The West', 'The North', 'The Interior', 'The South', 'Tasmania', 'The Center'],
 }
 
 /** Offsets from the country centroid, in spread-units. The heartland stays put. */
 const OFFSETS: [number, number][] = [
   [0, 0],
-  [0.72, 0.18],
-  [-0.55, 0.42],
-  [0.22, -0.68],
-  [-0.48, -0.36],
+  [0.92, 0.12],
+  [-0.78, 0.48],
+  [0.28, -0.9],
+  [-0.62, -0.55],
+  [0.7, 0.78],
+  [-0.18, 0.98],
+  [1.05, -0.42],
 ]
 
+export const MAX_TERRITORIES = 8
+
+/**
+ * Large countries are split into more districts, up to 8.
+ * Population and land area both count; the larger of the two wins. The floor is 1.
+ */
 export function territoryCount(population: number, area: number): number {
-  const fromPop = population < 8 ? 1 : population < 30 ? 2 : population < 80 ? 3 : population < 180 ? 4 : 5
-  const fromArea = area < 0.004 ? 1 : area < 0.012 ? 2 : area < 0.03 ? 3 : area < 0.06 ? 4 : 5
-  return Math.max(fromPop, fromArea)
+  const fromPop = population < 3 ? 1 : population < 10 ? 2 : population < 25 ? 3 : population < 50 ? 4 : population < 90 ? 5 : population < 160 ? 6 : population < 280 ? 7 : 8
+  const fromArea = area < 0.0015 ? 1 : area < 0.004 ? 2 : area < 0.01 ? 3 : area < 0.02 ? 4 : area < 0.035 ? 5 : area < 0.055 ? 6 : area < 0.08 ? 7 : 8
+  return Math.max(1, Math.min(MAX_TERRITORIES, Math.max(fromPop, fromArea)))
 }
 
 export function territorySpread(area: number): number {
-  return clamp(Math.sqrt(Math.max(area, 0)) * 80, 0.35, 14)
+  return clamp(Math.sqrt(Math.max(area, 0)) * 90, 0.4, 28)
+}
+
+function wrapLng(lng: number): number {
+  let x = lng
+  while (x > 180) x -= 360
+  while (x < -180) x += 360
+  return x
 }
 
 export function territoryName(country: string, index: number): string {
@@ -56,7 +72,7 @@ export function heartland(region: MapRegion): Territory {
 }
 
 export function musterTerritories(region: MapRegion, count = territoryCount(region.basePopulation, region.area)): Territory[] {
-  const n = Math.max(1, Math.min(5, count))
+  const n = Math.max(1, Math.min(MAX_TERRITORIES, count))
   const spread = territorySpread(region.area)
   const out: Territory[] = []
   for (let i = 0; i < n; i++) {
@@ -66,7 +82,7 @@ export function musterTerritories(region: MapRegion, count = territoryCount(regi
       regionId: region.id,
       name: territoryName(region.name, i),
       lat: clamp(region.lat + dLat * spread, -85, 85),
-      lng: region.lng + dLng * spread,
+      lng: wrapLng(region.lng + dLng * spread),
       index: i,
     })
   }

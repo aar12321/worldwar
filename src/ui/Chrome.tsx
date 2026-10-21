@@ -8,6 +8,8 @@ import { useGame, type Panel } from '../store'
 import { usePlayerView } from './hooks'
 
 const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
+  { panel: 'territories', label: 'Land', key: 'R', icon: <LandIcon /> },
+  { panel: 'military', label: 'Military', key: 'M', icon: <MilitaryIcon /> },
   { panel: 'nation', label: 'Nation', key: 'N', icon: <NationIcon /> },
   { panel: 'tech', label: 'Research', key: 'T', icon: <ResearchIcon /> },
   { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <PeopleIcon /> },
@@ -24,13 +26,13 @@ export function NavRail() {
     return unanswered.length
   })
   return (
-    <nav className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30">
-      <div className="glass rounded-[22px] px-2 py-1.5 flex items-end gap-0.5">
+    <nav className="nav-dock absolute left-3 top-1/2 -translate-y-1/2 z-30" aria-label="Game sections">
+      <div className="glass rounded-[22px] p-1.5 flex flex-col gap-0.5">
         {NAV.map((n) => (
           <button
             key={n.panel}
             onClick={() => setPanel(n.panel)}
-            className={`relative w-[76px] h-[58px] rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-colors ${panel === n.panel ? 'bg-white/14 text-white' : 'text-white/55 hover:text-white hover:bg-white/8'}`}
+            className={`nav-btn relative w-[72px] h-[52px] rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-colors ${panel === n.panel ? 'bg-white/14 text-white' : 'text-white/55 hover:text-white hover:bg-white/8'}`}
             title={n.key ? `${n.label} (${n.key})` : n.label}
           >
             {n.icon}
@@ -52,7 +54,7 @@ export function OrdersTray() {
   const { game, orders } = view
   const { map } = getWorld()
   return (
-    <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
+    <div className="orders-tray absolute bottom-6 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
       <div className="glass rounded-full px-3 py-1.5 flex items-center gap-2 overflow-x-auto scroll-thin">
         <span className="label whitespace-nowrap px-1">This month</span>
         <AnimatePresence initial={false}>
@@ -147,6 +149,24 @@ function IconFrame({ children }: { children: ReactNode }) {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       {children}
     </svg>
+  )
+}
+
+function LandIcon() {
+  return (
+    <IconFrame>
+      <path d="M4 18V8l5 3 5-5 6 4v8" />
+      <path d="M4 18h16" />
+    </IconFrame>
+  )
+}
+
+function MilitaryIcon() {
+  return (
+    <IconFrame>
+      <path d="M12 3l7 3v6c0 4.2-2.8 6.8-7 8-4.2-1.2-7-3.8-7-8V6l7-3z" />
+      <path d="M9 12h6" />
+    </IconFrame>
   )
 }
 

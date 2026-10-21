@@ -14,8 +14,8 @@ npm run build      # type-check + production bundle
 ## How to play
 
 1. Pick a nation on the main menu (search the list or click the globe), choose a victory condition (25% / 40% / 60% of world population), and begin.
-2. Click a region to open its panel. Each country holds a few muster territories. An empty one offers a single Raise button, which summons an army; training and recruiting happen only while that army is standing there. Other unit types, buildings, and treaties stay tucked away until you open them.
-3. Train an army up to five times, from Green to Guard, for up to +40% combat power. Sign a weapons contract on the Nation panel, or buy arms from another nation, to sharpen one unit type. Select an army, press **Attack** (or **Move**), then click a highlighted region on the globe to draw a front. Assign a general for trait bonuses.
+2. Click a country to open its panel. Every country is divided into territories (1 for the smallest, up to 8 for the largest), shown as pins on the globe. **Land** (`R`) develops a territory: housing, works, granaries, roads, and civic halls. **Military** (`M`) trains infantry, armor, air wings, and fleets into that territory’s army. Training takes one to three months and the finished unit fights with the army already there. An empty territory can still raise an army immediately.
+3. Drill an army up to five times, from Green to Guard, for up to +40% combat power. Sign a weapons contract on the Nation panel, or buy arms from another nation, to sharpen one unit type. Select an army, press **Attack** (or **Move**), then click a highlighted region on the globe to draw a front. Assign a general for trait bonuses.
 4. Balance the five resources in the HUD (hover any resource for a breakdown):
    - **Manpower**: civilians work; the draft rate moves them into the military pool.
    - **Capital**: taxes, factories, and port trade, minus upkeep.
@@ -24,7 +24,7 @@ npm run build      # type-check + production bundle
    - **Tech Points**: spend in the Tech Tree (press `T`).
 5. Every 2 to 4 turns a **Critical Decision** event demands a choice before the month can end.
 
-Shortcuts: `Enter` next turn, `Esc` cancel / close, `T` tech, `N` nation, `D` diplomacy, `L` dispatches.
+Shortcuts: `Enter` next turn, `Esc` cancel / close, `R` territories, `M` military, `T` tech, `N` nation, `D` diplomacy, `L` dispatches.
 
 ## Architecture
 

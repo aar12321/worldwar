@@ -1,6 +1,7 @@
+import { UPGRADE_SPECS } from '../data/development'
 import { asTraining } from '../data/unitTypes'
 import { FIRST_EVENT_TURN } from './events'
-import type { GameState, WorldMap } from './types'
+import { TERRITORY_UPGRADES, type GameState, type TerritoryDev, type TrainingJob, type WorldMap } from './types'
 
 /** Fills fields added after a save was written, so an older game can still load. */
 export function normalizeGame(game: GameState, map: WorldMap): GameState {
@@ -18,6 +19,25 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     }
     if (a.homeTerritoryId) used.add(a.homeTerritoryId)
   }
+  const devSource = game.territoryDev && typeof game.territoryDev === 'object' ? game.territoryDev : {}
+  const territoryDev: Record<string, TerritoryDev> = {}
+  for (const [id, raw] of Object.entries(devSource)) {
+    if (!map.territories[id] || !raw) continue
+    const dev = { housing: 0, works: 0, granary: 0, roads: 0, civic: 0 }
+    for (const upgrade of TERRITORY_UPGRADES) {
+      const level = Math.floor(Number((raw as Partial<TerritoryDev>)[upgrade] ?? 0))
+      dev[upgrade] = Number.isFinite(level) ? Math.max(0, Math.min(UPGRADE_SPECS[upgrade].max, level)) : 0
+    }
+    territoryDev[id] = dev
+  }
+  game.territoryDev = territoryDev
+
+  const queue = Array.isArray(game.trainingQueue) ? game.trainingQueue : []
+  game.trainingQueue = queue.filter((job): job is TrainingJob => {
+    if (!job || typeof job.id !== 'string' || !map.territories[job.territoryId]) return false
+    return job.remaining > 0 && job.total > 0 && !!game.nations[job.nationId]
+  })
+
   if (game.turn < FIRST_EVENT_TURN) {
     game.pendingEvent = null
     const scheduled = Number.isFinite(game.nextEventTurn) ? game.nextEventTurn : FIRST_EVENT_TURN

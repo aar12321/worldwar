@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { DIFFICULTY } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
 import type { Difficulty } from '../engine/types'
+import { territoryCount } from '../data/territories'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 
@@ -87,7 +88,7 @@ export function Setup() {
               </div>
             </div>
             <div className="text-xs text-slate-400 mt-2">
-              {pick.neighbors.length} land borders · {pick.seaLanes.length} sea lanes · {pick.coastal ? 'coastal' : 'landlocked'}
+              {territoryCount(pick.basePopulation, pick.area)} territories · {pick.neighbors.length} land borders · {pick.seaLanes.length} sea lanes · {pick.coastal ? 'coastal' : 'landlocked'}
             </div>
           </div>
         ) : (

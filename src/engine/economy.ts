@@ -2,6 +2,7 @@ import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
 import { TRAINING, UNIT_SPECS, clampTraining, type UnitTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
+import { developmentBonus, housingInRegion, populationGrowth } from './development'
 import { addLog, armiesOf, clamp, enemiesOf, nationModifiers, type AggregatedModifiers } from './helpers'
 import type { Rng } from './rng'
 import type { Buildings, GameState, MapRegion, NationId, RegionState, UnitType, WorldMap } from './types'
@@ -92,6 +93,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const factoryIncome =
     activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + (warEconomy ? 0.25 : 0)) * outputMult * (1 + botBonus)
   const tradeIncome = buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1)
+  const land = developmentBonus(s, map, nationId)
 
   const armies = armiesOf(s, nationId)
   let upkeep = 0
@@ -104,14 +106,14 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
       divisions += a.units[k]
     }
   const totalBuildings = BUILDING_TYPES.reduce((sum, b) => sum + buildings[b], 0)
-  upkeep += totalBuildings * ECON.buildingUpkeep
+  upkeep += totalBuildings * ECON.buildingUpkeep + land.upkeep
 
-  const foodProduction = baseFood + buildings.farm * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput)
+  const foodProduction = baseFood + buildings.farm * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food
   const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce + armyFood
 
-  const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn
+  const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn + land.pp
   const tpGain =
-    0.5 + workforce * 0.04 + buildings.university * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput) * outputMult
+    0.5 + workforce * 0.04 + buildings.university * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput) * outputMult + land.tp
 
   const highTax = Math.max(0, n.taxRate - 0.2) * 150
   const lowTax = Math.max(0, 0.2 - n.taxRate) * 50
@@ -140,7 +142,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     factoryIncome,
     tradeIncome,
     upkeep,
-    netCapital: taxIncome + factoryIncome + tradeIncome - upkeep,
+    netCapital: taxIncome + factoryIncome + tradeIncome + land.capital - upkeep,
     foodProduction,
     foodConsumption,
     netFood: foodProduction - foodConsumption,
@@ -190,7 +192,8 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
     .filter((x) => x.owner === nationId)
     .sort((a, b) => (a.id < b.id ? -1 : 1))
   for (const region of owned) {
-    region.population *= n.foodShortage ? 0.997 : 1.0008
+    const slots = map.territoriesByRegion[region.id]?.length ?? 1
+    region.population *= populationGrowth(n.foodShortage, housingInRegion(s, map, region.id), slots)
     if (region.sabotaged > 0) region.sabotaged--
   }
 

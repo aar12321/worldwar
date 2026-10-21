@@ -19,7 +19,7 @@ import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { ArmyCard, ArmyControls, UnitStrip } from './ArmyOrders'
 import { generalChoice } from './labels'
-import { usePlayerView, usePlayerVision } from './hooks'
+import { useNarrow, usePlayerView, usePlayerVision } from './hooks'
 import { speak } from './plain'
 
 function ActionButton({ order, label, sub, tone = '', chip = false }: { order: Order; label: string; sub?: string; tone?: string; chip?: boolean }) {
@@ -41,6 +41,8 @@ type CountryTab = 'home' | 'build' | 'relations'
 export function CountryPanel() {
   const view = usePlayerView()
   const selected = useGame((s) => s.selectedRegion)
+  const panelOpen = useGame((s) => s.panel)
+  const narrow = useNarrow()
   const selectRegion = useGame((s) => s.selectRegion)
   const openDiplomacy = useGame((s) => s.openDiplomacy)
   const vis = usePlayerVision()
@@ -55,7 +57,7 @@ export function CountryPanel() {
     setTab('home')
     setSpies(false)
   }
-  if (!view || !selected || !game || !supply) return null
+  if (!view || !selected || !game || !supply || (narrow && panelOpen !== 'none')) return null
   const { player, orders } = view
   const region = game.regions[selected]
   const mr = map.regions[selected]
@@ -64,7 +66,7 @@ export function CountryPanel() {
   const canSee = vis === 'all' || vis.has(selected)
   const armies = canSee ? armiesIn(game, selected) : []
   const dist = mine ? supply.get(selected) : undefined
-  const range = supplyRange(game, player.id)
+  const range = supplyRange(game, player.id, map)
   const queuedBuilds = (b: string) => orders.filter((o) => o.type === 'build' && o.regionId === selected && o.building === b).length
   const territoryIds = map.territoriesByRegion[selected] ?? []
   const homeArmyIds = new Set(
@@ -82,7 +84,7 @@ export function CountryPanel() {
   const built = BUILDING_TYPES.filter((b) => region.buildings[b] > 0)
   const supplyCut = mine && (dist === undefined || dist > range)
   const purpose = mine
-    ? 'Your country. Each district holds one army. It fights as one force. Train the units inside it from Armies.'
+    ? 'Your country. Each territory holds one army. Develop the land, or train units that fight with that army.'
     : war
       ? `At war with ${owner.name}. Attack from an army in a neighboring country.`
       : allied
@@ -99,7 +101,7 @@ export function CountryPanel() {
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 28, opacity: 0 }}
         transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-        className="glass absolute right-4 top-24 bottom-36 z-20 w-[400px] rounded-[22px] flex flex-col overflow-hidden"
+        className="glass side-panel absolute right-4 top-24 bottom-28 z-20 w-[min(400px,calc(100vw-32px))] rounded-[22px] flex flex-col overflow-hidden"
       >
         <div className="px-4 pt-4 pb-3 border-b border-white/10">
           <div className="flex items-start justify-between gap-3">
@@ -203,8 +205,8 @@ export function CountryPanel() {
 
               <section className="space-y-2">
                 <div>
-                  <div className="text-[13px] font-semibold">Districts</div>
-                  <p className="text-[12px] text-white/50 mt-0.5">One army each. Raise units here. They fight together, and train separately while the army is home.</p>
+                  <div className="text-[13px] font-semibold">Territories</div>
+                  <p className="text-[12px] text-white/50 mt-0.5">One army each. Pins on the map mark every territory. Develop them, or train units into the army that lives there.</p>
                 </div>
                 {territoryIds.map((tid) => (
                   <MusterCard key={tid} territoryId={tid} />
@@ -315,7 +317,8 @@ function MusterCard({ territoryId }: { territoryId: string }) {
   const openNation = useGame((s) => s.openNation)
   const { map } = getWorld()
   const vis = usePlayerVision()
-  const [moreUnits, setMoreUnits] = useState(false)
+  const openTerritory = useGame((s) => s.openTerritory)
+  const openMilitary = useGame((s) => s.openMilitary)
   const { game, player } = view
   const region = game.regions[selected]
   const mine = region.owner === player.id
@@ -329,7 +332,6 @@ function MusterCard({ territoryId }: { territoryId: string }) {
   const selectedHere = !!bound && selectedArmy === bound.id && mine && home
   const queued = (unit: UnitType) => view.orders.filter((o) => o.type === 'recruit' && o.territoryId === territoryId && o.unit === unit).length
   const infantryQueued = queued('infantry')
-  const extras = UNIT_TYPES.filter((unit) => unit !== 'infantry')
   const rebaseArmy = selectedArmy ? game.armies[selectedArmy] : undefined
   const canRebase = mine && !bound && !!rebaseArmy && rebaseArmy.owner === player.id && rebaseArmy.location === selected && rebaseArmy.homeTerritoryId !== territoryId
   const tiers = bound ? weaponTiers(game.nations[bound.owner], game.turn) : undefined
@@ -380,23 +382,14 @@ function MusterCard({ territoryId }: { territoryId: string }) {
         />
       )}
       {mine && bound && home && <ArmyControls army={bound} />}
-      {canRaise && (
-        <div className="space-y-1.5">
-          <button type="button" className="btn btn-quiet" onClick={() => setMoreUnits((open) => !open)}>
-            {moreUnits ? 'Hide other forces' : 'Add armor, planes, or ships'}
+      {mine && (
+        <div className="grid grid-cols-2 gap-1.5">
+          <button type="button" className="btn" onClick={() => openTerritory(territoryId)}>
+            Develop
           </button>
-          {moreUnits && (
-            <div className="grid grid-cols-1 gap-1.5">
-              {(bound ? UNIT_TYPES : extras).map((unit) => (
-                <ActionButton
-                  key={unit}
-                  order={{ type: 'recruit', nationId: player.id, territoryId, unit }}
-                  label={`${UNIT_SPECS[unit].name}${queued(unit) ? ` +${queued(unit)}` : ''}`}
-                  sub={`${UNIT_SPECS[unit].capitalCost} money · ${UNIT_SPECS[unit].manpowerCost},000 soldiers. ${roleOf(unit)}`}
-                />
-              ))}
-            </div>
-          )}
+          <button type="button" className="btn btn-primary" onClick={() => openMilitary(territoryId)}>
+            Train
+          </button>
         </div>
       )}
       {canRebase && rebaseArmy && (
@@ -406,9 +399,3 @@ function MusterCard({ territoryId }: { territoryId: string }) {
   )
 }
 
-function roleOf(unit: UnitType): string {
-  if (unit === 'infantry') return 'Reliable soldiers. Needs a barracks.'
-  if (unit === 'armor') return 'Hits harder than infantry. Needs a barracks.'
-  if (unit === 'air') return 'Strong and fragile. Needs a factory.'
-  return 'Fights at sea and supports landings. Needs a port.'
-}

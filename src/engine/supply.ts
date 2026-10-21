@@ -1,3 +1,4 @@
+import { roadSupplyBonus } from './development'
 import { addLog, armiesOf, nationModifiers } from './helpers'
 import type { GameState, NationId, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -67,12 +68,13 @@ export function supplyDistances(s: GameState, map: WorldMap, nationId: NationId)
   return dist
 }
 
-export function supplyRange(s: GameState, nationId: NationId): number {
-  return SUPPLY.baseRange + nationModifiers(s.nations[nationId]).supplyRange
+export function supplyRange(s: GameState, nationId: NationId, map?: WorldMap): number {
+  const roads = map ? roadSupplyBonus(s, map, nationId) : 0
+  return SUPPLY.baseRange + nationModifiers(s.nations[nationId]).supplyRange + roads
 }
 
 export function suppliedRegions(s: GameState, map: WorldMap, nationId: NationId): Set<RegionId> {
-  const range = supplyRange(s, nationId)
+  const range = supplyRange(s, nationId, map)
   const out = new Set<RegionId>()
   for (const [id, d] of supplyDistances(s, map, nationId)) if (d <= range) out.add(id)
   return out
@@ -92,7 +94,7 @@ function isArmySupplied(
 export function applySupply(s: GameState, map: WorldMap, nationId: NationId) {
   const n = s.nations[nationId]
   const dist = supplyDistances(s, map, nationId)
-  const range = supplyRange(s, nationId)
+  const range = supplyRange(s, nationId, map)
   for (const a of armiesOf(s, nationId)) {
     const foodLoss = n.foodShortage ? 0.05 : 0
     if (isArmySupplied(s, dist, range, a.id)) {

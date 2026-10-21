@@ -15,6 +15,8 @@ export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'air', 'naval']
 export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'depot']
 export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower']
+export const TERRITORY_UPGRADES = ['housing', 'works', 'granary', 'roads', 'civic'] as const
+export type TerritoryUpgrade = (typeof TERRITORY_UPGRADES)[number]
 
 /** Static geography, never mutated during play. */
 export interface MapRegion {
@@ -32,15 +34,36 @@ export interface MapRegion {
   development: number
 }
 
-/** A muster ground inside a country. Armies are raised and trained here. */
+/** A district inside a country. Armies are raised here, and the player develops the land. */
 export interface Territory {
   id: string
   regionId: RegionId
   name: string
   lat: number
   lng: number
-  /** 0 is the heartland muster, where the starting army is based. */
+  /** 0 is the heartland, where the starting army is based. */
   index: number
+}
+
+/** Levels bought on a territory. Missing keys mean undeveloped. */
+export interface TerritoryDev {
+  housing: number
+  works: number
+  granary: number
+  roads: number
+  civic: number
+}
+
+/** A unit in production at a territory. It joins that territory's army when it finishes. */
+export interface TrainingJob {
+  id: string
+  nationId: NationId
+  territoryId: string
+  unit: UnitType
+  remaining: number
+  total: number
+  /** Turn the order was resolved. The job does not advance during that same month. */
+  orderedTurn: number
 }
 
 export interface WorldMap {
@@ -243,6 +266,9 @@ export type Order =
   | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number }
   | { type: 'build'; nationId: NationId; regionId: RegionId; building: BuildingType }
   | { type: 'recruit'; nationId: NationId; territoryId: string; unit: UnitType }
+  | { type: 'queueTrain'; nationId: NationId; territoryId: string; unit: UnitType }
+  | { type: 'cancelTrain'; nationId: NationId; jobId: string }
+  | { type: 'develop'; nationId: NationId; territoryId: string; upgrade: TerritoryUpgrade }
   | { type: 'train'; nationId: NationId; armyId: string; unit: UnitType }
   | { type: 'rebase'; nationId: NationId; armyId: string; territoryId: string }
   | { type: 'signContract'; nationId: NationId; unit: UnitType; tier: number }
@@ -309,6 +335,10 @@ export interface GameState {
   nations: Record<NationId, Nation>
   regions: Record<RegionId, RegionState>
   armies: Record<string, Army>
+  /** Sparse development levels, keyed by territory id. */
+  territoryDev: Record<string, TerritoryDev>
+  /** Units in production. The front job of each territory advances each month. */
+  trainingQueue: TrainingJob[]
   /** Sorted "a|b" keys. */
   wars: string[]
   /** Sorted "a|b" key -> turn the pact expires. */

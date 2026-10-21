@@ -1,8 +1,9 @@
+import { UPGRADE_SPECS, upgradeCost } from '../data/development'
 import { TECH_BY_ID } from '../data/techTree'
-import { ARMS, BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAINING, UNIT_SPECS, trainingCost } from '../data/unitTypes'
+import { ARMS, BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, trainingCost } from '../data/unitTypes'
 import { validateProposal } from './diplomacy'
 import { armyIsHome, atWar, boundArmy, canUseUnit, factoryCount, hasCasusBelli, hasPact, isAllied } from './helpers'
-import type { GameState, Order, WorldMap } from './types'
+import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canReach } from './warfare'
 
 export const MAX_BUILDINGS_PER_TYPE = 12
@@ -21,8 +22,12 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.capital = BUILDING_SPECS[o.building].cost
       break
     case 'recruit':
+    case 'queueTrain':
       c.capital = UNIT_SPECS[o.unit].capitalCost
       c.manpower = UNIT_SPECS[o.unit].manpowerCost
+      break
+    case 'develop':
+      c.capital = upgradeCost(o.upgrade, s.territoryDev?.[o.territoryId]?.[o.upgrade] ?? 0)
       break
     case 'train':
       c.capital = trainingCost(s.armies[o.armyId]?.training[o.unit] ?? 0)
@@ -84,6 +89,22 @@ export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Or
   return null
 }
 
+function musterReady(s: GameState, map: WorldMap, nationId: string, territoryId: string, unit: UnitType, requireHome: boolean): string | null {
+  const n = s.nations[nationId]
+  const t = map.territories[territoryId]
+  if (!t) return 'Unknown territory'
+  const r = s.regions[t.regionId]
+  if (r?.owner !== nationId) return 'You do not control this territory'
+  if (!canUseUnit(n, unit)) return 'Technology required'
+  const spec = UNIT_SPECS[unit]
+  if (r.buildings[spec.requiresBuilding] <= 0) return `Requires a ${BUILDING_SPECS[spec.requiresBuilding].name}`
+  if (requireHome) {
+    const bound = boundArmy(s, t.id, nationId)
+    if (bound && !armyIsHome(s, map, bound)) return 'Army must return to this muster to recruit'
+  }
+  return null
+}
+
 function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
   switch (o.type) {
@@ -102,16 +123,29 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (r.buildings[o.building] + queued >= cap) return cap === 1 ? 'Already built here' : 'Region is at capacity'
       return null
     }
-    case 'recruit': {
+    case 'recruit':
+      return musterReady(s, map, o.nationId, o.territoryId, o.unit, true)
+    case 'queueTrain': {
+      const ready = musterReady(s, map, o.nationId, o.territoryId, o.unit, false)
+      if (ready) return ready
+      const live = (s.trainingQueue ?? []).filter((job) => job.territoryId === o.territoryId && job.nationId === o.nationId).length
+      const queued = pending.filter((p) => p.type === 'queueTrain' && p.territoryId === o.territoryId).length
+      if (live + queued >= TRAIN_QUEUE_LIMIT) return 'Training queue is full'
+      return null
+    }
+    case 'cancelTrain': {
+      const job = (s.trainingQueue ?? []).find((item) => item.id === o.jobId)
+      if (!job || job.nationId !== o.nationId) return 'No such training'
+      return null
+    }
+    case 'develop': {
       const t = map.territories[o.territoryId]
       if (!t) return 'Unknown territory'
-      const r = s.regions[t.regionId]
-      if (r?.owner !== o.nationId) return 'You do not control this territory'
-      if (!canUseUnit(n, o.unit)) return 'Technology required'
-      const spec = UNIT_SPECS[o.unit]
-      if (r.buildings[spec.requiresBuilding] <= 0) return `Requires a ${BUILDING_SPECS[spec.requiresBuilding].name}`
-      const bound = boundArmy(s, t.id, o.nationId)
-      if (bound && !armyIsHome(s, map, bound)) return 'Army must return to this muster to recruit'
+      if (s.regions[t.regionId]?.owner !== o.nationId) return 'You do not control this territory'
+      const spec = UPGRADE_SPECS[o.upgrade]
+      const level = s.territoryDev?.[o.territoryId]?.[o.upgrade] ?? 0
+      const queued = pending.filter((p) => p.type === 'develop' && p.territoryId === o.territoryId && p.upgrade === o.upgrade).length
+      if (level + queued >= spec.max) return 'Already fully developed'
       return null
     }
     case 'train': {

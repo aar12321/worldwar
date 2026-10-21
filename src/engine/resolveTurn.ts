@@ -1,11 +1,14 @@
+import { UPGRADE_SPECS } from '../data/development'
 import { TECH_BY_ID } from '../data/techTree'
 import { ARMS, BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
+import { ensureTerritoryDev } from './development'
 import { applyArmsContracts, grantArmsContract, pruneArmsContracts } from './arms'
 import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, propose, respond } from './diplomacy'
 import { applyEconomy } from './economy'
 import { runSpyMission } from './espionage'
 import { EVENT_GAP_TURNS, scheduleEvent } from './events'
-import { addLog, armiesOf, armyIsHome, boundArmy, createArmy, emptyUnits, regionsOf } from './helpers'
+import { addLog, armiesOf, armyIsHome, regionsOf } from './helpers'
+import { addUnitAtTerritory, tickTraining, trainMonths } from './training'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
 import { applySupply } from './supply'
@@ -24,6 +27,15 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Build ${BUILDING_SPECS[o.building].name} in ${region(o.regionId)}`
     case 'recruit':
       return `Recruit ${UNIT_SPECS[o.unit].name} at ${map.territories[o.territoryId]?.name ?? o.territoryId}`
+    case 'queueTrain':
+      return `Train ${UNIT_SPECS[o.unit].name} at ${map.territories[o.territoryId]?.name ?? o.territoryId} (${trainMonths(o.unit)} mo)`
+    case 'cancelTrain': {
+      const job = s.trainingQueue?.find((item) => item.id === o.jobId)
+      const what = job ? UNIT_SPECS[job.unit].name : 'training'
+      return `Cancel ${what}`
+    }
+    case 'develop':
+      return `Develop ${UPGRADE_SPECS[o.upgrade].name} in ${map.territories[o.territoryId]?.name ?? o.territoryId}`
     case 'train': {
       const place = map.territories[s.armies[o.armyId]?.homeTerritoryId]?.name
       const what = UNIT_SPECS[o.unit].name
@@ -76,7 +88,8 @@ const PHASES: Order['type'][][] = [
   ['setPolicy', 'enactLaw', 'repealLaw'],
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'propose'],
-  ['research', 'build', 'recruit', 'rebase', 'signContract', 'suppressRebels', 'assignGeneral'],
+  ['cancelTrain'],
+  ['research', 'build', 'recruit', 'queueTrain', 'develop', 'rebase', 'signContract', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['spy'],
 ]
@@ -111,6 +124,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
     }
   }
 
+  tickTraining(s, map)
   drillWithGenerals(s, map)
 
   const acted = new Set<string>()
@@ -177,11 +191,42 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       s.regions[o.regionId].buildings[o.building]++
       if (n.isPlayer) addLog(s, 'economy', `Construction complete: ${BUILDING_SPECS[o.building].name} in ${map.regions[o.regionId].name}.`, [o.nationId])
       break
-    case 'recruit': {
-      const t = map.territories[o.territoryId]
-      let army = boundArmy(s, t.id, o.nationId)
-      if (!army) army = createArmy(s, { owner: o.nationId, location: t.regionId, units: emptyUnits(), homeTerritoryId: t.id })
-      army.units[o.unit] += 1
+    case 'recruit':
+      addUnitAtTerritory(s, map, o.nationId, o.territoryId, o.unit)
+      break
+    case 'queueTrain': {
+      const total = trainMonths(o.unit)
+      s.trainingQueue ??= []
+      s.trainingQueue.push({
+        id: `q${s.nextId++}`,
+        nationId: o.nationId,
+        territoryId: o.territoryId,
+        unit: o.unit,
+        remaining: total,
+        total,
+        orderedTurn: s.turn,
+      })
+      break
+    }
+    case 'cancelTrain': {
+      const index = (s.trainingQueue ?? []).findIndex((job) => job.id === o.jobId && job.nationId === o.nationId)
+      if (index < 0) break
+      const job = s.trainingQueue[index]
+      const spec = UNIT_SPECS[job.unit]
+      const refund = job.remaining === job.total ? 1 : 0.5
+      n.resources.capital += spec.capitalCost * refund
+      n.militaryPool += spec.manpowerCost * refund
+      s.trainingQueue.splice(index, 1)
+      if (n.isPlayer) addLog(s, 'info', `Cancelled ${spec.name} training. ${refund === 1 ? 'The full cost' : 'Half the cost'} was refunded.`, [o.nationId])
+      break
+    }
+    case 'develop': {
+      const dev = ensureTerritoryDev(s, o.territoryId)
+      dev[o.upgrade] += 1
+      if (n.isPlayer) {
+        const place = map.territories[o.territoryId]?.name ?? 'the territory'
+        addLog(s, 'economy', `${UPGRADE_SPECS[o.upgrade].name} finished in ${place}.`, [o.nationId])
+      }
       break
     }
     case 'train': {
