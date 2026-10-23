@@ -79,7 +79,7 @@ interface GameStore {
   loadGame(): void
   quitToMenu(): void
   selectRegion(id: RegionId | null): void
-  focusTerritory(id: string): void
+  focusTerritory(id: string, look?: boolean): void
   openTerritory(id?: string): void
   openMilitary(id?: string): void
   selectArmy(id: string | null): void
@@ -245,12 +245,15 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ selectedRegion: id, selectedTerritory: null, targetMode: null })
   },
 
-  focusTerritory(id) {
+  focusTerritory(id, look = false) {
     const territory = getWorld().map.territories[id]
     if (!territory) return
     set({ selectedTerritory: id, selectedRegion: territory.regionId, targetMode: null })
     const api = globeBridge.api
-    if (api) api.pointOfView({ lat: territory.lat, lng: territory.lng, altitude: 0.58 }, get().settings.reducedMotion ? 0 : 700)
+    if (!look || !api) return
+    const current = api.pointOfView()
+    const altitude = current && current.altitude >= 1.5 ? current.altitude : 1.8
+    api.pointOfView({ lat: territory.lat, lng: territory.lng, altitude }, get().settings.reducedMotion ? 0 : 700)
   },
 
   openTerritory(id) {
@@ -410,7 +413,7 @@ export const useGame = create<GameStore>((set, get) => ({
       }
       return
     }
-    get().focusTerritory(id)
+    get().focusTerritory(id, true)
   },
 
   endTurn() {

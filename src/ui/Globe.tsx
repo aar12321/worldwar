@@ -249,7 +249,7 @@ function paintMarker(d: object): HTMLElement {
       event.preventDefault()
       const state = useGame.getState()
       if (state.targetMode === 'attack') state.clickTerritory(marker.territoryId!)
-      else state.focusTerritory(marker.territoryId!)
+      else state.focusTerritory(marker.territoryId!, true)
     })
   }
   const title = document.createElement('div')

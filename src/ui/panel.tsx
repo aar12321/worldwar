@@ -11,7 +11,7 @@ export function PanelShell({ title, kicker, panel, children }: { title: string; 
   return (
     <aside
       data-section={panel}
-      className="glass side-panel panel-in absolute left-[120px] bottom-28 z-[22] w-[min(440px,calc(100vw-168px))] rounded-[22px] flex flex-col overflow-hidden"
+      className="glass side-panel panel-in absolute left-[120px] bottom-28 z-[22] w-[min(400px,calc(100vw-148px))] rounded-[22px] flex flex-col overflow-hidden"
     >
       <div className="px-4 py-3.5 border-b border-white/10 flex items-start justify-between gap-3">
         <div>

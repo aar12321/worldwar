@@ -410,6 +410,10 @@ input[type='range'] {
 .tech-panel {
   top: var(--chrome-bottom, 12rem);
 }
+/* One working surface. A section already covers the task, so the country card does not sit on top of the map beside it. */
+body:has(.side-panel, .tech-panel) .country-panel {
+  display: none !important;
+}
 .nav-dock {
   width: 96px;
   max-height: calc(100vh - var(--chrome-bottom, 12rem) - 7rem);
@@ -470,9 +474,6 @@ input[type='range'] {
     height: auto !important;
     bottom: 78px !important;
     top: max(var(--chrome-bottom, 8rem), calc(100vh - 78px - min(52vh, 520px))) !important;
-  }
-  body:has(.side-panel, .tech-panel) .country-panel {
-    display: none !important;
   }
   .orders-tray {
     top: auto !important;

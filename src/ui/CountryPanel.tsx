@@ -19,7 +19,7 @@ import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { ArmyCard, ArmyControls, UnitStrip } from './ArmyOrders'
 import { generalChoice } from './labels'
-import { useNarrow, usePlayerView, usePlayerVision } from './hooks'
+import { usePlayerView, usePlayerVision } from './hooks'
 import { speak } from './plain'
 
 function ActionButton({ order, label, sub, tone = '', className = '' }: { order: Order; label: string; sub?: string; tone?: string; className?: string }) {
@@ -42,7 +42,6 @@ export function CountryPanel() {
   const view = usePlayerView()
   const selected = useGame((s) => s.selectedRegion)
   const panelOpen = useGame((s) => s.panel)
-  const narrow = useNarrow()
   const selectRegion = useGame((s) => s.selectRegion)
   const openDiplomacy = useGame((s) => s.openDiplomacy)
   const vis = usePlayerVision()
@@ -57,7 +56,7 @@ export function CountryPanel() {
     setTab('home')
     setSpies(false)
   }
-  if (!view || !selected || !game || !supply || (narrow && panelOpen !== 'none')) return null
+  if (!view || !selected || !game || !supply || panelOpen !== 'none') return null
   const { player, orders } = view
   const region = game.regions[selected]
   const mr = map.regions[selected]
