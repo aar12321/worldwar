@@ -50,7 +50,7 @@ export function MilitaryPanel() {
         </select>
       </label>
 
-      <div className="flex gap-1.5 overflow-x-auto scroll-thin pb-1">
+      <div className="flex flex-wrap gap-1.5">
         {territoryIds.map((id) => {
           const waiting = (game.trainingQueue ?? []).filter((job) => job.territoryId === id).length
           return (
@@ -58,7 +58,7 @@ export function MilitaryPanel() {
               key={id}
               type="button"
               aria-pressed={id === current}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${id === current ? 'bg-white text-black' : 'bg-white/10 text-white/80 hover:bg-white/16'}`}
+              className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${id === current ? 'bg-white text-black' : 'bg-white/10 text-white/80 hover:bg-white/16'}`}
               onClick={() => focusTerritory(id)}
             >
               {map.territories[id].name}
