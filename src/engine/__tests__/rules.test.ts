@@ -47,7 +47,7 @@ describe('diplomacy', () => {
     expect(next.wars).toContain('r0|r1')
     const s2 = startState(map)
     s2.nations.r0.resources.pp = 12
-    expect(validateOrder(s2, map, { type: 'declareWar', nationId: 'r0', target: 'r1' })).toMatch(/Political/)
+    expect(validateOrder(s2, map, { type: 'declareWar', nationId: 'r0', target: 'r1' })).toMatch(/influence/)
     s2.casusBelli['r0|r1'] = 10
     expect(validateOrder(s2, map, { type: 'declareWar', nationId: 'r0', target: 'r1' })).toBeNull()
   })

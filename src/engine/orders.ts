@@ -83,10 +83,10 @@ export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Or
   if (ruleError) return ruleError
   const spent = committedCost(s, pending)
   const cost = orderCost(s, o)
-  if (cost.capital > 0 && n.resources.capital - spent.capital < cost.capital) return `Needs ${cost.capital} Capital`
-  if (cost.pp > 0 && n.resources.pp - spent.pp < cost.pp) return `Needs ${cost.pp} Political Points`
-  if (cost.tp > 0 && n.resources.tp - spent.tp < cost.tp) return `Needs ${cost.tp} Tech Points`
-  if (cost.manpower > 0 && n.militaryPool - spent.manpower < cost.manpower) return `Needs ${cost.manpower}k military manpower`
+  if (cost.capital > 0 && n.resources.capital - spent.capital < cost.capital) return `Not enough money (costs ${cost.capital})`
+  if (cost.pp > 0 && n.resources.pp - spent.pp < cost.pp) return `Not enough influence (costs ${cost.pp})`
+  if (cost.tp > 0 && n.resources.tp - spent.tp < cost.tp) return `Not enough research (costs ${cost.tp})`
+  if (cost.manpower > 0 && n.militaryPool - spent.manpower < cost.manpower) return `Not enough soldiers (needs ${cost.manpower},000)`
   return null
 }
 
@@ -121,8 +121,9 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (BUILDING_SPECS[o.building].requiresCoast && !map.regions[o.regionId].coastal) return 'Requires a coastline'
       const queued = pending.filter((p) => p.type === 'build' && p.regionId === o.regionId && p.building === o.building).length
       const underway = (s.projects ?? []).filter((p) => p.kind === 'build' && p.regionId === o.regionId && p.building === o.building).length
+      if (queued + underway > 0) return 'Already building one here'
       const cap = BUILDING_SPECS[o.building].max ?? MAX_BUILDINGS_PER_TYPE
-      if (r.buildings[o.building] + queued + underway >= cap) return cap === 1 ? 'Already built here' : 'Region is at capacity'
+      if (r.buildings[o.building] >= cap) return cap === 1 ? 'Already built here' : 'Region is at capacity'
       return null
     }
     case 'recruit':
@@ -148,7 +149,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const level = s.territoryDev?.[o.territoryId]?.[o.upgrade] ?? 0
       const queued = pending.filter((p) => p.type === 'develop' && p.territoryId === o.territoryId && p.upgrade === o.upgrade).length
       const underway = (s.projects ?? []).filter((p) => p.kind === 'develop' && p.territoryId === o.territoryId && p.upgrade === o.upgrade).length
-      if (level + queued + underway >= spec.max) return 'Already fully developed'
+      if (queued + underway > 0) return 'Already building one here'
+      if (level >= spec.max) return 'Already fully developed'
       return null
     }
     case 'train': {

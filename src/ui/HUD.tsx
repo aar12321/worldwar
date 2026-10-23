@@ -1,11 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { developmentBonus } from '../engine/development'
 import { turnDate } from '../engine/helpers'
 import { MONTH_SECONDS } from '../engine/pace'
 import { populationShare } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
+import { LiveBanner } from './Chrome'
 import { Guide } from './Guide'
 import { fmt, signed, usePlayerView } from './hooks'
 
@@ -127,12 +128,38 @@ function attention(view: NonNullable<ReturnType<typeof usePlayerView>>): string 
 
 export function HUD() {
   const view = usePlayerView()
+  const chromeRef = useRef<HTMLDivElement>(null)
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const reduced = useGame((s) => s.settings.reducedMotion)
   const paused = useGame((s) => s.paused)
   const speed = useGame((s) => s.settings.simSpeed ?? 1)
   const togglePause = useGame((s) => s.togglePause)
   const setSpeed = useGame((s) => s.setSpeed)
+  const banner = useGame((s) => s.banner)
+  useLayoutEffect(() => {
+    const apply = () => {
+      const el = chromeRef.current
+      if (!el) return
+      const bottom = Math.ceil(el.getBoundingClientRect().bottom) + 12
+      const root = document.documentElement
+      if (root.style.getPropertyValue('--chrome-bottom') !== `${bottom}px`) root.style.setProperty('--chrome-bottom', `${bottom}px`)
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    if (chromeRef.current) observer.observe(chromeRef.current)
+    let frame = 0
+    const onResize = () => {
+      apply()
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(apply)
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', onResize)
+      window.cancelAnimationFrame(frame)
+    }
+  }, [view, banner, paused])
 
   if (!view) return null
   const { game, player, econ, committed } = view
@@ -144,7 +171,7 @@ export function HUD() {
   const clockLabel = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle' : paused ? 'Paused' : 'Live'
 
   return (
-    <div className="absolute top-0 inset-x-0 z-30 flex flex-col gap-2 p-3 pointer-events-none">
+    <div ref={chromeRef} className="absolute top-0 inset-x-0 z-30 flex flex-col gap-2 p-3 pointer-events-none">
       <div className="hud-row">
         <div className="glass rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-3 min-w-56">
           <div className="w-1.5 self-stretch rounded-full" style={{ background: player.color }} />
@@ -241,6 +268,7 @@ export function HUD() {
         </div>
       </div>
       {note && <div className="self-center max-w-xl rounded-full bg-black/55 border border-white/10 px-4 py-1.5 text-[13px] text-[#ffd60a]">{note}</div>}
+      <LiveBanner />
       <Guide />
     </div>
   )

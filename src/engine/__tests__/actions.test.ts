@@ -270,10 +270,10 @@ describe('every order type', () => {
     const s = base()
     s.nations[P].resources.pp = 3
     s.nations[P].resources.capital = 5
-    expect(validateOrder(s, map, { type: 'declareWar', nationId: P, target: 'r1' })).toMatch(/Political/)
-    expect(validateOrder(s, map, { type: 'propose', nationId: P, target: 'r1', proposal: { kind: 'alliance' } })).toMatch(/Political/)
-    expect(validateOrder(s, map, { type: 'build', nationId: P, regionId: P, building: 'factory' })).toMatch(/Capital/)
-    expect(validateOrder(s, map, { type: 'spy', nationId: P, target: 'r1', mission: 'sabotage' })).toMatch(/Capital/)
+    expect(validateOrder(s, map, { type: 'declareWar', nationId: P, target: 'r1' })).toMatch(/influence/)
+    expect(validateOrder(s, map, { type: 'propose', nationId: P, target: 'r1', proposal: { kind: 'alliance' } })).toMatch(/influence/)
+    expect(validateOrder(s, map, { type: 'build', nationId: P, regionId: P, building: 'factory' })).toMatch(/money/)
+    expect(validateOrder(s, map, { type: 'spy', nationId: P, target: 'r1', mission: 'sabotage' })).toMatch(/money/)
   })
 
   it('a duplicate proposal in the same month is charged and sent only once', () => {
@@ -297,7 +297,9 @@ describe('every order type', () => {
     s.alliances.push('r0|r1')
     expect(validateOrder(s, map, { type: 'declareWar', nationId: P, target: 'r1' })).toBe('You are allied')
     const depot: Order = { type: 'build', nationId: P, regionId: P, building: 'depot' }
-    expect(validateOrder(s, map, depot, [depot])).toBe('Already built here')
+    expect(validateOrder(s, map, depot, [depot])).toBe('Already building one here')
+    s.regions[P].buildings.depot = 1
+    expect(validateOrder(s, map, depot)).toBe('Already built here')
   })
 
   it('leaving an alliance costs PP', () => {

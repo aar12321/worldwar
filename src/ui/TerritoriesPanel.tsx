@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { UPGRADE_SPECS, upgradeCost } from '../data/development'
 import { developmentBonus, populationGrowth, territoryDevOf, territoryPopulation, territoryYield } from '../engine/development'
-import { formatSeconds } from '../engine/pace'
+import { UPGRADE_SECONDS, formatSeconds } from '../engine/pace'
 import { territoriesOf } from '../engine/territory'
 import { TERRITORY_UPGRADES, type Order, type TerritoryUpgrade } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -24,7 +24,7 @@ export function TerritoriesPanel() {
   const territoryTotal = ownedTerritories.length
 
   return (
-    <PanelShell title="Territories" kicker={`${territoryTotal} districts across ${owned.length} ${owned.length === 1 ? 'country' : 'countries'}`} panel="territories">
+    <PanelShell title="Land" kicker={`${territoryTotal} districts across ${owned.length} ${owned.length === 1 ? 'country' : 'countries'}`} panel="territories">
       <div className="grid grid-cols-3 gap-2">
         <Stat label="Money" value={signed(bonus.capital)} />
         <Stat label="Food" value={signed(bonus.food)} />
@@ -126,7 +126,7 @@ function TerritoryCard({
                     <p className="text-[11px] text-white/50 tabular-nums mt-0.5">{formatSeconds(project.remaining)} left</p>
                   </div>
                 ) : (
-                  <p className="text-[11px] text-white/40">{upgradeLine(upgrade, level)}</p>
+                  <p className="text-[11px] text-white/40">{upgradeLine(upgrade, level)} · {cost} money · {formatSeconds(UPGRADE_SECONDS[upgrade])}</p>
                 )}
               </div>
               {level >= spec.max ? (
@@ -140,7 +140,7 @@ function TerritoryCard({
                   Cancel
                 </button>
               ) : (
-                <OrderButton className="shrink-0" tone="btn-primary" order={{ type: 'develop', nationId: player.id, territoryId, upgrade }} label={`${level ? 'Upgrade' : 'Build'} · ${cost}`} />
+                <OrderButton className="shrink-0" tone="btn-primary" showError order={{ type: 'develop', nationId: player.id, territoryId, upgrade }} label={`${level ? 'Upgrade' : 'Build'} · ${cost}`} />
               )}
             </div>
           )

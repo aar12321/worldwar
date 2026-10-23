@@ -86,8 +86,16 @@ body,
   transform: scale(0.98);
 }
 .btn:disabled {
-  opacity: 0.38;
+  opacity: 1;
   cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(245, 245, 247, 0.78);
+}
+.btn-primary:disabled,
+.btn-red:disabled,
+.btn-magenta:disabled {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(245, 245, 247, 0.78);
 }
 .btn-magenta {
   color: #f2d6ff;
@@ -396,6 +404,29 @@ input[type='range'] {
   display: block;
 }
 
+.nav-dock,
+.side-panel,
+.country-panel,
+.tech-panel {
+  top: var(--chrome-bottom, 12rem);
+}
+.nav-dock {
+  width: 96px;
+  max-height: calc(100vh - var(--chrome-bottom, 12rem) - 7rem);
+  overflow: hidden;
+}
+.panel-in {
+  animation: panel-in 0.16s ease;
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @media (max-width: 1100px) {
   .hud-row {
     flex-direction: column;
@@ -404,16 +435,15 @@ input[type='range'] {
   .hud-resources {
     max-width: 100%;
   }
-}
-
-@media (max-width: 900px) {
   .nav-dock {
     left: 8px !important;
     right: 8px !important;
     top: auto !important;
     bottom: 8px !important;
+    max-height: none !important;
     transform: none !important;
     width: auto !important;
+    overflow: visible !important;
   }
   .nav-dock > div {
     flex-direction: row;
@@ -430,22 +460,31 @@ input[type='range'] {
   .nav-btn span {
     font-size: 10px;
   }
-  .side-panel {
+  .side-panel,
+  .country-panel,
+  .tech-panel {
     left: 8px !important;
     right: 8px !important;
-    top: auto !important;
     width: auto !important;
-    height: min(56vh, 520px);
-    bottom: 88px !important;
+    min-width: 0 !important;
+    height: auto !important;
+    bottom: 78px !important;
+    top: max(var(--chrome-bottom, 8rem), calc(100vh - 78px - min(52vh, 520px))) !important;
+  }
+  body:has(.side-panel, .tech-panel) .country-panel {
+    display: none !important;
   }
   .orders-tray {
-    bottom: 88px !important;
+    top: auto !important;
+    bottom: calc(86px + min(52vh, 520px)) !important;
     max-width: calc(100vw - 16px) !important;
+    z-index: 35;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pulse-cta {
+  .pulse-cta,
+  .panel-in {
     animation: none;
   }
 }

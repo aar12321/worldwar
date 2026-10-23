@@ -1,11 +1,10 @@
-import { AnimatePresence, motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
 import { perceivedPower } from '../ai/diplomat'
 import { opinionLabel, opinionOf } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, COSTS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { BUILD_SECONDS, formatSeconds } from '../engine/pace'
+import { BUILD_SECONDS, TRAIN_SECONDS, formatSeconds } from '../engine/pace'
 import { weaponTiers } from '../engine/arms'
 import { militaryPower } from '../engine/economy'
 import { spySuccessChance } from '../engine/espionage'
@@ -23,16 +22,16 @@ import { generalChoice } from './labels'
 import { useNarrow, usePlayerView, usePlayerVision } from './hooks'
 import { speak } from './plain'
 
-function ActionButton({ order, label, sub, tone = '', chip = false }: { order: Order; label: string; sub?: string; tone?: string; chip?: boolean }) {
+function ActionButton({ order, label, sub, tone = '', className = '' }: { order: Order; label: string; sub?: string; tone?: string; className?: string }) {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
   const { map } = getWorld()
   const err = validateOrder(view.game, map, order, view.orders)
   const why = err ? speak(err) : null
   return (
-    <button className={`btn ${tone} ${chip ? '' : 'flex flex-col items-start gap-0.5 text-left'}`} disabled={!!err} title={why ?? sub ?? ''} onClick={() => issueOrder(order)}>
+    <button className={`btn ${tone} ${className} flex flex-col items-start gap-0.5 text-left`} disabled={!!err} title={why ?? sub ?? ''} onClick={() => issueOrder(order)}>
       <span>{label}</span>
-      {!chip && (why || sub) && <span className="font-ui normal-case tracking-normal text-[11px] text-white/50">{why ?? sub}</span>}
+      {(why || sub) && <span className={`font-ui normal-case tracking-normal text-[11px] font-medium ${why ? 'text-white/85' : 'text-white/50'}`}>{why ?? sub}</span>}
     </button>
   )
 }
@@ -95,14 +94,10 @@ export function CountryPanel() {
           : `Belongs to ${owner.name}. Talk, or declare war before you can attack.`
 
   return (
-    <AnimatePresence>
-      <motion.aside
+    <aside
         key={selected}
-        initial={{ x: 28, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={{ x: 28, opacity: 0 }}
-        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-        className="glass side-panel absolute right-4 top-24 bottom-28 z-20 w-[min(400px,calc(100vw-32px))] rounded-[22px] flex flex-col overflow-hidden"
+        data-section="country"
+        className="glass country-panel panel-in absolute right-4 bottom-28 z-20 w-[min(400px,calc(100vw-600px))] rounded-[22px] flex flex-col overflow-hidden"
       >
         <div className="px-4 pt-4 pb-3 border-b border-white/10">
           <div className="flex items-start justify-between gap-3">
@@ -228,33 +223,40 @@ export function CountryPanel() {
 
           {tab === 'build' && mine && (
             <section className="space-y-2">
-              <p className="text-[13px] text-white/55">Buildings start at once and finish in under a minute. Each one does one job.</p>
+              <p className="text-[13px] text-white/55">Buildings start at once and finish in under a minute. Money is spent when you start. One of each is built at a time.</p>
               {BUILDING_TYPES.map((b) => {
                 const project = (game.projects ?? []).find((item) => item.kind === 'build' && item.regionId === selected && item.building === b)
                 const fraction = project && project.total > 0 ? Math.min(1, (project.total - project.remaining) / project.total) : 0
+                const coast = BUILDING_SPECS[b].requiresCoast ? ' · coast only' : ''
                 return (
-                <div key={b} className="inset-card p-3 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="font-semibold">{BUILDING_SPECS[b].name}</span>
-                      <span className="text-[13px] tabular-nums text-white/70">
-                        {region.buildings[b]}
-                        {queuedBuilds(b) > 0 && <span className="text-[#30d158]"> +{queuedBuilds(b)}</span>}
-                      </span>
-                    </div>
-                    <p className="text-[12px] text-white/50 mt-0.5 leading-snug">{BUILDING_SPECS[b].description}</p>
-                    {project ? (
-                      <div className="mt-1.5">
-                        <div className="h-1.5 rounded-full bg-white/12 overflow-hidden">
-                          <div className="h-full bg-[#30d158]" style={{ width: `${Math.max(8, fraction * 100)}%` }} />
-                        </div>
-                        <p className="text-[11px] text-white/50 tabular-nums mt-0.5">{formatSeconds(project.remaining)} left · {formatSeconds(BUILD_SECONDS[b])} total</p>
-                      </div>
-                    ) : (
-                      <p className="text-[12px] text-white/40 mt-1">{BUILDING_SPECS[b].cost} money · {formatSeconds(BUILD_SECONDS[b])}</p>
-                    )}
+                <div key={b} className="inset-card p-3 space-y-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-semibold">{BUILDING_SPECS[b].name}</span>
+                    <span className="text-[13px] tabular-nums text-white/70" aria-live="polite">
+                      {region.buildings[b]}
+                      {project && <span className="text-[#30d158]"> +1</span>}
+                      {queuedBuilds(b) > 0 && <span className="text-[#30d158]"> +{queuedBuilds(b)}</span>}
+                    </span>
                   </div>
-                  <ActionButton chip order={{ type: 'build', nationId: player.id, regionId: selected, building: b }} label="Build" sub={BUILDING_SPECS[b].description} tone="btn-primary" />
+                  <p className="text-[12px] text-white/50 leading-snug">{BUILDING_SPECS[b].description}</p>
+                  {project ? (
+                    <div>
+                      <div className="h-1.5 rounded-full bg-white/12 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)} aria-label={`${BUILDING_SPECS[b].name} progress`}>
+                        <div className="h-full bg-[#30d158]" style={{ width: `${Math.max(8, fraction * 100)}%` }} />
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <p className="text-[12px] text-white/60 tabular-nums">{formatSeconds(project.remaining)} left · {formatSeconds(BUILD_SECONDS[b])} total</p>
+                        <button type="button" className="btn btn-quiet shrink-0" onClick={() => useGame.getState().cancelLiveProject(project.id)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[12px] text-white/45">{BUILDING_SPECS[b].cost} money · {formatSeconds(BUILD_SECONDS[b])}{coast}</p>
+                      <ActionButton className="w-full" order={{ type: 'build', nationId: player.id, regionId: selected, building: b }} label="Build" sub={`${BUILDING_SPECS[b].cost} money, ready in ${formatSeconds(BUILD_SECONDS[b])}.`} tone="btn-primary" />
+                    </>
+                  )}
                 </div>
                 )
               })}
@@ -309,8 +311,7 @@ export function CountryPanel() {
             </section>
           )}
         </div>
-      </motion.aside>
-    </AnimatePresence>
+    </aside>
   )
 }
 
@@ -391,7 +392,7 @@ function MusterCard({ territoryId }: { territoryId: string }) {
         <ActionButton
           order={{ type: 'recruit', nationId: player.id, territoryId, unit: 'infantry' }}
           label={infantryQueued ? `Raising infantry +${infantryQueued}` : 'Raise an army'}
-          sub={`${UNIT_SPECS.infantry.capitalCost} money · ${UNIT_SPECS.infantry.manpowerCost},000 soldiers. Needs a barracks.`}
+          sub={`${UNIT_SPECS.infantry.capitalCost} money · ${UNIT_SPECS.infantry.manpowerCost},000 soldiers · ready in ${formatSeconds(TRAIN_SECONDS.infantry)}. Needs a barracks.`}
           tone="btn-primary"
         />
       )}

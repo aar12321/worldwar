@@ -10,7 +10,7 @@ import { speak } from './plain'
 const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra']
 const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2' }
 
-function TechNode({ tech, index }: { tech: Tech; index: number }) {
+function TechNode({ tech }: { tech: Tech }) {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
   const removeOrder = useGame((s) => s.removeOrder)
@@ -25,9 +25,6 @@ function TechNode({ tech, index }: { tech: Tech; index: number }) {
 
   return (
     <motion.button
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, delay: Math.min(0.14, index * 0.01), ease: [0.22, 1, 0.36, 1] }}
       whileHover={state === 'available' ? { y: -2 } : undefined}
       onClick={() => {
         if (queuedIdx >= 0) removeOrder(queuedIdx)
@@ -61,13 +58,7 @@ export function TechTree() {
   if (!view) return null
   const { player, committed } = view
   return (
-    <motion.div
-      initial={{ y: '100%', opacity: 0.4 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: '100%', opacity: 0 }}
-      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-      className="absolute inset-x-4 top-24 bottom-36 z-40 glass rounded-[22px] flex flex-col"
-    >
+    <div data-section="tech" className="tech-panel panel-in absolute left-[120px] right-4 bottom-28 z-[22] glass rounded-[22px] flex flex-col">
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
         <div>
           <h2 className="text-[28px] font-semibold tracking-tight">Research</h2>
@@ -95,7 +86,7 @@ export function TechTree() {
                 .map((t, i) => (
                   <div key={t.id} className="relative">
                     {i > 0 && <div className="absolute -top-3 left-1/2 w-px h-3" style={{ background: `${BRANCH_COLOR[b]}88` }} />}
-                    <TechNode tech={t} index={i} />
+                    <TechNode tech={t} />
                   </div>
                 ))}
             </div>
@@ -103,6 +94,6 @@ export function TechTree() {
         </div>
         <p className="text-[12px] text-white/40 mt-6">Research comes from universities and the people working in your country.</p>
       </div>
-    </motion.div>
+    </div>
   )
 }

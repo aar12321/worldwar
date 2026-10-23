@@ -146,6 +146,7 @@ function UnitCard({ unit, territoryId }: { unit: UnitType; territoryId: string }
       <OrderButton
         className="shrink-0"
         tone="btn-primary"
+        showError
         order={{ type: 'queueTrain', nationId: view.player.id, territoryId, unit }}
         label={pending ? `Queued +${pending}` : 'Train'}
       />
@@ -169,7 +170,7 @@ function Queue({ territoryId, jobs }: { territoryId: string; jobs: TrainingJob[]
           <div key={`pending-${index}`} className="inset-card px-3 py-2 flex items-center justify-between gap-2">
             <div>
               <div className="text-[13px] font-semibold">{UNIT_SPECS[order.unit].name}</div>
-              <div className="text-[12px] text-white/45">Starts on the next month</div>
+              <div className="text-[12px] text-white/45">Waiting to start</div>
             </div>
             <button type="button" className="btn btn-quiet" onClick={() => removeOrder(index)}>
               Cancel

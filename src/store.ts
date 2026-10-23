@@ -382,8 +382,10 @@ export const useGame = create<GameStore>((set, get) => ({
     const { game } = get()
     if (!game) return
     const next = cancelProject(game, id)
+    if (next === game) return
     save(next)
     set({ game: next })
+    get().toast('Construction cancelled. What you get back is in your treasury.', 'info')
   },
 
   cancelLiveMarch(armyId) {

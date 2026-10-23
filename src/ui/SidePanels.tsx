@@ -32,7 +32,7 @@ export function NationPanel() {
   const armies = armiesOf(game, player.id)
 
   return (
-    <PanelShell title="Your nation" kicker={`${player.name} · ${regionsOf(game, player.id).length} countries`} panel="nation">
+    <PanelShell title="Nation" kicker={`${player.name} · ${regionsOf(game, player.id).length} countries`} panel="nation">
       <div className="segmented">
         {([
           ['economy', 'Economy'],

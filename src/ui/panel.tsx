@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { validateOrder } from '../engine/orders'
 import type { Order } from '../engine/types'
@@ -10,12 +9,9 @@ import { speak } from './plain'
 export function PanelShell({ title, kicker, panel, children }: { title: string; kicker: string; panel: Panel; children: ReactNode }) {
   const setPanel = useGame((s) => s.setPanel)
   return (
-    <motion.aside
-      initial={{ x: -380, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: -380, opacity: 0 }}
-      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="glass side-panel absolute left-[92px] top-24 bottom-28 z-20 w-[min(440px,calc(100vw-140px))] rounded-[22px] flex flex-col overflow-hidden"
+    <aside
+      data-section={panel}
+      className="glass side-panel panel-in absolute left-[120px] bottom-28 z-[22] w-[min(440px,calc(100vw-168px))] rounded-[22px] flex flex-col overflow-hidden"
     >
       <div className="px-4 py-3.5 border-b border-white/10 flex items-start justify-between gap-3">
         <div>
@@ -27,7 +23,7 @@ export function PanelShell({ title, kicker, panel, children }: { title: string; 
         </button>
       </div>
       <div className="flex-1 overflow-y-auto scroll-thin p-4 space-y-5">{children}</div>
-    </motion.aside>
+    </aside>
   )
 }
 
@@ -36,10 +32,11 @@ export function OrderButton({ order, label, sub, tone = '', showError = false, c
   const issueOrder = useGame((s) => s.issueOrder)
   const err = validateOrder(view.game, getWorld().map, order, view.orders)
   const why = err ? speak(err) : null
+  const detail = why ?? (showError ? sub : null)
   return (
-    <button className={`btn ${tone} ${className} ${showError ? 'flex flex-col items-start gap-0.5 text-left' : ''}`} disabled={!!err} title={why ?? sub ?? ''} onClick={() => issueOrder(order)}>
+    <button className={`btn ${tone} ${className} ${detail ? 'flex flex-col items-start gap-0.5 text-left' : ''}`} disabled={!!err} title={why ?? sub ?? ''} onClick={() => issueOrder(order)}>
       <span>{label}</span>
-      {showError && (why || sub) && <span className="font-ui normal-case tracking-normal text-[11px] text-white/50">{why ?? sub}</span>}
+      {detail && <span className={`font-ui normal-case tracking-normal text-[11px] font-medium ${why ? 'text-white/85' : 'text-white/50'}`}>{detail}</span>}
     </button>
   )
 }

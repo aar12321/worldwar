@@ -44,13 +44,17 @@ export function usePlayerVision(): Set<RegionId> | 'all' {
   return useMemo(() => (game ? visibleRegions(game, getWorld().map, game.playerId) : new Set<RegionId>()), [game])
 }
 
-export function useNarrow(max = 900): boolean {
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < max)
+/** Matches the CSS `@media (max-width)` breakpoints, including the boundary pixel. */
+export function useNarrow(max = 1100): boolean {
+  const query = `(max-width: ${max}px)`
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
   useEffect(() => {
-    const onResize = () => setNarrow(window.innerWidth < max)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [max])
+    const media = window.matchMedia(query)
+    const onChange = () => setNarrow(media.matches)
+    onChange()
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [query])
   return narrow
 }
 
