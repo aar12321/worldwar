@@ -16,6 +16,8 @@ export const ECON = {
   buildingUpkeep: 0.15,
   baseFoodPerWorkforce: 0.8,
   foodPerFarm: 3,
+  /** Gardens feed a small country even when it cannot staff a farm. */
+  subsistencePerRegion: 1,
   foodConsumptionPerWorkforce: 0.75,
   foodCapPerWorkforce: 20,
   tpPerUniversity: 2.5,
@@ -108,7 +110,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const totalBuildings = BUILDING_TYPES.reduce((sum, b) => sum + buildings[b], 0)
   upkeep += totalBuildings * ECON.buildingUpkeep + land.upkeep
 
-  const foodProduction = baseFood + buildings.farm * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food
+  const foodProduction = baseFood + owned.length * ECON.subsistencePerRegion + buildings.farm * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food
   const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce + armyFood
 
   const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn + land.pp

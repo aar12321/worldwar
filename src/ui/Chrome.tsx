@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { turnDate } from '../engine/helpers'
 import { describeOrder } from '../engine/resolveTurn'
-import { populationShare } from '../engine/victory'
+import { conquestGoal, populationShare, territoriesTaken } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { useGame, type Panel } from '../store'
 import { usePlayerView } from './hooks'
@@ -156,8 +156,10 @@ export function GameOver() {
         <div className="text-[56px] font-semibold tracking-tight text-white">{win ? 'You won' : 'Your nation has fallen'}</div>
         <p className="mt-3 text-[17px] text-white/70">
           {win
-            ? `${p.name} leads ${(populationShare(game, p.id) * 100).toFixed(1)}% of the world's people, as of ${turnDate(game.turn)}.`
-            : `${p.name} fell in ${turnDate(game.turn)}.`}
+            ? territoriesTaken(game, getWorld().map) >= conquestGoal(game.settings.victoryShare)
+              ? `${p.name} holds ${territoriesTaken(game, getWorld().map)} territories beyond its first borders, as of ${turnDate(game.turn)}.`
+              : `${p.name} leads ${(populationShare(game, p.id) * 100).toFixed(1)}% of the world's people, as of ${turnDate(game.turn)}.`
+            : `${p.name} fell in ${turnDate(game.turn)}. The nation is gone, so the game is lost.`}
         </p>
         <button className="btn btn-primary mt-8 px-6 py-3 text-[15px]" onClick={quit}>
           Back to the menu

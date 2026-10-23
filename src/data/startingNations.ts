@@ -1,5 +1,5 @@
 import { emptyTraining } from './unitTypes'
-import { ECON, regionWorkforce } from '../engine/economy'
+import { ECON, computeEconomy, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
@@ -164,6 +164,22 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     state.nations[id] = nation
     state.armies[army.id] = army
   })
+
+  for (const nation of Object.values(state.nations)) {
+    const capital = state.regions[nation.capital]
+    const army = Object.values(state.armies).find((item) => item.owner === nation.id)
+    let guard = 0
+    while (capital && guard < 12 && computeEconomy(state, map, nation.id).netFood < 0.4) {
+      const econ = computeEconomy(state, map, nation.id)
+      guard++
+      if (econ.laborRatio < 0.9 && capital.buildings.factory > 0) capital.buildings.factory -= 1
+      else if (econ.laborRatio < 0.9 && capital.buildings.university > 0) capital.buildings.university -= 1
+      else if (capital.buildings.farm < 12) capital.buildings.farm += 1
+      else if (army && army.units.infantry > 1) army.units.infantry -= 1
+      else break
+    }
+    if (nation.resources.food < 8) nation.resources.food = 8
+  }
 
   return state
 }

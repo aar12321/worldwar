@@ -140,7 +140,7 @@ function UnitCard({ unit, territoryId }: { unit: UnitType; territoryId: string }
           Attack {spec.attack} · Defense {spec.defense}
         </p>
         <p className="text-[12px] text-white/40 mt-0.5">
-          {spec.capitalCost} money · {spec.manpowerCost}k soldiers · needs a {spec.requiresBuilding === 'barracks' ? 'barracks' : spec.requiresBuilding === 'factory' ? 'factory' : 'port'}
+          {spec.capitalCost} money · {spec.manpowerCost}k soldiers · eats {spec.food} food a month · needs a {spec.requiresBuilding === 'barracks' ? 'barracks' : spec.requiresBuilding === 'factory' ? 'factory' : 'port'}
         </p>
       </div>
       <OrderButton

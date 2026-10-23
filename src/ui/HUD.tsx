@@ -1,9 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { developmentBonus } from '../engine/development'
-import { turnDate } from '../engine/helpers'
+import { enemiesOf, turnDate } from '../engine/helpers'
 import { MONTH_SECONDS } from '../engine/pace'
-import { populationShare } from '../engine/victory'
+import { conquestGoal, populationShare, territoriesTaken } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { LiveBanner } from './Chrome'
@@ -123,6 +123,8 @@ function attention(view: NonNullable<ReturnType<typeof usePlayerView>>): string 
   if (player.inDebt) return 'Out of money. The country grows less stable until income covers spending.'
   if (player.stability < 35) return 'Stability is low. Rebels can rise. Lower taxes, or crack down in a troubled country.'
   if (econ.netFood < 0) return 'You are eating more food than you grow. Build farms before stocks run out.'
+  if (player.resources.capital > 500 && econ.netCapital > 60 && enemiesOf(view.game, player.id).length === 0)
+    return 'Money is piling up. Train troops and take territory. The treasury itself does not win.'
   return null
 }
 
@@ -165,6 +167,8 @@ export function HUD() {
   const { game, player, econ, committed } = view
   const share = populationShare(game, player.id)
   const goal = game.settings.victoryShare
+  const taken = territoriesTaken(game, getWorld().map)
+  const lands = conquestGoal(goal)
   const land = developmentBonus(game, getWorld().map, player.id)
   const note = attention(view)
   const month = game.monthElapsed ?? 0
@@ -190,13 +194,14 @@ export function HUD() {
                 </motion.div>
               </AnimatePresence>
             </div>
-            <div className="mt-1.5 flex items-center gap-2" title="Share of the world's people you control. Fill the bar to win.">
-              <div className="h-1 w-24 rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full bg-[#0a84ff] transition-[width] duration-700 ease-out" style={{ width: `${Math.min(100, (share / goal) * 100)}%` }} />
+            <div className="mt-1.5 space-y-1" title={`Win by taking ${lands} territories, or by leading ${(goal * 100).toFixed(0)}% of the world's people. You lose if ${player.name} is wiped out.`}>
+              <div className="flex items-center justify-between gap-3 text-[11px] text-white/55 tabular-nums">
+                <span>Territories {taken}/{lands}</span>
+                <span>People {(share * 100).toFixed(1)}%/{(goal * 100).toFixed(0)}%</span>
               </div>
-              <span className="text-[11px] text-white/50 tabular-nums">
-                {(share * 100).toFixed(1)}% of {(goal * 100).toFixed(0)}%
-              </span>
+              <div className="h-1 w-full min-w-24 rounded-full bg-white/10 overflow-hidden">
+                <div className="h-full bg-[#0a84ff] transition-[width] duration-700 ease-out" style={{ width: `${Math.min(100, (taken / lands) * 100)}%` }} />
+              </div>
             </div>
           </div>
         </div>

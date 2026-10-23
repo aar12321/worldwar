@@ -37,7 +37,8 @@ export function canReach(s: GameState, map: WorldMap, nationId: NationId, from: 
   const n = s.nations[nationId]
   const hasPort = s.regions[from].buildings.port > 0
   if (kind === 'move') return { ok: hasPort && hasTech(n, 'naval_gunboats'), bySea: true }
-  return { ok: hasPort && nationModifiers(n).seaInvasion, bySea: true }
+  // A port is enough to attempt a landing. Destroyers and amphibious doctrine only soften the penalty.
+  return { ok: hasPort, bySea: true }
 }
 
 export function garrisonStrength(s: GameState, map: WorldMap, regionId: RegionId): number {

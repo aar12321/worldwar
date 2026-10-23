@@ -233,6 +233,9 @@ export function SettingsPanel() {
           <option value={2}>2×</option>
         </select>
       </label>
+      <button className="btn" onClick={() => update({ showTips: true, tutorialStep: 0 })}>
+        Replay introduction
+      </button>
       <button className="btn btn-red" onClick={quit}>
         Leave game
       </button>
@@ -242,7 +245,7 @@ export function SettingsPanel() {
         <p>Open Nation, then Armies, to see every army. They fight as one force. Add a general and each unit trains for free every month. Without a general, you pay to train each unit in its city.</p>
         <p>Select an army, press Attack, then click a highlighted border territory. Winning takes that territory. Lose every territory and the country is gone.</p>
         <p>Time runs on its own. Pause with Space, or run at 1×, 2×, or 4×. The month bar is when wages, food, and treaties settle.</p>
-        <p>Win by controlling the share of the world’s people you chose at the start.</p>
+        <p>Win by taking the territories asked for at the start (3, 6, or 12), or by leading that share of the world’s people. You lose if your nation is wiped out.</p>
         <div className="label pt-2">Shortcuts</div>
         <p>Space pauses. Esc cancels or closes. R territories, M military, N nation, T research, D diplomacy, L news.</p>
       </div>

@@ -1,5 +1,6 @@
 import { armiesOf, regionsOf } from './helpers'
-import type { GameState, NationId } from './types'
+import { territoryOwner } from './territory'
+import type { GameState, NationId, WorldMap } from './types'
 
 export function populationShare(s: GameState, nationId: NationId): number {
   let mine = 0
@@ -11,11 +12,29 @@ export function populationShare(s: GameState, nationId: NationId): number {
   return total > 0 ? mine / total : 0
 }
 
-export function checkOutcome(s: GameState): GameState['outcome'] {
+/** Territories outside your starting country. Short games ask for 3, full for 6, long for 12. */
+export function conquestGoal(victoryShare: number): number {
+  if (victoryShare <= 0.25) return 3
+  if (victoryShare >= 0.6) return 12
+  return 6
+}
+
+/** Territories the player holds that were not part of the country they started as. */
+export function territoriesTaken(s: GameState, map: WorldMap): number {
+  let taken = 0
+  for (const territory of Object.values(map.territories)) {
+    if (territory.regionId === s.playerId) continue
+    if (territoryOwner(s, map, territory.id) === s.playerId) taken++
+  }
+  return taken
+}
+
+export function checkOutcome(s: GameState, map?: WorldMap): GameState['outcome'] {
   const p = s.nations[s.playerId]
   if (!p.alive || regionsOf(s, p.id).length === 0) return 'defeat'
   const capitalLost = s.regions[p.originalCapital].owner !== p.id
   if (capitalLost && armiesOf(s, p.id).length === 0) return 'defeat'
+  if (map && territoriesTaken(s, map) >= conquestGoal(s.settings.victoryShare)) return 'victory'
   if (populationShare(s, p.id) >= s.settings.victoryShare) return 'victory'
   return 'playing'
 }

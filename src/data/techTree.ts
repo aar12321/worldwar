@@ -58,7 +58,7 @@ export const TECHS: Tech[] = [
   t({ id: 'air_satellites', name: 'Orbital Satellites', branch: 'air', tier: 6, requires: ['air_missiles'], globalVision: true, description: 'Eyes in orbit. Reveals every army on the map; all defense +10%.', modifiers: { unitDefense: { infantry: 0.1, armor: 0.1, air: 0.1, naval: 0.1 } } }),
 
   t({ id: 'naval_gunboats', name: 'Coastal Gunboats', branch: 'naval', tier: 1, requires: [], unlocksUnit: 'naval', description: 'Brown-water patrol craft. Unlocks naval fleets.', modifiers: {} }),
-  t({ id: 'naval_destroyers', name: 'Destroyers', branch: 'naval', tier: 2, requires: ['naval_gunboats'], enablesSeaInvasion: true, description: 'Ocean escorts. Naval +30% and enables attacks across sea lanes from ports.', modifiers: { unitAttack: { naval: 0.3 } } }),
+  t({ id: 'naval_destroyers', name: 'Destroyers', branch: 'naval', tier: 2, requires: ['naval_gunboats'], enablesSeaInvasion: true, description: 'Ocean escorts. Naval attack +30%, and landings launched from your ports lose less strength.', modifiers: { unitAttack: { naval: 0.3 }, amphibiousPenaltyReduction: 0.25 } }),
   t({ id: 'naval_submarines', name: 'Submarines', branch: 'naval', tier: 3, requires: ['naval_destroyers'], description: 'Silent hunters. Naval attack +25%.', modifiers: { unitAttack: { naval: 0.25 } } }),
   t({ id: 'naval_amphibious', name: 'Amphibious Doctrine', branch: 'naval', tier: 4, requires: ['naval_submarines'], description: 'Landing craft. Sea invasion penalty halved.', modifiers: { amphibiousPenaltyReduction: 0.5 } }),
   t({ id: 'naval_carriers', name: 'Aircraft Carriers', branch: 'naval', tier: 5, requires: ['naval_amphibious'], description: 'Floating airfields. Naval +40%, air +10%.', modifiers: { unitAttack: { naval: 0.4, air: 0.1 } } }),
