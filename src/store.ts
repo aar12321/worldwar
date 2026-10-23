@@ -5,9 +5,10 @@ import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
 import { validateOrder } from './engine/orders'
 import { resolveTurn } from './engine/resolveTurn'
+import { QUEUED_ORDERS, advance, applyImmediate, cancelMarch, cancelProject, type SimNotice } from './engine/realtime'
 import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
-import { globeBridge } from './ui/globeBridge'
+import { globeBridge, useFx } from './ui/globeBridge'
 import { speak } from './ui/plain'
 
 const SAVE_KEY = 'worlds-of-others-save-v2'
@@ -27,6 +28,8 @@ export interface Settings {
   reducedMotion: boolean
   turnTimer: number
   fxSpeed: 1 | 2
+  /** How fast the live clock runs. */
+  simSpeed: 1 | 2 | 4
   battleFx: boolean
   /** Quiet “what to do” prompt on the globe. */
   showTips: boolean
@@ -36,6 +39,17 @@ export interface Toast {
   id: number
   text: string
   tone: 'info' | 'error' | 'success'
+}
+
+export interface Banner {
+  text: string
+  tone: 'good' | 'bad'
+  territoryId?: string
+}
+
+export interface Flash {
+  id: string
+  until: number
 }
 
 interface GameStore {
@@ -52,6 +66,9 @@ interface GameStore {
   marches: March[]
   marchStamp: number
   settings: Settings
+  paused: boolean
+  banner: Banner | null
+  flashes: Flash[]
   toasts: Toast[]
   hasSave: boolean
 
@@ -73,18 +90,27 @@ interface GameStore {
   setPolicy(taxRate: number, draftRate: number): void
   clickRegion(id: RegionId): void
   endTurn(): void
+  step(dt: number): void
+  togglePause(): void
+  setSpeed(speed: 1 | 2 | 4): void
+  resume(): void
+  cancelLiveProject(id: string): void
+  cancelLiveMarch(armyId: string): void
+  clickTerritory(id: string): void
   chooseEventOption(index: number): void
   shiftFx(): void
   clearFx(): void
   updateSettings(patch: Partial<Settings>): void
   toast(text: string, tone?: Toast['tone'], ms?: number): void
   dismissToast(id: number): void
+  persist(): void
 }
 
 const defaultSettings: Settings = {
   reducedMotion: typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
   turnTimer: 0,
   fxSpeed: 1,
+  simSpeed: 1,
   battleFx: true,
   showTips: true,
 }
@@ -108,6 +134,48 @@ function save(game: GameState | null) {
 }
 
 let toastId = 1
+
+function absorb(state: GameState, notices: SimNotice[], flushOrders: boolean) {
+  const store = useGame.getState()
+  const player = state.playerId
+  const seen = new Set(store.game?.battles.map((b) => b.id) ?? [])
+  const fresh = store.settings.battleFx
+    ? state.battles.filter((b) => !seen.has(b.id) && (b.attacker.nationId === player || b.defender.nationId === player))
+    : []
+  const now = performance.now()
+  const flashes = store.flashes.filter((flash) => flash.until > now)
+  let banner = store.banner
+  let paused = store.paused
+  for (const notice of notices) {
+    if (notice.territoryId) {
+      flashes.push({ id: notice.territoryId, until: now + 2600 })
+      const territory = getWorld().map.territories[notice.territoryId]
+      const color = state.nations[player]?.color ?? '#22d3ee'
+      if (territory) useFx.getState().addRing({ lat: territory.lat, lng: territory.lng, color: notice.type === 'loss' ? '#ff453a' : color, maxRadius: 3.2 }, 1800)
+    }
+    if (notice.pause) {
+      paused = true
+      banner = { text: notice.text, tone: notice.type === 'loss' ? 'bad' : 'good', territoryId: notice.territoryId }
+      if (notice.type === 'capture' || notice.type === 'loss') useFx.getState().shake(notice.type === 'loss' ? 1.15 : 0.7)
+    } else store.toast(notice.text, 'success', 4200)
+  }
+  const selected = store.selectedArmy
+  if (paused || flushOrders) save(state)
+  if (flashes.length) {
+    window.setTimeout(() => {
+      useGame.setState((current) => ({ flashes: current.flashes.filter((flash) => flash.until > performance.now()) }))
+    }, 2700)
+  }
+  useGame.setState({
+    game: state,
+    orders: flushOrders ? [] : store.orders,
+    fxQueue: [...store.fxQueue, ...fresh],
+    paused,
+    banner,
+    flashes,
+    selectedArmy: selected && state.armies[selected] ? selected : null,
+  })
+}
 
 function heartlandOf(state: { game: GameState | null; selectedRegion: RegionId | null }): string | null {
   const game = state.game
@@ -141,6 +209,9 @@ export const useGame = create<GameStore>((set, get) => ({
   marches: [],
   marchStamp: 0,
   settings: loadSettings(),
+  paused: false,
+  banner: null,
+  flashes: [],
   toasts: [],
   hasSave: typeof localStorage !== 'undefined' && !!localStorage.getItem(SAVE_KEY),
 
@@ -148,7 +219,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const { map } = getWorld()
     const game = createInitialState(map, opts)
     save(game)
-    set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], hasSave: true })
+    set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], hasSave: true, paused: false, banner: null, flashes: [] })
   },
 
   loadGame() {
@@ -156,7 +227,7 @@ export const useGame = create<GameStore>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
       const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
-      set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [] })
+      set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], paused: false, banner: null, flashes: [] })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
@@ -220,6 +291,15 @@ export const useGame = create<GameStore>((set, get) => ({
     const { game, orders } = get()
     if (!game) return false
     const { map } = getWorld()
+    if (!QUEUED_ORDERS.has(order.type)) {
+      const result = applyImmediate(game, map, order)
+      if (result.error) {
+        get().toast(result.error, 'error')
+        return false
+      }
+      absorb(result.state, result.notices, false)
+      return true
+    }
     let rest = orders
     if (order.type === 'move' || order.type === 'attack')
       rest = orders.filter((o) => !((o.type === 'move' || o.type === 'attack') && o.armyId === order.armyId))
@@ -270,6 +350,61 @@ export const useGame = create<GameStore>((set, get) => ({
       return
     }
     set({ selectedRegion: id, targetMode: null })
+  },
+
+  step(dt) {
+    const { game, orders, settings, fxQueue, paused } = get()
+    if (!game || paused || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
+    const result = advance(game, getWorld().map, dt * (settings.simSpeed ?? 1), orders)
+    absorb(result.state, result.notices, result.flushOrders)
+  },
+
+  togglePause() {
+    const { game, paused, banner } = get()
+    if (!game) return
+    if (paused) {
+      set({ paused: false, banner: null })
+      return
+    }
+    set({ paused: true, banner: banner ?? { text: 'Paused', tone: 'good' } })
+  },
+
+  setSpeed(speed) {
+    get().updateSettings({ simSpeed: speed })
+    if (get().paused) set({ paused: false, banner: null })
+  },
+
+  resume() {
+    set({ paused: false, banner: null })
+  },
+
+  cancelLiveProject(id) {
+    const { game } = get()
+    if (!game) return
+    const next = cancelProject(game, id)
+    save(next)
+    set({ game: next })
+  },
+
+  cancelLiveMarch(armyId) {
+    const { game } = get()
+    if (!game) return
+    set({ game: cancelMarch(game, armyId) })
+  },
+
+  clickTerritory(id) {
+    const territory = getWorld().map.territories[id]
+    if (!territory) return
+    const { targetMode, selectedArmy, game } = get()
+    if (targetMode === 'attack' && selectedArmy && game) {
+      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, armyId: selectedArmy, target: territory.regionId, territoryId: id })
+      if (ok) {
+        get().toast(`Attacking ${territory.name}`, 'success')
+        set({ targetMode: null })
+      }
+      return
+    }
+    get().focusTerritory(id)
   },
 
   endTurn() {
@@ -328,5 +463,9 @@ export const useGame = create<GameStore>((set, get) => ({
 
   dismissToast(id) {
     set((st) => ({ toasts: st.toasts.filter((t) => t.id !== id) }))
+  },
+
+  persist() {
+    save(get().game)
   },
 }))

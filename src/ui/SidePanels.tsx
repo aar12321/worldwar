@@ -213,7 +213,7 @@ export function SettingsPanel() {
   const update = useGame((s) => s.updateSettings)
   const quit = useGame((s) => s.quitToMenu)
   return (
-    <PanelShell title="Settings" kicker="The game saves itself at the end of every month." panel="settings">
+    <PanelShell title="Settings" kicker="The game saves itself while time is moving." panel="settings">
       <label className="flex items-center justify-between text-[14px]">
         <span>Show tips</span>
         <input type="checkbox" checked={settings.showTips} onChange={(e) => update({ showTips: e.target.checked })} />
@@ -233,15 +233,6 @@ export function SettingsPanel() {
           <option value={2}>2×</option>
         </select>
       </label>
-      <label className="flex items-center justify-between text-[14px]">
-        <span>Turn clock</span>
-        <select className="field px-2 py-1" value={settings.turnTimer} onChange={(e) => update({ turnTimer: +e.target.value })}>
-          <option value={0}>Off</option>
-          <option value={30}>30s</option>
-          <option value={60}>60s</option>
-          <option value={120}>120s</option>
-        </select>
-      </label>
       <button className="btn btn-red" onClick={quit}>
         Leave game
       </button>
@@ -249,11 +240,11 @@ export function SettingsPanel() {
         <div className="text-[13px] font-semibold text-white">How to play</div>
         <p>Click a country. If it is yours, raise an army in a district or open Build. If it is not, talk or declare war.</p>
         <p>Open Nation, then Armies, to see every army. They fight as one force. Add a general and each unit trains for free every month. Without a general, you pay to train each unit in its city.</p>
-        <p>Select an army, press Move or Attack, then click a highlighted country.</p>
-        <p>Press End month. Every nation acts at the same time.</p>
+        <p>Select an army, press Attack, then click a highlighted border territory. Winning takes that territory. Lose every territory and the country is gone.</p>
+        <p>Time runs on its own. Pause with Space, or run at 1×, 2×, or 4×. The month bar is when wages, food, and treaties settle.</p>
         <p>Win by controlling the share of the world’s people you chose at the start.</p>
         <div className="label pt-2">Shortcuts</div>
-        <p>Enter ends the month. Esc cancels or closes. N nation, T research, D diplomacy, L news.</p>
+        <p>Space pauses. Esc cancels or closes. R territories, M military, N nation, T research, D diplomacy, L news.</p>
       </div>
     </PanelShell>
   )

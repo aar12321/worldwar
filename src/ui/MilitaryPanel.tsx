@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
-import { TRAIN_MONTHS, TRAIN_QUEUE_LIMIT, UNIT_SPECS, trainingCost, trainingRank } from '../data/unitTypes'
+import { TRAIN_QUEUE_LIMIT, UNIT_SPECS, trainingCost, trainingRank } from '../data/unitTypes'
+import { TRAIN_SECONDS, formatSeconds } from '../engine/pace'
 import { armyIsHome, boundArmy, formatDivisions, regionsOf } from '../engine/helpers'
 import type { Army, TrainingJob, UnitType } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
@@ -126,14 +127,14 @@ function Garrison({ territoryId, army }: { territoryId: string; army: Army | und
 function UnitCard({ unit, territoryId }: { unit: UnitType; territoryId: string }) {
   const view = usePlayerView()!
   const spec = UNIT_SPECS[unit]
-  const months = TRAIN_MONTHS[unit]
+  const seconds = TRAIN_SECONDS[unit]
   const pending = view.orders.filter((order) => order.type === 'queueTrain' && order.territoryId === territoryId && order.unit === unit).length
   return (
     <motion.div layout className="inset-card p-3 flex items-center gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="font-semibold">{spec.name}</span>
-          <span className="text-[12px] text-white/45">{months} month{months === 1 ? '' : 's'}</span>
+          <span className="text-[12px] text-white/45">{formatSeconds(seconds)}</span>
         </div>
         <p className="text-[12px] text-white/50 mt-0.5" title={`${spec.attack} attack, ${spec.defense} defense`}>
           Attack {spec.attack} · Defense {spec.defense}
@@ -168,7 +169,7 @@ function Queue({ territoryId, jobs }: { territoryId: string; jobs: TrainingJob[]
           <div key={`pending-${index}`} className="inset-card px-3 py-2 flex items-center justify-between gap-2">
             <div>
               <div className="text-[13px] font-semibold">{UNIT_SPECS[order.unit].name}</div>
-              <div className="text-[12px] text-white/45">Starts when the month ends · {TRAIN_MONTHS[order.unit]} month{TRAIN_MONTHS[order.unit] === 1 ? '' : 's'}</div>
+              <div className="text-[12px] text-white/45">Starts on the next month</div>
             </div>
             <button type="button" className="btn btn-quiet" onClick={() => removeOrder(index)}>
               Cancel
@@ -177,8 +178,10 @@ function Queue({ territoryId, jobs }: { territoryId: string; jobs: TrainingJob[]
         ) : null,
       )}
       {jobs.map((job, index) => {
-        const done = job.total - job.remaining
         const active = index === 0
+        const fraction = job.total > 0 ? Math.min(1, Math.max(0, (job.total - job.remaining) / job.total)) : 0
+        const live = job.clock === 'time'
+        const label = !active ? 'Waiting' : live ? `${formatSeconds(job.remaining)} left` : job.remaining <= 1 ? 'Arrives when the month ends' : `${job.remaining} months left`
         return (
           <div key={job.id} className="inset-card px-3 py-2 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
@@ -187,14 +190,12 @@ function Queue({ territoryId, jobs }: { territoryId: string; jobs: TrainingJob[]
                   {UNIT_SPECS[job.unit].name}
                   {!active && <span className="text-white/40 font-medium"> · waiting</span>}
                 </div>
-                <div className="text-[12px] text-white/45">{job.remaining <= 1 && active ? 'Arrives when the month ends' : `${job.remaining} month${job.remaining === 1 ? '' : 's'} left`}</div>
+                <div className="text-[12px] text-white/45 tabular-nums">{label}</div>
               </div>
               <OrderButton order={{ type: 'cancelTrain', nationId: view.player.id, jobId: job.id }} label="Cancel" tone="btn-quiet" />
             </div>
-            <div className="flex gap-1" aria-hidden>
-              {Array.from({ length: job.total }, (_, pip) => (
-                <span key={pip} className={`h-1.5 flex-1 rounded-full ${pip < done ? 'bg-[#30d158]' : pip === done && active ? 'bg-[#0a84ff] animate-pulse' : 'bg-white/12'}`} />
-              ))}
+            <div className="h-1.5 rounded-full bg-white/12 overflow-hidden" aria-hidden>
+              <div className={`h-full rounded-full ${active ? 'bg-[#0a84ff]' : 'bg-white/25'}`} style={{ width: `${active ? Math.max(6, fraction * 100) : 0}%` }} />
             </div>
           </div>
         )
@@ -244,7 +245,7 @@ function Raise({ territoryId }: { territoryId: string }) {
         tone="btn-primary"
         order={{ type: 'recruit', nationId: player.id, territoryId, unit: 'infantry' }}
         label="Raise an army now"
-        sub={`${UNIT_SPECS.infantry.capitalCost} money · arrives when the month ends. Needs a barracks.`}
+        sub={`${UNIT_SPECS.infantry.capitalCost} money · infantry in ${formatSeconds(TRAIN_SECONDS.infantry)}. Needs a barracks.`}
       />
       {visitors.length > 0 && (
         <div className="space-y-1.5">

@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { developmentBonus } from '../engine/development'
 import { turnDate } from '../engine/helpers'
+import { MONTH_SECONDS } from '../engine/pace'
 import { populationShare } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
@@ -126,22 +127,12 @@ function attention(view: NonNullable<ReturnType<typeof usePlayerView>>): string 
 
 export function HUD() {
   const view = usePlayerView()
-  const endTurn = useGame((s) => s.endTurn)
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
-  const timer = useGame((s) => s.settings.turnTimer)
   const reduced = useGame((s) => s.settings.reducedMotion)
-  const [remaining, setRemaining] = useState(timer)
-  const turn = view?.game.turn
-  const blocked = !view || !!view.game.pendingEvent || fxBusy || view.game.outcome !== 'playing'
-  useEffect(() => setRemaining(timer), [turn, timer])
-  useEffect(() => {
-    if (!timer || blocked) return
-    const id = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1000)
-    return () => clearInterval(id)
-  }, [timer, blocked, turn])
-  useEffect(() => {
-    if (timer && !blocked && remaining === 0) endTurn()
-  }, [remaining, timer, blocked, endTurn])
+  const paused = useGame((s) => s.paused)
+  const speed = useGame((s) => s.settings.simSpeed ?? 1)
+  const togglePause = useGame((s) => s.togglePause)
+  const setSpeed = useGame((s) => s.setSpeed)
 
   if (!view) return null
   const { game, player, econ, committed } = view
@@ -149,7 +140,8 @@ export function HUD() {
   const goal = game.settings.victoryShare
   const land = developmentBonus(game, getWorld().map, player.id)
   const note = attention(view)
-  const endLabel = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle playing' : 'End month'
+  const month = game.monthElapsed ?? 0
+  const clockLabel = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle' : paused ? 'Paused' : 'Live'
 
   return (
     <div className="absolute top-0 inset-x-0 z-30 flex flex-col gap-2 p-3 pointer-events-none">
@@ -222,18 +214,29 @@ export function HUD() {
           </Resource>
         </div>
 
-        <div className="glass rounded-2xl p-2 pointer-events-auto flex items-center gap-3">
-          {timer > 0 && (
-            <div className="text-center px-1">
-              <div className="label">Time left</div>
-              <div className={`text-lg font-semibold tabular-nums ${remaining <= 10 ? 'text-[#ff6961]' : 'text-white'}`}>{blocked ? '—' : `${remaining}s`}</div>
-            </div>
-          )}
-          <div className="flex flex-col items-end gap-1">
-            {view.orders.length > 0 && <span className="text-[11px] font-semibold text-white/55 px-1">{view.orders.length} order{view.orders.length === 1 ? '' : 's'} queued</span>}
-            <button className={`btn btn-primary px-5 py-3 text-[14px] ${blocked ? '' : 'pulse-cta'}`} disabled={blocked} onClick={endTurn} title="End the month (Enter)">
-              {endLabel}
+        <div className="glass rounded-2xl p-2 pointer-events-auto flex flex-col gap-1.5 min-w-[168px]">
+          <div className="flex items-center gap-1">
+            <button className="btn btn-primary px-3 py-2 text-[13px]" onClick={togglePause} title="Pause or play (Space)">
+              {paused ? 'Play' : 'Pause'}
             </button>
+            {([1, 2, 4] as const).map((rate) => (
+              <button
+                key={rate}
+                className={`btn px-2.5 py-2 text-[13px] tabular-nums ${speed === rate ? 'bg-white text-black' : ''}`}
+                onClick={() => setSpeed(rate)}
+              >
+                {rate}×
+              </button>
+            ))}
+          </div>
+          <div className="px-1">
+            <div className="flex justify-between text-[10px] text-white/45">
+              <span>{clockLabel}</span>
+              <span>Month</span>
+            </div>
+            <div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden" title="Economy, supply, and diplomacy settle when this fills">
+              <div className="h-full bg-[#0a84ff] transition-[width] duration-150" style={{ width: `${Math.min(100, (month / MONTH_SECONDS) * 100)}%` }} />
+            </div>
           </div>
         </div>
       </div>

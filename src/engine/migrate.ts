@@ -31,6 +31,13 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     territoryDev[id] = dev
   }
   game.territoryDev = territoryDev
+  if (!game.territoryOwners || typeof game.territoryOwners !== 'object') game.territoryOwners = {}
+  for (const id of Object.keys(game.territoryOwners)) if (!map.territories[id]) delete game.territoryOwners[id]
+  game.projects = Array.isArray(game.projects) ? game.projects.filter((p) => p && p.remaining > 0 && p.total > 0 && game.nations[p.nationId]) : []
+  if (!Number.isFinite(game.simTime)) game.simTime = 0
+  if (!Number.isFinite(game.monthElapsed)) game.monthElapsed = 0
+  if (!Number.isFinite(game.militaryElapsed)) game.militaryElapsed = 0
+  for (const a of Object.values(game.armies)) if (!a.march) a.march = null
 
   const queue = Array.isArray(game.trainingQueue) ? game.trainingQueue : []
   game.trainingQueue = queue.filter((job): job is TrainingJob => {

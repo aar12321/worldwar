@@ -3,11 +3,13 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
 import { TERRAIN } from '../data/terrain'
-import { armiesIn, totalUnits } from '../engine/helpers'
+import { armiesIn, atWar, totalUnits } from '../engine/helpers'
+import { attackableTerritoryIds, territoryOwner } from '../engine/territory'
 import { supplyDistances, supplyRange } from '../engine/supply'
 import type { Army, GameState, NationId, RegionId, UnitType } from '../engine/types'
 import { visibleArmies, visibleRegions } from '../engine/visibility'
 import { canReach } from '../engine/warfare'
+import { buildTerritoryMesh, type LandFeature } from '../map/territoryMesh'
 import { getWorld, type CountryFeature } from '../map/world'
 import { useGame } from '../store'
 import { armyMarkerText } from './labels'
@@ -15,13 +17,21 @@ import { NEON, tint, withAlpha } from './colors'
 import { globeBridge, useFx } from './globeBridge'
 
 const { map, features } = getWorld()
+const territoryMesh = buildTerritoryMesh(features, map)
 const UP = new THREE.Vector3(0, 1, 0)
 const OUTWARD = new THREE.Vector3()
 const MARCH_MS = 1400
 const REVEAL_MARCH_MS = 680
 const EMPTY_REGIONS = new Set<RegionId>()
 
-type MarchPath = { from: [number, number]; to: [number, number] }
+type MarchPath = { from: [number, number]; to: [number, number]; simT?: number }
+
+type Shape = CountryFeature | LandFeature
+
+function shapeOf(f: object): { regionId: string; territoryId?: string; name: string } {
+  const props = (f as Shape).properties as { regionId: string; territoryId?: string; name: string }
+  return { regionId: props.regionId, territoryId: props.territoryId, name: props.name }
+}
 
 type LayerDatum =
   | { kind: 'army'; key: string; signature: string; army: Army; lat: number; lng: number; color: string; hold: boolean; march: MarchPath | null; mine: boolean }
@@ -236,7 +246,9 @@ function paintMarker(d: object): HTMLElement {
     el.addEventListener('click', (event) => {
       event.stopPropagation()
       event.preventDefault()
-      useGame.getState().focusTerritory(marker.territoryId!)
+      const state = useGame.getState()
+      if (state.targetMode === 'attack') state.clickTerritory(marker.territoryId!)
+      else state.focusTerritory(marker.territoryId!)
     })
   }
   const title = document.createElement('div')
@@ -369,6 +381,14 @@ export function WorldGlobe() {
     api.pointOfView({ lat: cap.lat, lng: cap.lng, altitude: 1.7 }, reducedRef.current ? 0 : 900)
   }, [gameStarted, playerId])
 
+  const flashes = useGame((s) => s.flashes)
+  const attackTargets = useMemo(() => {
+    if (!game || !selectedArmy || targetMode !== 'attack') return new Set<string>()
+    const army = game.armies[selectedArmy]
+    if (!army) return new Set<string>()
+    return new Set(attackableTerritoryIds(game, map, game.playerId, army.location, (owner) => atWar(game, game.playerId, owner)))
+  }, [game, selectedArmy, targetMode])
+
   const reachable = useMemo(() => {
     if (!game || !selectedArmy || !targetMode) return EMPTY_REGIONS
     const a = game.armies[selectedArmy]
@@ -437,52 +457,72 @@ export function WorldGlobe() {
 
   const polygonColor = useCallback(
     (f: object) => {
-      const id = (f as CountryFeature).properties.regionId
-      const base = hiddenCaptures.get(id) ?? regionColor(game, id)
-      if (reachable.has(id)) return tint(targetMode === 'attack' ? NEON.magenta : NEON.cyan, hover === id ? 0.1 : -0.05)
+      const shape = shapeOf(f)
+      const id = shape.regionId
+      if (shape.territoryId && attackTargets.has(shape.territoryId)) return tint(NEON.magenta, hover === id ? 0.12 : 0)
+      const ownerId = game && shape.territoryId ? territoryOwner(game, map, shape.territoryId) : null
+      const base = ownerId ? game!.nations[ownerId]?.color ?? '#334155' : hiddenCaptures.get(id) ?? regionColor(game, id)
+      if (shape.territoryId && flashes.some((flash) => flash.id === shape.territoryId)) return tint(base, 0.28)
+      if (!shape.territoryId && reachable.has(id)) return tint(targetMode === 'attack' ? NEON.magenta : NEON.cyan, hover === id ? 0.1 : -0.05)
+      if (shape.territoryId && targetMode === 'move' && reachable.has(id)) return tint(NEON.cyan, hover === id ? 0.1 : -0.04)
       if (id === selectedRegion) return tint(base, 0.18, 0.1)
       if (id === hover) return tint(base, 0.1)
       return base
     },
-    [game, hiddenCaptures, reachable, targetMode, selectedRegion, hover],
+    [game, hiddenCaptures, reachable, targetMode, selectedRegion, hover, attackTargets, flashes],
   )
   const polygonAltitude = useCallback(
     (f: object) => {
-      const id = (f as CountryFeature).properties.regionId
+      const shape = shapeOf(f)
+      const id = shape.regionId
+      if (shape.territoryId && flashes.some((flash) => flash.id === shape.territoryId)) return 0.055
       if (popped.has(id)) return 0.045
+      if (shape.territoryId && shape.territoryId === selectedTerritory) return 0.034
+      if (shape.territoryId && attackTargets.has(shape.territoryId)) return 0.028
       if (id === selectedRegion) return 0.03
       if (reachable.has(id)) return 0.022
+      if (game && shape.territoryId && territoryOwner(game, map, shape.territoryId) === game.playerId) return 0.012
       if (game && game.regions[id].owner === game.playerId) return 0.012
       return 0.006
     },
-    [game, selectedRegion, reachable, popped],
+    [game, selectedRegion, selectedTerritory, reachable, popped, flashes, attackTargets],
   )
   const polygonStroke = useCallback(
     (f: object) => {
-      const id = (f as CountryFeature).properties.regionId
+      const shape = shapeOf(f)
+      const id = shape.regionId
+      if (shape.territoryId && attackTargets.has(shape.territoryId)) return '#ffd6ff'
       if (id === selectedRegion) return '#ffffff'
-      if (game && game.regions[id].owner === game.playerId) return '#0A84FF'
+      if (game && shape.territoryId && territoryOwner(game, map, shape.territoryId) !== game.regions[id]?.owner) return '#ffe08a'
+      if (game && (shape.territoryId ? territoryOwner(game, map, shape.territoryId) : game.regions[id].owner) === game.playerId) return '#0A84FF'
       return 'rgba(8, 12, 28, 0.9)'
     },
-    [game, selectedRegion],
+    [game, selectedRegion, attackTargets],
   )
   const polygonLabel = useCallback(
     (f: object) => {
-      const id = (f as CountryFeature).properties.regionId
+      const shape = shapeOf(f)
+      const id = shape.regionId
       const mr = map.regions[id]
       if (!game) return `<div class="globe-tip"><b>${mr.name}</b></div>`
-      const owner = game.nations[game.regions[id].owner]
+      const ownerId = shape.territoryId ? territoryOwner(game, map, shape.territoryId) : game.regions[id].owner
+      const owner = game.nations[ownerId]
       const vis = vision ?? 'all'
       const armies = vis === 'all' || vis.has(id) ? armiesIn(game, id).reduce((s, a) => s + totalUnits(a.units), 0) : null
       const rebels = game.regions[id].rebels
-      const yours = game.regions[id].owner === game.playerId
-      return `<div class="globe-tip"><b>${mr.name}</b><div style="color:${owner.color}">${yours ? 'Your country' : owner.name}</div><div>${TERRAIN[mr.terrain].name} · ${game.regions[id].population.toFixed(1)} million people</div>${armies === null ? '<div class="dim">Armies hidden</div>' : `<div>${armies.toFixed(1)} divisions</div>`}${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
+      const yours = ownerId === game.playerId
+      const title = shape.territoryId ? shape.name : mr.name
+      const held = shape.territoryId && ownerId !== game.regions[id].owner ? ' · captured ground' : ''
+      return `<div class="globe-tip"><b>${title}</b><div style="color:${owner?.color ?? '#fff'}">${yours ? 'Your territory' : owner?.name ?? 'Unknown'}${held}</div><div>${TERRAIN[mr.terrain].name} · ${mr.name}</div>${armies === null ? '<div class="dim">Armies hidden</div>' : `<div>${armies.toFixed(1)} divisions</div>`}${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
     },
     [game, vision],
   )
 
   const onPolygonClick = useCallback((f: object) => {
-    useGame.getState().clickRegion((f as CountryFeature).properties.regionId)
+    const shape = shapeOf(f)
+    const state = useGame.getState()
+    if (shape.territoryId && state.targetMode === 'attack') state.clickTerritory(shape.territoryId)
+    else state.clickRegion(shape.regionId)
   }, [])
   const onPolygonHover = useCallback((f: object | null) => {
     const id = f ? (f as CountryFeature).properties.regionId : null
@@ -608,8 +648,13 @@ export function WorldGlobe() {
       const color = game.nations[a.owner]?.color ?? '#94a3b8'
       const mine = a.owner === game.playerId
       const present = (['infantry', 'armor', 'air', 'naval'] as UnitType[]).filter((k) => a.units[k] >= 0.5).join(',')
-      const signature = `${a.owner}|${color}|${present}|${mine ? 1 : 0}|v2`
-      const march = from ? { from: [fromHome ? home.lng : from.lng, fromHome ? home.lat : from.lat] as [number, number], to: [lng, lat] as [number, number] } : null
+      const signature = `${a.owner}|${color}|${present}|${mine ? 1 : 0}|v3`
+      const live = a.march
+      const march = live
+        ? { from: [live.fromLng, live.fromLat] as [number, number], to: [live.toLng, live.toLat] as [number, number], simT: live.progress }
+        : from
+          ? { from: [fromHome ? home.lng : from.lng, fromHome ? home.lat : from.lat] as [number, number], to: [lng, lat] as [number, number] }
+          : null
       const hold = !!(m && hiddenCaptures.has(m.to))
       const prev = cache.get(a.id)
       if (prev && prev.kind === 'army' && prev.signature === signature) {
@@ -660,7 +705,7 @@ export function WorldGlobe() {
       const visitors = new Map<RegionId, number>()
       const occupied = new Set<string>()
       for (const a of visibleArmies(game, map, game.playerId, vision ?? undefined)) {
-        if (marching.has(a.id)) continue
+        if (a.march || marching.has(a.id)) continue
         const inView = !!selectedRegion && a.location === selectedRegion
         const mine = a.owner === game.playerId
         const picked = a.id === selectedArmy
@@ -775,6 +820,17 @@ export function WorldGlobe() {
             else marchGate.current.set(d.key, { held: true, delayed: true, start: now })
             lng = d.march.from[0]
             lat = d.march.from[1]
+          } else if (d.march && d.march.simT != null) {
+            const e = Math.max(0, Math.min(1, d.march.simT))
+            const interpKey = `${d.march.from[0]},${d.march.from[1]},${d.march.to[0]},${d.march.to[1]}`
+            if (obj.userData.interpKey !== interpKey) {
+              obj.userData.interp = geoInterpolate(d.march.from, d.march.to)
+              obj.userData.interpKey = interpKey
+            }
+            const [x, y] = (obj.userData.interp as (t: number) => [number, number])(e)
+            lng = x
+            lat = y
+            alt += Math.sin(Math.PI * e) * (reduced ? 0 : 0.03)
           } else if (d.march && !reduced) {
             const gates = marchGate.current
             let gate = gates.get(d.key)
@@ -841,7 +897,7 @@ export function WorldGlobe() {
       atmosphereAltitude={0.16}
       polygonCapCurvatureResolution={6}
       polygonsTransitionDuration={reducedMotion ? 0 : 160}
-      polygonsData={features}
+      polygonsData={game ? territoryMesh : features}
       polygonCapColor={polygonColor}
       polygonSideColor={SIDE_COLOR}
       polygonStrokeColor={polygonStroke}

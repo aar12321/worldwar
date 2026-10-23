@@ -17,13 +17,13 @@ export function Guide() {
   let body = `${player.name} is split into territories. Open Land to develop them, or Military to train units into the army that holds each one.`
   if (orders.length > 0) {
     title = 'Your month is planned'
-    body = 'Orders along the bottom all happen together when you press End month. Click one to take it back.'
+    body = 'Diplomacy along the bottom settles when the month bar fills. Training, building, and marches start immediately.'
   } else if (armies.length === 0) {
     title = 'Raise your first army'
     body = `Click ${player.name}, then press Raise an army. Or open Military and queue training. A barracks is required.`
   } else {
     title = 'Train, then march'
-    body = 'Open Military to queue infantry, armor, planes, or ships. They join that territory’s army and fight with it. Select the army and press Attack.'
+    body = 'Open Military to train infantry (10s), armor (30s), planes (45s), or fleets (40s). Select an army and attack a bordering territory. Space pauses.'
   }
   return (
     <div className="pointer-events-auto self-center w-full max-w-md">

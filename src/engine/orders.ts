@@ -3,6 +3,7 @@ import { TECH_BY_ID } from '../data/techTree'
 import { ARMS, BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, trainingCost } from '../data/unitTypes'
 import { validateProposal } from './diplomacy'
 import { armyIsHome, atWar, boundArmy, canUseUnit, factoryCount, hasCasusBelli, hasPact, isAllied } from './helpers'
+import { attackableTerritoryIds, territoryOwner } from './territory'
 import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canReach } from './warfare'
 
@@ -119,8 +120,9 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (r?.owner !== o.nationId) return 'You do not control this region'
       if (BUILDING_SPECS[o.building].requiresCoast && !map.regions[o.regionId].coastal) return 'Requires a coastline'
       const queued = pending.filter((p) => p.type === 'build' && p.regionId === o.regionId && p.building === o.building).length
+      const underway = (s.projects ?? []).filter((p) => p.kind === 'build' && p.regionId === o.regionId && p.building === o.building).length
       const cap = BUILDING_SPECS[o.building].max ?? MAX_BUILDINGS_PER_TYPE
-      if (r.buildings[o.building] + queued >= cap) return cap === 1 ? 'Already built here' : 'Region is at capacity'
+      if (r.buildings[o.building] + queued + underway >= cap) return cap === 1 ? 'Already built here' : 'Region is at capacity'
       return null
     }
     case 'recruit':
@@ -141,11 +143,12 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'develop': {
       const t = map.territories[o.territoryId]
       if (!t) return 'Unknown territory'
-      if (s.regions[t.regionId]?.owner !== o.nationId) return 'You do not control this territory'
+      if (territoryOwner(s, map, o.territoryId) !== o.nationId) return 'You do not control this territory'
       const spec = UPGRADE_SPECS[o.upgrade]
       const level = s.territoryDev?.[o.territoryId]?.[o.upgrade] ?? 0
       const queued = pending.filter((p) => p.type === 'develop' && p.territoryId === o.territoryId && p.upgrade === o.upgrade).length
-      if (level + queued >= spec.max) return 'Already fully developed'
+      const underway = (s.projects ?? []).filter((p) => p.kind === 'develop' && p.territoryId === o.territoryId && p.upgrade === o.upgrade).length
+      if (level + queued + underway >= spec.max) return 'Already fully developed'
       return null
     }
     case 'train': {
@@ -207,6 +210,12 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
       if (!canReach(s, map, o.nationId, a.location, o.target, 'attack').ok)
         return 'Not adjacent (sea invasions need a port and Destroyers)'
+      if (o.territoryId) {
+        const territory = map.territories[o.territoryId]
+        if (!territory || territory.regionId !== o.target) return 'Unknown territory'
+        const legal = attackableTerritoryIds(s, map, o.nationId, a.location, (owner) => atWar(s, o.nationId, owner) || pendingWar)
+        if (!legal.includes(o.territoryId)) return 'That territory is not on your border'
+      }
       return null
     }
     case 'assignGeneral': {

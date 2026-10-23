@@ -1,5 +1,6 @@
 import { TRAIN_MONTHS, UNIT_SPECS } from '../data/unitTypes'
 import { addLog, boundArmy, createArmy, emptyUnits } from './helpers'
+import { territoryOwner } from './territory'
 import type { GameState, NationId, TrainingJob, UnitType, WorldMap } from './types'
 
 /** Puts one trained unit into the army bound to this territory, creating that army if needed. */
@@ -24,7 +25,7 @@ export function tickTraining(s: GameState, map: WorldMap) {
   const advanced = new Set<string>()
   for (const job of queue) {
     const territory = map.territories[job.territoryId]
-    const owner = territory ? s.regions[territory.regionId]?.owner : null
+    const owner = territory ? territoryOwner(s, map, job.territoryId) : null
     const nation = s.nations[job.nationId]
     if (!territory || owner !== job.nationId || !nation?.alive) {
       if (nation?.alive) {
@@ -37,7 +38,7 @@ export function tickTraining(s: GameState, map: WorldMap) {
       }
       continue
     }
-    if (job.orderedTurn === s.turn) {
+    if (job.clock === 'time' || job.orderedTurn === s.turn) {
       next.push(job)
       continue
     }

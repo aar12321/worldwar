@@ -50,7 +50,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'move':
       return `Move army to ${region(o.to)}`
     case 'attack':
-      return `Attack ${region(o.target)}`
+      return o.territoryId ? `Attack ${map.territories[o.territoryId]?.name ?? region(o.target)}` : `Attack ${region(o.target)}`
     case 'assignGeneral': {
       const place = map.territories[s.armies[o.armyId]?.homeTerritoryId]?.name ?? 'the army'
       if (!o.generalId) return `Remove the general from ${place}`
@@ -152,6 +152,19 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   }
   s.outcome = checkOutcome(s)
   return s
+}
+
+/** Pays for one order and runs it at once. Used by the real-time clock for decisions that are not marches or construction. */
+export function applyResolvedOrder(s: GameState, map: WorldMap, o: Order): string | null {
+  const err = validateOrder(s, map, o)
+  if (err) return err
+  const n = s.nations[o.nationId]
+  const cost = orderCost(s, o)
+  n.resources.capital -= cost.capital
+  n.resources.pp -= cost.pp
+  n.militaryPool -= cost.manpower
+  executeOrder(s, map, o, createRng(s.seed, s.turn + s.nextId))
+  return null
 }
 
 function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typeof createRng>) {

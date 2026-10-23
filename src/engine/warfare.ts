@@ -3,6 +3,7 @@ import { TRAINING, emptyTraining } from '../data/unitTypes'
 import { combatMods, contractNote } from './arms'
 import { regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
+import { closestEnemyTerritory, damageTerritory, territoryOwner } from './territory'
 import { recordBattle } from './warscore'
 import {
   addLog,
@@ -72,6 +73,7 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
   const oldOwner = region.owner
   region.owner = newOwner
   region.rebels = 0
+  if (s.territoryOwners) for (const id of map.territoriesByRegion[regionId] ?? []) delete s.territoryOwners[id]
   if (raze) {
     region.buildings.barracks = 0
     region.buildings.depot = 0
@@ -185,11 +187,11 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
 }
 
 export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng: Rng, used: Set<string>) {
-  const groups = new Map<string, { nationId: NationId; target: RegionId; armyIds: string[] }>()
+  const groups = new Map<string, { nationId: NationId; target: RegionId; territoryId?: string; armyIds: string[] }>()
   for (const o of orders) {
     if (o.type !== 'attack') continue
-    const key = `${o.nationId}>${o.target}`
-    const g = groups.get(key) ?? { nationId: o.nationId, target: o.target, armyIds: [] }
+    const key = `${o.nationId}>${o.target}>${o.territoryId ?? ''}`
+    const g = groups.get(key) ?? { nationId: o.nationId, target: o.target, territoryId: o.territoryId, armyIds: [] }
     g.armyIds.push(o.armyId)
     groups.set(key, g)
   }
@@ -233,8 +235,9 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
     const defenderNation = suppression ? null : s.nations[defenderId]
     const defArmies = suppression ? [] : armiesIn(s, g.target, defenderId)
     const garrison = emptyUnits()
+    const territoryCount = Math.max(1, map.territoriesByRegion[g.target]?.length ?? 1)
     if (suppression) garrison.infantry = targetRegion.rebels
-    else garrison.infantry = garrisonStrength(s, map, g.target)
+    else garrison.infantry = garrisonStrength(s, map, g.target) / territoryCount
     const defender = makeCombatant(s, defenderNation, defArmies, garrison, [], 1, true)
     const wasCapital = !suppression && s.nations[defenderId]?.capital === g.target
 
@@ -249,51 +252,62 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
 
     const fromRegionId = armies[0].location
     let captured = false
+    let fell = false
+    let foughtOver: string | null = null
     if (suppression) {
       targetRegion.rebels = outcome.winner === 'attacker' ? 0 : garrison.infantry
     } else if (outcome.winner === 'attacker') {
       pruneArmies(s)
       const survivors = armies.filter((a) => s.armies[a.id])
       if (survivors.length) {
-        transferRegion(s, map, g.target, g.nationId)
-        captured = true
-        const lead = survivors[0]
-        for (const a of survivors.slice(1)) {
-          for (const k of UNIT_TYPES) {
-            const have = lead.units[k]
-            const extra = a.units[k]
-            const sum = have + extra
-            if (sum > 0) lead.training[k] = Math.max(0, Math.min(TRAINING.max, Math.round((lead.training[k] * have + a.training[k] * extra) / sum)))
-            lead.units[k] += extra
+        foughtOver = closestEnemyTerritory(s, map, g.nationId, fromRegionId, g.target, g.territoryId)
+        const taken = foughtOver ? captureTerritory(s, map, foughtOver, g.nationId) : null
+        if (taken) {
+          captured = true
+          fell = taken.fell
+        }
+        if (fell) {
+          const lead = survivors[0]
+          for (const a of survivors.slice(1)) {
+            for (const k of UNIT_TYPES) {
+              const have = lead.units[k]
+              const extra = a.units[k]
+              const sum = have + extra
+              if (sum > 0) lead.training[k] = Math.max(0, Math.min(TRAINING.max, Math.round((lead.training[k] * have + a.training[k] * extra) / sum)))
+              lead.units[k] += extra
+            }
+            if (!lead.generalId) lead.generalId = a.generalId
+            delete s.armies[a.id]
           }
-          if (!lead.generalId) lead.generalId = a.generalId
-          delete s.armies[a.id]
+          if (!mr.coastal && lead.units.naval > 0) {
+            const origin = lead.location
+            const fleetTraining = emptyTraining()
+            fleetTraining.naval = lead.training.naval
+            const fleet = createArmy(s, {
+              owner: g.nationId,
+              location: origin,
+              units: { ...emptyUnits(), naval: lead.units.naval },
+              homeTerritoryId: openMuster(s, map, origin, g.nationId),
+              training: fleetTraining,
+            })
+            fleet.outOfSupplyTurns = lead.outOfSupplyTurns
+            used.add(fleet.id)
+            lead.units.naval = 0
+          }
+          lead.location = g.target
+          for (const a of survivors) if (s.armies[a.id]) a.march = null
         }
-        if (!mr.coastal && lead.units.naval > 0) {
-          const origin = lead.location
-          const fleetTraining = emptyTraining()
-          fleetTraining.naval = lead.training.naval
-          const fleet = createArmy(s, {
-            owner: g.nationId,
-            location: origin,
-            units: { ...emptyUnits(), naval: lead.units.naval },
-            homeTerritoryId: openMuster(s, map, origin, g.nationId),
-            training: fleetTraining,
-          })
-          fleet.outOfSupplyTurns = lead.outOfSupplyTurns
-          used.add(fleet.id)
-          lead.units.naval = 0
-        }
-        lead.location = g.target
       }
     }
     pruneArmies(s)
 
+    const place = foughtOver ? map.territories[foughtOver]?.name ?? mr.name : mr.name
     const report: BattleReport = {
       id: newId(s, 'b'),
       turn: s.turn,
       regionId: g.target,
       fromRegionId,
+      territoryId: foughtOver,
       attacker: { nationId: g.nationId, units: attacker.units, losses: outcome.attackerLosses },
       defender: { nationId: suppression ? 'rebels' : defenderId, units: defender.units, losses: outcome.defenderLosses },
       rounds: outcome.rounds,
@@ -303,14 +317,17 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
     }
     s.battles.push(report)
     if (!suppression) {
-      recordBattle(s, report, wasCapital && captured)
+      recordBattle(s, report, wasCapital && fell)
       if (captured) addOpinion(s, defenderId, g.nationId, 'Seized our land', -8, 0.2)
     }
-    const defName = suppression ? 'rebels' : s.nations[defenderId].name
+    const defName = suppression ? 'rebels' : s.nations[defenderId]?.name ?? 'the defender'
     const verb = suppression
       ? outcome.winner === 'attacker' ? 'crushed the rebels in' : 'failed to crush the rebels in'
-      : captured ? 'captured' : 'was repulsed attacking'
-    addLog(s, 'battle', `${attackerNation.name} ${verb} ${mr.name}${suppression ? '' : ` (held by ${defName})`}.`, suppression ? [g.nationId] : [g.nationId, defenderId])
+      : captured
+        ? fell ? 'captured' : 'seized'
+        : 'was repulsed attacking'
+    const where = suppression || !foughtOver ? mr.name : place
+    addLog(s, 'battle', `${attackerNation.name} ${verb} ${where}${suppression ? '' : ` (held by ${defName})`}.`, suppression ? [g.nationId] : [g.nationId, defenderId])
   }
 }
 
@@ -355,6 +372,43 @@ export function resolveRebels(s: GameState, map: WorldMap, rng: Rng) {
       modifiers: outcome.modifiers,
     })
   }
+}
+
+export interface CaptureResult {
+  fell: boolean
+  territoryId: string
+  previousOwner: string
+}
+
+/**
+ * Flips one territory. Upgrades stay, one level poorer.
+ * The country itself changes hands only when its last territory there is gone.
+ */
+export function captureTerritory(s: GameState, map: WorldMap, territoryId: string, newOwner: NationId): CaptureResult | null {
+  const territory = map.territories[territoryId]
+  if (!territory) return null
+  const previousOwner = territoryOwner(s, map, territoryId)
+  if (!previousOwner || previousOwner === newOwner) return null
+  s.territoryOwners ??= {}
+  s.territoryOwners[territoryId] = newOwner
+  const dev = s.territoryDev?.[territoryId]
+  if (dev) damageTerritory(dev)
+  const ids = map.territoriesByRegion[territory.regionId] ?? []
+  const holdsOn = ids.some((id) => territoryOwner(s, map, id) === previousOwner)
+  if (!holdsOn) {
+    for (const id of ids) delete s.territoryOwners[id]
+    transferRegion(s, map, territory.regionId, newOwner)
+    return { fell: true, territoryId, previousOwner }
+  }
+  const conqueror = s.nations[newOwner]
+  const loser = s.nations[previousOwner]
+  addLog(
+    s,
+    'war',
+    `${conqueror?.name ?? newOwner} seized ${territory.name} from ${loser?.name ?? previousOwner}. ${map.regions[territory.regionId].name} still stands.`,
+    [previousOwner, newOwner],
+  )
+  return { fell: false, territoryId, previousOwner }
 }
 
 function openMuster(s: GameState, map: WorldMap, regionId: RegionId, owner: NationId): string {

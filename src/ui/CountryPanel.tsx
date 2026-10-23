@@ -5,6 +5,7 @@ import { opinionLabel, opinionOf } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, COSTS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
+import { BUILD_SECONDS, formatSeconds } from '../engine/pace'
 import { weaponTiers } from '../engine/arms'
 import { militaryPower } from '../engine/economy'
 import { spySuccessChance } from '../engine/espionage'
@@ -227,8 +228,11 @@ export function CountryPanel() {
 
           {tab === 'build' && mine && (
             <section className="space-y-2">
-              <p className="text-[13px] text-white/55">Buildings finish when the month ends. Each one does one job.</p>
-              {BUILDING_TYPES.map((b) => (
+              <p className="text-[13px] text-white/55">Buildings start at once and finish in under a minute. Each one does one job.</p>
+              {BUILDING_TYPES.map((b) => {
+                const project = (game.projects ?? []).find((item) => item.kind === 'build' && item.regionId === selected && item.building === b)
+                const fraction = project && project.total > 0 ? Math.min(1, (project.total - project.remaining) / project.total) : 0
+                return (
                 <div key={b} className="inset-card p-3 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-2">
@@ -239,11 +243,21 @@ export function CountryPanel() {
                       </span>
                     </div>
                     <p className="text-[12px] text-white/50 mt-0.5 leading-snug">{BUILDING_SPECS[b].description}</p>
-                    <p className="text-[12px] text-white/40 mt-1">{BUILDING_SPECS[b].cost} money</p>
+                    {project ? (
+                      <div className="mt-1.5">
+                        <div className="h-1.5 rounded-full bg-white/12 overflow-hidden">
+                          <div className="h-full bg-[#30d158]" style={{ width: `${Math.max(8, fraction * 100)}%` }} />
+                        </div>
+                        <p className="text-[11px] text-white/50 tabular-nums mt-0.5">{formatSeconds(project.remaining)} left · {formatSeconds(BUILD_SECONDS[b])} total</p>
+                      </div>
+                    ) : (
+                      <p className="text-[12px] text-white/40 mt-1">{BUILDING_SPECS[b].cost} money · {formatSeconds(BUILD_SECONDS[b])}</p>
+                    )}
                   </div>
                   <ActionButton chip order={{ type: 'build', nationId: player.id, regionId: selected, building: b }} label="Build" sub={BUILDING_SPECS[b].description} tone="btn-primary" />
                 </div>
-              ))}
+                )
+              })}
             </section>
           )}
 

@@ -76,8 +76,10 @@ export function ArmyControls({ army }: { army: Army }) {
   const setTargetMode = useGame((s) => s.setTargetMode)
   const removeOrder = useGame((s) => s.removeOrder)
   const selected = selectedArmy === army.id
+  const cancelLiveMarch = useGame((s) => s.cancelLiveMarch)
   const pendingIdx = orders.findIndex((o) => (o.type === 'move' || o.type === 'attack') && o.armyId === army.id)
   const pending = pendingIdx >= 0 ? orders[pendingIdx] : null
+  const march = army.march
 
   return (
     <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
@@ -103,7 +105,20 @@ export function ArmyControls({ army }: { army: Army }) {
           Attack
         </button>
       </div>
-      <p className="text-[11px] text-white/40">The whole army moves or attacks together. Press a button, then click a highlighted neighbor.</p>
+      <p className="text-[11px] text-white/40">The whole army moves together. Attack a highlighted border territory.</p>
+      {march && (
+        <div className="space-y-1 rounded-xl bg-white/8 px-2.5 py-1.5 text-[12px]">
+          <div className="flex items-center justify-between gap-2">
+            <span>{march.kind === 'attack' ? 'Attacking ' : 'Moving to '}{map.territories[march.territoryId]?.name ?? map.regions[march.to]?.name}</span>
+            <button className="text-white/50 hover:text-white" onClick={() => cancelLiveMarch(army.id)}>
+              Cancel
+            </button>
+          </div>
+          <div className="h-1.5 rounded-full bg-white/12 overflow-hidden">
+            <div className="h-full bg-[#e879f9]" style={{ width: `${Math.min(100, march.progress * 100)}%` }} />
+          </div>
+        </div>
+      )}
       {pending && (
         <div className="flex items-center justify-between rounded-xl bg-white/8 px-2.5 py-1.5 text-[12px]">
           <span>

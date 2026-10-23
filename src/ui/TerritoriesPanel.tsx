@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion'
 import { UPGRADE_SPECS, upgradeCost } from '../data/development'
 import { developmentBonus, populationGrowth, territoryDevOf, territoryPopulation, territoryYield } from '../engine/development'
-import { regionsOf } from '../engine/helpers'
+import { formatSeconds } from '../engine/pace'
+import { territoriesOf } from '../engine/territory'
 import { TERRITORY_UPGRADES, type Order, type TerritoryUpgrade } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
@@ -18,8 +19,9 @@ export function TerritoriesPanel() {
   const { game, player, orders } = view
   const { map } = getWorld()
   const bonus = developmentBonus(game, map, player.id)
-  const owned = regionsOf(game, player.id)
-  const territoryTotal = owned.reduce((sum, id) => sum + (map.territoriesByRegion[id]?.length ?? 0), 0)
+  const ownedTerritories = territoriesOf(game, map, player.id)
+  const owned = [...new Set(ownedTerritories.map((id) => map.territories[id].regionId))].sort()
+  const territoryTotal = ownedTerritories.length
 
   return (
     <PanelShell title="Territories" kicker={`${territoryTotal} districts across ${owned.length} ${owned.length === 1 ? 'country' : 'countries'}`} panel="territories">
@@ -29,7 +31,7 @@ export function TerritoriesPanel() {
         <Stat label="Upkeep" value={signed(-bonus.upkeep)} warn={bonus.upkeep > 0} />
       </div>
       <p className="text-[13px] leading-snug text-white/60">
-        Each country is split into territories. Upgrade one and it pays you when the month ends. Click a card, or a pin on the globe, to focus it.
+        Each country is split into territories. Upgrades take well under a minute and then pay you every month. Captured land keeps its buildings, a little worse for wear.
       </p>
       {owned.map((regionId) => {
         const region = game.regions[regionId]
@@ -45,7 +47,7 @@ export function TerritoriesPanel() {
                 {growth.toFixed(2)}%/mo
               </span>
             </button>
-            {ids.map((id, index) => (
+            {ids.filter((id) => ownedTerritories.includes(id)).map((id, index) => (
               <TerritoryCard key={id} territoryId={id} index={index} selected={selectedTerritory === id} onFocus={() => focusTerritory(id)} orders={orders} />
             ))}
           </section>
@@ -70,6 +72,7 @@ function TerritoryCard({
 }) {
   const view = usePlayerView()!
   const removeOrder = useGame((s) => s.removeOrder)
+  const cancelLiveProject = useGame((s) => s.cancelLiveProject)
   const { map } = getWorld()
   const territory = map.territories[territoryId]
   const { game, player } = view
@@ -103,7 +106,9 @@ function TerritoryCard({
           const spec = UPGRADE_SPECS[upgrade]
           const level = dev[upgrade]
           const orderIndex = orders.findIndex((order) => order.type === 'develop' && order.territoryId === territoryId && order.upgrade === upgrade)
+          const project = (game.projects ?? []).find((item) => item.kind === 'develop' && item.territoryId === territoryId && item.upgrade === upgrade)
           const cost = upgradeCost(upgrade, level)
+          const fraction = project && project.total > 0 ? Math.min(1, (project.total - project.remaining) / project.total) : 0
           return (
             <div key={upgrade} className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
@@ -113,10 +118,23 @@ function TerritoryCard({
                   </Tip>
                   <Pips value={level} max={spec.max} />
                 </div>
-                <p className="text-[11px] text-white/40">{upgradeLine(upgrade, level)}</p>
+                {project ? (
+                  <div className="mt-1">
+                    <div className="h-1.5 rounded-full bg-white/12 overflow-hidden">
+                      <div className="h-full bg-[#0a84ff]" style={{ width: `${Math.max(8, fraction * 100)}%` }} />
+                    </div>
+                    <p className="text-[11px] text-white/50 tabular-nums mt-0.5">{formatSeconds(project.remaining)} left</p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-white/40">{upgradeLine(upgrade, level)}</p>
+                )}
               </div>
               {level >= spec.max ? (
                 <span className="text-[12px] font-semibold text-[#30d158] shrink-0">Max</span>
+              ) : project ? (
+                <button type="button" className="btn btn-quiet shrink-0" onClick={() => cancelLiveProject(project.id)}>
+                  Cancel
+                </button>
               ) : orderIndex >= 0 ? (
                 <button type="button" className="btn btn-quiet shrink-0" onClick={() => removeOrder(orderIndex)}>
                   Cancel

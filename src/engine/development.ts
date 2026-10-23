@@ -1,4 +1,5 @@
 import { HOUSING_GROWTH_CAP, UPGRADE_SPECS, UPGRADE_UPKEEP } from '../data/development'
+import { territoryOwner } from './territory'
 import { TERRITORY_UPGRADES, type GameState, type RegionId, type TerritoryDev, type TerritoryUpgrade, type WorldMap } from './types'
 
 export interface DevelopmentBonus {
@@ -29,7 +30,11 @@ export function ensureTerritoryDev(s: GameState, territoryId: string): Territory
 
 export function housingInRegion(s: GameState, map: WorldMap, regionId: RegionId): number {
   let housing = 0
-  for (const id of map.territoriesByRegion[regionId] ?? []) housing += territoryDevOf(s, id).housing
+  const owner = s.regions[regionId]?.owner
+  for (const id of map.territoriesByRegion[regionId] ?? []) {
+    if (territoryOwner(s, map, id) !== owner) continue
+    housing += territoryDevOf(s, id).housing
+  }
   return housing
 }
 
@@ -44,26 +49,24 @@ export function populationGrowth(foodShortage: boolean, housing: number, territo
 export function developmentBonus(s: GameState, map: WorldMap, nationId: string): DevelopmentBonus {
   if (!s.territoryDev) return { ...EMPTY_BONUS }
   const out: DevelopmentBonus = { ...EMPTY_BONUS }
-  for (const region of Object.values(s.regions)) {
-    if (region.owner !== nationId) continue
-    for (const id of map.territoriesByRegion[region.id] ?? []) {
-      const dev = s.territoryDev[id]
-      if (!dev) continue
-      let levels = 0
-      for (const upgrade of TERRITORY_UPGRADES) {
-        const level = dev[upgrade] || 0
-        const spec = UPGRADE_SPECS[upgrade]
-        out.capital += level * spec.capital
-        out.food += level * spec.food
-        out.pp += level * spec.pp
-        out.tp += level * spec.tp
-        levels += level
-      }
-      out.roads += dev.roads
-      out.housing += dev.housing
-      out.levels += levels
-      out.upkeep += levels * UPGRADE_UPKEEP
+  for (const id of Object.keys(map.territories)) {
+    if (territoryOwner(s, map, id) !== nationId) continue
+    const dev = s.territoryDev[id]
+    if (!dev) continue
+    let levels = 0
+    for (const upgrade of TERRITORY_UPGRADES) {
+      const level = dev[upgrade] || 0
+      const spec = UPGRADE_SPECS[upgrade]
+      out.capital += level * spec.capital
+      out.food += level * spec.food
+      out.pp += level * spec.pp
+      out.tp += level * spec.tp
+      levels += level
     }
+    out.roads += dev.roads
+    out.housing += dev.housing
+    out.levels += levels
+    out.upkeep += levels * UPGRADE_UPKEEP
   }
   return out
 }

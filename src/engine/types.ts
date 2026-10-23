@@ -64,6 +64,34 @@ export interface TrainingJob {
   total: number
   /** Turn the order was resolved. The job does not advance during that same month. */
   orderedTurn: number
+  /** `time` counts down in sim-seconds. `turn` counts down when a month resolves. */
+  clock?: 'time' | 'turn'
+}
+
+/** A factory or territory upgrade under construction. */
+export interface Project {
+  id: string
+  nationId: NationId
+  kind: 'build' | 'develop'
+  remaining: number
+  total: number
+  regionId?: RegionId
+  building?: BuildingType
+  territoryId?: string
+  upgrade?: TerritoryUpgrade
+}
+
+/** An army walking the globe. Progress is 0 at the start and 1 on arrival. */
+export interface ArmyMarch {
+  kind: 'move' | 'attack'
+  to: RegionId
+  territoryId: string
+  fromLat: number
+  fromLng: number
+  toLat: number
+  toLng: number
+  progress: number
+  duration: number
 }
 
 export interface WorldMap {
@@ -108,6 +136,8 @@ export interface Army {
   homeTerritoryId: string
   /** Drill rank 0–5 for each unit type. The army attacks as one; each unit trains on its own. */
   training: Record<UnitType, number>
+  /** Set while the army is walking to a move or an attack. */
+  march?: ArmyMarch | null
 }
 
 export interface Resources {
@@ -274,7 +304,7 @@ export type Order =
   | { type: 'signContract'; nationId: NationId; unit: UnitType; tier: number }
   | { type: 'research'; nationId: NationId; techId: string }
   | { type: 'move'; nationId: NationId; armyId: string; to: RegionId }
-  | { type: 'attack'; nationId: NationId; armyId: string; target: RegionId }
+  | { type: 'attack'; nationId: NationId; armyId: string; target: RegionId; territoryId?: string }
   | { type: 'assignGeneral'; nationId: NationId; armyId: string; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'propose'; nationId: NationId; target: NationId; proposal: ProposalDraft }
@@ -309,6 +339,8 @@ export interface BattleReport {
   rounds: BattleRound[]
   winner: 'attacker' | 'defender'
   captured: boolean
+  /** Territory that changed hands, when the battle was fought over one. */
+  territoryId?: string | null
   modifiers: string[]
 }
 
@@ -337,6 +369,16 @@ export interface GameState {
   armies: Record<string, Army>
   /** Sparse development levels, keyed by territory id. */
   territoryDev: Record<string, TerritoryDev>
+  /** Owner of a territory when it is not the owner of the surrounding country. */
+  territoryOwners: Record<string, NationId>
+  /** Factories and territory upgrades currently under construction. */
+  projects: Project[]
+  /** Seconds since the campaign started, at 1×. */
+  simTime: number
+  /** Seconds accumulated toward the next economy month. */
+  monthElapsed: number
+  /** Seconds until AI armies look for another march. */
+  militaryElapsed: number
   /** Units in production. The front job of each territory advances each month. */
   trainingQueue: TrainingJob[]
   /** Sorted "a|b" keys. */
