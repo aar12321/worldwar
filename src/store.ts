@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { generateAllBotOrders } from './ai/bot'
 import { normalizeGame } from './engine/migrate'
+import { PLAYER_COLOR } from './data/mapColors'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
 import { validateOrder } from './engine/orders'
@@ -153,7 +154,7 @@ function absorb(state: GameState, notices: SimNotice[], flushOrders: boolean) {
     if (notice.territoryId) {
       flashes.push({ id: notice.territoryId, until: now + 2600 })
       const territory = getWorld().map.territories[notice.territoryId]
-      const color = state.nations[player]?.color ?? '#22d3ee'
+      const color = state.nations[player]?.color ?? PLAYER_COLOR
       if (territory) useFx.getState().addRing({ lat: territory.lat, lng: territory.lng, color: notice.type === 'loss' ? '#ff453a' : color, maxRadius: 3.2 }, 1800)
     }
     if (notice.pause) {

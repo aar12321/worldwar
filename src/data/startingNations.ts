@@ -1,11 +1,10 @@
+import { PLAYER_COLOR, mapColor } from './mapColors'
 import { emptyTraining } from './unitTypes'
 import { ECON, computeEconomy, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
 import type { Army, Difficulty, GameSettings, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
-
-export const PLAYER_COLOR = '#22d3ee'
 
 const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dmitri', 'Saoirse', 'Tariq', 'Mei', 'Lucien', 'Zofia', 'Kwame', 'Elena', 'Hugo', 'Anika', 'Mateo', 'Yara', 'Bogdan', 'Ines']
 const GENERAL_LAST = ['Varga', 'Okafor', 'Takeda', 'Brandt', 'Montoya', 'Haddad', 'Volkov', 'Byrne', 'Rahman', 'Lin', 'Moreau', 'Nowak', 'Mensah', 'Petrova', 'Lindqvist', 'Sato', 'Reyes', 'Kader', 'Horvat', 'Silva']
@@ -20,9 +19,7 @@ export const GENERAL_TRAITS: Record<GeneralTrait, { name: string; description: s
 const TRAITS = Object.keys(GENERAL_TRAITS) as GeneralTrait[]
 
 function nationColor(index: number): string {
-  const hue = (index * 137.508 + 20) % 360
-  const inCyanBand = hue > 170 && hue < 200
-  return `hsl(${Math.round(inCyanBand ? hue + 40 : hue)}, ${55 + (index % 3) * 10}%, ${42 + (index % 4) * 6}%)`
+  return mapColor(index)
 }
 
 export interface NewGameOptions {
