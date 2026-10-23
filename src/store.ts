@@ -33,6 +33,8 @@ export interface Settings {
   battleFx: boolean
   /** Quiet “what to do” prompt on the globe. */
   showTips: boolean
+  /** 0–2 are the introduction cards. 3 means the introduction is finished. */
+  tutorialStep: number
 }
 
 export interface Toast {
@@ -113,6 +115,7 @@ const defaultSettings: Settings = {
   simSpeed: 1,
   battleFx: true,
   showTips: true,
+  tutorialStep: 0,
 }
 
 function loadSettings(): Settings {

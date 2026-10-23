@@ -392,7 +392,7 @@ function MusterCard({ territoryId }: { territoryId: string }) {
         <ActionButton
           order={{ type: 'recruit', nationId: player.id, territoryId, unit: 'infantry' }}
           label={infantryQueued ? `Raising infantry +${infantryQueued}` : 'Raise an army'}
-          sub={`${UNIT_SPECS.infantry.capitalCost} money · ${UNIT_SPECS.infantry.manpowerCost},000 soldiers · ready in ${formatSeconds(TRAIN_SECONDS.infantry)}. Needs a barracks.`}
+          sub={`${UNIT_SPECS.infantry.capitalCost} money · ${UNIT_SPECS.infantry.manpowerCost},000 soldiers · eats ${UNIT_SPECS.infantry.food} food a month · ready in ${formatSeconds(TRAIN_SECONDS.infantry)}. Needs a barracks.`}
           tone="btn-primary"
         />
       )}

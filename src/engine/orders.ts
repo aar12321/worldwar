@@ -2,12 +2,27 @@ import { UPGRADE_SPECS, upgradeCost } from '../data/development'
 import { TECH_BY_ID } from '../data/techTree'
 import { ARMS, BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, trainingCost } from '../data/unitTypes'
 import { validateProposal } from './diplomacy'
+import { computeEconomy } from './economy'
 import { armyIsHome, atWar, boundArmy, canUseUnit, factoryCount, hasCasusBelli, hasPact, isAllied } from './helpers'
 import { attackableTerritoryIds, territoryOwner } from './territory'
 import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canReach } from './warfare'
 
 export const MAX_BUILDINGS_PER_TYPE = 12
+
+/** Blocks recruitment that would march a nation into a food shortage. */
+export function foodForTroops(s: GameState, map: WorldMap, nationId: string, unit: UnitType, pending: Order[]): string | null {
+  const nation = s.nations[nationId]
+  const spec = UNIT_SPECS[unit]
+  const econ = computeEconomy(s, map, nationId)
+  const queued = pending.reduce((sum, order) => {
+    if ((order.type === 'recruit' || order.type === 'queueTrain') && order.nationId === nationId) return sum + UNIT_SPECS[order.unit].food
+    return sum
+  }, 0)
+  if (nation.foodShortage || nation.resources.food <= 0) return 'Not enough food to feed them. Build a farm first.'
+  if (econ.netFood < spec.food + queued && nation.resources.food < econ.foodConsumption * 2) return 'Not enough food to feed them. Build a farm first.'
+  return null
+}
 
 export interface OrderCost {
   capital: number
@@ -127,10 +142,12 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return null
     }
     case 'recruit':
-      return musterReady(s, map, o.nationId, o.territoryId, o.unit, true)
+      return musterReady(s, map, o.nationId, o.territoryId, o.unit, true) ?? foodForTroops(s, map, o.nationId, o.unit, pending)
     case 'queueTrain': {
       const ready = musterReady(s, map, o.nationId, o.territoryId, o.unit, false)
       if (ready) return ready
+      const hungry = foodForTroops(s, map, o.nationId, o.unit, pending)
+      if (hungry) return hungry
       const live = (s.trainingQueue ?? []).filter((job) => job.territoryId === o.territoryId && job.nationId === o.nationId).length
       const queued = pending.filter((p) => p.type === 'queueTrain' && p.territoryId === o.territoryId).length
       if (live + queued >= TRAIN_QUEUE_LIMIT) return 'Training queue is full'
@@ -211,7 +228,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const pendingWar = pending.some((p) => p.type === 'declareWar' && p.target === target.owner)
       if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
       if (!canReach(s, map, o.nationId, a.location, o.target, 'attack').ok)
-        return 'Not adjacent (sea invasions need a port and Destroyers)'
+        return 'Not adjacent. A sea invasion needs a port.'
       if (o.territoryId) {
         const territory = map.territories[o.territoryId]
         if (!territory || territory.regionId !== o.target) return 'Unknown territory'

@@ -10,6 +10,7 @@ import { createRng } from './rng'
 import { closestEnemyTerritory, territoryOwner } from './territory'
 import { addUnitAtTerritory } from './training'
 import type { Army, GameState, Order, TrainingJob, WorldMap } from './types'
+import { checkOutcome } from './victory'
 import { canReach, resolveAttacks } from './warfare'
 
 const LIVE = new Set<Order['type']>(['move', 'attack', 'queueTrain', 'build', 'develop', 'recruit'])
@@ -318,6 +319,7 @@ export function advance(prev: GameState, map: WorldMap, dt: number, queued: Orde
   progressMarches(s, map, dt)
   notices.push(...collectLogs(s, logAt), ...collectCaptures(s, map, battleAt))
   if (s.battles.length > 16) s.battles.splice(0, s.battles.length - 16)
+  s.outcome = checkOutcome(s, map)
   return { state: s, notices, flushOrders }
 }
 

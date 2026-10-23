@@ -150,7 +150,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
     s.pendingEvent = scheduleEvent(s, map, s.playerId, rng)
     s.nextEventTurn = s.turn + EVENT_GAP_TURNS
   }
-  s.outcome = checkOutcome(s)
+  s.outcome = checkOutcome(s, map)
   return s
 }
 

@@ -234,6 +234,11 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   const reserve = 15
   let budget = Math.max(0, n.resources.capital - reserve)
 
+  if ((n.foodShortage || econ.netFood < 0.4) && budget >= 25 && owned.length) {
+    const place = owned.reduce((best, id) => (s.regions[id].buildings.farm < s.regions[best].buildings.farm ? id : best), owned[0])
+    if (tryAdd({ type: 'build', nationId, regionId: place, building: 'farm' })) budget -= 25
+  }
+
   const agenda: Record<Agenda, () => boolean> = {
     research() {
       const priorities = BRANCH_PRIORITY[n.aggression > 0.5 ? 'aggressive' : 'builder']
@@ -338,6 +343,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         else if (roll < 0.5 && canUseUnit(n, 'naval') && s.regions[recruitRegion].buildings.port > 0) unit = 'naval'
         const spec = UNIT_SPECS[unit]
         if (spec.upkeep > room || spec.capitalCost > budget) break
+        if (n.foodShortage || n.resources.food <= 0) break
+        if (econ.netFood < spec.food && n.resources.food < econ.foodConsumption * 2) break
         if (!tryAdd({ type: 'recruit', nationId, territoryId: recruitTerritory, unit })) break
         budget -= spec.capitalCost
         room -= spec.upkeep
@@ -432,7 +439,10 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         if (!t?.alive || atWar(s, nationId, id) || hasPact(s, nationId, id) || isAllied(s, nationId, id)) continue
         if (id === playerId && (s.turn < diff.playerGracePeriod || ctx.warsOnPlayer >= playerCap)) continue
         const op = opinion(id)
-        if (op > 20 || (n.personality === 'honorable' && op > 0)) continue
+        const muchWeaker = perceived(id) < myPower * 0.55
+        const bully = muchWeaker && n.personality !== 'honorable' && n.personality !== 'turtle'
+        if (op > (bully ? 40 : 20)) continue
+        if (n.personality === 'honorable' && op > 0) continue
         let defense = perceived(id)
         for (const ally of alliesOf(id)) if (myNeighbors.has(ally)) defense += perceived(ally) * 0.5
         let ratio = myPower / Math.max(0.5, defense)
@@ -443,7 +453,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         if (!best || ratio > best.ratio) best = { id, ratio }
       }
       if (!best || best.ratio <= diff.warDeclarePowerRatio / persona.risk) return false
-      if (!rng.chance(n.aggression * persona.aggression * diff.aggression * 0.12)) return false
+      const odds = best.ratio >= diff.warDeclarePowerRatio * 1.2 ? 0.45 : 0.24
+      if (!rng.chance(n.aggression * persona.aggression * diff.aggression * odds)) return false
       if (!tryAdd({ type: 'declareWar', nationId, target: best.id })) return false
       if (best.id === playerId) ctx.warsOnPlayer++
       return true

@@ -8,9 +8,9 @@ import { getWorld } from '../map/world'
 import { useGame } from '../store'
 
 const VICTORY_OPTIONS = [
-  { share: 0.25, label: 'Short', sub: 'Lead 25% of all people' },
-  { share: 0.4, label: 'Full', sub: 'Lead 40%. Recommended.' },
-  { share: 0.6, label: 'Long', sub: 'Lead 60% of all people' },
+  { share: 0.25, label: 'Short', sub: 'Take 3 territories, or lead 25%' },
+  { share: 0.4, label: 'Full', sub: 'Take 6 territories, or lead 40%' },
+  { share: 0.6, label: 'Long', sub: 'Take 12 territories, or lead 60%' },
 ]
 
 export function Setup() {
@@ -41,7 +41,7 @@ export function Setup() {
       <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="absolute top-8 left-1/2 -translate-x-1/2 text-center w-[min(640px,90vw)]">
         <p className="text-[13px] font-medium text-white/50">January 1936</p>
         <h1 className="text-[40px] font-semibold tracking-tight text-white mt-1">Worlds of Others</h1>
-        <p className="mt-2 text-[15px] text-white/65">Pick a nation. Time runs on its own. Win by leading enough of the world’s people.</p>
+        <p className="mt-2 text-[15px] text-white/65">Pick a nation. Time runs on its own. Win by taking territory, or by leading enough of the world’s people.</p>
       </motion.div>
 
       <motion.div initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.05, ease: [0.22, 1, 0.36, 1] }} className="glass pointer-events-auto absolute left-6 top-36 bottom-6 w-[380px] rounded-[22px] flex flex-col overflow-hidden">
