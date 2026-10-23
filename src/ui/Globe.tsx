@@ -2,23 +2,26 @@ import { geoInterpolate } from 'd3-geo'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
-import { mapColor } from '../data/mapColors'
 import { TERRAIN } from '../data/terrain'
 import { armiesIn, atWar, totalUnits } from '../engine/helpers'
 import { attackableTerritoryIds, territoryOwner } from '../engine/territory'
 import { supplyDistances, supplyRange } from '../engine/supply'
-import type { Army, GameState, NationId, RegionId, UnitType } from '../engine/types'
+import type { Army, NationId, RegionId, UnitType } from '../engine/types'
 import { visibleArmies, visibleRegions } from '../engine/visibility'
 import { canReach } from '../engine/warfare'
-import { buildTerritoryMesh, type LandFeature } from '../map/territoryMesh'
+import { locateCountry, locateTerritory, territoryMesh } from '../map/landIndex'
+import type { LandFeature } from '../map/territoryMesh'
 import { getWorld, type CountryFeature } from '../map/world'
 import { useGame } from '../store'
 import { armyMarkerText } from './labels'
-import { NEON, tint, wash, withAlpha } from './colors'
+import { NEON, tint, withAlpha } from './colors'
 import { globeBridge, useFx } from './globeBridge'
+import { landFill, POLITICAL_HEIGHT, POLITICAL_WIDTH, politicalKey, syncPoliticalTexture, type PoliticalSlot } from './politicalMap'
 
-const { map, features } = getWorld()
-const territoryMesh = buildTerritoryMesh(features, map)
+const { map } = getWorld()
+const NO_OVERLAY: LandFeature[] = []
+/** three-globe's sphere radius. Borders sit a hair above it so they don't flicker against the fill. */
+const GLOBE_RADIUS = 100
 const UP = new THREE.Vector3(0, 1, 0)
 const OUTWARD = new THREE.Vector3()
 const MARCH_MS = 1400
@@ -84,6 +87,37 @@ function disableRaycast(obj: THREE.Object3D) {
   obj.raycast = () => {}
   for (const child of obj.children) disableRaycast(child)
 }
+
+function buildBorders(features: LandFeature[]) {
+  const positions: number[] = []
+  const radius = GLOBE_RADIUS * 1.0035
+  const push = (lng: number, lat: number) => {
+    const phi = ((90 - lat) * Math.PI) / 180
+    const theta = ((90 - lng) * Math.PI) / 180
+    const sinPhi = Math.sin(phi)
+    positions.push(radius * sinPhi * Math.cos(theta), radius * Math.cos(phi), radius * sinPhi * Math.sin(theta))
+  }
+  for (const feature of features) {
+    const polys = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates] : feature.geometry.coordinates
+    for (const poly of polys) {
+      for (const ring of poly) {
+        for (let i = 0; i < ring.length - 1; i++) {
+          push(ring[i][0], ring[i][1])
+          push(ring[i + 1][0], ring[i + 1][1])
+        }
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.computeBoundingSphere()
+  const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: '#f6f1e6', transparent: true, opacity: 0.85, depthWrite: false }))
+  lines.renderOrder = 2
+  disableRaycast(lines)
+  return lines
+}
+
+const borderLines = buildBorders(territoryMesh)
 
 let smokeTexture: THREE.Texture | null = null
 function getSmokeTexture() {
@@ -210,15 +244,6 @@ function placeDatum(obj: THREE.Object3D) {
   }
 }
 
-function regionColor(game: GameState | null, id: RegionId): string {
-  const terrain = map.regions[id].terrain
-  if (!game) {
-    const index = map.order.indexOf(id)
-    return wash(mapColor(index < 0 ? 0 : index), terrain)
-  }
-  return wash(game.nations[game.regions[id].owner]?.color ?? '#8d6b4a', terrain)
-}
-
 interface Marker {
   key: string
   lat: number
@@ -260,7 +285,7 @@ function paintMarker(d: object): HTMLElement {
         if (regionId) state.clickRegion(regionId)
         return
       }
-      state.focusTerritory(territoryId, true)
+      state.focusTerritory(territoryId)
     })
   }
   const title = document.createElement('div')
@@ -321,9 +346,18 @@ function paintMarker(d: object): HTMLElement {
 }
 const datumCache = new Map<string, LayerDatum>()
 const arcCache = new Map<string, Arc>()
+const RENDERER_CONFIG = { antialias: false, alpha: true, powerPreference: 'high-performance' as const }
+const markerAltitude = (d: object) => ((d as Marker).kind === 'army' && (d as Marker).tone !== 'other' ? 0.05 : 0.02)
+function markerVisibility(el: HTMLElement, isVisible: boolean) {
+  el.style.opacity = isVisible ? '1' : '0'
+}
+/** Empty string tells three-globe to skip the extruded walls. The cap and the border stay. */
+const noSide = () => ''
+const noLabel = () => ''
 
 export function WorldGlobe() {
-  const game = useGame((s) => s.game)
+  const sceneRev = useGame((s) => s.sceneRev)
+  const game = useMemo(() => (sceneRev >= 0 ? useGame.getState().game : null), [sceneRev])
   const orders = useGame((s) => s.orders)
   const selectedRegion = useGame((s) => s.selectedRegion)
   const selectedTerritory = useGame((s) => s.selectedTerritory)
@@ -336,7 +370,6 @@ export function WorldGlobe() {
   const fxQueue = useGame((s) => s.fxQueue)
   const revealedBattleId = useFx((s) => s.revealedBattleId)
   const ref = useRef<GlobeMethods | undefined>(undefined)
-  const [hover, setHover] = useState<RegionId | null>(null)
   const { w, h } = useWindowSize()
   const animated = useRef(new Set<THREE.Object3D>())
   const marchGate = useRef(new Map<string, MarchGate>())
@@ -348,10 +381,9 @@ export function WorldGlobe() {
     marchStampRef.current = marchStamp
   }, [reducedMotion, marchStamp])
 
-  const globeMaterial = useMemo(
-    () => new THREE.MeshPhongMaterial({ color: new THREE.Color('#16375f'), emissive: new THREE.Color('#0c2342'), shininess: 22, specular: new THREE.Color('#c5d8ee') }),
-    [],
-  )
+  const globeMaterial = useMemo(() => new THREE.MeshLambertMaterial({ color: new THREE.Color('#16375f') }), [])
+  const paintSlot = useRef<PoliticalSlot | null>(null)
+  const tipHtml = useRef<(feature: object) => string>(() => '')
 
   const inGame = !!game
   const controlsTuned = useRef(false)
@@ -361,10 +393,22 @@ export function WorldGlobe() {
     globeBridge.api = api
     for (const obj of animated.current) placeDatum(obj)
     const renderer = api.renderer()
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.5)
+    const gl = renderer.getContext()
+    const gpu = gl.getExtension('WEBGL_debug_renderer_info')
+    const gpuName = gpu ? String(gl.getParameter(gpu.UNMASKED_RENDERER_WEBGL)) : ''
+    const software = /swiftshader|llvmpipe|softpipe|basic render/i.test(gpuName)
+    const ratio = software ? 1 : Math.min(window.devicePixelRatio || 1, 1.25)
     if (renderer.getPixelRatio() !== ratio) {
       renderer.setPixelRatio(ratio)
       renderer.setSize(window.innerWidth, window.innerHeight, false)
+    }
+    const slot = paintSlot.current
+    if (slot) {
+      const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
+      if (slot.texture.anisotropy !== anisotropy) {
+        slot.texture.anisotropy = anisotropy
+        slot.texture.needsUpdate = true
+      }
     }
     const controls = api.controls()
     controls.autoRotate = !inGame
@@ -447,6 +491,47 @@ export function WorldGlobe() {
     return out
   }, [fxQueue, revealedBattleId, game])
 
+  useLayoutEffect(() => {
+    const key = politicalKey(game, concealed, hiddenCaptures)
+    let slot = paintSlot.current
+    if (!slot) {
+      const canvas = document.createElement('canvas')
+      canvas.width = POLITICAL_WIDTH
+      canvas.height = POLITICAL_HEIGHT
+      const texture = new THREE.CanvasTexture(canvas)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.anisotropy = 8
+      slot = { canvas, texture, key: '' }
+      paintSlot.current = slot
+    }
+    syncPoliticalTexture(globeMaterial, slot, key, game, concealed, hiddenCaptures)
+  }, [game, concealed, hiddenCaptures, globeMaterial])
+
+  useLayoutEffect(() => {
+    const api = ref.current
+    if (!api) return
+    api.scene().add(borderLines)
+    return () => {
+      api.scene().remove(borderLines)
+    }
+  }, [])
+
+  const overlay = useMemo(() => {
+    const ids = new Set<string>()
+    const addRegion = (id: RegionId | null | undefined) => {
+      if (!id) return
+      for (const territoryId of map.territoriesByRegion[id] ?? []) ids.add(territoryId)
+    }
+    if (game) {
+      addRegion(selectedRegion)
+      for (const id of attackTargets) ids.add(id)
+      for (const id of reachable) addRegion(id)
+      for (const flash of flashes) ids.add(flash.id)
+    } else addRegion(selectedRegion)
+    if (!ids.size) return NO_OVERLAY
+    return territoryMesh.filter((feature) => ids.has(feature.properties.territoryId))
+  }, [game, selectedRegion, attackTargets, reachable, flashes])
+
   const displayOwners = useMemo(() => {
     const out = new Map<RegionId, NationId>()
     if (!game) return out
@@ -490,21 +575,16 @@ export function WorldGlobe() {
     (f: object) => {
       const shape = shapeOf(f)
       const id = shape.regionId
-      if (shape.territoryId && attackTargets.has(shape.territoryId)) return tint(NEON.magenta, hover === id ? 0.12 : 0)
-      const hiddenColor = shape.territoryId ? concealed.get(shape.territoryId) : undefined
-      const ownerId = !hiddenColor && game && shape.territoryId ? territoryOwner(game, map, shape.territoryId) : null
-      const raw = hiddenColor ?? (ownerId ? game!.nations[ownerId]?.color : hiddenCaptures.get(id))
-      const base = raw ? wash(raw, map.regions[id].terrain) : regionColor(game, id)
+      if (shape.territoryId && attackTargets.has(shape.territoryId)) return NEON.magenta
+      const base = landFill(game, f as LandFeature, concealed, hiddenCaptures)
       if (shape.territoryId && flashes.some((flash) => flash.id === shape.territoryId)) return tint(base, 0.28)
-      if (!shape.territoryId && reachable.has(id)) return tint(targetMode === 'attack' ? NEON.magenta : NEON.cyan, hover === id ? 0.1 : -0.05)
-      if (shape.territoryId && targetMode === 'move' && reachable.has(id)) return tint(NEON.cyan, hover === id ? 0.1 : -0.04)
+      if (!shape.territoryId && reachable.has(id)) return tint(targetMode === 'attack' ? NEON.magenta : NEON.cyan, -0.05)
+      if (shape.territoryId && targetMode === 'move' && reachable.has(id)) return tint(NEON.cyan, -0.04)
       if (id === selectedRegion) return tint(base, 0.18, 0.1)
-      if (id === hover) return tint(base, 0.1)
       return base
     },
-    [game, hiddenCaptures, concealed, reachable, targetMode, selectedRegion, hover, attackTargets, flashes],
+    [game, hiddenCaptures, concealed, reachable, targetMode, selectedRegion, attackTargets, flashes],
   )
-  const polygonSideColor = useCallback((f: object) => tint(polygonColor(f), -0.2), [polygonColor])
   const polygonAltitude = useCallback(
     (f: object) => {
       const shape = shapeOf(f)
@@ -552,20 +632,30 @@ export function WorldGlobe() {
     },
     [game, vision],
   )
+  useLayoutEffect(() => {
+    tipHtml.current = polygonLabel
+  }, [polygonLabel])
 
-  const onPolygonClick = useCallback((f: object) => {
+  const activateLand = useCallback((f: object) => {
     const shape = shapeOf(f)
     const state = useGame.getState()
+    if (!state.game) {
+      state.clickRegion(shape.regionId)
+      return
+    }
     if (shape.territoryId && state.targetMode === 'attack') state.clickTerritory(shape.territoryId)
     else if (shape.territoryId && state.targetMode === 'move') state.clickRegion(shape.regionId)
     else if (shape.territoryId) state.focusTerritory(shape.territoryId)
     else state.clickRegion(shape.regionId)
   }, [])
-  const onPolygonHover = useCallback((f: object | null) => {
-    const id = f ? (f as CountryFeature).properties.regionId : null
-    setHover((prev) => (prev === id ? prev : id))
-  }, [])
-
+  const onGlobeClick = useCallback(
+    (coords: { lat: number; lng: number }) => {
+      const state = useGame.getState()
+      const feature = state.game ? locateTerritory(coords.lng, coords.lat) : locateCountry(coords.lng, coords.lat)
+      if (feature) activateLand(feature)
+    },
+    [activateLand],
+  )
   const arcs = useMemo<Arc[]>(() => {
     if (!game) return []
     const out: Arc[] = []
@@ -710,11 +800,10 @@ export function WorldGlobe() {
       }
       seen.add(a.id)
     }
-    const vis = vision ?? 'all'
     for (const r of Object.values(game.regions)) {
       const factories = r.buildings.factory
       if (factories < 2 || r.sabotaged > 0) continue
-      if (vis !== 'all' && !vis.has(r.id) && r.owner !== game.playerId && factories < 6) continue
+      if (r.owner !== game.playerId && r.id !== selectedRegion) continue
       const key = `smoke-${r.id}`
       const mr = map.regions[r.id]
       const signature = String(Math.min(3, 2 + Math.floor(factories / 4)))
@@ -733,7 +822,7 @@ export function WorldGlobe() {
     }
     for (const key of [...cache.keys()]) if (!seen.has(key)) cache.delete(key)
     return out
-  }, [game, marches, hiddenCaptures, vision])
+  }, [game, marches, hiddenCaptures, vision, selectedRegion])
 
   const markers = useMemo<Marker[]>(() => {
     const out: Marker[] = []
@@ -849,6 +938,7 @@ export function WorldGlobe() {
         marchGate.current.clear()
       }
       const selectedId = useGame.getState().selectedArmy
+      const liveArmies = useGame.getState().game?.armies
       for (const obj of animated.current) {
         if (!obj.parent) {
           obj.userData.misses = (obj.userData.misses ?? 0) + 1
@@ -861,24 +951,30 @@ export function WorldGlobe() {
           let lat = d.lat
           let lng = d.lng
           let alt = d.mine ? 0.02 : 0.012
+          let moving = false
+          const liveMarch = liveArmies?.[d.army.id]?.march
           if (d.march && d.hold) {
             const gate = marchGate.current.get(d.key)
             if (gate) gate.held = true
             else marchGate.current.set(d.key, { held: true, delayed: true, start: now })
             lng = d.march.from[0]
             lat = d.march.from[1]
-          } else if (d.march && d.march.simT != null) {
-            const e = Math.max(0, Math.min(1, d.march.simT))
-            const interpKey = `${d.march.from[0]},${d.march.from[1]},${d.march.to[0]},${d.march.to[1]}`
+            moving = true
+          } else if (liveMarch) {
+            const e = Math.max(0, Math.min(1, liveMarch.progress))
+            const from: [number, number] = [liveMarch.fromLng, liveMarch.fromLat]
+            const to: [number, number] = [liveMarch.toLng, liveMarch.toLat]
+            const interpKey = `${from[0]},${from[1]},${to[0]},${to[1]}`
             if (obj.userData.interpKey !== interpKey) {
-              obj.userData.interp = geoInterpolate(d.march.from, d.march.to)
+              obj.userData.interp = geoInterpolate(from, to)
               obj.userData.interpKey = interpKey
             }
             const [x, y] = (obj.userData.interp as (t: number) => [number, number])(e)
             lng = x
             lat = y
             alt += Math.sin(Math.PI * e) * (reduced ? 0 : 0.03)
-          } else if (d.march && !reduced) {
+            moving = true
+          } else if (d.march && d.march.simT == null && !reduced) {
             const gates = marchGate.current
             let gate = gates.get(d.key)
             if (!gate) {
@@ -901,15 +997,18 @@ export function WorldGlobe() {
             lng = x
             lat = y
             alt += Math.sin(Math.PI * e) * 0.03
-          } else if (!reduced) {
-            alt += Math.sin(now / 1400 + obj.userData.phase) * 0.0011
+            moving = true
           }
-          if (placeOnGlobe(obj, lat, lng, alt) && !reduced) obj.rotateY(Math.sin(now / 1600 + obj.userData.phase) * 0.1)
           const hi = obj.userData.highlight as THREE.Object3D | undefined
           const selected = selectedId === d.army.id
-          if (hi) hi.visible = selected
+          if (hi && hi.visible !== selected) hi.visible = selected
           const base = (obj.userData.baseScale as number) || 1
-          obj.scale.setScalar(selected && !reduced ? base * (1 + Math.sin(now / 320) * 0.035) : base)
+          if (selected && !reduced) obj.scale.setScalar(base * (1 + Math.sin(now / 320) * 0.035))
+          else if (obj.scale.x !== base) obj.scale.setScalar(base)
+          const placeKey = `${lat.toFixed(3)},${lng.toFixed(3)},${alt.toFixed(3)}`
+          if (moving || selected || obj.userData.placeKey !== placeKey) {
+            if (placeOnGlobe(obj, lat, lng, alt)) obj.userData.placeKey = placeKey
+          }
         } else {
           if (obj.userData.placedLat !== d.lat || obj.userData.placedLng !== d.lng) {
             if (placeOnGlobe(obj, d.lat, d.lng, 0.01)) {
@@ -932,9 +1031,81 @@ export function WorldGlobe() {
     return () => cancelAnimationFrame(raf)
   }, [])
 
+  useEffect(() => {
+    const tip = document.createElement('div')
+    tip.className = 'globe-tip'
+    tip.style.position = 'fixed'
+    tip.style.zIndex = '40'
+    tip.style.pointerEvents = 'none'
+    tip.style.display = 'none'
+    tip.style.maxWidth = '240px'
+    document.body.appendChild(tip)
+    const raycaster = new THREE.Raycaster()
+    const pointer = new THREE.Vector2()
+    const surface = ref.current?.renderer().domElement
+    if (!surface) {
+      tip.remove()
+      return
+    }
+    let frame = 0
+    let pending: PointerEvent | null = null
+    let landMesh: THREE.Mesh | null = null
+    let shown = ''
+    const hide = () => {
+      shown = ''
+      tip.style.display = 'none'
+    }
+    const move = (event: PointerEvent) => {
+      pending = event
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const ev = pending
+        pending = null
+        const api = ref.current
+        if (!ev || !api) return hide()
+        if (!landMesh) {
+          api.scene().traverse((obj) => {
+            const candidate = obj as THREE.Mesh
+            if (candidate.material === globeMaterial) landMesh = candidate
+          })
+        }
+        if (!landMesh) return hide()
+        const rect = surface.getBoundingClientRect()
+        pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1
+        pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1
+        raycaster.setFromCamera(pointer, api.camera())
+        const hit = raycaster.intersectObject(landMesh, false)[0]
+        if (!hit) return hide()
+        const { lat, lng } = api.toGeoCoords(hit.point)
+        const state = useGame.getState()
+        const feature = state.game ? locateTerritory(lng, lat) : locateCountry(lng, lat)
+        if (!feature) return hide()
+        const props = feature.properties as { regionId: string; territoryId?: string }
+        const key = props.territoryId ?? props.regionId
+        if (shown !== key) {
+          tip.innerHTML = tipHtml.current(feature)
+          shown = key
+        }
+        tip.style.display = 'block'
+        tip.style.left = `${Math.min(ev.clientX + 16, window.innerWidth - 260)}px`
+        tip.style.top = `${Math.min(ev.clientY + 16, window.innerHeight - 96)}px`
+      })
+    }
+    surface.addEventListener('pointermove', move)
+    surface.addEventListener('pointerleave', hide)
+    return () => {
+      cancelAnimationFrame(frame)
+      surface.removeEventListener('pointermove', move)
+      surface.removeEventListener('pointerleave', hide)
+      tip.remove()
+    }
+  }, [globeMaterial])
+
   return (
     <Globe
       ref={ref}
+      rendererConfig={RENDERER_CONFIG}
       width={w}
       height={h}
       backgroundColor="rgba(0,0,0,0)"
@@ -942,16 +1113,16 @@ export function WorldGlobe() {
       showGraticules={false}
       atmosphereColor="#d7e3f2"
       atmosphereAltitude={0.08}
-      polygonCapCurvatureResolution={6}
+      polygonCapCurvatureResolution={4}
       polygonsTransitionDuration={reducedMotion ? 0 : 160}
-      polygonsData={game ? territoryMesh : features}
+      polygonsData={overlay}
       polygonCapColor={polygonColor}
-      polygonSideColor={polygonSideColor}
+      polygonSideColor={noSide}
       polygonStrokeColor={polygonStroke}
       polygonAltitude={polygonAltitude}
-      polygonLabel={polygonLabel}
-      onPolygonClick={onPolygonClick}
-      onPolygonHover={onPolygonHover}
+      polygonLabel={noLabel}
+      onPolygonClick={activateLand}
+      onGlobeClick={onGlobeClick}
       arcCurveResolution={24}
       arcCircularResolution={4}
       arcsTransitionDuration={reducedMotion ? 0 : 520}
@@ -969,12 +1140,10 @@ export function WorldGlobe() {
       htmlElementsData={markers}
       htmlLat="lat"
       htmlLng="lng"
-      htmlAltitude={(d: object) => ((d as Marker).kind === 'army' && (d as Marker).tone !== 'other' ? 0.05 : 0.02)}
+      htmlAltitude={markerAltitude}
       htmlElement={paintMarker}
-      htmlTransitionDuration={reducedMotion ? 0 : 400}
-      htmlElementVisibilityModifier={(el, isVisible) => {
-        el.style.opacity = isVisible ? '1' : '0'
-      }}
+      htmlTransitionDuration={0}
+      htmlElementVisibilityModifier={markerVisibility}
       ringsData={rings}
       ringColor={ringColor}
       ringMaxRadius="maxRadius"
