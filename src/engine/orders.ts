@@ -19,8 +19,9 @@ export function foodForTroops(s: GameState, map: WorldMap, nationId: string, uni
     if ((order.type === 'recruit' || order.type === 'queueTrain') && order.nationId === nationId) return sum + UNIT_SPECS[order.unit].food
     return sum
   }, 0)
+  const training = (s.trainingQueue ?? []).reduce((sum, job) => (job.nationId === nationId ? sum + UNIT_SPECS[job.unit].food : sum), 0)
   if (nation.foodShortage || nation.resources.food <= 0) return 'Not enough food to feed them. Build a farm first.'
-  if (econ.netFood < spec.food + queued && nation.resources.food < econ.foodConsumption * 2) return 'Not enough food to feed them. Build a farm first.'
+  if (econ.netFood < spec.food + queued + training && nation.resources.food < econ.foodConsumption * 2) return 'Not enough food to feed them. Build a farm first.'
   return null
 }
 
@@ -142,14 +143,13 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return null
     }
     case 'recruit':
-      return musterReady(s, map, o.nationId, o.territoryId, o.unit, true) ?? foodForTroops(s, map, o.nationId, o.unit, pending)
     case 'queueTrain': {
-      const ready = musterReady(s, map, o.nationId, o.territoryId, o.unit, false)
+      const ready = musterReady(s, map, o.nationId, o.territoryId, o.unit, o.type === 'recruit')
       if (ready) return ready
       const hungry = foodForTroops(s, map, o.nationId, o.unit, pending)
       if (hungry) return hungry
       const live = (s.trainingQueue ?? []).filter((job) => job.territoryId === o.territoryId && job.nationId === o.nationId).length
-      const queued = pending.filter((p) => p.type === 'queueTrain' && p.territoryId === o.territoryId).length
+      const queued = pending.filter((p) => (p.type === 'queueTrain' || p.type === 'recruit') && p.territoryId === o.territoryId).length
       if (live + queued >= TRAIN_QUEUE_LIMIT) return 'Training queue is full'
       return null
     }
@@ -232,7 +232,14 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (o.territoryId) {
         const territory = map.territories[o.territoryId]
         if (!territory || territory.regionId !== o.target) return 'Unknown territory'
-        const legal = attackableTerritoryIds(s, map, o.nationId, a.location, (owner) => atWar(s, o.nationId, owner) || pendingWar)
+        const legal = attackableTerritoryIds(
+          s,
+          map,
+          o.nationId,
+          a.location,
+          (owner) => atWar(s, o.nationId, owner) || pendingWar,
+          (regionId) => canReach(s, map, o.nationId, a.location, regionId, 'attack').ok,
+        )
         if (!legal.includes(o.territoryId)) return 'That territory is not on your border'
       }
       return null

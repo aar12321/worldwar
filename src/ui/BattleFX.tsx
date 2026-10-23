@@ -75,6 +75,10 @@ export function BattleFX() {
     const timers: number[] = []
     const at = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, t(ms)))
     const region = map.regions[battle.regionId]
+    if (!region) {
+      const id = window.setTimeout(() => shiftFx(), 0)
+      return () => window.clearTimeout(id)
+    }
     const att = sideInfo(game, battle.attacker.nationId)
     const def = sideInfo(game, battle.defender.nationId)
     globeBridge.api?.pointOfView({ lat: region.lat - 6, lng: region.lng, altitude: 0.78 }, reduced ? 0 : t(640))
@@ -147,6 +151,7 @@ export function BattleFX() {
 
   if (!battle || !game || !bars) return null
   const region = map.regions[battle.regionId]
+  if (!region) return null
   const att = sideInfo(game, battle.attacker.nationId)
   const def = sideInfo(game, battle.defender.nationId)
   const banner = resultBanner(battle, game.playerId)

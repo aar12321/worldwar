@@ -1,3 +1,4 @@
+import { geoArea, geoContains } from 'd3-geo'
 import { describe, expect, it } from 'vitest'
 import { getWorld } from '../../map/world'
 import { buildTerritoryMesh } from '../../map/territoryMesh'
@@ -32,6 +33,24 @@ describe('territory map', () => {
     expect(ids.size).toBe(Object.keys(world.map.territories).length)
     expect(mesh.every((feature) => feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')).toBe(true)
     expect(pieces).toBeLessThan(2000)
+  })
+
+  it('keeps every district inside its country and off the far side of the globe', () => {
+    const world = getWorld()
+    const mesh = buildTerritoryMesh(world.features, world.map)
+    const parent = new Map(world.features.map((feature) => [feature.properties.regionId, feature]))
+    let outside = 0
+    for (const territory of Object.values(world.map.territories)) {
+      const feature = parent.get(territory.regionId)
+      if (!feature || !geoContains(feature, [territory.lng, territory.lat])) outside++
+    }
+    expect(outside).toBe(0)
+    for (const feature of mesh) {
+      const source = parent.get(feature.properties.regionId)
+      expect(source).toBeTruthy()
+      expect(geoArea(feature)).toBeLessThanOrEqual(geoArea(source!) * 1.35 + 0.02)
+    }
+    expect(new Set(mesh.map((feature) => feature.properties.territoryId)).size).toBe(Object.keys(world.map.territories).length)
   })
 })
 

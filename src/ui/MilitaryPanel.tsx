@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { TRAIN_QUEUE_LIMIT, UNIT_SPECS, trainingCost, trainingRank } from '../data/unitTypes'
 import { TRAIN_SECONDS, formatSeconds } from '../engine/pace'
@@ -12,15 +13,20 @@ import { OrderButton, PanelShell } from './panel'
 export function MilitaryPanel() {
   const view = usePlayerView()
   const selectedTerritory = useGame((s) => s.selectedTerritory)
+  const selectedRegion = useGame((s) => s.selectedRegion)
   const focusTerritory = useGame((s) => s.focusTerritory)
   const selectRegion = useGame((s) => s.selectRegion)
-  if (!view) return null
-  const { game, player, orders } = view
+  const [heldRegion, setHeldRegion] = useState<string | null>(null)
+  const game = view?.game
+  const playerId = view?.player.id
   const { map } = getWorld()
-  const owned = regionsOf(game, player.id)
-  const regionId = selectedTerritory && map.territories[selectedTerritory] && game.regions[map.territories[selectedTerritory].regionId]?.owner === player.id
-    ? map.territories[selectedTerritory].regionId
-    : owned[0]
+  const owned = game && playerId ? regionsOf(game, playerId) : []
+  const territoryRegion = selectedTerritory ? map.territories[selectedTerritory]?.regionId : null
+  const ownedSelection = selectedRegion && owned.includes(selectedRegion) ? selectedRegion : territoryRegion && owned.includes(territoryRegion) ? territoryRegion : null
+  if (ownedSelection && ownedSelection !== heldRegion) setHeldRegion(ownedSelection)
+  if (!view || !game || !playerId) return null
+  const { player, orders } = view
+  const regionId = ownedSelection ?? (heldRegion && owned.includes(heldRegion) ? heldRegion : owned[0])
   if (!regionId) return <PanelShell title="Military" kicker="No land remains" panel="military"><p className="text-[13px] text-white/55">You have no country to train in.</p></PanelShell>
   const territoryIds = map.territoriesByRegion[regionId] ?? []
   const current = selectedTerritory && territoryIds.includes(selectedTerritory) ? selectedTerritory : territoryIds[0]

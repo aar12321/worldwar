@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { generateBotOrders } from '../../ai/bot'
 import { createInitialState } from '../../data/startingNations'
 import { computeEconomy } from '../economy'
+import { atWar } from '../helpers'
 import { validateOrder } from '../orders'
+import { attackableTerritoryIds } from '../territory'
 import { canReach } from '../warfare'
 import { checkOutcome, conquestGoal, territoriesTaken } from '../victory'
 import { lineMap, startState } from './fixtures'
@@ -66,6 +68,29 @@ describe('food and sea landings', () => {
     expect(canReach(s, map, 'r0', 'r0', 'r1', 'attack')).toEqual({ ok: true, bySea: true })
     s.regions.r0.buildings.port = 0
     expect(canReach(s, map, 'r0', 'r0', 'r1', 'attack').ok).toBe(false)
+  })
+
+  it('hides a sea landing until the army has a port', () => {
+    const map = lineMap(2)
+    map.regions.r0.neighbors = []
+    map.regions.r1.neighbors = []
+    map.regions.r0.seaLanes = ['r1']
+    map.regions.r1.seaLanes = ['r0']
+    const s = startState(map)
+    s.wars = ['r0|r1']
+    const reachable = (port: number) => {
+      s.regions.r0.buildings.port = port
+      return attackableTerritoryIds(
+        s,
+        map,
+        'r0',
+        'r0',
+        (owner) => atWar(s, 'r0', owner),
+        (regionId) => canReach(s, map, 'r0', 'r0', regionId, 'attack').ok,
+      )
+    }
+    expect(reachable(0)).not.toContain('r1:0')
+    expect(reachable(1)).toContain('r1:0')
   })
 
   it('starts a tiny country with food to spare', () => {

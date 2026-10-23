@@ -1,4 +1,4 @@
-import { geoCentroid, geoContains } from 'd3-geo'
+import { geoArea, geoCentroid, geoContains } from 'd3-geo'
 import type { Feature, MultiPolygon, Polygon, Position } from 'geojson'
 import type { Territory, WorldMap } from '../engine/types'
 import type { CountryFeature } from './world'
@@ -57,6 +57,22 @@ function close(ring: Position[]): Position[] {
   return [...ring, [a[0], a[1]]]
 }
 
+/**
+ * A backwards ring is the rest of the planet. three-globe then paints that
+ * territory across the ocean and every other country.
+ */
+function smallRing(ring: Position[]): Position[] | null {
+  const closed = close(ring)
+  if (closed.length < 4 || !localRing(closed)) return null
+  const reversed = close(closed.slice(0, -1).reverse())
+  const areaOf = (coords: Position[]) => geoArea({ type: 'Polygon', coordinates: [coords] })
+  const forward = areaOf(closed)
+  const back = areaOf(reversed)
+  const chosen = forward <= back ? closed : reversed
+  if (Math.min(forward, back) > 2) return null
+  return chosen
+}
+
 /** Even samples so a fjord does not become thousands of separate meshes. */
 function simplify(ring: Position[], max = 72): Position[] {
   const open = ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1] ? ring.slice(0, -1) : ring.slice()
@@ -78,6 +94,54 @@ function nearestSite(sites: Territory[], lng: number, lat: number): Territory {
     }
   }
   return best
+}
+
+function wrapLng(lng: number): number {
+  let x = lng
+  while (x > 180) x -= 360
+  while (x < -180) x += 360
+  return x
+}
+
+function ringsArea(rings: Position[][]): number {
+  if (!rings.length) return 0
+  if (rings.length === 1) return geoArea({ type: 'Polygon', coordinates: [rings[0]] })
+  return geoArea({ type: 'MultiPolygon', coordinates: rings.map((ring) => [ring]) })
+}
+
+/** A three-point fallback is a speck. It cannot be clicked on the globe. */
+function isSpeck(rings: Position[][]): boolean {
+  return rings.length === 1 && rings[0].length <= 5 && ringsArea(rings) < 0.001
+}
+
+function pair(point: Position): [number, number] {
+  return [point[0], point[1]]
+}
+
+function ringFits(feature: CountryFeature, ring: Position[]): boolean {
+  const open = ring.slice(0, -1)
+  if (open.length < 3 || !open.every((point) => geoContains(feature, pair(point)))) return false
+  for (let i = 0; i < open.length; i++) {
+    const a = open[i]
+    const b = open[(i + 1) % open.length]
+    for (const t of [0.25, 0.5, 0.75]) if (!geoContains(feature, pair(lerp(a, b, t)))) return false
+  }
+  const mid = lerp(lerp(open[0], open[1], 0.5), open[2], 0.45)
+  return geoContains(feature, pair(mid))
+}
+
+/** Largest triangle around a missed district that still sits inside the country. */
+function patchInside(feature: CountryFeature, site: Territory): Position[] | null {
+  for (const d of [5, 3.6, 2.6, 1.8, 1.2, 0.8]) {
+    const ring = close([
+      [wrapLng(site.lng - d), site.lat - d * 0.62],
+      [wrapLng(site.lng + d), site.lat - d * 0.62],
+      [wrapLng(site.lng), Math.max(-85, Math.min(85, site.lat + d * 0.95))],
+    ])
+    const chosen = smallRing(ring)
+    if (chosen && ringFits(feature, chosen)) return chosen
+  }
+  return null
 }
 
 function featureFor(site: Territory, regionId: string, rings: Position[][]): LandFeature {
@@ -108,8 +172,8 @@ export function buildTerritoryMesh(features: CountryFeature[], map: Pick<WorldMa
     if (!parts.length) continue
     const buckets = new Map<string, Position[][]>()
     const push = (id: string, ring: Position[]) => {
-      const closed = close(ring)
-      if (closed.length < 4 || !localRing(closed)) return
+      const closed = smallRing(ring)
+      if (!closed) return
       const list = buckets.get(id) ?? []
       list.push(closed)
       buckets.set(id, list)
@@ -166,14 +230,19 @@ export function buildTerritoryMesh(features: CountryFeature[], map: Pick<WorldMa
       }
     })
     for (const site of sites) {
-      if (buckets.has(site.id)) continue
-      const d = 0.45
-      push(site.id, [
-        [site.lng, site.lat],
-        [site.lng + d, site.lat + d * 0.55],
-        [site.lng, site.lat + d],
-        [site.lng - d, site.lat + d * 0.55],
-      ])
+      const existing = buckets.get(site.id)
+      if (existing && !isSpeck(existing)) continue
+      if (!geoContains(feature, [site.lng, site.lat])) continue
+      const patch = patchInside(feature, site)
+      if (patch) buckets.set(site.id, [patch])
+      else if (!existing) {
+        const d = 0.35
+        push(site.id, [
+          [site.lng - d, site.lat],
+          [site.lng, site.lat + d],
+          [site.lng + d, site.lat],
+        ])
+      }
     }
     for (const site of sites) {
       const rings = buckets.get(site.id)

@@ -1,7 +1,9 @@
 import { TRAINING, UNIT_SPECS, trainingCost, trainingRank } from '../data/unitTypes'
 import { combatMods, weaponTiers } from '../engine/arms'
 import { unitPower } from '../engine/economy'
-import { armyIsHome, formatDivisions, totalUnits } from '../engine/helpers'
+import { armyIsHome, atWar, enemiesOf, formatDivisions, totalUnits } from '../engine/helpers'
+import { attackableTerritoryIds } from '../engine/territory'
+import { canReach } from '../engine/warfare'
 import type { Army, GameState, UnitType } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -77,6 +79,7 @@ export function ArmyControls({ army }: { army: Army }) {
   const removeOrder = useGame((s) => s.removeOrder)
   const selected = selectedArmy === army.id
   const cancelLiveMarch = useGame((s) => s.cancelLiveMarch)
+  const toast = useGame((s) => s.toast)
   const pendingIdx = orders.findIndex((o) => (o.type === 'move' || o.type === 'attack') && o.armyId === army.id)
   const pending = pendingIdx >= 0 ? orders[pendingIdx] : null
   const march = army.march
@@ -89,7 +92,15 @@ export function ArmyControls({ army }: { army: Army }) {
           title="March into a neighboring country you are allowed to enter."
           onClick={() => {
             selectArmy(army.id)
-            setTargetMode(selected && targetMode === 'move' ? null : 'move')
+            if (selected && targetMode === 'move') {
+              setTargetMode(null)
+              return
+            }
+            if (moveDestinations(army) === 0) {
+              toast('This army has no friendly country it can march into. A sea move needs a port and Coastal Gunboats.', 'info')
+              return
+            }
+            setTargetMode('move')
           }}
         >
           Move
@@ -99,7 +110,18 @@ export function ArmyControls({ army }: { army: Army }) {
           title="Fight a neighboring country. You must already be at war."
           onClick={() => {
             selectArmy(army.id)
-            setTargetMode(selected && targetMode === 'attack' ? null : 'attack')
+            if (selected && targetMode === 'attack') {
+              setTargetMode(null)
+              return
+            }
+            const game = useGame.getState().game
+            if (!game) return
+            if (attackDestinations(game, army) === 0) {
+              const fighting = enemiesOf(game, army.owner).some((id) => !id.startsWith('free-'))
+              toast(fighting ? 'This army is not on a border it can reach. A sea crossing needs a port.' : 'Declare war on a neighbor before this army can attack.', 'info')
+              return
+            }
+            setTargetMode('attack')
           }}
         >
           Attack
@@ -247,4 +269,29 @@ export function ArmyManager({ army }: { army: Army }) {
       <ArmyControls army={army} />
     </div>
   )
+}
+
+function moveDestinations(army: Army): number {
+  const game = useGame.getState().game
+  if (!game) return 0
+  const { map } = getWorld()
+  const from = map.regions[army.location]
+  if (!from) return 0
+  let count = 0
+  for (const id of [...from.neighbors, ...from.seaLanes]) {
+    if (game.regions[id]?.owner === army.owner && canReach(game, map, army.owner, army.location, id, 'move').ok) count++
+  }
+  return count
+}
+
+function attackDestinations(game: GameState, army: Army): number {
+  const { map } = getWorld()
+  return attackableTerritoryIds(
+    game,
+    map,
+    army.owner,
+    army.location,
+    (owner) => atWar(game, army.owner, owner),
+    (regionId) => canReach(game, map, army.owner, army.location, regionId, 'attack').ok,
+  ).length
 }

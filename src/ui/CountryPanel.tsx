@@ -11,7 +11,7 @@ import { spySuccessChance } from '../engine/espionage'
 import { armiesIn, armyIsHome, atWar, boundArmy, formatDivisions, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { supplyDistances, supplyRange } from '../engine/supply'
-import type { Order, UnitType } from '../engine/types'
+import type { Order } from '../engine/types'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
 import { netWarScore } from '../engine/warscore'
 import { garrisonStrength } from '../engine/warfare'
@@ -333,6 +333,7 @@ function MusterCard({ territoryId }: { territoryId: string }) {
   const vis = usePlayerVision()
   const openTerritory = useGame((s) => s.openTerritory)
   const openMilitary = useGame((s) => s.openMilitary)
+  const issueOrder = useGame((s) => s.issueOrder)
   const { game, player } = view
   const region = game.regions[selected]
   const mine = region.owner === player.id
@@ -344,8 +345,7 @@ function MusterCard({ territoryId }: { territoryId: string }) {
   const away = !!bound && !home
   const canRaise = mine && (!bound || home)
   const selectedHere = !!bound && selectedArmy === bound.id && mine && home
-  const queued = (unit: UnitType) => view.orders.filter((o) => o.type === 'recruit' && o.territoryId === territoryId && o.unit === unit).length
-  const infantryQueued = queued('infantry')
+  const jobs = (game.trainingQueue ?? []).filter((job) => job.nationId === player.id && job.territoryId === territoryId)
   const rebaseArmy = selectedArmy ? game.armies[selectedArmy] : undefined
   const canRebase = mine && !bound && !!rebaseArmy && rebaseArmy.owner === player.id && rebaseArmy.location === selected && rebaseArmy.homeTerritoryId !== territoryId
   const tiers = bound ? weaponTiers(game.nations[bound.owner], game.turn) : undefined
@@ -387,10 +387,38 @@ function MusterCard({ territoryId }: { territoryId: string }) {
       )}
       {away && bound && <p className="text-[12px] text-[#ffd60a]">In {map.regions[bound.location]?.name ?? 'the field'}. March it home to recruit or train.</p>}
       {!showForces && <p className="text-[12px] text-white/45">You cannot see the army that belongs here.</p>}
+      {mine && jobs.length > 0 && (
+        <div className="space-y-1.5">
+          {jobs.map((job, index) => {
+            const active = index === 0
+            const fraction = job.total > 0 ? Math.min(1, Math.max(0, (job.total - job.remaining) / job.total)) : 0
+            const label = !active ? 'Waiting' : job.clock === 'time' ? `${formatSeconds(job.remaining)} left` : job.remaining <= 1 ? 'Arrives when the month ends' : `${job.remaining} months left`
+            return (
+              <div key={job.id} className="space-y-1 rounded-xl bg-black/20 px-2.5 py-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[13px] font-semibold">
+                      Raising {UNIT_SPECS[job.unit].name}
+                      {!active && <span className="font-medium text-white/40"> · waiting</span>}
+                    </div>
+                    <div className="text-[12px] tabular-nums text-white/45">{label}</div>
+                  </div>
+                  <button type="button" className="btn btn-quiet" onClick={() => issueOrder({ type: 'cancelTrain', nationId: player.id, jobId: job.id })}>
+                    Cancel
+                  </button>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/12" aria-hidden>
+                  <div className={`h-full rounded-full ${active ? 'bg-[#0a84ff]' : 'bg-white/25'}`} style={{ width: `${active ? Math.max(6, fraction * 100) : 0}%` }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
       {!bound && canRaise && (
         <ActionButton
           order={{ type: 'recruit', nationId: player.id, territoryId, unit: 'infantry' }}
-          label={infantryQueued ? `Raising infantry +${infantryQueued}` : 'Raise an army'}
+          label={jobs.length ? `Raise another · ${jobs.length} training` : 'Raise an army'}
           sub={`${UNIT_SPECS.infantry.capitalCost} money · ${UNIT_SPECS.infantry.manpowerCost},000 soldiers · eats ${UNIT_SPECS.infantry.food} food a month · ready in ${formatSeconds(TRAIN_SECONDS.infantry)}. Needs a barracks.`}
           tone="btn-primary"
         />

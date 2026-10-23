@@ -53,7 +53,19 @@ export function NationPanel() {
             <span>Tax rate</span>
             <span className="font-semibold tabular-nums">{Math.round(tax * 100)}%</span>
           </div>
-          <input type="range" className="w-full" min={TAX_LIMITS.min} max={TAX_LIMITS.max} step={0.01} value={tax} onChange={(e) => setTax(+e.target.value)} onMouseUp={() => setPolicy(tax, draft)} onKeyUp={() => setPolicy(tax, draft)} onTouchEnd={() => setPolicy(tax, draft)} />
+          <input
+            type="range"
+            className="w-full"
+            min={TAX_LIMITS.min}
+            max={TAX_LIMITS.max}
+            step={0.01}
+            value={tax}
+            onChange={(e) => {
+              const next = +e.target.value
+              setTax(next)
+              setPolicy(next, draft)
+            }}
+          />
           <div className="text-[12px] text-white/45">Higher taxes bring in more money, and unsettle the country once they pass 20%.</div>
         </div>
         <div>
@@ -61,7 +73,19 @@ export function NationPanel() {
             <span>Draft</span>
             <span className="font-semibold tabular-nums">{Math.round(draft * 100)}%</span>
           </div>
-          <input type="range" className="w-full" min={DRAFT_LIMITS.min} max={maxDraft} step={0.01} value={draft} onChange={(e) => setDraft(+e.target.value)} onMouseUp={() => setPolicy(tax, draft)} onKeyUp={() => setPolicy(tax, draft)} onTouchEnd={() => setPolicy(tax, draft)} />
+          <input
+            type="range"
+            className="w-full"
+            min={DRAFT_LIMITS.min}
+            max={maxDraft}
+            step={0.01}
+            value={draft}
+            onChange={(e) => {
+              const next = +e.target.value
+              setDraft(next)
+              setPolicy(tax, next)
+            }}
+          />
           <div className="text-[12px] text-white/45">Moves civilians into the army. Fewer workers means less money, food, and factory output.</div>
         </div>
         <div className="grid grid-cols-2 gap-2 text-[13px] inset-card p-3">
@@ -213,7 +237,7 @@ export function SettingsPanel() {
   const update = useGame((s) => s.updateSettings)
   const quit = useGame((s) => s.quitToMenu)
   return (
-    <PanelShell title="Settings" kicker="The game saves itself while time is moving." panel="settings">
+    <PanelShell title="Settings" kicker="The game saves itself." panel="settings">
       <label className="flex items-center justify-between text-[14px]">
         <span>Show tips</span>
         <input type="checkbox" checked={settings.showTips} onChange={(e) => update({ showTips: e.target.checked })} />

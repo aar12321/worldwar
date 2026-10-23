@@ -75,7 +75,7 @@ export function TechTree() {
         </div>
       </div>
       <div className="flex-1 overflow-auto scroll-thin p-6">
-        <div className="grid grid-cols-4 gap-5 min-w-[960px]">
+        <div className="tech-grid">
           {BRANCHES.map((b) => (
             <div key={b} className="space-y-3">
               <div className="text-[13px] font-semibold pb-2 border-b border-white/10" style={{ color: BRANCH_COLOR[b] }}>

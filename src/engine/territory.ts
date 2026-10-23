@@ -33,13 +33,21 @@ function dist2(lat: number, lng: number, lat2: number, lng2: number): number {
  * Enemy territories on the border an army can reach from `fromRegion`.
  * The closest third of a country's territories face each neighbor; the rest open as the border is taken.
  */
-export function attackableTerritoryIds(s: GameState, map: WorldMap, nationId: NationId, fromRegion: RegionId, atWarWith: (owner: NationId) => boolean): string[] {
+export function attackableTerritoryIds(
+  s: GameState,
+  map: WorldMap,
+  nationId: NationId,
+  fromRegion: RegionId,
+  atWarWith: (owner: NationId) => boolean,
+  canEnter: (regionId: RegionId) => boolean = () => true,
+): string[] {
   const origin = map.regions[fromRegion]
   if (!origin) return []
   const out: string[] = []
   const seen = new Set<string>()
   const regions = [fromRegion, ...origin.neighbors, ...origin.seaLanes]
   for (const regionId of regions) {
+    if (!canEnter(regionId)) continue
     const ids = map.territoriesByRegion[regionId] ?? []
     const enemy = ids.filter((id) => {
       const owner = territoryOwner(s, map, id)

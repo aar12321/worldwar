@@ -10,7 +10,7 @@ import { supplyDistances, supplyRange } from '../engine/supply'
 import type { Army, GameState, NationId, RegionId, UnitType } from '../engine/types'
 import { visibleArmies, visibleRegions } from '../engine/visibility'
 import { canReach } from '../engine/warfare'
-import type { LandFeature } from '../map/territoryMesh'
+import { buildTerritoryMesh, type LandFeature } from '../map/territoryMesh'
 import { getWorld, type CountryFeature } from '../map/world'
 import { useGame } from '../store'
 import { armyMarkerText } from './labels'
@@ -18,6 +18,7 @@ import { NEON, tint, wash, withAlpha } from './colors'
 import { globeBridge, useFx } from './globeBridge'
 
 const { map, features } = getWorld()
+const territoryMesh = buildTerritoryMesh(features, map)
 const UP = new THREE.Vector3(0, 1, 0)
 const OUTWARD = new THREE.Vector3()
 const MARCH_MS = 1400
@@ -247,9 +248,19 @@ function paintMarker(d: object): HTMLElement {
     el.addEventListener('click', (event) => {
       event.stopPropagation()
       event.preventDefault()
+      const territoryId = marker.territoryId
+      if (!territoryId) return
       const state = useGame.getState()
-      if (state.targetMode === 'attack') state.clickTerritory(marker.territoryId!)
-      else state.focusTerritory(marker.territoryId!, true)
+      if (state.targetMode === 'attack') {
+        state.clickTerritory(territoryId)
+        return
+      }
+      if (state.targetMode === 'move') {
+        const regionId = map.territories[territoryId]?.regionId
+        if (regionId) state.clickRegion(regionId)
+        return
+      }
+      state.focusTerritory(territoryId, true)
     })
   }
   const title = document.createElement('div')
@@ -386,7 +397,16 @@ export function WorldGlobe() {
     if (!game || !selectedArmy || targetMode !== 'attack') return new Set<string>()
     const army = game.armies[selectedArmy]
     if (!army) return new Set<string>()
-    return new Set(attackableTerritoryIds(game, map, game.playerId, army.location, (owner) => atWar(game, game.playerId, owner)))
+    return new Set(
+      attackableTerritoryIds(
+        game,
+        map,
+        game.playerId,
+        army.location,
+        (owner) => atWar(game, game.playerId, owner),
+        (regionId) => canReach(game, map, game.playerId, army.location, regionId, 'attack').ok,
+      ),
+    )
   }, [game, selectedArmy, targetMode])
 
   const reachable = useMemo(() => {
@@ -404,6 +424,17 @@ export function WorldGlobe() {
   }, [game, selectedArmy, targetMode])
 
   const vision = useMemo(() => (game ? visibleRegions(game, map, game.playerId) : null), [game])
+
+  const concealed = useMemo(() => {
+    const out = new Map<string, string>()
+    if (!game) return out
+    for (const battle of fxQueue) {
+      if (!battle.captured || battle.id === revealedBattleId || !battle.territoryId) continue
+      const color = game.nations[battle.defender.nationId]?.color
+      if (color) out.set(battle.territoryId, color)
+    }
+    return out
+  }, [game, fxQueue, revealedBattleId])
 
   const hiddenCaptures = useMemo(() => {
     const out = new Map<RegionId, string>()
@@ -460,8 +491,9 @@ export function WorldGlobe() {
       const shape = shapeOf(f)
       const id = shape.regionId
       if (shape.territoryId && attackTargets.has(shape.territoryId)) return tint(NEON.magenta, hover === id ? 0.12 : 0)
-      const ownerId = game && shape.territoryId ? territoryOwner(game, map, shape.territoryId) : null
-      const raw = ownerId ? game!.nations[ownerId]?.color : hiddenCaptures.get(id)
+      const hiddenColor = shape.territoryId ? concealed.get(shape.territoryId) : undefined
+      const ownerId = !hiddenColor && game && shape.territoryId ? territoryOwner(game, map, shape.territoryId) : null
+      const raw = hiddenColor ?? (ownerId ? game!.nations[ownerId]?.color : hiddenCaptures.get(id))
       const base = raw ? wash(raw, map.regions[id].terrain) : regionColor(game, id)
       if (shape.territoryId && flashes.some((flash) => flash.id === shape.territoryId)) return tint(base, 0.28)
       if (!shape.territoryId && reachable.has(id)) return tint(targetMode === 'attack' ? NEON.magenta : NEON.cyan, hover === id ? 0.1 : -0.05)
@@ -470,7 +502,7 @@ export function WorldGlobe() {
       if (id === hover) return tint(base, 0.1)
       return base
     },
-    [game, hiddenCaptures, reachable, targetMode, selectedRegion, hover, attackTargets, flashes],
+    [game, hiddenCaptures, concealed, reachable, targetMode, selectedRegion, hover, attackTargets, flashes],
   )
   const polygonSideColor = useCallback((f: object) => tint(polygonColor(f), -0.2), [polygonColor])
   const polygonAltitude = useCallback(
@@ -495,10 +527,12 @@ export function WorldGlobe() {
       const id = shape.regionId
       if (shape.territoryId && attackTargets.has(shape.territoryId)) return '#ffd6ff'
       if (id === selectedRegion) return '#f6f1e6'
+      if (shape.territoryId && concealed.has(shape.territoryId)) return 'rgba(246, 241, 230, 0.28)'
       if (game && shape.territoryId && territoryOwner(game, map, shape.territoryId) !== game.regions[id]?.owner) return '#e7c27a'
+      if (shape.territoryId) return 'rgba(246, 241, 230, 0.55)'
       return 'rgba(16, 18, 24, 0.55)'
     },
-    [game, selectedRegion, attackTargets],
+    [game, selectedRegion, attackTargets, concealed],
   )
   const polygonLabel = useCallback(
     (f: object) => {
@@ -523,6 +557,8 @@ export function WorldGlobe() {
     const shape = shapeOf(f)
     const state = useGame.getState()
     if (shape.territoryId && state.targetMode === 'attack') state.clickTerritory(shape.territoryId)
+    else if (shape.territoryId && state.targetMode === 'move') state.clickRegion(shape.regionId)
+    else if (shape.territoryId) state.focusTerritory(shape.territoryId)
     else state.clickRegion(shape.regionId)
   }, [])
   const onPolygonHover = useCallback((f: object | null) => {
@@ -908,7 +944,7 @@ export function WorldGlobe() {
       atmosphereAltitude={0.08}
       polygonCapCurvatureResolution={6}
       polygonsTransitionDuration={reducedMotion ? 0 : 160}
-      polygonsData={features}
+      polygonsData={game ? territoryMesh : features}
       polygonCapColor={polygonColor}
       polygonSideColor={polygonSideColor}
       polygonStrokeColor={polygonStroke}

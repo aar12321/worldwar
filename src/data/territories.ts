@@ -1,3 +1,5 @@
+import { geoContains, geoCentroid } from 'd3-geo'
+import type { Feature, MultiPolygon, Polygon, Position } from 'geojson'
 import { clamp } from '../engine/helpers'
 import type { MapRegion, RegionId, Territory, WorldMap } from '../engine/types'
 
@@ -71,18 +73,111 @@ export function heartland(region: MapRegion): Territory {
   }
 }
 
-export function musterTerritories(region: MapRegion, count = territoryCount(region.basePopulation, region.area)): Territory[] {
+function exteriorRings(feature: Feature<Polygon | MultiPolygon>): Position[][] {
+  if (feature.geometry.type === 'Polygon') return [feature.geometry.coordinates[0]].filter((ring) => ring && ring.length >= 4)
+  return feature.geometry.coordinates.map((polygon) => polygon[0]).filter((ring) => ring && ring.length >= 4)
+}
+
+function ringSpan(ring: Position[]): number {
+  let sum = 0
+  for (let i = 0; i < ring.length - 1; i++) sum += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1]
+  return Math.abs(sum / 2)
+}
+
+/** A point that is actually on the land. A country's centroid can fall in a bay. */
+function interiorPoint(feature: Feature<Polygon | MultiPolygon>, fallbackLat: number, fallbackLng: number): { lat: number; lng: number } {
+  const centroid = geoCentroid(feature)
+  if (Number.isFinite(centroid[0]) && Number.isFinite(centroid[1]) && geoContains(feature, centroid)) return { lat: centroid[1], lng: centroid[0] }
+  const rings = exteriorRings(feature).sort((a, b) => ringSpan(b) - ringSpan(a))
+  for (const ring of rings) {
+    const finite = ring.filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]))
+    if (finite.length < 3) continue
+    const midLng = finite.reduce((sum, point) => sum + point[0], 0) / finite.length
+    const midLat = finite.reduce((sum, point) => sum + point[1], 0) / finite.length
+    const step = Math.max(1, Math.floor(finite.length / 28))
+    for (let i = 0; i < finite.length; i += step) {
+      const point = finite[i]
+      for (const t of [0.25, 0.5, 0.75]) {
+        const lng = point[0] + (midLng - point[0]) * t
+        const lat = point[1] + (midLat - point[1]) * t
+        if (geoContains(feature, [lng, lat])) return { lat, lng: wrapLng(lng) }
+      }
+    }
+  }
+  return { lat: fallbackLat, lng: fallbackLng }
+}
+
+function lngDelta(a: number, b: number): number {
+  let d = a - b
+  while (d > 180) d -= 360
+  while (d < -180) d += 360
+  return d
+}
+
+/** Walk from the heart toward a compass point and stop before the border. */
+function placeSpread(
+  feature: Feature<Polygon | MultiPolygon>,
+  heartLat: number,
+  heartLng: number,
+  dLat: number,
+  dLng: number,
+  used: { lat: number; lng: number }[],
+): { lat: number; lng: number } {
+  const desired = Math.hypot(dLat, dLng) || 1
+  let best = { lat: heartLat, lng: heartLng, score: -1 }
+  for (const deg of [0, 18, -18, 36, -36, 60, -60, 90, -90, 130, -130, 180]) {
+    const rad = (deg * Math.PI) / 180
+    const oLat = dLat * Math.cos(rad) - dLng * Math.sin(rad)
+    const oLng = dLat * Math.sin(rad) + dLng * Math.cos(rad)
+    const targetLat = clamp(heartLat + oLat, -85, 85)
+    const targetLng = heartLng + oLng
+    const at = (t: number) => ({
+      lat: heartLat + (targetLat - heartLat) * t,
+      lng: wrapLng(heartLng + (targetLng - heartLng) * t),
+    })
+    let bestT = 0
+    for (let step = 1; step <= 16; step++) {
+      const t = step / 16
+      const sample = at(t)
+      if (geoContains(feature, [sample.lng, sample.lat])) bestT = t
+    }
+    const pulled = at(bestT * 0.9)
+    const point = geoContains(feature, [pulled.lng, pulled.lat]) ? pulled : at(bestT)
+    const lat = point.lat
+    const lng = point.lng
+    const dist = Math.hypot(lat - heartLat, lngDelta(lng, heartLng))
+    const separated = used.every((point) => Math.hypot(point.lat - lat, lngDelta(point.lng, lng)) > 0.3)
+    const score = dist + (deg === 0 ? desired * 0.08 : 0) + (separated ? desired * 0.12 : 0)
+    if (score > best.score) best = { lat, lng, score }
+  }
+  return { lat: best.lat, lng: best.lng }
+}
+
+export function musterTerritories(
+  region: MapRegion,
+  count = territoryCount(region.basePopulation, region.area),
+  feature?: Feature<Polygon | MultiPolygon>,
+): Territory[] {
   const n = Math.max(1, Math.min(MAX_TERRITORIES, count))
   const spread = territorySpread(region.area)
+  const heart = feature ? interiorPoint(feature, region.lat, region.lng) : { lat: region.lat, lng: region.lng }
+  const used: { lat: number; lng: number }[] = []
   const out: Territory[] = []
   for (let i = 0; i < n; i++) {
     const [dLat, dLng] = OFFSETS[i] ?? [0, 0]
+    const point =
+      i === 0
+        ? heart
+        : feature
+          ? placeSpread(feature, heart.lat, heart.lng, dLat * spread, dLng * spread, used)
+          : { lat: clamp(heart.lat + dLat * spread, -85, 85), lng: wrapLng(heart.lng + dLng * spread) }
+    used.push(point)
     out.push({
       id: territoryId(region.id, i),
       regionId: region.id,
       name: territoryName(region.name, i),
-      lat: clamp(region.lat + dLat * spread, -85, 85),
-      lng: wrapLng(region.lng + dLng * spread),
+      lat: point.lat,
+      lng: point.lng,
       index: i,
     })
   }

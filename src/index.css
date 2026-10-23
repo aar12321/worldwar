@@ -431,7 +431,45 @@ body:has(.side-panel, .tech-panel) .country-panel {
   }
 }
 
+.tech-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+@media (min-width: 720px) {
+  .tech-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .tech-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1100px) {
+  .setup-title {
+    top: 12px !important;
+    width: min(560px, calc(100vw - 24px)) !important;
+  }
+  .setup-title h1 {
+    font-size: 30px !important;
+  }
+  .setup-blurb {
+    display: none;
+  }
+  .setup-list {
+    left: 8px !important;
+    width: min(300px, 38vw) !important;
+    top: 128px !important;
+    bottom: 8px !important;
+  }
+  .setup-card {
+    right: 8px !important;
+    width: min(320px, 42vw) !important;
+    max-height: min(58vh, 480px);
+    overflow: auto;
+  }
   .hud-row {
     flex-direction: column;
     align-items: stretch;

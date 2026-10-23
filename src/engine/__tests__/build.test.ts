@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { UPGRADE_SPECS } from '../../data/development'
-import { BUILDING_SPECS, UNIT_SPECS } from '../../data/unitTypes'
+import { BUILDING_SPECS, TRAIN_QUEUE_LIMIT, UNIT_SPECS } from '../../data/unitTypes'
 import { computeEconomy } from '../economy'
 import { developmentBonus } from '../development'
 import { validateOrder } from '../orders'
@@ -135,5 +135,18 @@ describe('building and training', () => {
     expect(refunded.error).toBeNull()
     expect(refunded.state.trainingQueue.some((item) => item.id === job.id)).toBe(false)
     expect(refunded.state.nations.r0.resources.capital).toBe(fresh.state.nations.r0.resources.capital + UNIT_SPECS.infantry.capitalCost)
+  })
+
+  it('stops recruiting once four units are already training', () => {
+    const { map, s } = quiet()
+    const order = { type: 'recruit' as const, nationId: 'r0', territoryId: 'r0:0', unit: 'infantry' as const }
+    let state = s
+    for (let i = 0; i < TRAIN_QUEUE_LIMIT; i++) {
+      const next = applyImmediate(state, map, order)
+      expect(next.error).toBeNull()
+      state = next.state
+    }
+    expect(state.trainingQueue).toHaveLength(TRAIN_QUEUE_LIMIT)
+    expect(applyImmediate(state, map, order).error).toMatch(/queue/i)
   })
 })

@@ -119,8 +119,9 @@ export function buildWorld(): BuiltWorld {
   }
 
   const order = Object.keys(regions).sort()
+  const featureByRegion = new Map(features.map((shape) => [shape.properties.regionId, shape]))
   const musters: Territory[] = []
-  for (const id of order) musters.push(...musterTerritories(regions[id]))
+  for (const id of order) musters.push(...musterTerritories(regions[id], undefined, featureByRegion.get(id)))
   const { territories, territoriesByRegion } = indexTerritories(musters)
   return { map: { regions, order, territories, territoriesByRegion }, features }
 }

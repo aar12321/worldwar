@@ -38,13 +38,13 @@ export function Setup() {
 
   return (
     <div className="absolute inset-0 z-30 pointer-events-none">
-      <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="absolute top-8 left-1/2 -translate-x-1/2 text-center w-[min(640px,90vw)]">
+      <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="setup-title absolute top-8 left-1/2 -translate-x-1/2 text-center w-[min(640px,90vw)]">
         <p className="text-[13px] font-medium text-white/50">January 1936</p>
         <h1 className="text-[40px] font-semibold tracking-tight text-white mt-1">Worlds of Others</h1>
-        <p className="mt-2 text-[15px] text-white/65">Pick a nation. Time runs on its own. Win by taking territory, or by leading enough of the world’s people.</p>
+        <p className="setup-blurb mt-2 text-[15px] text-white/65">Pick a nation. Time runs on its own. Win by taking territory, or by leading enough of the world’s people.</p>
       </motion.div>
 
-      <motion.div initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.05, ease: [0.22, 1, 0.36, 1] }} className="glass pointer-events-auto absolute left-6 top-36 bottom-6 w-[380px] rounded-[22px] flex flex-col overflow-hidden">
+      <motion.div initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.05, ease: [0.22, 1, 0.36, 1] }} className="setup-list glass pointer-events-auto absolute left-6 top-36 bottom-6 w-[380px] rounded-[22px] flex flex-col overflow-hidden">
         <div className="p-5 border-b border-white/10">
           <div className="text-[17px] font-semibold tracking-tight">Choose a nation</div>
           <input
@@ -68,7 +68,7 @@ export function Setup() {
         </div>
       </motion.div>
 
-      <motion.div initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="glass pointer-events-auto absolute right-6 bottom-6 w-[400px] rounded-[22px] p-5 space-y-4">
+      <motion.div initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="setup-card glass pointer-events-auto absolute right-6 bottom-6 w-[400px] rounded-[22px] p-5 space-y-4">
         {pick ? (
           <div>
             <div className="label">{tier(Math.pow(pick.basePopulation, 0.6) * (0.3 + 0.7 * pick.development))}</div>

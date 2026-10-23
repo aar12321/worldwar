@@ -90,7 +90,15 @@ function useClock() {
       }
     }
     frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
+    const flush = () => {
+      const st = useGame.getState()
+      if (st.game) st.persist()
+    }
+    window.addEventListener('pagehide', flush)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('pagehide', flush)
+    }
   }, [])
 }
 
