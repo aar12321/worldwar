@@ -12,12 +12,12 @@ export interface UnitSpec {
   requiresBuilding: BuildingType
 }
 
-/** Months after the order resolves before the unit joins its territory's army. */
+/** Months after you order the unit before it joins its territory's army. */
 export const TRAIN_MONTHS: Record<UnitType, number> = {
   infantry: 1,
   armor: 2,
   air: 2,
-  naval: 3,
+  naval: 2,
 }
 
 /** Waiting jobs allowed at one territory, not counting the one already in production. */
@@ -40,7 +40,7 @@ export interface BuildingSpec {
 }
 
 export const BUILDING_SPECS: Record<BuildingType, BuildingSpec> = {
-  factory: { name: 'Factory', cost: 40, description: 'Earns money each month. Required before you can build air wings.' },
+  factory: { name: 'Factory', cost: 40, description: 'Earns money each month and improves every unit’s attack. Required before you can build air wings.' },
   farm: { name: 'Farm', cost: 25, description: 'Grows food each month.' },
   university: { name: 'University', cost: 45, description: 'Produces research each month.' },
   barracks: { name: 'Barracks', cost: 30, description: 'Lets you recruit infantry and armor, and keeps nearby troops supplied.' },

@@ -1,7 +1,7 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
 import { ARMS, PROPOSAL_LABELS, UNIT_SPECS } from '../data/unitTypes'
-import { breakArmsBetween, grantArmsContract, validateArmsTerms } from './arms'
+import { breakArmsBetween, grantArmsContract } from './arms'
 import { addLog, alliesOf, atWar, hasPact, isAllied, newId, pairKey } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
@@ -97,7 +97,7 @@ export function validateProposal(s: GameState, map: WorldMap, from: NationId, to
       if (atWar(s, from, to)) return 'Cannot trade with an enemy'
       return validateTradeTerms(s, d.terms, from, to)
     case 'arms':
-      return validateArmsTerms(s, from, to, d.terms)
+      return 'Factories forge weapons on their own'
     case 'callToArms': {
       const enemy = s.nations[d.enemy]
       if (!isAllied(s, from, to)) return 'Only allies can be called to arms'

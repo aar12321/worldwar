@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { TRAIN_QUEUE_LIMIT, UNIT_SPECS, trainingCost, trainingRank } from '../data/unitTypes'
-import { TRAIN_SECONDS, formatSeconds } from '../engine/pace'
+import { TRAIN_MONTHS, TRAIN_QUEUE_LIMIT, UNIT_SPECS, trainingCost, trainingRank } from '../data/unitTypes'
+import { formatMonths } from '../engine/pace'
 import { armyIsHome, boundArmy, formatDivisions, regionsOf } from '../engine/helpers'
 import type { Army, TrainingJob, UnitType } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
@@ -84,8 +84,8 @@ export function MilitaryPanel() {
                 Queue {jobs.length + pendingHere.length}/{TRAIN_QUEUE_LIMIT}
               </span>
             </div>
-            <p className="text-[12px] leading-snug text-white/50">One unit trains at a time. The rest wait. Finished units join this territory&apos;s army and fight with it, even if the army is away.</p>
-            <div className="grid grid-cols-1 gap-2">
+            <p className="text-[12px] leading-snug text-white/50">One unit trains at a time. The rest wait. They finish when you end the month, then join this territory&apos;s army.</p>
+            <div className="grid grid-cols-2 gap-2">
               {UNIT_TYPES.map((unit) => (
                 <UnitCard key={unit} unit={unit} territoryId={current} />
               ))}
@@ -133,14 +133,14 @@ function Garrison({ territoryId, army }: { territoryId: string; army: Army | und
 function UnitCard({ unit, territoryId }: { unit: UnitType; territoryId: string }) {
   const view = usePlayerView()!
   const spec = UNIT_SPECS[unit]
-  const seconds = TRAIN_SECONDS[unit]
+  const months = TRAIN_MONTHS[unit]
   const pending = view.orders.filter((order) => order.type === 'queueTrain' && order.territoryId === territoryId && order.unit === unit).length
   return (
     <motion.div layout className="inset-card p-3 flex items-center gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="font-semibold">{spec.name}</span>
-          <span className="text-[12px] text-white/45">{formatSeconds(seconds)}</span>
+          <span className="text-[12px] text-white/45">{formatMonths(months)}</span>
         </div>
         <p className="text-[12px] text-white/50 mt-0.5" title={`${spec.attack} attack, ${spec.defense} defense`}>
           Attack {spec.attack} · Defense {spec.defense}
@@ -187,8 +187,7 @@ function Queue({ territoryId, jobs }: { territoryId: string; jobs: TrainingJob[]
       {jobs.map((job, index) => {
         const active = index === 0
         const fraction = job.total > 0 ? Math.min(1, Math.max(0, (job.total - job.remaining) / job.total)) : 0
-        const live = job.clock === 'time'
-        const label = !active ? 'Waiting' : live ? `${formatSeconds(job.remaining)} left` : job.remaining <= 1 ? 'Arrives when the month ends' : `${job.remaining} months left`
+        const label = !active ? 'Waiting' : job.remaining <= 1 ? 'Finishes when the month ends' : `${formatMonths(job.remaining)} left`
         return (
           <div key={job.id} className="inset-card px-3 py-2 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
@@ -252,7 +251,7 @@ function Raise({ territoryId }: { territoryId: string }) {
         tone="btn-primary"
         order={{ type: 'recruit', nationId: player.id, territoryId, unit: 'infantry' }}
         label="Raise an army now"
-        sub={`${UNIT_SPECS.infantry.capitalCost} money · infantry in ${formatSeconds(TRAIN_SECONDS.infantry)}. Needs a barracks.`}
+        sub={`${UNIT_SPECS.infantry.capitalCost} money · infantry in ${formatMonths(TRAIN_MONTHS.infantry)}. Needs a barracks.`}
       />
       {visitors.length > 0 && (
         <div className="space-y-1.5">

@@ -27,11 +27,11 @@ export function Guide() {
       },
       {
         title: 'Feed the army you train',
-        body: `Open Military and train infantry. Each one eats ${UNIT_SPECS.infantry.food} food a month and finishes in a few seconds. If food turns red, build a farm before you recruit more.`,
+        body: `Open Military and train infantry. Each one eats ${UNIT_SPECS.infantry.food} food a month and finishes when you end the month. If food turns red, build a farm on the Land sheet.`,
       },
       {
         title: 'Take a border territory',
-        body: 'Click a neighbor and declare war. Select your army, press Attack, then click a highlighted territory. A port lets you cross a sea lane. Space pauses. 2× and 4× speed the clock.',
+        body: 'Click a neighbor and declare war. Select your army, press Attack, then click a highlighted territory. Press End month and the march arrives. Space does the same.',
       },
     ]
     const card = cards[step]
@@ -63,13 +63,13 @@ export function Guide() {
   let body = `${player.name} is split into territories. Open Land to develop them, or Military to train units into the army that holds each one.`
   if (orders.length > 0) {
     title = 'Your month is planned'
-    body = 'Diplomacy along the bottom settles when the month bar fills. Training, building, and marches start immediately.'
+    body = 'Press End month. Diplomacy, training, building, and marches all settle then. Nothing moves while you are deciding.'
   } else if (armies.length === 0) {
     title = 'Raise your first army'
-    body = `Click ${player.name}, then press Raise an army. Or open Military and queue training. A barracks is required.`
+    body = 'Open Land and press Train, or open Military and queue infantry. A barracks is required. The unit finishes when you end the month.'
   } else {
     title = 'Train, then march'
-    body = 'Open Military to train infantry, armor, planes, or fleets. Select an army and attack a bordering territory. Space pauses.'
+    body = 'Open Military to train infantry, armor, planes, or fleets. Select an army and attack a bordering territory. Space ends the month.'
   }
   return (
     <div className="pointer-events-auto self-center w-full max-w-md">

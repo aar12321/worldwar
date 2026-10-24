@@ -2,7 +2,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { developmentBonus } from '../engine/development'
 import { enemiesOf, turnDate } from '../engine/helpers'
-import { MONTH_SECONDS } from '../engine/pace'
 import { conquestGoal, populationShare, territoriesTaken } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
@@ -133,10 +132,7 @@ export function HUD() {
   const chromeRef = useRef<HTMLDivElement>(null)
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const reduced = useGame((s) => s.settings.reducedMotion)
-  const paused = useGame((s) => s.paused)
-  const speed = useGame((s) => s.settings.simSpeed ?? 1)
-  const togglePause = useGame((s) => s.togglePause)
-  const setSpeed = useGame((s) => s.setSpeed)
+  const endTurn = useGame((s) => s.endTurn)
   const banner = useGame((s) => s.banner)
   useLayoutEffect(() => {
     const apply = () => {
@@ -161,7 +157,7 @@ export function HUD() {
       window.removeEventListener('resize', onResize)
       window.cancelAnimationFrame(frame)
     }
-  }, [view, banner, paused])
+  }, [view, banner])
 
   if (!view) return null
   const { game, player, econ, committed } = view
@@ -171,8 +167,7 @@ export function HUD() {
   const lands = conquestGoal(goal)
   const land = developmentBonus(game, getWorld().map, player.id)
   const note = attention(view)
-  const month = game.monthElapsed ?? 0
-  const clockLabel = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle' : paused ? 'Paused' : 'Live'
+  const waiting = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle' : 'The world waits'
 
   return (
     <div ref={chromeRef} className="absolute top-0 inset-x-0 z-30 flex flex-col gap-2 p-3 pointer-events-none">
@@ -236,7 +231,7 @@ export function HUD() {
           </Resource>
           <Resource label="Research" amount={player.resources.tp - committed.tp} delta={signed(econ.tpGain)}>
             <Row k="Universities" v={`${econ.buildings.university}`} />
-            <p className="text-[12px] text-white/55">Open Research to buy technologies. They finish when the month ends.</p>
+            <p className="text-[12px] text-white/55">Open Research to buy technologies. Press End month and they finish with the rest of the month.</p>
           </Resource>
           <Resource label="Stability" amount={player.stability} format={(v) => Math.round(v).toString()} suffix="%" warn={player.stability < 35}>
             <Row k="Heading toward" v={`${Math.round(econ.stabilityTarget)}%`} />
@@ -247,29 +242,10 @@ export function HUD() {
         </div>
 
         <div className="glass rounded-2xl p-2 pointer-events-auto flex flex-col gap-1.5 min-w-[168px]">
-          <div className="flex items-center gap-1">
-            <button className="btn btn-primary px-3 py-2 text-[13px]" onClick={togglePause} title="Pause or play (Space)">
-              {paused ? 'Play' : 'Pause'}
-            </button>
-            {([1, 2, 4] as const).map((rate) => (
-              <button
-                key={rate}
-                className={`btn px-2.5 py-2 text-[13px] tabular-nums ${speed === rate ? 'bg-white text-black' : ''}`}
-                onClick={() => setSpeed(rate)}
-              >
-                {rate}×
-              </button>
-            ))}
-          </div>
-          <div className="px-1">
-            <div className="flex justify-between text-[10px] text-white/45">
-              <span>{clockLabel}</span>
-              <span>Month</span>
-            </div>
-            <div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden" title="Economy, supply, and diplomacy settle when this fills">
-              <div className="h-full bg-[#0a84ff] transition-[width] duration-150" style={{ width: `${Math.min(100, (month / MONTH_SECONDS) * 100)}%` }} />
-            </div>
-          </div>
+          <button className="btn btn-primary px-3 py-2 text-[13px]" disabled={!!game.pendingEvent || fxBusy} onClick={endTurn} title="End the month (Space)">
+            End month
+          </button>
+          <p className="px-1 text-[11px] text-white/45">{waiting}. Space ends the month.</p>
         </div>
       </div>
       {note && <div className="self-center max-w-xl rounded-full bg-black/55 border border-white/10 px-4 py-1.5 text-[13px] text-[#ffd60a]">{note}</div>}

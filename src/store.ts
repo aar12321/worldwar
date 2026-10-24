@@ -1,13 +1,11 @@
 import { create } from 'zustand'
-import { generateAllBotOrders } from './ai/bot'
 import { normalizeGame } from './engine/migrate'
 import { PLAYER_COLOR } from './data/mapColors'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
 import { validateOrder } from './engine/orders'
-import { resolveTurn } from './engine/resolveTurn'
 import { sceneKey } from './engine/sceneKey'
-import { QUEUED_ORDERS, advance, applyImmediate, cancelMarch, cancelProject, type SimNotice } from './engine/realtime'
+import { QUEUED_ORDERS, applyImmediate, cancelMarch, cancelProject, endMonth, type SimNotice } from './engine/realtime'
 import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
 import { globeBridge, useFx } from './ui/globeBridge'
@@ -213,7 +211,6 @@ function absorb(state: GameState, notices: SimNotice[], flushOrders: boolean) {
       if (territory) useFx.getState().addRing({ lat: territory.lat, lng: territory.lng, color: notice.type === 'loss' ? '#ff453a' : color, maxRadius: 3.2 }, 1800)
     }
     if (notice.pause) {
-      paused = true
       banner = { text: notice.text, tone: notice.type === 'loss' ? 'bad' : 'good', territoryId: notice.territoryId }
       if (notice.type === 'capture' || notice.type === 'loss') useFx.getState().shake(notice.type === 'loss' ? 1.15 : 0.7)
     } else store.toast(notice.text, 'success', 4200)
@@ -339,7 +336,14 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   setPanel(panel) {
-    set((st) => ({ panel: st.panel === panel ? 'none' : panel, diploFocus: null }))
+    set((st) => {
+      const next = st.panel === panel ? 'none' : panel
+      if (next !== 'territories' || !st.game) return { panel: next, diploFocus: null }
+      const owned = !!st.selectedRegion && st.game.regions[st.selectedRegion]?.owner === st.game.playerId
+      if (owned) return { panel: next, diploFocus: null }
+      const home = st.game.regions[st.game.playerId]?.owner === st.game.playerId ? st.game.playerId : (Object.values(st.game.regions).find((region) => region.owner === st.game!.playerId)?.id ?? null)
+      return { panel: next, diploFocus: null, selectedRegion: home, selectedTerritory: null }
+    })
   },
 
   setNationTab(tab) {
@@ -425,14 +429,18 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     const current = get().selectedTerritory
     const territory = current ? getWorld().map.territories[current] : null
-    set({ selectedRegion: id, targetMode: null, selectedTerritory: territory?.regionId === id ? current : null })
+    const mine = !!game && game.regions[id]?.owner === game.playerId
+    set({
+      selectedRegion: id,
+      targetMode: null,
+      selectedTerritory: territory?.regionId === id ? current : null,
+      panel: mine ? 'territories' : 'none',
+      diploFocus: null,
+    })
   },
 
-  step(dt) {
-    const { game, orders, settings, fxQueue, paused } = get()
-    if (!game || paused || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
-    const result = advance(game, getWorld().map, dt * (settings.simSpeed ?? 1), orders)
-    absorb(result.state, result.notices, result.flushOrders)
+  step() {
+    get().endTurn()
   },
 
   togglePause() {
@@ -486,27 +494,27 @@ export const useGame = create<GameStore>((set, get) => ({
       }
       return
     }
+    const mine = !!game && game.regions[territory.regionId]?.owner === game.playerId
     get().focusTerritory(id, true)
+    if (mine) set({ panel: 'territories', diploFocus: null })
   },
 
   endTurn() {
-    const { game, orders, settings, fxQueue } = get()
+    const { game, orders, fxQueue } = get()
     if (!game || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
+    set({ banner: null, paused: false })
     const { map } = getWorld()
-    const botOrders = generateAllBotOrders(game, map)
-    const next = resolveTurn(game, map, [...orders, ...botOrders])
-    const player = game.playerId
-    const fx = settings.battleFx
-      ? next.battles.filter((b) => b.attacker.nationId === player || b.defender.nationId === player)
-      : []
+    const before = game
+    const result = endMonth(game, map, orders)
+    const next = result.state
     const marches: March[] = []
     for (const a of Object.values(next.armies)) {
-      const before = game.armies[a.id]
-      if (before && before.location !== a.location) marches.push({ armyId: a.id, owner: a.owner, from: before.location, to: a.location })
+      const was = before.armies[a.id]
+      if (was && was.location !== a.location) marches.push({ armyId: a.id, owner: a.owner, from: was.location, to: a.location })
     }
-    save(next, [])
-    set({ game: next, ...scenePatch(next), orders: [], fxQueue: fx, marches, marchStamp: performance.now(), targetMode: null, selectedArmy: next.armies[get().selectedArmy ?? ''] ? get().selectedArmy : null })
-    const mine = next.dispatches.filter((d) => d.to === player || d.from === player)
+    absorb(next, result.notices, true)
+    set({ marches, marchStamp: performance.now(), targetMode: null })
+    const mine = next.dispatches.filter((d) => d.to === before.playerId || d.from === before.playerId)
     for (const d of mine.slice(-4)) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
   },
 

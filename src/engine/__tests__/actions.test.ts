@@ -3,7 +3,7 @@ import { storedOpinion } from '../../ai/opinion'
 import { EVENTS } from '../../data/events'
 import { COSTS, PROPOSAL_COSTS, trainingCost } from '../../data/unitTypes'
 import { getWorld } from '../../map/world'
-import { combatMods } from '../arms'
+import { nationCombatMods } from '../arms'
 import { computeEconomy, unitPower } from '../economy'
 import { applyEventChoice, effectAmount } from '../events'
 import { atWar, hasPact, isAllied } from '../helpers'
@@ -70,16 +70,6 @@ const ROWS: Row[] = [
     name: 'train',
     order: (s) => ({ type: 'train', nationId: P, armyId: armyOf(s, P).id, unit: 'infantry' }),
     check: (n) => expect(armyOf(n, P).training.infantry).toBe(1),
-  },
-  {
-    name: 'signContract',
-    order: () => ({ type: 'signContract', nationId: P, unit: 'infantry', tier: 1 }),
-    check: (n) => {
-      const c = n.nations[P].contracts.find((x) => x.unit === 'infantry')
-      expect(c?.tier).toBe(1)
-      expect(c?.supplier).toBeNull()
-      expect(combatMods(n.nations[P], n.turn).unitAttack.infantry).toBeGreaterThan(0.09)
-    },
   },
   {
     name: 'research',
@@ -554,23 +544,16 @@ describe('musters, training, and arms', () => {
     expect(next.armies[army.id].homeTerritoryId).toBe('r0:1')
   })
 
-  it('an arms deal pays the seller and is cancelled when the two go to war', () => {
+  it('refuses weapon contracts and lets factories improve attack instead', () => {
     const s = base()
-    s.nations.r1.personality = 'trader'
-    const offer: Order = {
-      type: 'propose',
-      nationId: P,
-      target: 'r1',
-      proposal: { kind: 'arms', terms: { unit: 'infantry', tier: 1, months: 6, payPerMonth: 20, seller: 'r1' } },
-    }
-    const quiet = resolveTurn(structuredClone(s), map, [])
-    const dealt = resolveTurn(structuredClone(s), map, [offer])
-    expect(dealt.nations[P].contracts.find((c) => c.unit === 'infantry')?.supplier).toBe('r1')
-    expect(quiet.nations[P].resources.capital - dealt.nations[P].resources.capital).toBe(20)
-    expect(dealt.nations.r1.resources.capital - quiet.nations.r1.resources.capital).toBe(20)
-    const war = resolveTurn(dealt, map, [{ type: 'declareWar', nationId: P, target: 'r1' }])
-    expect(war.nations[P].contracts.some((c) => c.supplier === 'r1')).toBe(false)
-    expect(war.log.some((l) => /cancelled/i.test(l.text))).toBe(true)
+    expect(validateOrder(s, map, { type: 'signContract', nationId: P, unit: 'infantry', tier: 1 })).toMatch(/factor/i)
+    expect(validateOrder(s, map, { type: 'propose', nationId: P, target: 'r1', proposal: { kind: 'arms', terms: { unit: 'infantry', tier: 1, months: 6, payPerMonth: 20, seller: 'r1' } } })).toMatch(/factor/i)
+    s.regions[P].buildings.factory = 0
+    expect(nationCombatMods(s, s.nations[P]).unitAttack.infantry).toBe(0)
+    s.regions[P].buildings.factory = 2
+    expect(nationCombatMods(s, s.nations[P]).unitAttack.infantry).toBeCloseTo(0.08)
+    s.regions[P].buildings.factory = 10
+    expect(nationCombatMods(s, s.nations[P]).unitAttack.infantry).toBeCloseTo(0.2)
   })
 
   it('gives large countries several named musters and fills missing save fields', () => {

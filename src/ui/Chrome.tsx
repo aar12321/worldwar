@@ -100,20 +100,19 @@ export function TargetHint() {
 
 export function LiveBanner() {
   const banner = useGame((s) => s.banner)
-  const paused = useGame((s) => s.paused)
   const resume = useGame((s) => s.resume)
-  if (!banner || !paused) return null
+  if (!banner) return null
   return (
     <motion.div initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="live-banner pointer-events-auto self-center w-[min(440px,calc(100vw-48px))]">
       <div className={`glass rounded-2xl px-4 py-3 flex items-center gap-3 ${banner.tone === 'bad' ? 'ring-1 ring-[#ff453a]/50' : 'ring-1 ring-[#30d158]/40'}`}>
         <div className="min-w-0 flex-1">
           <div className="label">
-            {banner.text.toLowerCase().includes('captured') ? 'Territory captured' : banner.tone === 'bad' ? 'Territory lost' : banner.text.toLowerCase().includes('war') ? 'War' : banner.text.toLowerCase().includes('training') ? 'Unit ready' : 'Paused'}
+            {banner.text.toLowerCase().includes('captured') ? 'Territory captured' : banner.tone === 'bad' ? 'Territory lost' : banner.text.toLowerCase().includes('war') ? 'War' : banner.text.toLowerCase().includes('training') ? 'Unit ready' : 'News'}
           </div>
           <p className="text-[15px] font-semibold tracking-tight">{banner.text}</p>
         </div>
         <button className="btn btn-primary shrink-0" onClick={resume}>
-          Resume
+          Continue
         </button>
       </div>
     </motion.div>

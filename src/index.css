@@ -513,6 +513,11 @@ body:has(.side-panel, .tech-panel) .country-panel {
     bottom: 78px !important;
     top: max(var(--chrome-bottom, 8rem), calc(100vh - 78px - min(52vh, 520px))) !important;
   }
+  .country-panel {
+    bottom: auto !important;
+    height: auto !important;
+    max-height: calc(100vh - var(--chrome-bottom, 8rem) - 5rem) !important;
+  }
   .orders-tray {
     top: auto !important;
     bottom: calc(86px + min(52vh, 520px)) !important;
