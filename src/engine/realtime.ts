@@ -1,10 +1,10 @@
-import { generateAllBotOrders, generateBotMarches } from '../ai/bot'
+import { generateAllBotOrders } from '../ai/bot'
 import { UPGRADE_SPECS, upgradeCost } from '../data/development'
-import { BUILDING_SPECS, UNIT_SPECS } from '../data/unitTypes'
+import { BUILDING_SPECS, TRAIN_MONTHS, UNIT_SPECS } from '../data/unitTypes'
 import { ensureTerritoryDev } from './development'
 import { addLog } from './helpers'
 import { orderCost, validateOrder } from './orders'
-import { BUILD_SECONDS, MILITARY_PULSE_SECONDS, MONTH_SECONDS, TRAIN_SECONDS, UPGRADE_SECONDS, travelSeconds } from './pace'
+import { BUILD_MONTHS, UPGRADE_MONTHS } from './pace'
 import { applyResolvedOrder, resolveTurn } from './resolveTurn'
 import { createRng } from './rng'
 import { closestEnemyTerritory, territoryOwner } from './territory'
@@ -72,7 +72,7 @@ export function startLive(s: GameState, map: WorldMap, order: Order): string | n
       toLat: to.lat,
       toLng: to.lng,
       progress: 0,
-      duration: travelSeconds(from.lat, from.lng, to.lat, to.lng, 'attack'),
+      duration: 1,
     }
     return null
   }
@@ -91,7 +91,7 @@ export function startLive(s: GameState, map: WorldMap, order: Order): string | n
       toLat: to.lat,
       toLng: to.lng,
       progress: 0,
-      duration: travelSeconds(from.lat, from.lng, to.lat, to.lng, 'move'),
+      duration: 1,
     }
     return null
   }
@@ -100,7 +100,7 @@ export function startLive(s: GameState, map: WorldMap, order: Order): string | n
   s.projects ??= []
   s.trainingQueue ??= []
   if (order.type === 'queueTrain' || order.type === 'recruit') {
-    const total = TRAIN_SECONDS[order.unit]
+    const total = TRAIN_MONTHS[order.unit]
     const job: TrainingJob = {
       id: `q${s.nextId++}`,
       nationId: order.nationId,
@@ -115,7 +115,7 @@ export function startLive(s: GameState, map: WorldMap, order: Order): string | n
     return null
   }
   if (order.type === 'build') {
-    const total = BUILD_SECONDS[order.building]
+    const total = BUILD_MONTHS[order.building]
     s.projects.push({
       id: `p${s.nextId++}`,
       nationId: order.nationId,
@@ -128,7 +128,7 @@ export function startLive(s: GameState, map: WorldMap, order: Order): string | n
     return null
   }
   if (order.type !== 'develop') return 'Not a live order'
-  const total = UPGRADE_SECONDS[order.upgrade]
+  const total = UPGRADE_MONTHS[order.upgrade]
   s.projects.push({
     id: `p${s.nextId++}`,
     nationId: order.nationId,
@@ -166,7 +166,7 @@ function advanceProjects(s: GameState, map: WorldMap, dt: number) {
       continue
     }
     const remaining = project.remaining - dt
-    if (remaining > 0.05) {
+    if (remaining > 0) {
       left.push({ ...project, remaining })
       continue
     }
@@ -212,7 +212,7 @@ function advanceTraining(s: GameState, map: WorldMap, dt: number) {
     }
     advanced.add(job.territoryId)
     const remaining = job.remaining - dt
-    if (remaining > 0.05) {
+    if (remaining > 0) {
       next.push({ ...job, remaining })
       continue
     }
@@ -231,7 +231,7 @@ function progressMarches(s: GameState, map: WorldMap, dt: number) {
   for (const army of armies) {
     const march = army.march
     if (!march || !s.armies[army.id]) continue
-    march.progress = Math.min(1, march.progress + dt / Math.max(0.25, march.duration))
+    march.progress = Math.min(1, march.progress + dt / Math.max(1, march.duration))
     if (march.progress < 1) continue
     army.march = null
     if (march.kind === 'move') {
@@ -284,42 +284,41 @@ function collectCaptures(s: GameState, map: WorldMap, from: number): SimNotice[]
 }
 
 /**
- * Moves the world forward by `dt` sim-seconds.
- * Training, construction, and marches advance continuously. Economy, supply, and diplomacy settle once per month.
+ * Resolves one month. The world does not move until this is called.
+ * Due buildings and training finish, marches arrive, income is paid, then rivals act once.
  */
-export function advance(prev: GameState, map: WorldMap, dt: number, queued: Order[] = []): AdvanceResult {
-  if (dt <= 0 || prev.outcome !== 'playing' || prev.pendingEvent) return { state: prev, notices: [], flushOrders: false }
+export function endMonth(prev: GameState, map: WorldMap, queued: Order[] = []): AdvanceResult {
+  if (prev.outcome !== 'playing' || prev.pendingEvent) return { state: prev, notices: [], flushOrders: false }
   let s = structuredClone(prev)
-  s.simTime = (s.simTime ?? 0) + dt
-  s.monthElapsed = (s.monthElapsed ?? 0) + dt
-  s.militaryElapsed = (s.militaryElapsed ?? 0) - dt
+  s.simTime = (s.simTime ?? 0) + 1
+  s.monthElapsed = 0
+  s.militaryElapsed = 0
   const notices: SimNotice[] = []
-  let flushOrders = false
-
-  if (s.monthElapsed >= MONTH_SECONDS) {
-    s.monthElapsed -= MONTH_SECONDS
-    const bot = generateAllBotOrders(s, map)
-    const diplomatic = [...queued.filter((o) => !LIVE.has(o.type)), ...bot.filter((o) => !LIVE.has(o.type))]
-    const logAt = s.log.length
-    s = resolveTurn(s, map, diplomatic)
-    flushOrders = true
-    notices.push(...collectLogs(s, logAt), ...collectCaptures(s, map, 0))
-    for (const order of bot) if (LIVE.has(order.type)) startLive(s, map, order)
-    s.militaryElapsed = MILITARY_PULSE_SECONDS
-  } else if (s.militaryElapsed <= 0) {
-    s.militaryElapsed = MILITARY_PULSE_SECONDS
-    for (const order of generateBotMarches(s, map)) startLive(s, map, order)
-  }
 
   const logAt = s.log.length
   const battleAt = s.battles.length
-  advanceTraining(s, map, dt)
-  advanceProjects(s, map, dt)
-  progressMarches(s, map, dt)
+  advanceProjects(s, map, 1)
+  advanceTraining(s, map, 1)
+  progressMarches(s, map, 1)
   notices.push(...collectLogs(s, logAt), ...collectCaptures(s, map, battleAt))
-  if (s.battles.length > 16) s.battles.splice(0, s.battles.length - 16)
   s.outcome = checkOutcome(s, map)
-  return { state: s, notices, flushOrders }
+  if (s.outcome !== 'playing') return { state: s, notices, flushOrders: true }
+
+  const freshBattles = s.battles.slice(battleAt)
+  const bot = generateAllBotOrders(s, map)
+  const diplomatic = [...queued.filter((o) => !LIVE.has(o.type)), ...bot.filter((o) => !LIVE.has(o.type))]
+  const monthLog = s.log.length
+  s = resolveTurn(s, map, diplomatic)
+  s.battles = [...freshBattles, ...s.battles].slice(-16)
+  notices.push(...collectLogs(s, monthLog), ...collectCaptures(s, map, freshBattles.length))
+  for (const order of bot) if (LIVE.has(order.type)) startLive(s, map, order)
+  return { state: s, notices, flushOrders: true }
+}
+
+/** `dt <= 0` changes nothing. Any positive step ends one month. Time no longer runs by itself. */
+export function advance(prev: GameState, map: WorldMap, dt: number, queued: Order[] = []): AdvanceResult {
+  if (dt <= 0) return { state: prev, notices: [], flushOrders: false }
+  return endMonth(prev, map, queued)
 }
 
 /** Applies one player decision without waiting for the month. Queued kinds are rejected. */

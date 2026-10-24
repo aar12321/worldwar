@@ -100,6 +100,39 @@ describe('bots play fair', () => {
     }
   }, 20_000)
 
+  it('offers a pact only when a neighbor is afraid, and only one reaches the player', () => {
+    const chain = lineMap(3)
+    const calm = startState(chain)
+    const playerArmy = Object.values(calm.armies).find((a) => a.owner === 'r0')!
+    playerArmy.units = { infantry: 400, armor: 0, air: 0, naval: 0 }
+    for (const id of ['r1', 'r2']) {
+      calm.nations[id].personality = 'honorable'
+      addOpinion(calm, id, 'r0', 'Gifts', 40)
+      addOpinion(calm, id, 'r0', 'Old friends', 40)
+    }
+    for (let seed = 1; seed <= 12; seed++) {
+      calm.seed = seed
+      calm.turn = 6
+      const pacts = generateAllBotOrders(calm, chain).filter((o) => o.type === 'propose' && o.proposal.kind === 'pact' && o.target === 'r0')
+      expect(pacts).toHaveLength(0)
+    }
+
+    const afraid = startState(chain)
+    const strong = Object.values(afraid.armies).find((a) => a.owner === 'r0')!
+    strong.units = { infantry: 400, armor: 0, air: 0, naval: 0 }
+    afraid.nations.r1.personality = 'turtle'
+    addOpinion(afraid, 'r1', 'r0', 'Grievance', -50)
+    let offers = 0
+    for (let seed = 1; seed <= 24; seed++) {
+      afraid.seed = seed
+      afraid.turn = 6
+      const pacts = generateAllBotOrders(afraid, chain).filter((o) => o.type === 'propose' && o.proposal.kind === 'pact' && o.target === 'r0')
+      expect(pacts.length).toBeLessThanOrEqual(1)
+      offers += pacts.length
+    }
+    expect(offers).toBeGreaterThan(0)
+  })
+
   it('send the player at most one new proposal a month and keep the inbox short', () => {
     run('normal', 5, 30, (s) => {
       const inbox = s.proposals.filter((p) => p.to === s.playerId)

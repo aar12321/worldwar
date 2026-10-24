@@ -27,7 +27,7 @@ function useShortcuts() {
         else st.selectRegion(null)
       } else if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault()
-        st.togglePause()
+        st.endTurn()
       } else {
         const map: Record<string, 'tech' | 'nation' | 'diplomacy' | 'log' | 'territories' | 'military'> = {
           t: 'tech',
@@ -66,39 +66,14 @@ function ShakeLayer({ children }: { children: React.ReactNode }) {
   )
 }
 
-function useClock() {
+function usePersistOnHide() {
   useEffect(() => {
-    let last = performance.now()
-    let acc = 0
-    let saveAcc = 0
-    let frame = 0
-    const tick = (now: number) => {
-      frame = requestAnimationFrame(tick)
-      const dt = Math.min(1, (now - last) / 1000)
-      last = now
-      acc += dt
-      if (acc < 0.1) return
-      const stepDt = acc
-      acc = 0
-      const st = useGame.getState()
-      if (!st.game || st.paused || st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0) return
-      st.step(stepDt)
-      saveAcc += stepDt
-      if (saveAcc > 5) {
-        saveAcc = 0
-        useGame.getState().persist()
-      }
-    }
-    frame = requestAnimationFrame(tick)
     const flush = () => {
       const st = useGame.getState()
       if (st.game) st.persist()
     }
     window.addEventListener('pagehide', flush)
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener('pagehide', flush)
-    }
+    return () => window.removeEventListener('pagehide', flush)
   }, [])
 }
 
@@ -106,7 +81,7 @@ export default function App() {
   const inGame = useGame((s) => !!s.game)
   const panel = useGame((s) => s.panel)
   useShortcuts()
-  useClock()
+  usePersistOnHide()
 
   return (
     <div className="relative w-full h-full select-none">

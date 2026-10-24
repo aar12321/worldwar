@@ -3,7 +3,7 @@ import { TECH_BY_ID } from '../data/techTree'
 import { ARMS, BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, trainingCost } from '../data/unitTypes'
 import { validateProposal } from './diplomacy'
 import { computeEconomy } from './economy'
-import { armyIsHome, atWar, boundArmy, canUseUnit, factoryCount, hasCasusBelli, hasPact, isAllied } from './helpers'
+import { armyIsHome, atWar, boundArmy, canUseUnit, hasCasusBelli, hasPact, isAllied } from './helpers'
 import { attackableTerritoryIds, territoryOwner } from './territory'
 import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canReach } from './warfare'
@@ -195,14 +195,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (pending.some((p) => p.type === 'rebase' && p.territoryId === t.id && p.armyId !== a.id)) return 'That muster already has an army'
       return null
     }
-    case 'signContract': {
-      if (!Number.isInteger(o.tier) || o.tier < 1 || o.tier > ARMS.maxTier) return 'Invalid tier'
-      if (!canUseUnit(n, o.unit)) return 'Technology required'
-      const factories = factoryCount(s, o.nationId)
-      if (factories < o.tier) return factories === 0 ? 'Requires a Factory' : `Needs ${o.tier} factories`
-      if (pending.some((p) => p.type === 'signContract' && p.unit === o.unit)) return 'Already queued'
-      return null
-    }
+    case 'signContract':
+      return 'Factories improve weapons on their own'
     case 'research': {
       const t = TECH_BY_ID[o.techId]
       if (!t) return 'Unknown technology'

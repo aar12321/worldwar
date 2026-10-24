@@ -1,35 +1,34 @@
-import { addOpinion } from '../ai/opinion'
-import { ARMS, UNIT_SPECS } from '../data/unitTypes'
+import { ARMS } from '../data/unitTypes'
 import { addLog, atWar, canUseUnit, factoryCount, nationModifiers, newId, type AggregatedModifiers } from './helpers'
-import type { ArmsContract, ArmsTerms, GameState, Nation, NationId, UnitType } from './types'
+import type { ArmsContract, ArmsTerms, GameState, Nation, NationId } from './types'
 import { UNIT_TYPES } from './types'
 
-export function weaponTiers(n: Nation | undefined, turn: number): Partial<Record<UnitType, number>> {
-  const out: Partial<Record<UnitType, number>> = {}
-  if (!n) return out
-  for (const c of n.contracts ?? []) {
-    if (c.until < turn) continue
-    out[c.unit] = Math.max(out[c.unit] ?? 0, c.tier)
-  }
-  return out
+/** Each factory adds this much attack, up to the cap. */
+export const FACTORY_ATTACK = 0.04
+export const FACTORY_ATTACK_CAP = 0.2
+
+export function factoryWeaponBonus(factories: number): number {
+  if (!Number.isFinite(factories) || factories <= 0) return 0
+  return Math.min(FACTORY_ATTACK_CAP, factories * FACTORY_ATTACK)
 }
 
-/** Technology modifiers plus the attack bonus from live weapons contracts. */
-export function combatMods(n: Nation, turn: number): AggregatedModifiers {
+export function factoryWeaponNote(factories: number): string | null {
+  const bonus = factoryWeaponBonus(factories)
+  if (bonus <= 0) return null
+  return `factory weapons (+${Math.round(bonus * 100)}%)`
+}
+
+/** Technology modifiers plus the attack bonus from factories. Weapon contracts are ignored. */
+export function combatMods(n: Nation, turn: number, factories = 0): AggregatedModifiers {
+  void turn
   const mods = nationModifiers(n)
-  const bonus: Partial<Record<UnitType, number>> = {}
-  for (const c of n.contracts ?? []) {
-    if (c.until < turn) continue
-    bonus[c.unit] = Math.max(bonus[c.unit] ?? 0, c.tier * ARMS.attackPerTier)
-  }
-  for (const k of UNIT_TYPES) if (bonus[k]) mods.unitAttack[k] += bonus[k]
+  const bonus = factoryWeaponBonus(factories)
+  if (bonus > 0) for (const k of UNIT_TYPES) mods.unitAttack[k] += bonus
   return mods
 }
 
-export function contractNote(n: Nation, turn: number): string | null {
-  const tiers = weaponTiers(n, turn)
-  const bits = UNIT_TYPES.filter((k) => tiers[k]).map((k) => `${UNIT_SPECS[k].name} +${Math.round((tiers[k] ?? 0) * ARMS.attackPerTier * 100)}%`)
-  return bits.length ? `arms contract (${bits.join(', ')})` : null
+export function nationCombatMods(s: GameState, n: Nation): AggregatedModifiers {
+  return combatMods(n, s.turn, factoryCount(s, n.id))
 }
 
 export function validateArmsTerms(s: GameState, from: NationId, to: NationId, terms: ArmsTerms): string | null {
@@ -85,35 +84,7 @@ export function pruneArmsContracts(s: GameState) {
   }
 }
 
-/** Monthly payment for foreign contracts, then expiry. A buyer who cannot pay loses the contract. */
+/** Weapon contracts are no longer part of play. Drop any that an older save still carries. */
 export function applyArmsContracts(s: GameState) {
-  const nations = Object.values(s.nations).sort((a, b) => (a.id < b.id ? -1 : 1))
-  for (const n of nations) {
-    if (!n.alive) {
-      n.contracts = []
-      continue
-    }
-    const kept: ArmsContract[] = []
-    for (const c of n.contracts ?? []) {
-      if (c.supplier) {
-        const seller = s.nations[c.supplier]
-        if (!seller?.alive || atWar(s, n.id, c.supplier) || (n.embargoedUntil ?? 0) >= s.turn || (seller.embargoedUntil ?? 0) >= s.turn) continue
-        if (n.resources.capital < c.payPerMonth) {
-          addOpinion(s, c.supplier, n.id, 'Defaulted on an arms contract', -20, 0.4)
-          addLog(s, 'diplomacy', `${n.name} could not pay ${seller.name} for ${UNIT_SPECS[c.unit].name} and the contract is cancelled.`, [n.id, c.supplier])
-          continue
-        }
-        n.resources.capital -= c.payPerMonth
-        seller.resources.capital += c.payPerMonth
-      }
-      if (s.turn >= c.until) {
-        const who = c.supplier ? [n.id, c.supplier] : [n.id]
-        if (n.isPlayer || (c.supplier && s.nations[c.supplier]?.isPlayer))
-          addLog(s, 'economy', `${n.name}'s ${UNIT_SPECS[c.unit].name} contract has been fulfilled.`, who)
-        continue
-      }
-      kept.push(c)
-    }
-    n.contracts = kept
-  }
+  for (const n of Object.values(s.nations)) n.contracts = []
 }

@@ -1,10 +1,10 @@
 import { TRAINING, UNIT_SPECS, trainingCost, trainingRank } from '../data/unitTypes'
-import { combatMods, weaponTiers } from '../engine/arms'
+import { factoryWeaponBonus, nationCombatMods } from '../engine/arms'
 import { unitPower } from '../engine/economy'
-import { armyIsHome, atWar, enemiesOf, formatDivisions, totalUnits } from '../engine/helpers'
+import { armyIsHome, atWar, enemiesOf, factoryCount, formatDivisions, totalUnits } from '../engine/helpers'
 import { attackableTerritoryIds } from '../engine/territory'
 import { canReach } from '../engine/warfare'
-import type { Army, GameState, UnitType } from '../engine/types'
+import type { Army, GameState } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
@@ -12,7 +12,7 @@ import { usePlayerView } from './hooks'
 import { generalChoice } from './labels'
 import { OrderButton } from './panel'
 
-export function UnitStrip({ units, tiers }: { units: Army['units']; tiers?: Partial<Record<UnitType, number>> }) {
+export function UnitStrip({ units }: { units: Army['units'] }) {
   const present = UNIT_TYPES.filter((k) => units[k] >= 0.05)
   if (!present.length) return <p className="text-[11px] text-slate-500">No divisions yet.</p>
   return (
@@ -20,7 +20,6 @@ export function UnitStrip({ units, tiers }: { units: Army['units']; tiers?: Part
       {present.map((k) => (
         <span key={k} className="rounded-full bg-white/8 px-2 py-0.5 text-[12px] font-medium text-white/90" title={UNIT_SPECS[k].name}>
           {UNIT_SPECS[k].name} {formatDivisions(units[k])}
-          {tiers?.[k] ? <span className="text-[#ffd60a]"> · weapons {tiers[k]}</span> : null}
         </span>
       ))}
     </div>
@@ -36,8 +35,9 @@ export function ArmyCard({ army, game }: { army: Army; game: GameState }) {
   const selected = selectedArmy === army.id
   const home = map.territories[army.homeTerritoryId]
   const atHome = armyIsHome(game, map, army)
-  const tiers = weaponTiers(owner, game.turn)
-  const power = unitPower(army.units, combatMods(owner, game.turn), army.training)
+  const factories = factoryCount(game, owner.id)
+  const weaponBonus = factoryWeaponBonus(factories)
+  const power = unitPower(army.units, nationCombatMods(game, owner), army.training)
   const present = UNIT_TYPES.filter((k) => army.units[k] >= 0.05)
 
   return (
@@ -49,7 +49,8 @@ export function ArmyCard({ army, game }: { army: Army; game: GameState }) {
         </div>
         <span className="text-[12px] text-white/45 shrink-0">{formatDivisions(totalUnits(army.units))} div · strength {power.toFixed(1)}</span>
       </div>
-      <UnitStrip units={army.units} tiers={tiers} />
+      <UnitStrip units={army.units} />
+      {weaponBonus > 0 && <p className="mt-1.5 text-[12px] text-[#ffd60a]">Factory weapons +{Math.round(weaponBonus * 100)}%</p>}
       {present.length > 0 && (
         <div className="mt-2 space-y-1">
           {present.map((k) => (
@@ -192,7 +193,10 @@ export function ArmyManager({ army }: { army: Army }) {
           <span className="text-[16px] font-semibold tracking-tight">{place}</span>
           <span className={`text-[12px] font-medium shrink-0 ${atHome ? 'text-[#8ec5ff]' : 'text-[#ffd60a]'}`}>{where}</span>
         </div>
-        <p className="text-[12px] text-white/45 mt-0.5">{formatDivisions(totalUnits(army.units))} divisions · strength {unitPower(army.units, combatMods(owner, game.turn), army.training).toFixed(1)}</p>
+        <p className="text-[12px] text-white/45 mt-0.5">{formatDivisions(totalUnits(army.units))} divisions · strength {unitPower(army.units, nationCombatMods(game, owner), army.training).toFixed(1)}</p>
+        {factoryWeaponBonus(factoryCount(game, owner.id)) > 0 && (
+          <p className="text-[12px] text-[#ffd60a] mt-0.5">Factory weapons +{Math.round(factoryWeaponBonus(factoryCount(game, owner.id)) * 100)}%</p>
+        )}
       </button>
 
       <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>

@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ARMS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, UNIT_SPECS } from '../data/unitTypes'
-import { weaponTiers } from '../engine/arms'
+import { DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS } from '../data/unitTypes'
 import { armiesOf, regionsOf, turnDate } from '../engine/helpers'
-import { UNIT_TYPES } from '../engine/types'
-import type { LawId, LogKind, UnitType } from '../engine/types'
+import type { LawId, LogKind } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { ArmyManager } from './ArmyOrders'
@@ -16,7 +14,7 @@ export function NationPanel() {
   const removeOrder = useGame((s) => s.removeOrder)
   const [tax, setTax] = useState(view?.pendingPolicy.taxRate ?? 0.25)
   const [draft, setDraft] = useState(view?.pendingPolicy.draftRate ?? 0.05)
-  const tab = useGame((s) => s.nationTab)
+  const tab = useGame((s) => (s.nationTab === 'arms' ? 'economy' : s.nationTab))
   const setNationTab = useGame((s) => s.setNationTab)
   const pTax = view?.pendingPolicy.taxRate
   const pDraft = view?.pendingPolicy.draftRate
@@ -37,7 +35,6 @@ export function NationPanel() {
         {([
           ['economy', 'Economy'],
           ['laws', 'Laws'],
-          ['arms', 'Weapons'],
           ['armies', 'Armies'],
         ] as const).map(([id, label]) => (
           <button key={id} type="button" aria-pressed={tab === id} onClick={() => setNationTab(id)}>
@@ -47,7 +44,7 @@ export function NationPanel() {
       </div>
       {tab === 'economy' && (
       <section className="space-y-3">
-        <p className="text-[13px] text-white/55">Taxes and the draft take effect when the month ends.</p>
+        <p className="text-[13px] text-white/55">Taxes and the draft take effect when you end the month.</p>
         <div>
           <div className="flex justify-between text-[14px]">
             <span>Tax rate</span>
@@ -130,15 +127,6 @@ export function NationPanel() {
       </section>
       )}
 
-      {tab === 'arms' && (
-      <section className="space-y-2">
-        <p className="text-[13px] text-white/55">Each level adds 10% attack for eight months. One contract per unit type. Diplomacy can buy the same bonus from another nation.</p>
-        {UNIT_TYPES.map((u) => (
-          <ContractRow key={u} unit={u} />
-        ))}
-      </section>
-      )}
-
       {tab === 'armies' && (
       <section className="space-y-3">
         <div className="space-y-1 text-[13px] text-white/70">
@@ -154,41 +142,6 @@ export function NationPanel() {
       </section>
       )}
     </PanelShell>
-  )
-}
-
-function ContractRow({ unit }: { unit: UnitType }) {
-  const view = usePlayerView()!
-  const { game, player } = view
-  const active = (player.contracts ?? []).find((c) => c.unit === unit && c.until >= game.turn)
-  const liveTier = weaponTiers(player, game.turn)[unit] ?? 0
-  const initialTier = (liveTier === 2 || liveTier === 3 ? liveTier : 1) as 1 | 2 | 3
-  const [tier, setTier] = useState<1 | 2 | 3>(initialTier)
-  const bonus = Math.round(tier * ARMS.attackPerTier * 100)
-  const supplier = active?.supplier ? game.nations[active.supplier]?.name ?? 'Foreign' : 'Domestic'
-  return (
-    <div className="rounded-lg border border-slate-700/70 bg-slate-900/40 px-3 py-2 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[14px] font-semibold tracking-tight">{UNIT_SPECS[unit].name}</span>
-        <span className={`text-[12px] font-medium ${active ? 'text-[#ffd60a]' : 'text-white/40'}`}>{active ? `Level ${liveTier} · ${supplier}` : 'No contract'}</span>
-      </div>
-      {active && (
-        <p className="text-[11px] text-slate-400">
-          +{Math.round(active.tier * ARMS.attackPerTier * 100)}% attack through {turnDate(active.until)}
-          {active.payPerMonth > 0 ? ` · ${active.payPerMonth} money/month` : ''}.
-        </p>
-      )}
-      <div className="flex items-center gap-2">
-        <div className="segmented shrink-0">
-          {([1, 2, 3] as const).map((level) => (
-            <button key={level} type="button" aria-pressed={tier === level} className="!flex-none px-2.5" onClick={() => setTier(level)}>
-              {level}
-            </button>
-          ))}
-        </div>
-        <OrderButton className="flex-1" showError order={{ type: 'signContract', nationId: player.id, unit, tier }} label={`${active ? 'Replace' : 'Sign'} · ${ARMS.domesticCost[tier - 1]} money`} sub={`+${bonus}% attack for ${ARMS.months} months`} />
-      </div>
-    </div>
   )
 }
 
@@ -265,13 +218,13 @@ export function SettingsPanel() {
       </button>
       <div className="text-[13px] text-white/55 pt-2 space-y-2">
         <div className="text-[13px] font-semibold text-white">How to play</div>
-        <p>Click a country. If it is yours, raise an army in a district or open Build. If it is not, talk or declare war.</p>
-        <p>Open Nation, then Armies, to see every army. They fight as one force. Add a general and each unit trains for free every month. Without a general, you pay to train each unit in its city.</p>
-        <p>Select an army, press Attack, then click a highlighted border territory. Winning takes that territory. Lose every territory and the country is gone.</p>
-        <p>Time runs on its own. Pause with Space, or run at 1×, 2×, or 4×. The month bar is when wages, food, and treaties settle.</p>
+        <p>Click your country to open Land. Country buildings and district upgrades are on that same sheet. Click another country to talk or declare war.</p>
+        <p>Open Nation, then Armies, to see every army. They fight as one force. Add a general and each unit trains for free every month. Without a general, you pay to train each unit in its city. Factories quietly improve every unit’s attack.</p>
+        <p>Select an army, press Attack, then click a highlighted border territory. The march arrives when you end the month. Winning takes that territory.</p>
+        <p>Nothing moves until you press End month. Buildings, training, income, and rival decisions all settle then.</p>
         <p>Win by taking the territories asked for at the start (3, 6, or 12), or by leading that share of the world’s people. You lose if your nation is wiped out.</p>
         <div className="label pt-2">Shortcuts</div>
-        <p>Space pauses. Esc cancels or closes. R territories, M military, N nation, T research, D diplomacy, L news.</p>
+        <p>Space ends the month. Esc cancels or closes. R territories, M military, N nation, T research, D diplomacy, L news.</p>
       </div>
     </PanelShell>
   )

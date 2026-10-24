@@ -4,8 +4,8 @@ import { getWorld } from '../../map/world'
 import { buildTerritoryMesh } from '../../map/territoryMesh'
 import { UPGRADE_SPECS } from '../../data/development'
 import { indexTerritories } from '../../data/territories'
-import { TRAIN_SECONDS } from '../pace'
-import { advance, applyImmediate } from '../realtime'
+import { TRAIN_MONTHS } from '../../data/unitTypes'
+import { applyImmediate, endMonth } from '../realtime'
 import { developmentBonus } from '../development'
 import { resolveTurn } from '../resolveTurn'
 import { territoryOwner } from '../territory'
@@ -103,39 +103,35 @@ describe('territory capture', () => {
   })
 })
 
-describe('real-time clock', () => {
-  it('finishes infantry in ten seconds and armor in thirty', () => {
+describe('monthly turns', () => {
+  it('finishes infantry in one month and leaves armor training', () => {
     const map = lineMap(1)
     const s = startState(map)
-    s.militaryElapsed = 100
     s.nations.r0.resources.capital = 800
     s.nations.r0.militaryPool = 80
     const army = Object.values(s.armies).find((a) => a.owner === 'r0')!
     const infantry = army.units.infantry
     const started = applyImmediate(s, map, { type: 'queueTrain', nationId: 'r0', territoryId: 'r0:0', unit: 'infantry' })
     expect(started.error).toBeNull()
-    expect(started.state.trainingQueue[0].remaining).toBe(TRAIN_SECONDS.infantry)
+    expect(started.state.trainingQueue[0].remaining).toBe(TRAIN_MONTHS.infantry)
     expect(started.state.trainingQueue[0].clock).toBe('time')
-    const early = advance(started.state, map, 9, [])
-    expect(early.state.armies[army.id].units.infantry).toBe(infantry)
-    const done = advance(early.state, map, 1.2, [])
+    expect(started.state.armies[army.id].units.infantry).toBe(infantry)
+    const done = endMonth(started.state, map)
     expect(done.state.trainingQueue).toHaveLength(0)
     expect(done.state.armies[army.id].units.infantry).toBe(infantry + 1)
     expect(done.notices.some((n) => n.type === 'trained' && n.pause)).toBe(true)
 
     const tanks = applyImmediate(done.state, map, { type: 'queueTrain', nationId: 'r0', territoryId: 'r0:0', unit: 'armor' })
-    expect(tanks.state.trainingQueue[0].total).toBe(30)
-    const midway = advance(tanks.state, map, 15, [])
-    expect(midway.state.trainingQueue[0].remaining).toBeCloseTo(15, 0)
+    expect(tanks.state.trainingQueue[0].total).toBe(TRAIN_MONTHS.armor)
+    const midway = endMonth(tanks.state, map)
+    expect(midway.state.trainingQueue[0].remaining).toBe(1)
     expect(midway.state.armies[army.id].units.armor).toBe(army.units.armor)
   })
 
-  it('marches an army onto a border territory and captures it on arrival', () => {
+  it('marches an army onto a border territory and captures it when the month ends', () => {
     const map = borderMap()
     const s = startState(map)
     s.wars = ['r0|r1']
-    s.militaryElapsed = 100
-    s.monthElapsed = 0
     const army = Object.values(s.armies).find((a) => a.owner === 'r0')!
     army.units = { infantry: 40, armor: 12, air: 6, naval: 0 }
     for (const a of Object.values(s.armies)) if (a.owner === 'r1') a.units = { infantry: 1, armor: 0, air: 0, naval: 0 }
@@ -144,7 +140,9 @@ describe('real-time clock', () => {
     const march = ordered.state.armies[army.id].march
     expect(march?.kind).toBe('attack')
     expect(march?.territoryId).toBe('r1:0')
-    const arrived = advance(ordered.state, map, (march?.duration ?? 1) + 0.2, [])
+    expect(march?.duration).toBe(1)
+    expect(territoryOwner(ordered.state, map, 'r1:0')).toBe('r1')
+    const arrived = endMonth(ordered.state, map)
     expect(arrived.state.armies[army.id].march).toBeNull()
     expect(territoryOwner(arrived.state, map, 'r1:0')).toBe('r0')
     expect(arrived.state.regions.r1.owner).toBe('r1')

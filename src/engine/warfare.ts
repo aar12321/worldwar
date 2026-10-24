@@ -1,6 +1,7 @@
 import { addOpinion, forgetNation } from '../ai/opinion'
 import { TRAINING, emptyTraining } from '../data/unitTypes'
-import { combatMods, contractNote } from './arms'
+import { factoryCount } from './helpers'
+import { factoryWeaponNote, nationCombatMods } from './arms'
 import { regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
 import { closestEnemyTerritory, damageTerritory, territoryOwner } from './territory'
@@ -155,12 +156,12 @@ function makeCombatant(s: GameState, n: Nation | null, armies: Army[], extra: Un
     notes.push(`entrenched (+${Math.round(dug * 100)}%)`)
   }
   if (n && !defending) {
-    const arms = contractNote(n, s.turn)
+    const arms = factoryWeaponNote(factoryCount(s, n.id))
     if (arms) notes.push(arms)
   }
   return {
     units: sumUnits([...armies.map((a) => a.units), ...(extra ? [extra] : [])]),
-    mods: n ? combatMods(n, s.turn) : null,
+    mods: n ? nationCombatMods(s, n) : null,
     penalty: p,
     penaltyNotes: notes,
   }

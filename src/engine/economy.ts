@@ -1,7 +1,7 @@
 import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
 import { TRAINING, UNIT_SPECS, clampTraining, type UnitTraining } from '../data/unitTypes'
-import { combatMods } from './arms'
+import { nationCombatMods } from './arms'
 import { developmentBonus, housingInRegion, populationGrowth } from './development'
 import { addLog, armiesOf, clamp, enemiesOf, nationModifiers, type AggregatedModifiers } from './helpers'
 import type { Rng } from './rng'
@@ -209,11 +209,11 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   }
 }
 
-/** Total army strength, including technology, training, and weapons contracts. */
+/** Total army strength, including technology, training, and factory weapons. */
 export function militaryPower(s: GameState, nationId: NationId): number {
   const n = s.nations[nationId]
   if (!n) return 0
-  const mods = combatMods(n, s.turn)
+  const mods = nationCombatMods(s, n)
   let p = 0
   for (const a of Object.values(s.armies)) if (a.owner === nationId) p += unitPower(a.units, mods, a.training)
   return p

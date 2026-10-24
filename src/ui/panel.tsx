@@ -6,12 +6,26 @@ import { useGame, type Panel } from '../store'
 import { usePlayerView } from './hooks'
 import { speak } from './plain'
 
-export function PanelShell({ title, kicker, panel, children }: { title: string; kicker: string; panel: Panel; children: ReactNode }) {
+export function PanelShell({
+  title,
+  kicker,
+  panel,
+  children,
+  pinned,
+  footer,
+}: {
+  title: string
+  kicker: string
+  panel: Panel
+  children: ReactNode
+  pinned?: ReactNode
+  footer?: ReactNode
+}) {
   const setPanel = useGame((s) => s.setPanel)
   return (
     <aside
       data-section={panel}
-      className="glass side-panel panel-in absolute left-[120px] bottom-28 z-[22] w-[min(400px,calc(100vw-148px))] rounded-[22px] flex flex-col overflow-hidden"
+      className="glass side-panel panel-in absolute left-[120px] bottom-28 z-[22] w-[min(680px,calc(100vw-148px))] rounded-[22px] flex flex-col overflow-hidden"
     >
       <div className="px-4 py-3.5 border-b border-white/10 flex items-start justify-between gap-3">
         <div>
@@ -22,7 +36,9 @@ export function PanelShell({ title, kicker, panel, children }: { title: string; 
           ×
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto scroll-thin p-4 space-y-5">{children}</div>
+      {pinned && <div className="px-4 pt-3 pb-2 border-b border-white/10 space-y-3">{pinned}</div>}
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin p-4 space-y-5">{children}</div>
+      {footer && <div className="px-4 py-3 border-t border-white/10">{footer}</div>}
     </aside>
   )
 }

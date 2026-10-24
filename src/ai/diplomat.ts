@@ -1,6 +1,6 @@
 import { PERSONALITIES } from '../data/personalities'
 import { ARMS } from '../data/unitTypes'
-import { combatMods } from '../engine/arms'
+import { nationCombatMods } from '../engine/arms'
 import { computeEconomy, militaryPower, unitPower, type EconomyReport } from '../engine/economy'
 import { alliesOf, atWar, canUseUnit, enemiesOf, factoryCount, hasCasusBelli, hasPact, isAllied, pairKey } from '../engine/helpers'
 import type { Rng } from '../engine/rng'
@@ -26,7 +26,7 @@ export function perceivedPower(s: GameState, map: WorldMap, viewer: NationId, ta
   const n = s.nations[target]
   if (!n) return 0
   const seen = vis ?? visibleRegions(s, map, viewer)
-  const mods = combatMods(n, s.turn)
+  const mods = nationCombatMods(s, n)
   let visible = 0
   let hidden = 0
   for (const a of armies ?? Object.values(s.armies)) {

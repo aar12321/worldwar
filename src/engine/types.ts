@@ -373,11 +373,11 @@ export interface GameState {
   territoryOwners: Record<string, NationId>
   /** Factories and territory upgrades currently under construction. */
   projects: Project[]
-  /** Seconds since the campaign started, at 1×. */
+  /** Months elapsed since the campaign started. */
   simTime: number
-  /** Seconds accumulated toward the next economy month. */
+  /** Leftover fraction toward the next month. Time only moves when the player ends the month. */
   monthElapsed: number
-  /** Seconds until AI armies look for another march. */
+  /** Unused. Rivals now move when the month ends. */
   militaryElapsed: number
   /** Units in production. The front job of each territory advances each month. */
   trainingQueue: TrainingJob[]
