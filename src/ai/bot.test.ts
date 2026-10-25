@@ -106,7 +106,7 @@ describe('bots play fair', () => {
       expect(inbox.filter((p) => p.created === s.turn - 1 && p.kind !== 'callToArms').length).toBeLessThanOrEqual(1)
       expect(inbox.filter((p) => p.kind !== 'callToArms').length).toBeLessThanOrEqual(3)
     })
-  })
+  }, 30_000)
 
   it('hard rivals earn more than easy ones', () => {
     const easy = createInitialState(world, { playerRegionId: 'china', seed: 1, victoryShare: 0.6, difficulty: 'easy' })

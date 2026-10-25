@@ -11,6 +11,7 @@ export function Guide() {
   const show = useGame((s) => s.settings.showTips)
   const step = useGame((s) => s.settings.tutorialStep ?? 0)
   const update = useGame((s) => s.updateSettings)
+  const resume = useGame((s) => s.resume)
   const selected = useGame((s) => s.selectedRegion)
   const panel = useGame((s) => s.panel)
   const targetMode = useGame((s) => s.targetMode)
@@ -23,7 +24,7 @@ export function Guide() {
     const cards = [
       {
         title: `Lead ${player.name} to victory`,
-        body: `Win by taking ${lands} territories outside ${player.name}, or by leading ${Math.round(game.settings.victoryShare * 100)}% of the world's people. You lose if ${player.name} is wiped out.`,
+        body: `The clock is paused until you finish these cards. Win by taking ${lands} territories outside ${player.name}, or by leading ${Math.round(game.settings.victoryShare * 100)}% of the world's people. You lose if ${player.name} is wiped out.`,
       },
       {
         title: 'Feed the army you train',
@@ -31,7 +32,7 @@ export function Guide() {
       },
       {
         title: 'Take a border territory',
-        body: 'Click a neighbor and declare war. Select your army, press Attack, then click a highlighted territory. A port lets you cross a sea lane. Space pauses. 2× and 4× speed the clock.',
+        body: 'Open Diplomacy and press Declare war on a neighbor. Select your army, press Attack, then click a highlighted territory. A port lets you cross a sea lane. Space pauses. 2× and 4× speed the clock.',
       },
     ]
     const card = cards[step]
@@ -42,13 +43,21 @@ export function Guide() {
             <p className="text-[12px] font-semibold text-white/50">
               Introduction {step + 1} of {STEPS}
             </p>
-            <button type="button" className="text-[12px] font-semibold text-[#64a8ff]" onClick={() => update({ showTips: false })}>
+            <button type="button" className="text-[12px] font-semibold text-[#64a8ff]" onClick={() => {
+                update({ showTips: false })
+                resume()
+              }}
+            >
               Hide
             </button>
           </div>
           <p className="mt-1 text-[15px] font-semibold tracking-tight">{card.title}</p>
           <p className="mt-0.5 text-[13px] leading-snug text-white/65">{card.body}</p>
-          <button type="button" className="btn btn-primary mt-3 px-3 py-1.5 text-[13px]" onClick={() => update({ tutorialStep: step + 1 })}>
+          <button type="button" className="btn btn-primary mt-3 px-3 py-1.5 text-[13px]" onClick={() => {
+              update({ tutorialStep: step + 1 })
+              if (step === STEPS - 1) resume()
+            }}
+          >
             {step === STEPS - 1 ? 'Got it' : 'Next'}
           </button>
         </div>
@@ -63,7 +72,7 @@ export function Guide() {
   let body = `${player.name} is split into territories. Open Land to develop them, or Military to train units into the army that holds each one.`
   if (orders.length > 0) {
     title = 'Your month is planned'
-    body = 'Diplomacy along the bottom settles when the month bar fills. Training, building, and marches start immediately.'
+    body = 'Treaties, trade offers, and research settle when the month bar fills. Training, building, and marches start immediately.'
   } else if (armies.length === 0) {
     title = 'Raise your first army'
     body = `Click ${player.name}, then press Raise an army. Or open Military and queue training. A barracks is required.`

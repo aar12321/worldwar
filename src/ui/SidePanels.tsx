@@ -243,8 +243,12 @@ export function SettingsPanel() {
         <input type="checkbox" checked={settings.showTips} onChange={(e) => update({ showTips: e.target.checked })} />
       </label>
       <label className="flex items-center justify-between text-[14px]">
-        <span>Battle cinematics</span>
-        <input type="checkbox" checked={settings.battleFx} onChange={(e) => update({ battleFx: e.target.checked })} />
+        <span>Battle scenes</span>
+        <select className="field px-2 py-1" value={settings.battleScenes} onChange={(e) => update({ battleScenes: e.target.value as 'important' | 'all' | 'off' })}>
+          <option value="important">Captures and losses</option>
+          <option value="all">Every battle</option>
+          <option value="off">Off</option>
+        </select>
       </label>
       <label className="flex items-center justify-between text-[14px]">
         <span>Reduce motion</span>

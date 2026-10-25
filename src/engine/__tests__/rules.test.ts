@@ -96,7 +96,7 @@ describe('decision events', () => {
     expect(resolveTurn(s, map, [])).toBe(s)
   })
 
-  it('a new game keeps surprise decisions quiet for twenty turns', () => {
+  it('a new game keeps surprise decisions quiet for the first seven turns', () => {
     const fresh = createInitialState(lineMap(3), { playerRegionId: 'r0', seed: 4, victoryShare: 0.4 })
     expect(fresh.turn).toBe(1)
     expect(fresh.pendingEvent).toBeNull()
@@ -114,7 +114,7 @@ describe('decision events', () => {
         s = applyEventChoice(s, map, 1)
       }
     }
-    expect(fired).toEqual([21, 41])
+    expect(fired).toEqual([8, 20, 32, 44])
   })
 
   it('an early save does not spring a surprise that was about to appear', () => {

@@ -1,7 +1,7 @@
 import type { BuildingType, TerritoryUpgrade, UnitType } from './types'
 
 /** How long one economy month lasts at 1×, in seconds. */
-export const MONTH_SECONDS = 20
+export const MONTH_SECONDS = 12
 
 /** How often idle armies look for a new march, in sim-seconds. */
 export const MILITARY_PULSE_SECONDS = 4

@@ -1,6 +1,7 @@
 import { UPGRADE_SPECS } from '../data/development'
 import { asTraining } from '../data/unitTypes'
-import { FIRST_EVENT_TURN } from './events'
+import { EVENT_BY_ID } from '../data/events'
+import { EVENT_GAP_TURNS, FIRST_EVENT_TURN } from './events'
 import { TERRITORY_UPGRADES, type GameState, type TerritoryDev, type TrainingJob, type WorldMap } from './types'
 
 /** Fills fields added after a save was written, so an older game can still load. */
@@ -49,6 +50,9 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     game.pendingEvent = null
     const scheduled = Number.isFinite(game.nextEventTurn) ? game.nextEventTurn : FIRST_EVENT_TURN
     game.nextEventTurn = Math.max(scheduled, FIRST_EVENT_TURN)
+  } else if (!Number.isFinite(game.nextEventTurn)) {
+    game.nextEventTurn = game.turn + EVENT_GAP_TURNS
   }
+  if (game.pendingEvent && !EVENT_BY_ID[game.pendingEvent.eventId]) game.pendingEvent = null
   return game
 }

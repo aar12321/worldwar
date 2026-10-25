@@ -51,6 +51,8 @@ export function BattleFX() {
   const [effects, setEffects] = useState<Effect[]>([])
   const { map } = getWorld()
   const speed = settings.fxSpeed
+  const speedRef = useRef(speed)
+  speedRef.current = speed
   const reduced = settings.reducedMotion
   const active = !!battle
   const savedView = useRef<{ lat: number; lng: number; altitude: number } | null>(null)
@@ -71,7 +73,7 @@ export function BattleFX() {
 
   useEffect(() => {
     if (!battle || !game) return
-    const t = (ms: number) => ms / speed
+    const t = (ms: number) => ms / speedRef.current
     const timers: number[] = []
     const at = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, t(ms)))
     const region = map.regions[battle.regionId]
@@ -124,7 +126,7 @@ export function BattleFX() {
     cursor += RESULT_MS
     at(cursor, () => shiftFx())
     return () => timers.forEach(clearTimeout)
-  }, [battle?.id, speed])
+  }, [battle?.id])
 
   const bars = useMemo(() => {
     if (!battle) return null

@@ -254,8 +254,9 @@ function collectLogs(s: GameState, from: number): SimNotice[] {
   for (const entry of s.log.slice(from)) {
     const involved = entry.nations.includes(player)
     if (!involved) continue
-    if (entry.kind === 'war' && entry.text.includes('declared war')) notices.push({ type: 'war', text: entry.text, pause: true, playerInvolved: true })
-    else if (entry.kind === 'info' && entry.text.includes('finished training')) notices.push({ type: 'trained', text: entry.text, pause: true, playerInvolved: true })
+    // Only a war declared on you stops the clock. One you declare, or an ally joining, is a toast.
+    if (entry.kind === 'war' && entry.text.includes('declared war')) notices.push({ type: 'war', text: entry.text, pause: entry.nations[1] === player, playerInvolved: true })
+    else if (entry.kind === 'info' && entry.text.includes('finished training')) notices.push({ type: 'trained', text: entry.text, pause: false, playerInvolved: true })
     else if ((entry.kind === 'economy' || entry.kind === 'info') && /finished|Construction complete/i.test(entry.text))
       notices.push({ type: 'built', text: entry.text, pause: false, playerInvolved: true })
   }
@@ -276,7 +277,8 @@ function collectCaptures(s: GameState, map: WorldMap, from: number): SimNotice[]
       type: loss ? 'loss' : 'capture',
       text: loss ? `${who} took ${name}` : `You captured ${name}`,
       territoryId: battle.territoryId ?? undefined,
-      pause: true,
+      // Winning is a toast and a ring on the map. Losing land stops the clock.
+      pause: loss,
       playerInvolved: true,
     })
   }

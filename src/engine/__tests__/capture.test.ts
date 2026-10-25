@@ -121,7 +121,7 @@ describe('real-time clock', () => {
     const done = advance(early.state, map, 1.2, [])
     expect(done.state.trainingQueue).toHaveLength(0)
     expect(done.state.armies[army.id].units.infantry).toBe(infantry + 1)
-    expect(done.notices.some((n) => n.type === 'trained' && n.pause)).toBe(true)
+    expect(done.notices.some((n) => n.type === 'trained' && n.pause === false)).toBe(true)
 
     const tanks = applyImmediate(done.state, map, { type: 'queueTrain', nationId: 'r0', territoryId: 'r0:0', unit: 'armor' })
     expect(tanks.state.trainingQueue[0].total).toBe(30)
@@ -148,6 +148,6 @@ describe('real-time clock', () => {
     expect(arrived.state.armies[army.id].march).toBeNull()
     expect(territoryOwner(arrived.state, map, 'r1:0')).toBe('r0')
     expect(arrived.state.regions.r1.owner).toBe('r1')
-    expect(arrived.notices.some((n) => n.type === 'capture' && n.territoryId === 'r1:0' && n.pause)).toBe(true)
+    expect(arrived.notices.some((n) => n.type === 'capture' && n.territoryId === 'r1:0' && n.pause === false)).toBe(true)
   })
 })
