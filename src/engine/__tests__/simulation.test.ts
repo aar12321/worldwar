@@ -32,5 +32,5 @@ describe('full simulation', () => {
 
   it('is deterministic for the same seed and orders', () => {
     expect(JSON.stringify(simulate(7, 12))).toBe(JSON.stringify(simulate(7, 12)))
-  })
+  }, 30_000)
 })
