@@ -16,6 +16,8 @@ export interface DifficultySpec {
   /** Chance per turn that a bot makes a noticeably poor decision. */
   mistakeRate: number
   aggression: number
+  /** Scales how many units bots recruit each month, and across how many sites. */
+  production: number
 }
 
 export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
@@ -29,6 +31,7 @@ export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
     botIncomeBonus: 0,
     mistakeRate: 0.1,
     aggression: 0.6,
+    production: 0.7,
   },
   normal: {
     name: 'Normal',
@@ -40,6 +43,7 @@ export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
     botIncomeBonus: 0,
     mistakeRate: 0.05,
     aggression: 1,
+    production: 1.2,
   },
   hard: {
     name: 'Hard',
@@ -51,6 +55,7 @@ export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
     botIncomeBonus: 0.15,
     mistakeRate: 0.02,
     aggression: 1.25,
+    production: 1.8,
   },
 }
 
