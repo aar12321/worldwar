@@ -130,6 +130,30 @@ IDs: **P** pacing/flow, **R** rules, **A** AI, **U** interface, **X** accessibil
 ### Not applicable
 Account creation, login, social features, monetization, in-app purchases, multiplayer and server networking do not exist. The README notes multiplayer as a future option; the deterministic engine would support it.
 
+## What this PR fixes
+
+Checked by unit tests (`npm test`, 154 pass) and by replaying the game in the browser after the changes. In the replay the game started paused with the introduction open, queuing three infantry caused no pause, **Declare war** was one click from the nation card, and the capture played one scene instead of a pause plus banner. The phone-size setup screen now fits with Start in view.
+
+| Fixed | IDs |
+|---|---|
+| Pacing and interruptions | P1, P2, P3, P4, P5 (month 20s → 12s, first event month 21 → 8, then every 12) |
+| Rules | R1, R2, R3, R4, R5, R6, R7, R8, R11 |
+| AI | A1, A2, A3, A4 |
+| Interface | U1, U2, U3, U4, U5, U6, U8, U10, "1 countries" in U11 |
+| Accessibility | X2 (event dialog and game over; focus and role), X3 |
+| Mobile | M1 |
+| Performance | F2 |
+| Robustness | S1, S2, S3, S6, part of R13 (`endTurn` and the turn timer removed) |
+
+![Start, paused](img/after/01-start-paused.png)
+![Declare war on every nation card](img/after/03-diplomacy-declare.png)
+![One scene for a capture](img/after/05-scene-0.png)
+![Setup on a phone](img/after/10-mobile-setup.png)
+
+Not fixed here, and still open: P6, P7, R9, R10, R12, most of R13 (the monthly path in `resolveTurn` and the `marches` store fields remain), A5, U7, U9, U11 (naming), U12–U16, X1, X4–X6, M2, F1, F3–F5, S4, S5, T1. The "Territory captured" title and the "Austria" label in the battle scene still sit on top of the HUD while the scene plays.
+
+Two changes worth knowing about: the first decision event now comes at month 8 instead of 21, which partly reverses commit 999540d, and a garrison is now a flat 1 defender per territory plus the country's barracks and workforce shared out. Both are numbers to tune in play.
+
 ## What would make it more fun
 
 ### Cut or merge
