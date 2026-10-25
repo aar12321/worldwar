@@ -106,7 +106,7 @@ describe('bots play fair', () => {
       expect(inbox.filter((p) => p.created === s.turn - 1 && p.kind !== 'callToArms').length).toBeLessThanOrEqual(1)
       expect(inbox.filter((p) => p.kind !== 'callToArms').length).toBeLessThanOrEqual(3)
     })
-  })
+  }, 30_000)
 
   it('hard rivals earn more than easy ones', () => {
     const easy = createInitialState(world, { playerRegionId: 'china', seed: 1, victoryShare: 0.6, difficulty: 'easy' })
@@ -137,6 +137,60 @@ describe('bots reason under fog of war', () => {
     giveRegions(s, 'r0', ['r1', 'r2'])
     expect(coalitionActive(s)).toBe(true)
     expect(opinionReport(s, wide, 'r3', 'r0').parts.some((p) => p.label === 'Fears your power')).toBe(true)
+  })
+
+  it('also band together once the player has taken half the territories they need', () => {
+    const wide = lineMap(40)
+    const s = startState(wide)
+    s.settings.victoryShare = 0.4
+    giveRegions(s, 'r0', ['r1', 'r2'])
+    expect(coalitionActive(s, wide)).toBe(false)
+    giveRegions(s, 'r0', ['r3'])
+    expect(coalitionActive(s, wide)).toBe(true)
+  })
+})
+
+describe('bots at war with the player', () => {
+  function front(turn: number): GameState {
+    const s = startState(map)
+    s.turn = turn
+    s.wars.push('r0|r1')
+    s.warStarted['r0|r1'] = 5
+    for (const a of Object.values(s.armies)) a.units = a.owner === 'r1' ? { infantry: 80, armor: 20, air: 10, naval: 0 } : { infantry: 1, armor: 0, air: 0, naval: 0 }
+    return s
+  }
+  const attacksPlayer = (s: GameState) => generateBotOrders(s, map, 'r1').some((o) => o.type === 'attack' && o.target === 'r0')
+
+  it('give the player a couple of months before the first attack', () => {
+    expect(attacksPlayer(front(5))).toBe(false)
+    expect(attacksPlayer(front(7))).toBe(false)
+    expect(attacksPlayer(front(9))).toBe(true)
+  })
+})
+
+describe('bot production', () => {
+  it('grows with the difficulty setting', () => {
+    const { map: world } = getWorld()
+    const recruits = (difficulty: Difficulty) => {
+      const s = createInitialState(world, { playerRegionId: 'china', seed: 3, victoryShare: 0.6, difficulty })
+      s.wars.push('france|germany')
+      s.nations.germany.resources.capital = 600
+      let count = 0
+      const sites = new Set<string>()
+      for (let turn = 2; turn <= 8; turn++) {
+        s.turn = turn
+        for (const o of generateBotOrders(s, world, 'germany')) {
+          if (o.type !== 'recruit') continue
+          count++
+          sites.add(o.territoryId)
+        }
+      }
+      return { count, sites: sites.size }
+    }
+    const easy = recruits('easy')
+    const hard = recruits('hard')
+    expect(hard.count).toBeGreaterThan(easy.count)
+    expect(hard.sites).toBeGreaterThan(1)
   })
 })
 

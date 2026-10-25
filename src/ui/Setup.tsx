@@ -1,11 +1,12 @@
 import { motion } from 'framer-motion'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { DIFFICULTY } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
 import type { Difficulty } from '../engine/types'
 import { territoryCount } from '../data/territories'
 import { getWorld } from '../map/world'
-import { useGame } from '../store'
+import { peekSave, useGame } from '../store'
+import { globeBridge } from './globeBridge'
 
 const VICTORY_OPTIONS = [
   { share: 0.25, label: 'Short', sub: 'Take 3 territories, or lead 25%' },
@@ -23,6 +24,7 @@ export function Setup() {
   const [query, setQuery] = useState('')
   const [share, setShare] = useState(0.4)
   const [difficulty, setDifficulty] = useState<Difficulty>('normal')
+  const saved = useMemo(() => (hasSave ? peekSave() : null), [hasSave])
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6))
 
   const nations = useMemo(
@@ -34,6 +36,11 @@ export function Setup() {
   )
   const filtered = nations.filter(({ r }) => r.name.toLowerCase().includes(query.toLowerCase()))
   const pick = selected ? map.regions[selected] : null
+  useEffect(() => {
+    // Turn the globe to the nation you picked, so you can see where you will play.
+    const region = selected ? map.regions[selected] : null
+    if (region) globeBridge.api?.pointOfView({ lat: region.lat, lng: region.lng, altitude: 1.8 }, 700)
+  }, [selected, map])
   const tier = (score: number) => (score > 25 ? 'Great Power' : score > 10 ? 'Major Power' : score > 4 ? 'Regional Power' : 'Minor Nation')
 
   return (
@@ -129,10 +136,15 @@ export function Setup() {
         <div className="flex gap-2">
           {hasSave && (
             <button className="btn flex-1 py-3" onClick={loadGame}>
-            Continue
+            Continue{saved ? ` ${saved.nation}, ${saved.date}` : ''}
           </button>
           )}
-          <button className="btn btn-primary flex-[2] py-3 text-[15px]" disabled={!pick} onClick={() => pick && newGame({ playerRegionId: pick.id, seed, victoryShare: share, difficulty })}>
+          <button className="btn btn-primary flex-[2] py-3 text-[15px]" disabled={!pick} onClick={() => {
+              if (!pick) return
+              if (hasSave && !window.confirm(`Starting a new game replaces your saved game${saved ? ` (${saved.nation}, ${saved.date})` : ''}. Start anyway?`)) return
+              newGame({ playerRegionId: pick.id, seed, victoryShare: share, difficulty })
+            }}
+          >
             Start game
           </button>
         </div>

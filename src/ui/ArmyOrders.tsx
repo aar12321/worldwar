@@ -118,7 +118,12 @@ export function ArmyControls({ army }: { army: Army }) {
             if (!game) return
             if (attackDestinations(game, army) === 0) {
               const fighting = enemiesOf(game, army.owner).some((id) => !id.startsWith('free-'))
-              toast(fighting ? 'This army is not on a border it can reach. A sea crossing needs a port.' : 'Declare war on a neighbor before this army can attack.', 'info')
+              toast(fighting ? 'This army is not on a border it can reach. A sea crossing needs a port.' : 'Declare war on a neighbor first. Diplomacy is open.', 'info')
+              if (!fighting) {
+                const { map } = getWorld()
+                const neighbor = map.regions[army.location].neighbors.map((id) => game.regions[id]?.owner).find((owner) => owner && owner !== army.owner)
+                useGame.getState().openDiplomacy(neighbor ?? null)
+              }
               return
             }
             setTargetMode('attack')

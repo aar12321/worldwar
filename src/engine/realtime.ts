@@ -2,7 +2,7 @@ import { generateAllBotOrders } from '../ai/bot'
 import { UPGRADE_SPECS, upgradeCost } from '../data/development'
 import { BUILDING_SPECS, UNIT_SPECS } from '../data/unitTypes'
 import { ensureTerritoryDev } from './development'
-import { addLog } from './helpers'
+import { addLog, atWar } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { BUILD_SECONDS, MILITARY_PULSE_SECONDS, MONTH_SECONDS, TRAIN_SECONDS, UPGRADE_SECONDS, travelSeconds } from './pace'
 import { applyResolvedOrder, resolveTurn } from './resolveTurn'
@@ -58,8 +58,12 @@ export function startLive(s: GameState, map: WorldMap, order: Order): string | n
 
   if (order.type === 'attack') {
     const army = s.armies[order.armyId]
-    const territoryId = order.territoryId ?? closestEnemyTerritory(s, map, order.nationId, army.location, order.target)
+    let territoryId: string | null | undefined =
+      order.territoryId ?? closestEnemyTerritory(s, map, order.nationId, army.location, order.target, undefined, (owner) => atWar(s, order.nationId, owner))
+    // Rebels in your own country have no enemy territory; march at the country itself.
+    if (!territoryId && s.regions[order.target]?.owner === order.nationId) territoryId = map.territoriesByRegion[order.target]?.[0]
     if (!territoryId) return 'No border territory to attack.'
+    army.entrenched = 0
     const from = armyPoint(map, army)
     const to = map.territories[territoryId]
     pay(s, order)
@@ -82,6 +86,7 @@ export function startLive(s: GameState, map: WorldMap, order: Order): string | n
     const from = armyPoint(map, army)
     const to = map.regions[order.to]
     pay(s, order)
+    army.entrenched = 0
     army.march = {
       kind: 'move',
       to: order.to,
@@ -236,6 +241,7 @@ function progressMarches(s: GameState, map: WorldMap, dt: number) {
     army.march = null
     if (march.kind === 'move') {
       if (s.regions[march.to]?.owner === army.owner && canReach(s, map, army.owner, army.location, march.to, 'move').ok) army.location = march.to
+      army.entrenched = 0
       continue
     }
     resolveAttacks(
@@ -254,8 +260,9 @@ function collectLogs(s: GameState, from: number): SimNotice[] {
   for (const entry of s.log.slice(from)) {
     const involved = entry.nations.includes(player)
     if (!involved) continue
-    if (entry.kind === 'war' && entry.text.includes('declared war')) notices.push({ type: 'war', text: entry.text, pause: true, playerInvolved: true })
-    else if (entry.kind === 'info' && entry.text.includes('finished training')) notices.push({ type: 'trained', text: entry.text, pause: true, playerInvolved: true })
+    // Only a war declared on you stops the clock. One you declare, or an ally joining, is a toast.
+    if (entry.kind === 'war' && entry.text.includes('declared war')) notices.push({ type: 'war', text: entry.text, pause: entry.nations[1] === player, playerInvolved: true })
+    else if (entry.kind === 'info' && entry.text.includes('finished training')) notices.push({ type: 'trained', text: entry.text, pause: false, playerInvolved: true })
     else if ((entry.kind === 'economy' || entry.kind === 'info') && /finished|Construction complete/i.test(entry.text))
       notices.push({ type: 'built', text: entry.text, pause: false, playerInvolved: true })
   }
@@ -276,7 +283,8 @@ function collectCaptures(s: GameState, map: WorldMap, from: number): SimNotice[]
       type: loss ? 'loss' : 'capture',
       text: loss ? `${who} took ${name}` : `You captured ${name}`,
       territoryId: battle.territoryId ?? undefined,
-      pause: true,
+      // Winning is a toast and a ring on the map. Losing land stops the clock.
+      pause: loss,
       playerInvolved: true,
     })
   }

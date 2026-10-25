@@ -1,11 +1,10 @@
 import { create } from 'zustand'
-import { generateAllBotOrders } from './ai/bot'
 import { normalizeGame } from './engine/migrate'
 import { PLAYER_COLOR } from './data/mapColors'
+import { turnDate } from './engine/helpers'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
 import { validateOrder } from './engine/orders'
-import { resolveTurn } from './engine/resolveTurn'
 import { QUEUED_ORDERS, advance, applyImmediate, cancelMarch, cancelProject, type SimNotice } from './engine/realtime'
 import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
@@ -15,6 +14,8 @@ import { speak } from './ui/plain'
 const SAVE_KEY = 'worlds-of-others-save-v2'
 const ORDERS_KEY = 'worlds-of-others-orders-v1'
 const SETTINGS_KEY = 'worlds-of-others-settings-v1'
+/** Everything a crashed game may have left behind. */
+export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 export type Panel = 'none' | 'nation' | 'tech' | 'diplomacy' | 'log' | 'settings' | 'territories' | 'military'
 export type NationTab = 'economy' | 'laws' | 'arms' | 'armies'
@@ -28,11 +29,11 @@ export interface March {
 
 export interface Settings {
   reducedMotion: boolean
-  turnTimer: number
   fxSpeed: 1 | 2
   /** How fast the live clock runs. */
   simSpeed: 1 | 2 | 4
-  battleFx: boolean
+  /** Which of your battles play the full-screen scene. The rest become a toast. */
+  battleScenes: 'important' | 'all' | 'off'
   /** Quiet “what to do” prompt on the globe. */
   showTips: boolean
   /** 0–2 are the introduction cards. 3 means the introduction is finished. */
@@ -79,6 +80,8 @@ interface GameStore {
   newGame(opts: NewGameOptions): void
   loadGame(): void
   quitToMenu(): void
+  /** Leaves a finished or unwanted game and deletes its save. */
+  abandonGame(): void
   selectRegion(id: RegionId | null): void
   focusTerritory(id: string, look?: boolean): void
   openTerritory(id?: string): void
@@ -93,7 +96,6 @@ interface GameStore {
   removeOrder(index: number): void
   setPolicy(taxRate: number, draftRate: number): void
   clickRegion(id: RegionId): void
-  endTurn(): void
   step(dt: number): void
   togglePause(): void
   setSpeed(speed: 1 | 2 | 4): void
@@ -112,21 +114,39 @@ interface GameStore {
 
 const defaultSettings: Settings = {
   reducedMotion: typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
-  turnTimer: 0,
   fxSpeed: 1,
   simSpeed: 1,
-  battleFx: true,
+  battleScenes: 'important',
   showTips: true,
   tutorialStep: 0,
+}
+
+/** Keeps a stored setting only if it has a value the game understands. A bad one would freeze the clock. */
+function sanitizeSettings(raw: Partial<Settings>): Settings {
+  const merged = { ...defaultSettings, ...raw }
+  const oneOf = <T,>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? (value as T) : fallback)
+  return {
+    reducedMotion: typeof merged.reducedMotion === 'boolean' ? merged.reducedMotion : defaultSettings.reducedMotion,
+    fxSpeed: oneOf(merged.fxSpeed, [1, 2], 1),
+    simSpeed: oneOf(merged.simSpeed, [1, 2, 4], 1),
+    battleScenes: oneOf(merged.battleScenes, ['important', 'all', 'off'], 'important'),
+    showTips: typeof merged.showTips === 'boolean' ? merged.showTips : true,
+    tutorialStep: Number.isFinite(merged.tutorialStep) ? merged.tutorialStep : 0,
+  }
 }
 
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
-    return raw ? { ...defaultSettings, ...JSON.parse(raw) } : defaultSettings
+    return raw ? sanitizeSettings(JSON.parse(raw) as Partial<Settings>) : defaultSettings
   } catch {
     return defaultSettings
   }
+}
+
+/** The clock waits while the introduction cards are on screen. */
+function introOpen(settings: Settings): boolean {
+  return settings.showTips && (settings.tutorialStep ?? 0) < 3
 }
 
 function writeOrders(orders: Order[]) {
@@ -138,9 +158,31 @@ function writeOrders(orders: Order[]) {
   }
 }
 
+/** A one-line description of the saved game, for the Continue button. */
+export function peekSave(): { nation: string; date: string } | null {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as GameState
+    const nation = saved.nations?.[saved.playerId]?.name
+    return nation ? { nation, date: turnDate(saved.turn) } : null
+  } catch {
+    return null
+  }
+}
+
+function hasStoredSave(): boolean {
+  try {
+    return !!localStorage.getItem(SAVE_KEY)
+  } catch {
+    return false
+  }
+}
+
 function save(game: GameState | null, orders?: Order[]) {
   try {
-    if (game) localStorage.setItem(SAVE_KEY, JSON.stringify(game))
+    // A finished game is not worth resuming, so it never stays as the save.
+    if (game && game.outcome === 'playing') localStorage.setItem(SAVE_KEY, JSON.stringify(game))
     else {
       localStorage.removeItem(SAVE_KEY)
       localStorage.removeItem(ORDERS_KEY)
@@ -184,13 +226,19 @@ function absorb(state: GameState, notices: SimNotice[], flushOrders: boolean) {
   const store = useGame.getState()
   const player = state.playerId
   const seen = new Set(store.game?.battles.map((b) => b.id) ?? [])
-  const fresh = store.settings.battleFx
-    ? state.battles.filter((b) => !seen.has(b.id) && (b.attacker.nationId === player || b.defender.nationId === player))
-    : []
+  const mine = state.battles.filter((b) => !seen.has(b.id) && (b.attacker.nationId === player || b.defender.nationId === player))
+  const mode = store.settings.battleScenes
+  const fresh = mine.filter((b) => mode === 'all' || (mode === 'important' && b.captured))
+  for (const b of mine) {
+    if (b.captured || fresh.includes(b)) continue
+    const won = (b.attacker.nationId === player) === (b.winner === 'attacker')
+    store.toast(quietBattleText(b, player), won ? 'success' : 'error', 4200)
+  }
   const now = performance.now()
   const flashes = store.flashes.filter((flash) => flash.until > now)
   let banner = store.banner
   let paused = store.paused
+  let stops = 0
   for (const notice of notices) {
     if (notice.territoryId) {
       flashes.push({ id: notice.territoryId, until: now + 2600 })
@@ -198,11 +246,17 @@ function absorb(state: GameState, notices: SimNotice[], flushOrders: boolean) {
       const color = state.nations[player]?.color ?? PLAYER_COLOR
       if (territory) useFx.getState().addRing({ lat: territory.lat, lng: territory.lng, color: notice.type === 'loss' ? '#ff453a' : color, maxRadius: 3.2 }, 1800)
     }
+    if (notice.type === 'capture' || notice.type === 'loss') useFx.getState().shake(notice.type === 'loss' ? 1.15 : 0.7)
     if (notice.pause) {
       paused = true
-      banner = { text: notice.text, tone: notice.type === 'loss' ? 'bad' : 'good', territoryId: notice.territoryId }
-      if (notice.type === 'capture' || notice.type === 'loss') useFx.getState().shake(notice.type === 'loss' ? 1.15 : 0.7)
-    } else store.toast(notice.text, 'success', 4200)
+      stops++
+      // Several stops in one tick share one banner.
+      banner = stops === 1 ? { text: notice.text, tone: notice.type === 'loss' ? 'bad' : 'good', territoryId: notice.territoryId } : { ...banner!, text: `${banner!.text} (+${stops - 1} more)` }
+    } else store.toast(notice.text, notice.type === 'loss' ? 'error' : 'success', 4200)
+  }
+  if (flushOrders) {
+    const mineNews = state.dispatches.filter((d) => d.to === player || d.from === player)
+    for (const d of mineNews.slice(-4)) store.toast(d.text, DISPATCH_TONE[d.kind], 6000)
   }
   const selected = store.selectedArmy
   if (paused || flushOrders) save(state, flushOrders ? [] : store.orders)
@@ -220,6 +274,13 @@ function absorb(state: GameState, notices: SimNotice[], flushOrders: boolean) {
     flashes,
     selectedArmy: selected && state.armies[selected] ? selected : null,
   })
+}
+
+function quietBattleText(b: BattleReport, player: NationId): string {
+  const where = getWorld().map.regions[b.regionId]?.name ?? 'the front'
+  const attackerWon = b.winner === 'attacker'
+  if (b.attacker.nationId === player) return attackerWon ? `Won the battle at ${where}` : `Your assault on ${where} was repulsed`
+  return attackerWon ? `Lost the battle at ${where}` : `Held the line at ${where}`
 }
 
 function heartlandOf(state: { game: GameState | null; selectedRegion: RegionId | null }): string | null {
@@ -258,13 +319,13 @@ export const useGame = create<GameStore>((set, get) => ({
   banner: null,
   flashes: [],
   toasts: [],
-  hasSave: typeof localStorage !== 'undefined' && !!localStorage.getItem(SAVE_KEY),
+  hasSave: hasStoredSave(),
 
   newGame(opts) {
     const { map } = getWorld()
     const game = createInitialState(map, opts)
     save(game, [])
-    set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], hasSave: true, paused: false, banner: null, flashes: [] })
+    set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], hasSave: true, paused: introOpen(get().settings), banner: null, flashes: [] })
   },
 
   loadGame() {
@@ -281,7 +342,12 @@ export const useGame = create<GameStore>((set, get) => ({
   quitToMenu() {
     const { game, orders } = get()
     if (game) save(game, orders)
-    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [] })
+    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], hasSave: hasStoredSave() })
+  },
+
+  abandonGame() {
+    save(null)
+    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], paused: false, banner: null, hasSave: false })
   },
 
   selectRegion(id) {
@@ -470,27 +536,6 @@ export const useGame = create<GameStore>((set, get) => ({
       return
     }
     get().focusTerritory(id, true)
-  },
-
-  endTurn() {
-    const { game, orders, settings, fxQueue } = get()
-    if (!game || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
-    const { map } = getWorld()
-    const botOrders = generateAllBotOrders(game, map)
-    const next = resolveTurn(game, map, [...orders, ...botOrders])
-    const player = game.playerId
-    const fx = settings.battleFx
-      ? next.battles.filter((b) => b.attacker.nationId === player || b.defender.nationId === player)
-      : []
-    const marches: March[] = []
-    for (const a of Object.values(next.armies)) {
-      const before = game.armies[a.id]
-      if (before && before.location !== a.location) marches.push({ armyId: a.id, owner: a.owner, from: before.location, to: a.location })
-    }
-    save(next, [])
-    set({ game: next, orders: [], fxQueue: fx, marches, marchStamp: performance.now(), targetMode: null, selectedArmy: next.armies[get().selectedArmy ?? ''] ? get().selectedArmy : null })
-    const mine = next.dispatches.filter((d) => d.to === player || d.from === player)
-    for (const d of mine.slice(-4)) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
   },
 
   chooseEventOption(index) {

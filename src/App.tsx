@@ -18,16 +18,19 @@ function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
+      if (e.ctrlKey || e.metaKey || e.altKey) return
       if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') return
       const st = useGame.getState()
       if (!st.game) return
+      if (st.game.pendingEvent || st.game.outcome !== 'playing') return
       if (e.key === 'Escape') {
-        if (st.targetMode) st.setTargetMode(null)
+        if (st.fxQueue.length > 0) st.clearFx()
+        else if (st.targetMode) st.setTargetMode(null)
         else if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
       } else if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault()
-        st.togglePause()
+        if (!e.repeat) st.togglePause()
       } else {
         const map: Record<string, 'tech' | 'nation' | 'diplomacy' | 'log' | 'territories' | 'military'> = {
           t: 'tech',

@@ -224,9 +224,14 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (!a || a.owner !== o.nationId) return 'Not your army'
       const target = s.regions[o.target]
       if (!target) return 'Unknown region'
-      if (target.owner === o.nationId) return target.rebels > 0 ? null : 'Region is already yours'
+      if (target.owner === o.nationId) {
+        // Your own country: put down rebels, or retake a territory an enemy holds.
+        const holder = o.territoryId ? territoryOwner(s, map, o.territoryId) : o.nationId
+        const retake = holder !== o.nationId && atWar(s, o.nationId, holder)
+        if (!retake) return target.rebels > 0 ? null : 'Region is already yours'
+      }
       const pendingWar = pending.some((p) => p.type === 'declareWar' && p.target === target.owner)
-      if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
+      if (target.owner !== o.nationId && !atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
       if (!canReach(s, map, o.nationId, a.location, o.target, 'attack').ok)
         return 'Not adjacent. A sea invasion needs a port.'
       if (o.territoryId) {

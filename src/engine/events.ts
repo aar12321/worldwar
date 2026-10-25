@@ -8,10 +8,10 @@ import { createRng, type Rng } from './rng'
 import type { EventEffect, GameState, NationId, PendingEvent, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
-/** Opening month is turn 1. The first surprise waits until this turn, twenty months later. */
-export const FIRST_EVENT_TURN = 21
+/** Opening month is turn 1. The first surprise waits until this turn, seven months later. */
+export const FIRST_EVENT_TURN = 8
 /** Months between surprise decisions once they start. */
-export const EVENT_GAP_TURNS = 20
+export const EVENT_GAP_TURNS = 12
 
 function availableTechs(s: GameState, nationId: NationId): string[] {
   const n = s.nations[nationId]
@@ -133,7 +133,7 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
   for (const e of option.effects) {
     switch (e.type) {
       case 'resource':
-        n.resources[e.key] = Math.max(e.key === 'capital' ? -9999 : 0, n.resources[e.key] + effectAmount(e, workforce))
+        n.resources[e.key] = Math.max(0, n.resources[e.key] + effectAmount(e, workforce))
         break
       case 'stability':
         n.stability = clamp(n.stability + e.amount, 0, 100)

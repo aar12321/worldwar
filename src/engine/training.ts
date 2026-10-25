@@ -9,7 +9,10 @@ export function addUnitAtTerritory(s: GameState, map: WorldMap, nationId: Nation
   if (!t) return null
   let army = boundArmy(s, t.id, nationId)
   if (!army) army = createArmy(s, { owner: nationId, location: t.regionId, units: emptyUnits(), homeTerritoryId: t.id })
-  army.units[unit] += 1
+  // A new recruit is green, so it pulls the army's average rank for that unit down.
+  const have = army.units[unit]
+  army.training[unit] = Math.round((army.training[unit] * have) / (have + 1))
+  army.units[unit] = have + 1
   return army
 }
 

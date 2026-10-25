@@ -68,9 +68,21 @@ export function attackableTerritoryIds(
 }
 
 /** Closest enemy territory in a region to the attacker's country. */
-export function closestEnemyTerritory(s: GameState, map: WorldMap, nationId: NationId, fromRegion: RegionId, toRegion: RegionId, prefer?: string): string | null {
+export function closestEnemyTerritory(
+  s: GameState,
+  map: WorldMap,
+  nationId: NationId,
+  fromRegion: RegionId,
+  toRegion: RegionId,
+  prefer?: string,
+  /** Which holders may be attacked. Defaults to anyone but the attacker; callers pass a war check. */
+  isEnemy: (owner: NationId) => boolean = (owner) => owner !== nationId,
+): string | null {
   const ids = map.territoriesByRegion[toRegion] ?? []
-  const enemy = ids.filter((id) => territoryOwner(s, map, id) !== nationId)
+  const enemy = ids.filter((id) => {
+    const owner = territoryOwner(s, map, id)
+    return owner !== nationId && isEnemy(owner)
+  })
   if (!enemy.length) return null
   if (prefer && enemy.includes(prefer)) return prefer
   const origin = map.regions[fromRegion]

@@ -149,7 +149,7 @@ export function CountryPanel() {
             <>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <Stat label="People" value={`${region.population.toFixed(1)}m`} />
-                <Stat label="Defenders" value={garrisonStrength(game, map, selected).toFixed(1)} />
+                <Stat label="Garrison" value={garrisonStrength(game, map, selected).toFixed(1)} />
                 <Stat
                   label={mine ? 'Supply' : 'Defense'}
                   value={mine ? (supplyCut ? 'Cut off' : 'Supplied') : `${TERRAIN[mr.terrain].defense.toFixed(2)}×`}

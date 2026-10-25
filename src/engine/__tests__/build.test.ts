@@ -122,7 +122,7 @@ describe('building and training', () => {
     expect(fast.state.armies[army.id].units.infantry).toBe(infantry + 1)
     expect(fast.state.trainingQueue).toHaveLength(1)
     expect(fast.state.trainingQueue[0].remaining).toBeCloseTo(TRAIN_SECONDS.infantry, 5)
-    expect(fast.notices.some((notice) => notice.type === 'trained' && notice.pause)).toBe(true)
+    expect(fast.notices.some((notice) => notice.type === 'trained' && notice.pause === false)).toBe(true)
 
     fast.state.monthElapsed = 0
     const both = advance(fast.state, map, TRAIN_SECONDS.infantry)

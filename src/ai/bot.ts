@@ -6,7 +6,7 @@ import { ARMS, TRAINING, UNIT_SPECS } from '../data/unitTypes'
 import { combatMods } from '../engine/arms'
 import { recentlyProposed } from '../engine/diplomacy'
 import { computeEconomy, unitPower, type EconomyReport } from '../engine/economy'
-import { armyIsHome, atWar, boundArmy, canUseUnit, clamp, factoryCount, hasCasusBelli, hasPact, isAllied, partnerIndex, totalUnits } from '../engine/helpers'
+import { armyIsHome, atWar, boundArmy, canUseUnit, clamp, factoryCount, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex, totalUnits } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { createRng, type Rng } from '../engine/rng'
 import { marketPrices, stockOf, type MarketPrices } from '../engine/trade'
@@ -21,7 +21,7 @@ import { coalitionActive, opinionOf } from './opinion'
 export const BOT = {
   firstWarTurn: 3,
   minRecruitsPerTurn: 2,
-  maxRecruitsPerTurn: 8,
+  maxRecruitsPerTurn: 16,
   maxBuildsPerTurn: 3,
   /** Major decisions (research, construction, recruitment drives, diplomacy, war) a bot can make per month. */
   attention: [2, 4] as const,
@@ -29,6 +29,8 @@ export const BOT = {
   maxPlayerProposalsPerTurn: 1,
   maxPlayerInbox: 3,
   maxAlliances: 2,
+  /** Months after a bot declares war on the player before its armies may attack. */
+  reactionTurns: 2,
 }
 
 /** Shared per-turn facts every bot reads, computed once instead of once per bot. */
@@ -89,7 +91,7 @@ export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
     enemies,
     allies: partnerIndex(s.alliances),
     prices: marketPrices(s),
-    coalition: coalitionActive(s),
+    coalition: coalitionActive(s, map),
     playerProposals: 0,
     playerInbox: s.proposals.filter((p) => p.to === player).length,
     warsOnPlayer: (enemies.get(player) ?? []).filter((e) => !e.startsWith('free-')).length,
@@ -331,11 +333,15 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         }
         return trainHome()
       }
-      const recruitRegion = map.territories[recruitTerritory].regionId
       let room = upkeepRoom
       let recruited = 0
-      const maxRecruits = clamp(Math.round(income / 30), BOT.minRecruitsPerTurn, BOT.maxRecruitsPerTurn)
-      for (let i = 0; i < maxRecruits && budget > 10; i++) {
+      const maxRecruits = clamp(Math.round((income / 30) * diff.production), BOT.minRecruitsPerTurn, BOT.maxRecruitsPerTurn)
+      // Rich nations raise units at several sites at once instead of queueing everything at one.
+      const siteCount = clamp(Math.ceil(maxRecruits / 3), 1, 4)
+      const rotation = [recruitTerritory, ...sites.filter((tid) => tid !== recruitTerritory)].slice(0, siteCount)
+      for (let i = 0; i < maxRecruits && budget > 10 && rotation.length > 0; i++) {
+        const site = rotation[i % rotation.length]
+        const recruitRegion = map.territories[site].regionId
         const roll = rng.next()
         let unit: UnitType = 'infantry'
         if (roll < 0.3 && canUseUnit(n, 'armor')) unit = 'armor'
@@ -345,7 +351,11 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         if (spec.upkeep > room || spec.capitalCost > budget) break
         if (n.foodShortage || n.resources.food <= 0) break
         if (econ.netFood < spec.food && n.resources.food < econ.foodConsumption * 2) break
-        if (!tryAdd({ type: 'recruit', nationId, territoryId: recruitTerritory, unit })) break
+        if (!tryAdd({ type: 'recruit', nationId, territoryId: site, unit })) {
+          rotation.splice(i % rotation.length, 1)
+          i--
+          continue
+        }
         budget -= spec.capitalCost
         room -= spec.upkeep
         recruited++
@@ -470,7 +480,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   }
 
   const attackRatio = (diff.attackRatio / persona.risk) * (mistake === 'overconfident' ? 0.75 : 1)
-  const warTargets = new Set(enemies)
+  // A war declared on the player gives them a couple of months to raise an army before the first blow.
+  const warTargets = new Set(enemies.filter((e) => e !== playerId || s.turn - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
   const fronts = new Set(enemies)
   for (const o of orders) {
     if (o.type !== 'declareWar') continue
