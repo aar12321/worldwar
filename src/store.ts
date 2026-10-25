@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { normalizeGame } from './engine/migrate'
 import { PLAYER_COLOR } from './data/mapColors'
+import { turnDate } from './engine/helpers'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
 import { validateOrder } from './engine/orders'
@@ -13,6 +14,8 @@ import { speak } from './ui/plain'
 const SAVE_KEY = 'worlds-of-others-save-v2'
 const ORDERS_KEY = 'worlds-of-others-orders-v1'
 const SETTINGS_KEY = 'worlds-of-others-settings-v1'
+/** Everything a crashed game may have left behind. */
+export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 export type Panel = 'none' | 'nation' | 'tech' | 'diplomacy' | 'log' | 'settings' | 'territories' | 'military'
 export type NationTab = 'economy' | 'laws' | 'arms' | 'armies'
@@ -77,6 +80,8 @@ interface GameStore {
   newGame(opts: NewGameOptions): void
   loadGame(): void
   quitToMenu(): void
+  /** Leaves a finished or unwanted game and deletes its save. */
+  abandonGame(): void
   selectRegion(id: RegionId | null): void
   focusTerritory(id: string, look?: boolean): void
   openTerritory(id?: string): void
@@ -116,10 +121,24 @@ const defaultSettings: Settings = {
   tutorialStep: 0,
 }
 
+/** Keeps a stored setting only if it has a value the game understands. A bad one would freeze the clock. */
+function sanitizeSettings(raw: Partial<Settings>): Settings {
+  const merged = { ...defaultSettings, ...raw }
+  const oneOf = <T,>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? (value as T) : fallback)
+  return {
+    reducedMotion: typeof merged.reducedMotion === 'boolean' ? merged.reducedMotion : defaultSettings.reducedMotion,
+    fxSpeed: oneOf(merged.fxSpeed, [1, 2], 1),
+    simSpeed: oneOf(merged.simSpeed, [1, 2, 4], 1),
+    battleScenes: oneOf(merged.battleScenes, ['important', 'all', 'off'], 'important'),
+    showTips: typeof merged.showTips === 'boolean' ? merged.showTips : true,
+    tutorialStep: Number.isFinite(merged.tutorialStep) ? merged.tutorialStep : 0,
+  }
+}
+
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
-    return raw ? { ...defaultSettings, ...JSON.parse(raw) } : defaultSettings
+    return raw ? sanitizeSettings(JSON.parse(raw) as Partial<Settings>) : defaultSettings
   } catch {
     return defaultSettings
   }
@@ -139,9 +158,31 @@ function writeOrders(orders: Order[]) {
   }
 }
 
+/** A one-line description of the saved game, for the Continue button. */
+export function peekSave(): { nation: string; date: string } | null {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as GameState
+    const nation = saved.nations?.[saved.playerId]?.name
+    return nation ? { nation, date: turnDate(saved.turn) } : null
+  } catch {
+    return null
+  }
+}
+
+function hasStoredSave(): boolean {
+  try {
+    return !!localStorage.getItem(SAVE_KEY)
+  } catch {
+    return false
+  }
+}
+
 function save(game: GameState | null, orders?: Order[]) {
   try {
-    if (game) localStorage.setItem(SAVE_KEY, JSON.stringify(game))
+    // A finished game is not worth resuming, so it never stays as the save.
+    if (game && game.outcome === 'playing') localStorage.setItem(SAVE_KEY, JSON.stringify(game))
     else {
       localStorage.removeItem(SAVE_KEY)
       localStorage.removeItem(ORDERS_KEY)
@@ -278,7 +319,7 @@ export const useGame = create<GameStore>((set, get) => ({
   banner: null,
   flashes: [],
   toasts: [],
-  hasSave: typeof localStorage !== 'undefined' && !!localStorage.getItem(SAVE_KEY),
+  hasSave: hasStoredSave(),
 
   newGame(opts) {
     const { map } = getWorld()
@@ -301,7 +342,12 @@ export const useGame = create<GameStore>((set, get) => ({
   quitToMenu() {
     const { game, orders } = get()
     if (game) save(game, orders)
-    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [] })
+    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], hasSave: hasStoredSave() })
+  },
+
+  abandonGame() {
+    save(null)
+    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], paused: false, banner: null, hasSave: false })
   },
 
   selectRegion(id) {

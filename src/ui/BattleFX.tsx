@@ -52,7 +52,9 @@ export function BattleFX() {
   const { map } = getWorld()
   const speed = settings.fxSpeed
   const speedRef = useRef(speed)
-  speedRef.current = speed
+  useEffect(() => {
+    speedRef.current = speed
+  }, [speed])
   const reduced = settings.reducedMotion
   const active = !!battle
   const savedView = useRef<{ lat: number; lng: number; altitude: number } | null>(null)

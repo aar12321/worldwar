@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { useGame } from './store'
+import { ErrorBoundary } from './ui/ErrorBoundary'
 import { globeBridge } from './ui/globeBridge'
 
 if (import.meta.env.DEV) {
@@ -12,6 +13,8 @@ if (import.meta.env.DEV) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )

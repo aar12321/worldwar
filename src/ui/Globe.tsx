@@ -580,6 +580,15 @@ export function WorldGlobe() {
       const c = attack ? NEON.magenta : NEON.cyan
       out.push({ startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, color: [withAlpha(c, 0.2), c], stroke: attack ? 0.55 : 0.4, dash: 0.4, gap: 0.18, speed: attack ? 700 : 1100, label: `${attack ? 'Attack' : 'Move'}: ${to.name}` })
     }
+    // Marches in progress. Moves and attacks run on the live clock, so they are not in the queued orders.
+    for (const a of Object.values(game.armies)) {
+      const m = a.march
+      if (!m || a.owner !== game.playerId) continue
+      const attack = m.kind === 'attack'
+      const c = attack ? NEON.magenta : NEON.cyan
+      const place = map.territories[m.territoryId]?.name ?? map.regions[m.to]?.name ?? 'the front'
+      out.push({ startLat: m.fromLat, startLng: m.fromLng, endLat: m.toLat, endLng: m.toLng, color: [withAlpha(c, 0.2), c], stroke: attack ? 0.55 : 0.4, dash: 0.4, gap: 0.18, speed: attack ? 700 : 1100, label: `${attack ? 'Attacking' : 'Moving to'} ${place}` })
+    }
     const p = game.nations[game.playerId]
     if (p.alive) {
       const dist = supplyDistances(game, map, p.id)

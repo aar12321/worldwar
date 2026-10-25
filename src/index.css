@@ -527,3 +527,28 @@ body:has(.side-panel, .tech-panel) .country-panel {
     animation: none;
   }
 }
+
+/* Phones: the nation list and the start card stack instead of sharing the width. */
+@media (max-width: 640px) {
+  .setup-title {
+    top: 8px !important;
+  }
+  .setup-title h1 {
+    font-size: 26px !important;
+  }
+  .setup-list {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    top: 72px !important;
+    bottom: auto !important;
+    height: 30vh !important;
+  }
+  .setup-card {
+    left: 8px !important;
+    right: 8px !important;
+    bottom: 8px !important;
+    width: auto !important;
+    max-height: 56vh !important;
+  }
+}

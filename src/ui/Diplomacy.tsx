@@ -474,6 +474,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
                 {treaties ? 'Hide treaties' : 'Treaties'}
               </button>
             )}
+            {!allied && <OrderButton order={{ type: 'declareWar', nationId: player.id, target: id }} label={`Declare war · ${cb ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} influence`} tone="btn-red" />}
             {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label={`Leave alliance · ${COSTS.leaveAlliance} influence`} tone="btn-quiet" />}
           </>
         )}
@@ -482,7 +483,6 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
         <div className="flex flex-wrap gap-1.5">
           {!pact && <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'pact' } }} label={`Peace pact · ${PROPOSAL_COSTS.pact} influence`} />}
           <OrderButton order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'alliance' } }} label={`Alliance · ${PROPOSAL_COSTS.alliance} influence`} />
-          <OrderButton order={{ type: 'declareWar', nationId: player.id, target: id }} label={`Declare war · ${cb ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} influence`} tone="btn-red" />
         </div>
       )}
       {callable.length > 0 && (
@@ -527,7 +527,7 @@ export function DiplomacyPanel() {
   const ctx = useMemo<RowContext | null>(() => {
     if (!game) return null
     const { map } = getWorld()
-    return { neighbors: nationNeighbors(game, map, game.playerId), coalition: coalitionActive(game), vision, myPower: militaryPower(game, game.playerId) }
+    return { neighbors: nationNeighbors(game, map, game.playerId), coalition: coalitionActive(game, map), vision, myPower: militaryPower(game, game.playerId) }
   }, [game, vision])
   if (!view || !ctx || !game) return null
   const { player } = view
