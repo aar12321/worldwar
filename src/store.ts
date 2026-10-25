@@ -6,6 +6,7 @@ import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
 import { validateOrder } from './engine/orders'
 import { resolveTurn } from './engine/resolveTurn'
+import { sceneKey } from './engine/sceneKey'
 import { QUEUED_ORDERS, advance, applyImmediate, cancelMarch, cancelProject, type SimNotice } from './engine/realtime'
 import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
@@ -58,6 +59,8 @@ export interface Flash {
 
 interface GameStore {
   game: GameState | null
+  /** Bumps only when the map picture changes, not on every clock tick. */
+  sceneRev: number
   orders: Order[]
   selectedRegion: RegionId | null
   selectedTerritory: string | null
@@ -179,6 +182,17 @@ function keptOrder(item: unknown, playerId: string): item is Order {
 }
 
 let toastId = 1
+let sceneToken = ''
+let sceneSerial = 0
+
+function scenePatch(game: GameState | null): { sceneRev: number } {
+  const next = game ? sceneKey(game) : ''
+  if (next !== sceneToken) {
+    sceneToken = next
+    sceneSerial += 1
+  }
+  return { sceneRev: sceneSerial }
+}
 
 function absorb(state: GameState, notices: SimNotice[], flushOrders: boolean) {
   const store = useGame.getState()
@@ -206,18 +220,20 @@ function absorb(state: GameState, notices: SimNotice[], flushOrders: boolean) {
   }
   const selected = store.selectedArmy
   if (paused || flushOrders) save(state, flushOrders ? [] : store.orders)
-  if (flashes.length) {
+  const flashesSame = flashes.length === store.flashes.length && flashes.every((flash, index) => flash === store.flashes[index])
+  if (!flashesSame) {
     window.setTimeout(() => {
       useGame.setState((current) => ({ flashes: current.flashes.filter((flash) => flash.until > performance.now()) }))
     }, 2700)
   }
   useGame.setState({
     game: state,
+    ...scenePatch(state),
     orders: flushOrders ? [] : store.orders,
-    fxQueue: [...store.fxQueue, ...fresh],
+    ...(fresh.length ? { fxQueue: [...store.fxQueue, ...fresh] } : {}),
     paused,
     banner,
-    flashes,
+    ...(flashesSame ? {} : { flashes }),
     selectedArmy: selected && state.armies[selected] ? selected : null,
   })
 }
@@ -242,6 +258,7 @@ const DISPATCH_TONE: Record<Dispatch['kind'], Toast['tone']> = {
 
 export const useGame = create<GameStore>((set, get) => ({
   game: null,
+  sceneRev: 0,
   orders: [],
   selectedRegion: null,
   selectedTerritory: null,
@@ -264,7 +281,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const { map } = getWorld()
     const game = createInitialState(map, opts)
     save(game, [])
-    set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], hasSave: true, paused: false, banner: null, flashes: [] })
+    set({ game, ...scenePatch(game), orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], hasSave: true, paused: false, banner: null, flashes: [] })
   },
 
   loadGame() {
@@ -272,7 +289,7 @@ export const useGame = create<GameStore>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
       const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
-      set({ game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], paused: false, banner: null, flashes: [] })
+      set({ game, ...scenePatch(game), orders: loadOrders(game.playerId), selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], paused: false, banner: null, flashes: [] })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
@@ -281,7 +298,7 @@ export const useGame = create<GameStore>((set, get) => ({
   quitToMenu() {
     const { game, orders } = get()
     if (game) save(game, orders)
-    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [] })
+    set({ game: null, ...scenePatch(null), orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [] })
   },
 
   selectRegion(id) {
@@ -444,7 +461,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const next = cancelProject(game, id)
     if (next === game) return
     save(next)
-    set({ game: next })
+    set({ game: next, ...scenePatch(next) })
     get().toast('Construction cancelled. What you get back is in your treasury.', 'info')
   },
 
@@ -454,7 +471,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const next = cancelMarch(game, armyId)
     if (next === game) return
     save(next)
-    set({ game: next })
+    set({ game: next, ...scenePatch(next) })
   },
 
   clickTerritory(id) {
@@ -488,7 +505,7 @@ export const useGame = create<GameStore>((set, get) => ({
       if (before && before.location !== a.location) marches.push({ armyId: a.id, owner: a.owner, from: before.location, to: a.location })
     }
     save(next, [])
-    set({ game: next, orders: [], fxQueue: fx, marches, marchStamp: performance.now(), targetMode: null, selectedArmy: next.armies[get().selectedArmy ?? ''] ? get().selectedArmy : null })
+    set({ game: next, ...scenePatch(next), orders: [], fxQueue: fx, marches, marchStamp: performance.now(), targetMode: null, selectedArmy: next.armies[get().selectedArmy ?? ''] ? get().selectedArmy : null })
     const mine = next.dispatches.filter((d) => d.to === player || d.from === player)
     for (const d of mine.slice(-4)) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
   },
@@ -498,7 +515,7 @@ export const useGame = create<GameStore>((set, get) => ({
     if (!game) return
     const next = applyEventChoice(game, getWorld().map, index)
     save(next)
-    set({ game: next })
+    set({ game: next, ...scenePatch(next) })
   },
 
   shiftFx() {

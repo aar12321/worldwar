@@ -469,19 +469,80 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
     if (agenda[item]()) attention--
   }
 
-  const attackRatio = (diff.attackRatio / persona.risk) * (mistake === 'overconfident' ? 0.75 : 1)
-  const warTargets = new Set(enemies)
-  const fronts = new Set(enemies)
+  pushMarches(s, map, nationId, ctx, orders, tryAdd, {
+    enemies,
+    owned,
+    myArmies,
+    playerId,
+    attackRatio: (diff.attackRatio / persona.risk) * (mistake === 'overconfident' ? 0.75 : 1),
+    mistake,
+    mods: combatMods(n, s.turn),
+  })
+
+  return orders
+}
+
+/** Attacks and marches only. The four-second pulse uses this so rivals do not replan their whole month just to walk. */
+export function generateBotMarches(s: GameState, map: WorldMap): Order[] {
+  const ctx = buildTurnContext(s, map)
+  const diff = difficultyOf(s.settings.difficulty)
+  const out: Order[] = []
+  for (const nationId of Object.keys(s.nations).sort()) {
+    const n = s.nations[nationId]
+    if (!n?.alive || n.isPlayer) continue
+    const persona = PERSONALITIES[n.personality ?? 'honorable']
+    const rng = createRng(s.seed, s.turn * 100003 + hashString(nationId) + 17)
+    const mistake = rng.chance(diff.mistakeRate) ? rng.pick(['research', 'overconfident', 'idle', 'hesitant'] as const) : null
+    const orders: Order[] = []
+    const tryAdd = (o: Order) => {
+      if (validateOrder(s, map, o, orders) === null) {
+        orders.push(o)
+        return true
+      }
+      return false
+    }
+    pushMarches(s, map, nationId, ctx, orders, tryAdd, {
+      enemies: ctx.enemies.get(nationId) ?? [],
+      owned: ctx.regions.get(nationId) ?? [],
+      myArmies: ctx.armies.get(nationId) ?? [],
+      playerId: s.playerId,
+      attackRatio: (diff.attackRatio / persona.risk) * (mistake === 'overconfident' ? 0.75 : 1),
+      mistake,
+      mods: combatMods(n, s.turn),
+    })
+    out.push(...orders)
+  }
+  return out
+}
+
+function pushMarches(
+  s: GameState,
+  map: WorldMap,
+  nationId: NationId,
+  ctx: TurnContext,
+  orders: Order[],
+  tryAdd: (o: Order) => boolean,
+  plan: {
+    enemies: NationId[]
+    owned: RegionId[]
+    myArmies: Army[]
+    playerId: NationId
+    attackRatio: number
+    mistake: 'research' | 'overconfident' | 'idle' | 'hesitant' | null
+    mods: ReturnType<typeof combatMods>
+  },
+) {
+  const warTargets = new Set(plan.enemies)
+  const fronts = new Set(plan.enemies)
   for (const o of orders) {
     if (o.type !== 'declareWar') continue
     fronts.add(o.target)
     // The player gets a month to react to a declaration before the first blow lands.
-    if (o.target !== playerId) warTargets.add(o.target)
+    if (o.target !== plan.playerId) warTargets.add(o.target)
   }
-  const borderGoals = new Set(owned.filter((id) => map.regions[id].neighbors.some((nb) => fronts.has(s.regions[nb]?.owner))))
+  const borderGoals = new Set(plan.owned.filter((id) => map.regions[id].neighbors.some((nb) => fronts.has(s.regions[nb]?.owner))))
   const committed = new Map<RegionId, number>()
-  const mods = combatMods(n, s.turn)
-  for (const a of myArmies) {
+  for (const a of plan.myArmies) {
     if (s.regions[a.location].rebels > 0) {
       tryAdd({ type: 'attack', nationId, armyId: a.id, target: a.location })
       continue
@@ -490,20 +551,18 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       .filter((id) => warTargets.has(s.regions[id]?.owner) && canReach(s, map, nationId, a.location, id, 'attack').ok)
       .map((id) => ({ id, def: estimateDefense(s, map, ctx, id) - (committed.get(id) ?? 0) }))
       .sort((x, y) => x.def - y.def || (x.id < y.id ? -1 : 1))
-    const power = unitPower(a.units, mods, a.training)
+    const power = unitPower(a.units, plan.mods, a.training)
     const target = options[0]
-    if (target && power > target.def * attackRatio) {
+    if (target && power > target.def * plan.attackRatio) {
       if (tryAdd({ type: 'attack', nationId, armyId: a.id, target: target.id })) committed.set(target.id, (committed.get(target.id) ?? 0) + power)
       continue
     }
-    if (mistake === 'idle' || a.outOfSupplyTurns > 0) continue
+    if (plan.mistake === 'idle' || a.outOfSupplyTurns > 0) continue
     if (borderGoals.size && !borderGoals.has(a.location)) {
       const step = stepToward(s, map, nationId, a.location, borderGoals)
       if (step) tryAdd({ type: 'move', nationId, armyId: a.id, to: step })
     }
   }
-
-  return orders
 }
 
 /** What a bot asks for at the peace table: land if it is winning, a white peace or payment if it is losing. */

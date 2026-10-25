@@ -1,4 +1,4 @@
-import { generateAllBotOrders } from '../ai/bot'
+import { generateAllBotOrders, generateBotMarches } from '../ai/bot'
 import { UPGRADE_SPECS, upgradeCost } from '../data/development'
 import { BUILDING_SPECS, UNIT_SPECS } from '../data/unitTypes'
 import { ensureTerritoryDev } from './development'
@@ -308,8 +308,7 @@ export function advance(prev: GameState, map: WorldMap, dt: number, queued: Orde
     s.militaryElapsed = MILITARY_PULSE_SECONDS
   } else if (s.militaryElapsed <= 0) {
     s.militaryElapsed = MILITARY_PULSE_SECONDS
-    const bot = generateAllBotOrders(s, map)
-    for (const order of bot) if (order.type === 'move' || order.type === 'attack') startLive(s, map, order)
+    for (const order of generateBotMarches(s, map)) startLive(s, map, order)
   }
 
   const logAt = s.log.length
