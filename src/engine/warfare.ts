@@ -41,11 +41,22 @@ export function canReach(s: GameState, map: WorldMap, nationId: NationId, from: 
   return { ok: hasPort, bySea: true }
 }
 
-export function garrisonStrength(s: GameState, map: WorldMap, regionId: RegionId): number {
+/** Free defenders every territory has before any army arrives. */
+const GARRISON_BASE = 1
+
+/**
+ * Defenders standing in one territory. Barracks and workforce are shared across the country's territories;
+ * the capital bonus sits in the first territory. Without a territory this is the average for the country.
+ */
+export function garrisonStrength(s: GameState, map: WorldMap, regionId: RegionId, territoryId?: string): number {
   const r = s.regions[regionId]
   const owner = s.nations[r.owner]
-  const isCapital = owner?.capital === regionId
-  return 0.5 + r.buildings.barracks * 0.75 + (isCapital ? 1 : 0) + regionWorkforce(r, map.regions[regionId]) * 0.05
+  const ids = map.territoriesByRegion[regionId] ?? []
+  const count = Math.max(1, ids.length)
+  const capitalBonus = owner?.capital === regionId ? 1 : 0
+  const shared = r.buildings.barracks * 0.75 + regionWorkforce(r, map.regions[regionId]) * 0.05
+  const capital = territoryId === undefined ? capitalBonus / count : ids[0] === territoryId ? capitalBonus : 0
+  return GARRISON_BASE + shared / count + capital
 }
 
 export function killNation(s: GameState, id: NationId, by: NationId | null) {
@@ -63,6 +74,8 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
   for (const k of Object.keys(s.warStarted)) if (involves(k)) delete s.warStarted[k]
   s.proposals = s.proposals.filter((p) => p.from !== id && p.to !== id && !(p.kind === 'callToArms' && p.enemy === id))
   s.deals = s.deals.filter((d) => d.from !== id && d.to !== id)
+  // Territories the dead nation held inside other countries go back to those countries.
+  if (s.territoryOwners) for (const [tid, holder] of Object.entries(s.territoryOwners)) if (holder === id) delete s.territoryOwners[tid]
   forgetNation(s, id)
   const conqueror = by ? s.nations[by] : null
   addLog(s, 'war', conqueror ? `${n.name} has fallen to ${conqueror.name}!` : `${n.name} has collapsed.`, by ? [id, by] : [id])
@@ -74,7 +87,12 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
   const oldOwner = region.owner
   region.owner = newOwner
   region.rebels = 0
-  if (s.territoryOwners) for (const id of map.territoriesByRegion[regionId] ?? []) delete s.territoryOwners[id]
+  // Land another nation holds inside this country stays theirs. Only the old and new owners' claims fold into the region.
+  if (s.territoryOwners)
+    for (const id of map.territoriesByRegion[regionId] ?? []) {
+      const holder = s.territoryOwners[id]
+      if (holder === newOwner || holder === oldOwner) delete s.territoryOwners[id]
+    }
   if (raze) {
     region.buildings.barracks = 0
     region.buildings.depot = 0
@@ -203,9 +221,20 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
     if (!attackerNation?.alive) continue
     const targetRegion = s.regions[g.target]
     const mr = map.regions[g.target]
-    const defenderId = targetRegion.owner
-    const suppression = defenderId === g.nationId
-    if (suppression ? targetRegion.rebels <= 0 : !atWar(s, g.nationId, defenderId)) continue
+    let defenderId = targetRegion.owner
+    let suppression = defenderId === g.nationId
+    const enemyHolder = (owner: NationId) => owner !== g.nationId && atWar(s, g.nationId, owner)
+    if (suppression && targetRegion.rebels <= 0) {
+      // Land inside your own country that an enemy has taken.
+      const holder = g.territoryId ? territoryOwner(s, map, g.territoryId) : null
+      if (!holder || !enemyHolder(holder)) continue
+      defenderId = holder
+      suppression = false
+    } else if (!suppression && !atWar(s, g.nationId, defenderId)) continue
+    const retake = !suppression && targetRegion.owner === g.nationId
+    // The territory this battle is fought over, chosen up front so its garrison is the one that defends.
+    const fightTerritory = suppression ? null : closestEnemyTerritory(s, map, g.nationId, s.armies[g.armyIds[0]]?.location ?? g.target, g.target, g.territoryId, enemyHolder)
+    if (!suppression && !fightTerritory) continue
 
     let bySea = false
     const armies: Army[] = []
@@ -236,11 +265,11 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
     const defenderNation = suppression ? null : s.nations[defenderId]
     const defArmies = suppression ? [] : armiesIn(s, g.target, defenderId)
     const garrison = emptyUnits()
-    const territoryCount = Math.max(1, map.territoriesByRegion[g.target]?.length ?? 1)
     if (suppression) garrison.infantry = targetRegion.rebels
-    else garrison.infantry = garrisonStrength(s, map, g.target) / territoryCount
+    else if (retake) garrison.infantry = GARRISON_BASE
+    else garrison.infantry = garrisonStrength(s, map, g.target, fightTerritory ?? undefined)
     const defender = makeCombatant(s, defenderNation, defArmies, garrison, [], 1, true)
-    const wasCapital = !suppression && s.nations[defenderId]?.capital === g.target
+    const wasCapital = !suppression && !retake && s.nations[defenderId]?.capital === g.target
 
     const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
     distributeLosses(armies, outcome.attackerLosses)
@@ -261,7 +290,7 @@ export function resolveAttacks(s: GameState, map: WorldMap, orders: Order[], rng
       pruneArmies(s)
       const survivors = armies.filter((a) => s.armies[a.id])
       if (survivors.length) {
-        foughtOver = closestEnemyTerritory(s, map, g.nationId, fromRegionId, g.target, g.territoryId)
+        foughtOver = fightTerritory
         const taken = foughtOver ? captureTerritory(s, map, foughtOver, g.nationId) : null
         if (taken) {
           captured = true
@@ -344,7 +373,7 @@ export function resolveRebels(s: GameState, map: WorldMap, rng: Rng) {
     const mr = map.regions[region.id]
     const rebels = { ...emptyUnits(), infantry: region.rebels }
     const defArmies = armiesIn(s, region.id, ownerId)
-    const garrison = { ...emptyUnits(), infantry: garrisonStrength(s, map, region.id) }
+    const garrison = { ...emptyUnits(), infantry: garrisonStrength(s, map, region.id) * Math.max(1, map.territoriesByRegion[region.id]?.length ?? 1) }
     const attacker: Combatant = { units: rebels, mods: null, penalty: 1, penaltyNotes: [] }
     const defender = makeCombatant(s, owner, defArmies, garrison, [], 1, true)
     const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
@@ -394,10 +423,16 @@ export function captureTerritory(s: GameState, map: WorldMap, territoryId: strin
   s.territoryOwners[territoryId] = newOwner
   const dev = s.territoryDev?.[territoryId]
   if (dev) damageTerritory(dev)
+  const region = s.regions[territory.regionId]
+  if (previousOwner !== region.owner) {
+    // Taking back, or taking from, land the country's owner no longer holds. The country itself is unaffected.
+    if (newOwner === region.owner) delete s.territoryOwners[territoryId]
+    addLog(s, 'war', `${s.nations[newOwner]?.name ?? newOwner} took ${territory.name} from ${s.nations[previousOwner]?.name ?? previousOwner}.`, [previousOwner, newOwner])
+    return { fell: false, territoryId, previousOwner }
+  }
   const ids = map.territoriesByRegion[territory.regionId] ?? []
   const holdsOn = ids.some((id) => territoryOwner(s, map, id) === previousOwner)
   if (!holdsOn) {
-    for (const id of ids) delete s.territoryOwners[id]
     transferRegion(s, map, territory.regionId, newOwner)
     return { fell: true, territoryId, previousOwner }
   }

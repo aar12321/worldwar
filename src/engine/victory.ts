@@ -1,3 +1,4 @@
+import { UNIT_SPECS } from '../data/unitTypes'
 import { armiesOf, regionsOf } from './helpers'
 import { territoryOwner } from './territory'
 import type { GameState, NationId, WorldMap } from './types'
@@ -33,7 +34,9 @@ export function checkOutcome(s: GameState, map?: WorldMap): GameState['outcome']
   const p = s.nations[s.playerId]
   if (!p.alive || regionsOf(s, p.id).length === 0) return 'defeat'
   const capitalLost = s.regions[p.originalCapital].owner !== p.id
-  if (capitalLost && armiesOf(s, p.id).length === 0) return 'defeat'
+  // Losing the capital only ends the game once there is nothing left to fight back with.
+  const canRebuild = (s.trainingQueue ?? []).some((job) => job.nationId === p.id) || p.resources.capital >= UNIT_SPECS.infantry.capitalCost
+  if (capitalLost && armiesOf(s, p.id).length === 0 && !canRebuild) return 'defeat'
   if (map && territoriesTaken(s, map) >= conquestGoal(s.settings.victoryShare)) return 'victory'
   if (populationShare(s, p.id) >= s.settings.victoryShare) return 'victory'
   return 'playing'
