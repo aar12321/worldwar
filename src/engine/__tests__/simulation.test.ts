@@ -17,6 +17,21 @@ function simulate(seed: number, turns: number): GameState {
   return s
 }
 
+describe('pacing', () => {
+  it('lets an idle player on Normal last about two years and keeps most of the world standing for three', () => {
+    let s = createInitialState(map, { playerRegionId: 'germany', seed: 1, victoryShare: 0.4, difficulty: 'normal' })
+    const total = Object.keys(s.nations).length
+    let alive = total
+    for (let i = 0; i < 36 && s.outcome === 'playing'; i++) {
+      if (s.pendingEvent) s = applyEventChoice(s, map, 0)
+      s = resolveTurn(s, map, generateAllBotOrders(s, map))
+      if (i === 21) expect(s.outcome).toBe('playing')
+    }
+    alive = Object.values(s.nations).filter((n) => n.alive).length
+    expect(alive / total).toBeGreaterThan(0.55)
+  }, 60_000)
+})
+
 describe('full simulation', () => {
   it('runs 36 bot-only turns without crashing and keeps numbers finite', () => {
     const s = simulate(42, 36)

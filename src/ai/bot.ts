@@ -32,9 +32,9 @@ export const BOT = {
   /** Months after a bot declares war on the player before its military may attack. */
   reactionTurns: 1,
   /** Chance a bot that could attack this turn actually does, before difficulty scaling. Keeps the world from collapsing in two years. */
-  attackChance: 0.25,
+  attackChance: 0.15,
   /** Turns a bot's military rests between attacks, so one nation cannot roll up a continent. */
-  attackRestTurns: 4,
+  attackRestTurns: 6,
 }
 
 /** Shared per-turn facts every bot reads, computed once instead of once per bot. */

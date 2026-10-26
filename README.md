@@ -21,7 +21,7 @@ The game is turn based. One turn is one month, starting January 1936. Nothing mo
 4. **War**: click a neighboring country, press **Declare war** (costs influence), then **Attack**. Your whole military fights the defender's whole military plus the country's garrison. A battle window plays three rounds, showing the damage each side dealt and the units lost. Win and you take the whole country. Each nation can attack once per turn.
 5. **Next turn** runs the rivals, training, research, income, diplomacy, rebels and any attacks on you, then replays the battles you were in. Decision events appear every few months.
 
-Shortcuts: `Enter` next turn, `C` country, `M` military, `T` research, `D` diplomacy, `L` news, `?` help, `Esc` close.
+Shortcuts: `Enter` next turn, `A` attack the selected country, `C` country, `M` military, `T` research, `D` diplomacy, `L` news, `?` help, `Esc` close.
 
 ## Architecture
 

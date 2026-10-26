@@ -151,8 +151,8 @@ describe('bots reason under fog of war', () => {
 })
 
 describe('bots at war with the player', () => {
-  function front(turn: number): GameState {
-    const s = startState(map)
+  function front(turn: number, seed = 1): GameState {
+    const s = startState(map, 'r0', seed)
     s.turn = turn
     s.wars.push('r0|r1')
     s.warStarted['r0|r1'] = 5
@@ -160,12 +160,14 @@ describe('bots at war with the player', () => {
     setMilitary(s, 'r0', { infantry: 1 })
     return s
   }
-  const attacksPlayer = (s: GameState) => generateBotOrders(s, map, 'r1').some((o) => o.type === 'attack' && o.target === 'r0')
+  const attacksPlayer = (turn: number) =>
+    // Bots only attack some of the time, so look across seeds.
+    Array.from({ length: 40 }, (_, i) => front(turn, i + 1)).some((s) => generateBotOrders(s, map, 'r1').some((o) => o.type === 'attack' && o.target === 'r0'))
 
   it('give the player a month before the first attack', () => {
-    expect(attacksPlayer(front(5))).toBe(false)
-    expect(attacksPlayer(front(6))).toBe(false)
-    expect(attacksPlayer(front(7))).toBe(true)
+    expect(attacksPlayer(5)).toBe(false)
+    expect(attacksPlayer(6)).toBe(false)
+    expect(attacksPlayer(7)).toBe(true)
   })
 })
 
