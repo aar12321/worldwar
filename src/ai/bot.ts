@@ -31,6 +31,10 @@ export const BOT = {
   maxAlliances: 2,
   /** Months after a bot declares war on the player before its military may attack. */
   reactionTurns: 1,
+  /** Chance a bot that could attack this turn actually does, before difficulty scaling. Keeps the world from collapsing in two years. */
+  attackChance: 0.15,
+  /** Turns a bot's military rests between attacks, so one nation cannot roll up a continent. */
+  attackRestTurns: 6,
 }
 
 /** Shared per-turn facts every bot reads, computed once instead of once per bot. */
@@ -415,13 +419,13 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   const warTargets = new Set(enemies.filter((e) => e !== playerId || s.turn - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
   for (const o of orders) if (o.type === 'declareWar' && o.target !== playerId) warTargets.add(o.target)
   // One attack a turn, at the weakest country on the front that the whole military can beat.
-  if (mistake !== 'idle' && n.military.lastAttackTurn !== s.turn) {
+  if (mistake !== 'idle' && s.turn - n.military.lastAttackTurn >= BOT.attackRestTurns) {
     const options = Object.values(s.regions)
       .filter((r) => warTargets.has(r.owner) && canAttackRegion(s, map, nationId, r.id).ok)
       .map((r) => ({ id: r.id, def: estimateDefense(s, map, ctx, r.id) }))
       .sort((x, y) => x.def - y.def || (x.id < y.id ? -1 : 1))
     const target = options[0]
-    if (target && myPower > target.def * attackRatio) tryAdd({ type: 'attack', nationId, target: target.id })
+    if (target && myPower > target.def * attackRatio && rng.chance(BOT.attackChance * diff.aggression)) tryAdd({ type: 'attack', nationId, target: target.id })
   }
   // Rebels in a country are fought every month with no order needed.
 

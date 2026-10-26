@@ -39,7 +39,7 @@ export function Help() {
       <p className="mt-6 text-[15px] text-white/80">
         <strong>To win:</strong> take {goal <= 0.25 ? 3 : goal >= 0.6 ? 12 : 6} countries outside your own, or lead {Math.round(goal * 100)}% of the world's people. You lose if your nation is wiped out.
       </p>
-      <p className="mt-2 text-[14px] text-white/65">Shortcuts: Enter for next turn, C country, M military, T research, D diplomacy, L news, ? for this help.</p>
+      <p className="mt-2 text-[14px] text-white/65">Shortcuts: Enter for next turn, A attack the selected country, C country, M military, T research, D diplomacy, L news, ? for this help.</p>
     </Modal>
   )
 }

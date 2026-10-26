@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { attackableRegions } from './engine/warfare'
+import { getWorld } from './map/world'
 import { useGame } from './store'
 import { BattleFX } from './ui/BattleFX'
 import { GameOver, NavRail, OrdersTray, Toasts, TurnSummary } from './ui/Chrome'
@@ -32,6 +34,11 @@ function useShortcuts() {
         if (target.tagName === 'BUTTON' || e.repeat) return
         e.preventDefault()
         st.endTurn()
+      } else if (e.key.toLowerCase() === 'a') {
+        // Attack the selected country if your military can reach it.
+        const target = st.selectedRegion
+        if (target && attackableRegions(st.game, getWorld().map, st.game.playerId).includes(target)) st.attack(target)
+        else st.toast('Select an enemy country you are at war with and border, then press A', 'error')
       } else if (e.key === '?') {
         st.setHelp(true)
       } else {

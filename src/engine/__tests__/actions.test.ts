@@ -481,6 +481,17 @@ describe('country upgrades', () => {
     expect(validateOrder(s, map, { type: 'build', nationId: P, regionId: P, building: 'farm' })).toMatch(/highest level/)
   })
 
+  it('cannot spend money that queued orders already hold', () => {
+    const s = base()
+    const farm: Order = { type: 'build', nationId: P, regionId: P, building: 'farm' }
+    const cost = orderCost(s, farm).capital
+    const held: Order = { type: 'spy', nationId: P, target: 'r1', mission: 'sabotage' } as Order
+    s.nations[P].resources.capital = cost + COSTS.spy - 1
+    expect(applyOrderNow(s, map, farm, [held]).error).toMatch(/Not enough money/)
+    expect(s.regions[P].buildings.farm).toBe(base().regions[P].buildings.farm)
+    expect(applyOrderNow(s, map, farm).error).toBeNull()
+  })
+
   it('month-end orders are the ones that wait', () => {
     expect(MONTH_END_ORDERS.has('research')).toBe(true)
     expect(MONTH_END_ORDERS.has('build')).toBe(false)

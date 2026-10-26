@@ -2,6 +2,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { enemiesOf, turnDate } from '../engine/helpers'
 import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
+import { garrisonStrength } from '../engine/warfare'
+import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { fmt, signed, usePlayerView } from './hooks'
 
@@ -129,7 +131,24 @@ function attention(view: NonNullable<ReturnType<typeof usePlayerView>>): string 
   if (econ.netFood < 0) return 'You are eating more food than you grow. Build farms before stocks run out.'
   if (player.resources.capital > 500 && econ.netCapital > 60 && enemiesOf(view.game, player.id).length === 0)
     return 'Money is piling up. Upgrade your country and military, then take a neighbor. The treasury itself does not win.'
-  return null
+  return firstWarHint(view)
+}
+
+/** Until the first war, point at the weakest country next door so a new player knows what to do. */
+function firstWarHint({ game, player }: NonNullable<ReturnType<typeof usePlayerView>>): string | null {
+  if (game.turn > 12 || enemiesOf(game, player.id).length > 0 || countriesTaken(game) > 0) return null
+  const { map } = getWorld()
+  let weakest: { name: string; def: number } | null = null
+  for (const r of Object.values(game.regions)) {
+    if (r.owner !== player.id) continue
+    for (const nb of map.regions[r.id].neighbors) {
+      const o = game.regions[nb]
+      if (!o || o.owner === player.id || !game.nations[o.owner]?.alive) continue
+      const def = garrisonStrength(game, map, nb)
+      if (!weakest || def < weakest.def) weakest = { name: map.regions[nb].name, def }
+    }
+  }
+  return weakest ? `Tip: ${weakest.name} is your weakest neighbor. Train troops, open its panel, declare war, then Attack.` : null
 }
 
 export function HUD() {

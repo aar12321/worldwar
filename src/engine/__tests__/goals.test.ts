@@ -96,7 +96,7 @@ describe('rivals pick on the weak', () => {
     let wars = 0
     for (let seed = 1; seed <= 24; seed++) {
       const s = startState(map, 'r0', seed)
-      s.turn = 12 + (seed % 4)
+      s.turn = 22 + (seed % 4)
       s.nations.r1.personality = 'expansionist'
       s.nations.r1.aggression = 0.95
       s.settings.difficulty = 'normal'

@@ -85,12 +85,9 @@ export interface AggregatedModifiers {
   researchOutput: number
   stability: number
   ppPerTurn: number
-  supplyRange: number
-  seaSupplyRange: number
   allOutput: number
   amphibiousPenaltyReduction: number
   seaInvasion: boolean
-  globalVision: boolean
 }
 
 export function nationModifiers(n: Nation): AggregatedModifiers {
@@ -105,12 +102,9 @@ export function nationModifiers(n: Nation): AggregatedModifiers {
     researchOutput: 0,
     stability: 0,
     ppPerTurn: 0,
-    supplyRange: 0,
-    seaSupplyRange: 0,
     allOutput: 0,
     amphibiousPenaltyReduction: 0,
     seaInvasion: false,
-    globalVision: false,
   }
   for (const id of n.techs) {
     const tech = TECH_BY_ID[id]
@@ -126,12 +120,9 @@ export function nationModifiers(n: Nation): AggregatedModifiers {
     m.researchOutput += mod.researchOutput ?? 0
     m.stability += mod.stability ?? 0
     m.ppPerTurn += mod.ppPerTurn ?? 0
-    m.supplyRange += mod.supplyRange ?? 0
-    m.seaSupplyRange += mod.seaSupplyRange ?? 0
     m.allOutput += mod.allOutput ?? 0
     m.amphibiousPenaltyReduction += mod.amphibiousPenaltyReduction ?? 0
     m.seaInvasion ||= !!tech.enablesSeaInvasion
-    m.globalVision ||= !!tech.globalVision
   }
   return m
 }

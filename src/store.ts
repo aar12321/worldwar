@@ -295,7 +295,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const { map } = getWorld()
     if (!MONTH_END_ORDERS.has(order.type)) {
       const next = structuredClone(game)
-      const result = applyOrderNow(next, map, order)
+      const result = applyOrderNow(next, map, order, orders)
       if (result.error) {
         get().toast(result.error, 'error')
         return false
@@ -340,7 +340,7 @@ export const useGame = create<GameStore>((set, get) => ({
     if (!game) return false
     const { map } = getWorld()
     const next = structuredClone(game)
-    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target })
+    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target }, get().orders)
     if (result.error || !result.battle) {
       get().toast(result.error ?? 'The attack could not be made', 'error')
       return false
