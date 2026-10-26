@@ -1,10 +1,11 @@
 import { PLAYER_COLOR, mapColor } from './mapColors'
 import { emptyTraining } from './unitTypes'
-import { ECON, computeEconomy, regionWorkforce } from '../engine/economy'
+import { ECON, buildingCap, computeEconomy, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
-import type { Army, Difficulty, GameSettings, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
+import { BUILDING_TYPES } from '../engine/types'
+import type { Difficulty, GameSettings, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
 
 const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dmitri', 'Saoirse', 'Tariq', 'Mei', 'Lucien', 'Zofia', 'Kwame', 'Elena', 'Hugo', 'Anika', 'Mateo', 'Yara', 'Bogdan', 'Ines']
 const GENERAL_LAST = ['Varga', 'Okafor', 'Takeda', 'Brandt', 'Montoya', 'Haddad', 'Volkov', 'Byrne', 'Rahman', 'Lin', 'Moreau', 'Nowak', 'Mensah', 'Petrova', 'Lindqvist', 'Sato', 'Reyes', 'Kader', 'Horvat', 'Silva']
@@ -48,13 +49,6 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     playerId: opts.playerRegionId,
     nations: {},
     regions: {},
-    armies: {},
-    territoryDev: {},
-    territoryOwners: {},
-    projects: [],
-    simTime: 0,
-    monthElapsed: 0,
-    militaryElapsed: 0.5,
     trainingQueue: [],
     wars: [],
     pacts: {},
@@ -81,7 +75,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       id,
       owner: id,
       population: mr.basePopulation,
-      buildings: { factory: 0, farm: 0, university: 0, barracks: 1, port: 0, depot: 0 },
+      buildings: { factory: 0, farm: 0, university: 0, barracks: 1, port: 0, civic: 0 },
       sabotaged: 0,
       rebels: 0,
     }
@@ -105,6 +99,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     }
     const armyFood = units.infantry * 0.3 + units.armor * 0.2 + units.air * 0.1 + units.naval * 0.15
     region.buildings.farm = Math.max(1, Math.ceil((armyFood + w * 0.12) / ECON.foodPerFarm))
+    for (const b of BUILDING_TYPES) region.buildings[b] = Math.min(region.buildings[b], buildingCap(w, b))
 
     const generals: General[] = []
     const generalCount = dev >= 0.8 ? 3 : dev >= 0.45 ? 2 : 1
@@ -140,31 +135,18 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       inDebt: false,
       debtTurns: 0,
       embargoedUntil: 0,
-      vision: {},
       aggression,
       personality,
-      contracts: [],
+      military: { units, drill: emptyTraining(), weapons: emptyTraining(), commanderId: null, lastAttackTurn: 0 },
     }
 
-    const army: Army = {
-      id: `a${state.nextId++}`,
-      owner: id,
-      location: id,
-      units,
-      generalId: null,
-      outOfSupplyTurns: 0,
-      entrenched: 0,
-      homeTerritoryId: map.territoriesByRegion[id]?.[0] ?? '',
-      training: emptyTraining(),
-    }
     state.regions[id] = region
     state.nations[id] = nation
-    state.armies[army.id] = army
   })
 
   for (const nation of Object.values(state.nations)) {
     const capital = state.regions[nation.capital]
-    const army = Object.values(state.armies).find((item) => item.owner === nation.id)
+    const units = nation.military.units
     let guard = 0
     while (capital && guard < 12 && computeEconomy(state, map, nation.id).netFood < 0.4) {
       const econ = computeEconomy(state, map, nation.id)
@@ -172,7 +154,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       if (econ.laborRatio < 0.9 && capital.buildings.factory > 0) capital.buildings.factory -= 1
       else if (econ.laborRatio < 0.9 && capital.buildings.university > 0) capital.buildings.university -= 1
       else if (capital.buildings.farm < 12) capital.buildings.farm += 1
-      else if (army && army.units.infantry > 1) army.units.infantry -= 1
+      else if (units.infantry > 1) units.infantry -= 1
       else break
     }
     if (nation.resources.food < 8) nation.resources.food = 8

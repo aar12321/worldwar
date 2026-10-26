@@ -25,7 +25,7 @@ describe('full simulation', () => {
       for (const v of Object.values(n.resources)) expect(Number.isFinite(v)).toBe(true)
       expect(Number.isFinite(n.stability)).toBe(true)
     }
-    for (const a of Object.values(s.armies)) for (const v of Object.values(a.units)) expect(Number.isFinite(v)).toBe(true)
+    for (const n of Object.values(s.nations)) for (const v of Object.values(n.military.units)) expect(Number.isFinite(v)).toBe(true)
     const alive = Object.values(s.nations).filter((n) => n.alive).length
     expect(alive).toBeGreaterThan(20)
   }, 20000)

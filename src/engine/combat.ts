@@ -1,5 +1,5 @@
 import { TERRAIN } from '../data/terrain'
-import { UNIT_SPECS } from '../data/unitTypes'
+import { TRAINING, UNIT_SPECS } from '../data/unitTypes'
 import { emptyUnits, totalUnits, type AggregatedModifiers } from './helpers'
 import type { Rng } from './rng'
 import type { BattleRound, Terrain, UnitCounts, UnitType } from './types'
@@ -7,6 +7,8 @@ import { UNIT_TYPES } from './types'
 
 export interface Combatant {
   units: UnitCounts
+  /** Drill rank of each unit type. Missing means Green. */
+  drill?: Record<UnitType, number>
   mods: AggregatedModifiers | null
   /** Multiplier applied to all combat power (supply, food, amphibious). */
   penalty: number
@@ -64,7 +66,8 @@ export function sidePower(
     const spec = UNIT_SPECS[k]
     const base = defending ? spec.defense : spec.attack
     const tech = 1 + (defending ? (c.mods?.unitDefense[k] ?? 0) : (c.mods?.unitAttack[k] ?? 0))
-    power += c.units[k] * weights[k] * base * tech * terrainMultiplier(terrain, k, c.mods)
+    const drilled = 1 + (c.drill?.[k] ?? 0) * TRAINING.bonusPerLevel
+    power += c.units[k] * weights[k] * base * tech * drilled * terrainMultiplier(terrain, k, c.mods)
   }
   if (hasCombinedArms(c.units)) {
     const bonus = COMBAT.combinedArmsBonus + (c.mods?.combinedArms ?? 0)
@@ -74,7 +77,7 @@ export function sidePower(
   return power * c.penalty
 }
 
-function applyLosses(units: UnitCounts, losses: UnitCounts, damage: number, coastal: boolean) {
+function applyLosses(units: UnitCounts, losses: UnitCounts, damage: number, coastal: boolean, round?: UnitCounts) {
   const eligible = UNIT_TYPES.filter((k) => units[k] > 0 && (coastal || k !== 'naval'))
   const total = eligible.reduce((s, k) => s + units[k], 0)
   if (total <= 0) return
@@ -83,6 +86,7 @@ function applyLosses(units: UnitCounts, losses: UnitCounts, damage: number, coas
     const share = (units[k] / total) * dmg
     units[k] -= share
     losses[k] += share
+    if (round) round[k] += share
   }
 }
 
@@ -101,9 +105,11 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
     const dp = sidePower(def, round.weights, terrain, coastal, true)
     const toDef = ap * rng.range(0.85, 1.15) * COMBAT.damagePerPower
     const toAtt = dp * rng.range(0.85, 1.15) * COMBAT.damagePerPower
-    applyLosses(def.units, defenderLosses, toDef, coastal)
-    applyLosses(att.units, attackerLosses, toAtt, coastal)
-    rounds.push({ name: round.name, attackerDamage: toDef, defenderDamage: toAtt })
+    const roundDefLoss = emptyUnits()
+    const roundAttLoss = emptyUnits()
+    applyLosses(def.units, defenderLosses, toDef, coastal, roundDefLoss)
+    applyLosses(att.units, attackerLosses, toAtt, coastal, roundAttLoss)
+    rounds.push({ name: round.name, attackerDamage: toDef, defenderDamage: toAtt, attackerLosses: roundAttLoss, defenderLosses: roundDefLoss })
     if (totalUnits(def.units) < 0.1 || totalUnits(att.units) < 0.1) break
   }
 

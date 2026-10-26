@@ -1,443 +1,188 @@
-import { useMemo, useState } from 'react'
-import { perceivedPower } from '../ai/diplomat'
 import { opinionLabel, opinionOf } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
-import { BUILDING_SPECS, COSTS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { BUILD_SECONDS, TRAIN_SECONDS, formatSeconds } from '../engine/pace'
-import { weaponTiers } from '../engine/arms'
-import { militaryPower } from '../engine/economy'
+import { BUILDING_SPECS, COSTS } from '../data/unitTypes'
+import { regionWorkforce } from '../engine/economy'
 import { spySuccessChance } from '../engine/espionage'
-import { armiesIn, armyIsHome, atWar, boundArmy, formatDivisions, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
+import { atWar, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
-import { supplyDistances, supplyRange } from '../engine/supply'
 import type { Order } from '../engine/types'
-import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
-import { netWarScore } from '../engine/warscore'
+import { BUILDING_TYPES } from '../engine/types'
 import { garrisonStrength } from '../engine/warfare'
+import { netWarScore } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { ArmyCard, ArmyControls, UnitStrip } from './ArmyOrders'
-import { generalChoice } from './labels'
-import { usePlayerView, usePlayerVision } from './hooks'
+import { usePlayerView } from './hooks'
+import { MilitaryCompare } from './MilitaryCompare'
 import { speak } from './plain'
 
-function ActionButton({ order, label, sub, tone = '', className = '' }: { order: Order; label: string; sub?: string; tone?: string; className?: string }) {
+function ActionButton({ order, label, sub, tone = '', className = '', onDone }: { order: Order; label: string; sub?: string; tone?: string; className?: string; onDone?: () => void }) {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
   const { map } = getWorld()
   const err = validateOrder(view.game, map, order, view.orders)
   const why = err ? speak(err) : null
   return (
-    <button className={`btn ${tone} ${className} flex flex-col items-start gap-0.5 text-left`} disabled={!!err} title={why ?? sub ?? ''} onClick={() => issueOrder(order)}>
+    <button
+      className={`btn ${tone} ${className} flex flex-col items-start gap-0.5 text-left`}
+      disabled={!!err}
+      title={why ?? sub ?? ''}
+      onClick={() => {
+        if (issueOrder(order)) onDone?.()
+      }}
+    >
       <span>{label}</span>
-      {(why || sub) && <span className={`font-ui normal-case tracking-normal text-[11px] font-medium ${why ? 'text-white/85' : 'text-white/50'}`}>{why ?? sub}</span>}
+      {(why || sub) && <span className={`font-ui normal-case tracking-normal text-[12px] font-medium ${why ? 'text-white/85' : 'text-white/65'}`}>{why ?? sub}</span>}
     </button>
   )
 }
 
-type CountryTab = 'home' | 'build' | 'relations'
-
+/** The country you clicked: who holds it, how strong it is, and what you can do about it. */
 export function CountryPanel() {
   const view = usePlayerView()
   const selected = useGame((s) => s.selectedRegion)
-  const panelOpen = useGame((s) => s.panel)
   const selectRegion = useGame((s) => s.selectRegion)
   const openDiplomacy = useGame((s) => s.openDiplomacy)
-  const vis = usePlayerVision()
+  const openCountry = useGame((s) => s.openCountry)
+  const setPanel = useGame((s) => s.setPanel)
+  const attack = useGame((s) => s.attack)
   const { map } = getWorld()
-  const game = view?.game
-  const supply = useMemo(() => (game ? supplyDistances(game, map, game.playerId) : null), [game, map])
-  const [panelFor, setPanelFor] = useState(selected ?? '')
-  const [tab, setTab] = useState<CountryTab>('home')
-  const [spies, setSpies] = useState(false)
-  if (selected && panelFor !== selected) {
-    setPanelFor(selected)
-    setTab('home')
-    setSpies(false)
-  }
-  if (!view || !selected || !game || !supply || panelOpen !== 'none') return null
-  const { player, orders } = view
+  if (!view || !selected) return null
+  const { game, player, orders } = view
   const region = game.regions[selected]
   const mr = map.regions[selected]
   const owner = game.nations[region.owner]
   const mine = region.owner === player.id
-  const canSee = vis === 'all' || vis.has(selected)
-  const armies = canSee ? armiesIn(game, selected) : []
-  const dist = mine ? supply.get(selected) : undefined
-  const range = supplyRange(game, player.id, map)
-  const queuedBuilds = (b: string) => orders.filter((o) => o.type === 'build' && o.regionId === selected && o.building === b).length
-  const territoryIds = map.territoriesByRegion[selected] ?? []
-  const homeArmyIds = new Set(
-    territoryIds.flatMap((tid) => {
-      if (!(mine || canSee)) return []
-      const bound = boundArmy(game, tid, region.owner)
-      return bound && armyIsHome(game, map, bound) ? [bound.id] : []
-    }),
-  )
-  const otherArmies = armies.filter((a) => !homeArmyIds.has(a.id))
   const war = !mine && atWar(game, player.id, owner.id)
   const pact = !mine && hasPact(game, player.id, owner.id)
   const allied = !mine && isAllied(game, player.id, owner.id)
   const opinion = mine ? 0 : opinionOf(game, map, owner.id, player.id)
   const built = BUILDING_TYPES.filter((b) => region.buildings[b] > 0)
-  const supplyCut = mine && (dist === undefined || dist > range)
+  const attackErr = war ? validateOrder(game, map, { type: 'attack', nationId: player.id, target: selected }, orders) : null
   const purpose = mine
-    ? 'Your country. Each territory holds one army. Develop the land, or train units that fight with that army.'
+    ? 'Your country. Upgrade it in Country, and train its military in Military.'
     : war
-      ? `At war with ${owner.name}. Attack from an army in a neighboring country.`
+      ? `At war with ${owner.name}. Attack takes the whole country if your military wins.`
       : allied
         ? `${owner.name} is an ally. You can ask them to join a war.`
         : pact
           ? `You have agreed not to attack ${owner.name}.`
-          : `Belongs to ${owner.name}. Talk, or declare war before you can attack.`
+          : `Belongs to ${owner.name}. Declare war before you can attack.`
 
   return (
-    <aside
-        key={selected}
-        data-section="country"
-        className="glass country-panel panel-in absolute right-4 bottom-28 z-20 w-[min(400px,calc(100vw-600px))] rounded-[22px] flex flex-col overflow-hidden"
-      >
-        <div className="px-4 pt-4 pb-3 border-b border-white/10">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="label">
-                {TERRAIN[mr.terrain].name} · {mr.coastal ? 'Coast' : 'Inland'}
-              </p>
-              <h2 className="text-[22px] font-semibold tracking-tight mt-0.5 truncate">{mr.name}</h2>
-            </div>
-            <button className="icon-close shrink-0" aria-label="Close" onClick={() => selectRegion(null)}>
-              ×
-            </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 mt-2">
-            <span className="chip">
-              <span className="w-2 h-2 rounded-full" style={{ background: owner.color }} />
-              {mine ? 'Yours' : owner.name}
-            </span>
-            {owner.capital === selected && <span className="chip">Capital city</span>}
-            {war && <span className="chip chip-red">At war</span>}
-            {allied && <span className="chip chip-blue">Ally</span>}
-            {pact && <span className="chip chip-green">Peace pact</span>}
-          </div>
-          {!mine && (
-            <p className="mt-2 text-[12px] text-white/50" title={PERSONALITIES[owner.personality].description}>
-              {PERSONALITIES[owner.personality].name} · {opinionLabel(opinion)} toward you ({opinion > 0 ? '+' : ''}
-              {opinion})
+    <aside key={selected} data-section="country" aria-label={mr.name} className="country-card surface">
+      <div className="px-5 pt-4 pb-3 border-b border-white/10 flex-none">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="label">
+              {TERRAIN[mr.terrain].name} · {mr.coastal ? 'Coast' : 'Inland'}
             </p>
-          )}
-          <p className="mt-2 text-[13px] leading-snug text-white/65">{purpose}</p>
-          <div className="segmented mt-3">
-            <button type="button" aria-pressed={tab === 'home'} onClick={() => setTab('home')}>
-              Overview
+            <h2 className="text-[24px] font-semibold tracking-tight mt-0.5 truncate">{mr.name}</h2>
+          </div>
+          <button className="icon-close shrink-0" aria-label="Close" onClick={() => selectRegion(null)}>
+            ×
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+          <span className="chip">
+            <span className="w-2 h-2 rounded-full" style={{ background: owner.color }} />
+            {mine ? 'Yours' : owner.name}
+          </span>
+          {owner.capital === selected && <span className="chip">Capital</span>}
+          {war && <span className="chip chip-red">At war</span>}
+          {allied && <span className="chip chip-blue">Ally</span>}
+          {pact && <span className="chip chip-green">Peace pact</span>}
+        </div>
+        {!mine && (
+          <p className="mt-2 text-[13px] text-white/70" title={PERSONALITIES[owner.personality].description}>
+            {PERSONALITIES[owner.personality].name} · {opinionLabel(opinion)} toward you ({opinion > 0 ? '+' : ''}
+            {opinion})
+          </p>
+        )}
+        <p className="mt-2 text-[14px] leading-snug text-white/75">{purpose}</p>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin p-5 space-y-4">
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <Stat label="People" value={`${region.population.toFixed(1)}m`} />
+          <Stat label="Workforce" value={regionWorkforce(region, mr).toFixed(1)} />
+          <Stat label="Garrison" value={garrisonStrength(game, map, selected).toFixed(1)} />
+        </div>
+        {built.length > 0 && (
+          <div className="inset-card p-3.5">
+            <div className="label mb-1.5">Upgrades</div>
+            <div className="flex flex-wrap gap-1.5">
+              {built.map((b) => (
+                <span key={b} className="chip">
+                  {BUILDING_SPECS[b].name} {region.buildings[b]}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {region.rebels > 0 && <p className="text-[14px] text-[#ff8a84]">Rebels are rising here ({region.rebels.toFixed(1)} divisions).</p>}
+
+        {mine ? (
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-primary" onClick={() => openCountry('build')}>
+              Upgrade country
             </button>
-            {mine && (
-              <button type="button" aria-pressed={tab === 'build'} onClick={() => setTab('build')}>
-                Build
-              </button>
-            )}
-            {!mine && (
-              <button type="button" aria-pressed={tab === 'relations'} onClick={() => setTab('relations')}>
-                Relations
-              </button>
+            <button className="btn" onClick={() => setPanel('military')}>
+              Your military
+            </button>
+            {region.rebels > 0 && (
+              <ActionButton order={{ type: 'suppressRebels', nationId: player.id, regionId: selected }} label="Crack down" sub={`${COSTS.suppressRebels} influence. Halves the rebels.`} tone="btn-magenta" />
             )}
           </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto scroll-thin p-4 space-y-4">
-          {tab === 'home' && (
-            <>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <Stat label="People" value={`${region.population.toFixed(1)}m`} />
-                <Stat label="Garrison" value={garrisonStrength(game, map, selected).toFixed(1)} />
-                <Stat
-                  label={mine ? 'Supply' : 'Defense'}
-                  value={mine ? (supplyCut ? 'Cut off' : 'Supplied') : `${TERRAIN[mr.terrain].defense.toFixed(2)}×`}
-                  warn={supplyCut}
-                />
-              </div>
-              {mine && supplyCut && <p className="text-[12px] text-[#ff8a84]">This country is outside your supply network. Armies here will starve.</p>}
-              {region.rebels > 0 && (
-                <div className="rounded-2xl bg-[#ff453a]/12 p-3 text-[13px] text-[#ffb4af]">
-                  Rebels hold {region.rebels.toFixed(1)} divisions. Station an army here, attack them, or crack down.
-                  {mine && (
-                    <div className="mt-2">
-                      <ActionButton order={{ type: 'suppressRebels', nationId: player.id, regionId: selected }} label="Crack down" sub={`${COSTS.suppressRebels} influence. Cuts rebel strength in half.`} tone="btn-red" />
-                    </div>
-                  )}
-                </div>
-              )}
-              {region.sabotaged > 0 && <p className="text-[12px] text-[#ffd60a]">Factories are sabotaged for {region.sabotaged} more month{region.sabotaged === 1 ? '' : 's'}.</p>}
-
-              {!mine && (
-                <div className="flex flex-wrap gap-1.5">
-                  <button className="btn btn-primary" onClick={() => openDiplomacy(owner.id)}>
-                    {war ? 'Make peace' : 'Talk'}
+        ) : (
+          <>
+            <MilitaryCompare game={game} mine={player.id} theirs={owner.id} />
+            {war && <p className="text-[14px] text-white/75">War score: {netWarScore(game, player.id, owner.id)}</p>}
+            <div className="flex flex-wrap gap-2">
+              {war ? (
+                <>
+                  <button className="btn btn-red" disabled={!!attackErr} title={attackErr ? speak(attackErr) : 'Attack with your whole military'} onClick={() => attack(selected)}>
+                    <span className="block">Attack</span>
+                    {attackErr && <span className="block text-[12px] font-medium text-white/85 normal-case">{speak(attackErr)}</span>}
                   </button>
-                  {!war && !allied && (
+                  <button className="btn btn-primary" onClick={() => openDiplomacy(owner.id)}>
+                    Make peace
+                  </button>
+                </>
+              ) : (
+                <>
+                  {!allied && (
                     <ActionButton
                       order={{ type: 'declareWar', nationId: player.id, target: owner.id }}
                       label="Declare war"
-                      sub={hasCasusBelli(game, player.id, owner.id) ? `${COSTS.declareWarWithCasusBelli} influence. You have a grievance, so this is cheaper.` : `${COSTS.declareWar} influence.`}
+                      sub={hasCasusBelli(game, player.id, owner.id) ? `${COSTS.declareWarWithCasusBelli} influence, because you have a grievance.` : `${COSTS.declareWar} influence.`}
                       tone="btn-red"
                     />
                   )}
-                  <button type="button" className="btn btn-quiet" onClick={() => setTab('relations')}>
-                    Spy
+                  <button className="btn btn-primary" onClick={() => openDiplomacy(owner.id)}>
+                    Talk
                   </button>
-                </div>
+                </>
               )}
-
-              {mine && (
-                <button type="button" className="w-full text-left inset-card px-3 py-2.5" onClick={() => setTab('build')}>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[13px] font-semibold">Buildings</span>
-                    <span className="text-[12px] text-[#64a8ff]">Build</span>
-                  </div>
-                  <p className="text-[12px] text-white/50 mt-0.5">{built.length ? built.map((b) => `${BUILDING_SPECS[b].name} ${region.buildings[b]}`).join(' · ') : 'Nothing built yet. Factories earn money. Farms grow food. Barracks raise armies.'}</p>
-                </button>
-              )}
-
-              <section className="space-y-2">
-                <div>
-                  <div className="text-[13px] font-semibold">Territories</div>
-                  <p className="text-[12px] text-white/50 mt-0.5">One army each. Pins on the map mark every territory. Develop them, or train units into the army that lives there.</p>
-                </div>
-                {territoryIds.map((tid) => (
-                  <MusterCard key={tid} territoryId={tid} />
-                ))}
-              </section>
-
-              {(otherArmies.length > 0 || !canSee) && (
-                <section className="space-y-2">
-                  <div className="text-[13px] font-semibold">{mine ? 'Also passing through' : 'Other armies'}</div>
-                  {!canSee && <p className="text-[13px] text-white/50">You cannot see armies here. Steal their maps, or research satellites.</p>}
-                  {otherArmies.map((a) => (
-                    <ArmyCard key={a.id} army={a} game={game} />
-                  ))}
-                </section>
-              )}
-            </>
-          )}
-
-          {tab === 'build' && mine && (
-            <section className="space-y-2">
-              <p className="text-[13px] text-white/55">Buildings start at once and finish in under a minute. Money is spent when you start. One of each is built at a time.</p>
-              {BUILDING_TYPES.map((b) => {
-                const project = (game.projects ?? []).find((item) => item.kind === 'build' && item.regionId === selected && item.building === b)
-                const fraction = project && project.total > 0 ? Math.min(1, (project.total - project.remaining) / project.total) : 0
-                const coast = BUILDING_SPECS[b].requiresCoast ? ' · coast only' : ''
-                return (
-                <div key={b} className="inset-card p-3 space-y-2">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-semibold">{BUILDING_SPECS[b].name}</span>
-                    <span className="text-[13px] tabular-nums text-white/70" aria-live="polite">
-                      {region.buildings[b]}
-                      {project && <span className="text-[#30d158]"> +1</span>}
-                      {queuedBuilds(b) > 0 && <span className="text-[#30d158]"> +{queuedBuilds(b)}</span>}
-                    </span>
-                  </div>
-                  <p className="text-[12px] text-white/50 leading-snug">{BUILDING_SPECS[b].description}</p>
-                  {project ? (
-                    <div>
-                      <div className="h-1.5 rounded-full bg-white/12 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)} aria-label={`${BUILDING_SPECS[b].name} progress`}>
-                        <div className="h-full bg-[#30d158]" style={{ width: `${Math.max(8, fraction * 100)}%` }} />
-                      </div>
-                      <div className="mt-1.5 flex items-center justify-between gap-2">
-                        <p className="text-[12px] text-white/60 tabular-nums">{formatSeconds(project.remaining)} left · {formatSeconds(BUILD_SECONDS[b])} total</p>
-                        <button type="button" className="btn btn-quiet shrink-0" onClick={() => useGame.getState().cancelLiveProject(project.id)}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-[12px] text-white/45">{BUILDING_SPECS[b].cost} money · {formatSeconds(BUILD_SECONDS[b])}{coast}</p>
-                      <ActionButton className="w-full" order={{ type: 'build', nationId: player.id, regionId: selected, building: b }} label="Build" sub={`${BUILDING_SPECS[b].cost} money, ready in ${formatSeconds(BUILD_SECONDS[b])}.`} tone="btn-primary" />
-                    </>
-                  )}
-                </div>
-                )
-              })}
-            </section>
-          )}
-
-          {tab === 'relations' && !mine && (
-            <section className="space-y-3">
-              <div className="inset-card p-3 text-[13px] space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-white/50">Their strength</span>
-                  <span>~{perceivedPower(game, map, player.id, owner.id, vis).toFixed(0)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/50">Your strength</span>
-                  <span>{militaryPower(game, player.id).toFixed(0)}</span>
-                </div>
-                {war && (
-                  <div className="flex justify-between">
-                    <span className="text-white/50">War score</span>
-                    <span>{netWarScore(game, player.id, owner.id)}</span>
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <button className="btn btn-primary" onClick={() => openDiplomacy(owner.id)}>
-                  {war ? 'Make peace' : 'Talk'}
-                </button>
-                {!war && !allied && (
-                  <ActionButton
-                    order={{ type: 'declareWar', nationId: player.id, target: owner.id }}
-                    label="Declare war"
-                    sub={hasCasusBelli(game, player.id, owner.id) ? `${COSTS.declareWarWithCasusBelli} influence, because you have a grievance.` : `${COSTS.declareWar} influence.`}
-                    tone="btn-red"
-                  />
-                )}
-              </div>
-              <div className="space-y-2">
-                <button type="button" className="btn btn-quiet" onClick={() => setSpies((open) => !open)}>
-                  {spies ? 'Hide espionage' : 'Espionage'}
-                </button>
-                {spies && (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <ActionButton order={{ type: 'spy', nationId: player.id, target: selected, mission: 'sabotage' }} label="Sabotage" sub={`${COSTS.spy} money · ${Math.round(spySuccessChance(game, player.id, selected) * 100)}% chance. Stops their factories for a few months.`} tone="btn-magenta" />
-                      <ActionButton order={{ type: 'spy', nationId: player.id, target: selected, mission: 'stealVision' }} label="Steal maps" sub={`${COSTS.spy} money · ${Math.round(spySuccessChance(game, player.id, selected) * 100)}% chance. Reveals their armies.`} tone="btn-magenta" />
-                    </div>
-                    <p className="text-[12px] text-white/45">If you are caught, they gain a grievance and can declare war more cheaply.</p>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-        </div>
+            </div>
+            <ActionButton
+              order={{ type: 'spy', nationId: player.id, target: selected, mission: 'sabotage' }}
+              label="Sabotage factories"
+              sub={`${COSTS.spy} money · ${Math.round(spySuccessChance(game, player.id, selected) * 100)}% chance. If you are caught they gain a grievance.`}
+              tone="btn-magenta"
+            />
+          </>
+        )}
+      </div>
     </aside>
   )
 }
 
-function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="inset-card py-2 px-1">
+    <div className="inset-card py-2.5 px-1">
       <div className="label">{label}</div>
-      <div className={`text-[14px] font-semibold tabular-nums ${warn ? 'text-[#ff6961]' : ''}`}>{value}</div>
+      <div className="text-[16px] font-semibold tabular-nums">{value}</div>
     </div>
   )
 }
-
-function MusterCard({ territoryId }: { territoryId: string }) {
-  const view = usePlayerView()!
-  const selected = useGame((s) => s.selectedRegion)!
-  const selectedArmy = useGame((s) => s.selectedArmy)
-  const selectArmy = useGame((s) => s.selectArmy)
-  const openNation = useGame((s) => s.openNation)
-  const { map } = getWorld()
-  const vis = usePlayerVision()
-  const openTerritory = useGame((s) => s.openTerritory)
-  const openMilitary = useGame((s) => s.openMilitary)
-  const issueOrder = useGame((s) => s.issueOrder)
-  const { game, player } = view
-  const region = game.regions[selected]
-  const mine = region.owner === player.id
-  const canSee = vis === 'all' || vis.has(selected)
-  const showForces = mine || canSee
-  const territory = map.territories[territoryId]
-  const bound = showForces ? boundArmy(game, territoryId, region.owner) : undefined
-  const home = !!bound && armyIsHome(game, map, bound)
-  const away = !!bound && !home
-  const canRaise = mine && (!bound || home)
-  const selectedHere = !!bound && selectedArmy === bound.id && mine && home
-  const jobs = (game.trainingQueue ?? []).filter((job) => job.nationId === player.id && job.territoryId === territoryId)
-  const rebaseArmy = selectedArmy ? game.armies[selectedArmy] : undefined
-  const canRebase = mine && !bound && !!rebaseArmy && rebaseArmy.owner === player.id && rebaseArmy.location === selected && rebaseArmy.homeTerritoryId !== territoryId
-  const tiers = bound ? weaponTiers(game.nations[bound.owner], game.turn) : undefined
-  const generalId = bound ? generalChoice(bound.id, bound.generalId, view.orders) : null
-  const general = generalId ? game.nations[bound?.owner ?? '']?.generals.find((g) => g.id === generalId) : null
-  const present = bound ? UNIT_TYPES.filter((unit) => bound.units[unit] >= 0.05) : []
-  const status = !showForces ? 'Hidden' : home ? 'In the city' : away ? 'Away' : 'Empty'
-
-  return (
-    <div className={`inset-card p-3 space-y-2 ${selectedHere ? 'ring-1 ring-white/35' : ''}`}>
-      <div className="flex items-center justify-between gap-2">
-        {mine && bound ? (
-          <button type="button" className="text-[14px] font-semibold text-left tracking-tight" onClick={() => selectArmy(bound.id)}>
-            {territory.name}
-          </button>
-        ) : (
-          <span className="text-[14px] font-semibold tracking-tight">{territory.name}</span>
-        )}
-        <span className={`text-[12px] font-medium ${!showForces ? 'text-white/40' : home ? 'text-[#8ec5ff]' : away ? 'text-[#ffd60a]' : 'text-white/40'}`}>{status}</span>
-      </div>
-      {bound && home && <UnitStrip units={bound.units} tiers={tiers} />}
-      {bound && showForces && present.length > 0 && (
-        <div className="space-y-1">
-          {present.map((unit) => (
-            <div key={unit} className="flex justify-between text-[12px]">
-              <span className="text-white/75">{UNIT_SPECS[unit].name} {formatDivisions(bound.units[unit])}</span>
-              <span className="text-white/45">{trainingRank(bound.training[unit] ?? 0)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {mine && bound && home && (
-        <p className="text-[12px] text-white/55">{general ? `${general.name} trains these units for free each month.` : 'No general. You pay to train each unit.'}</p>
-      )}
-      {mine && bound && (
-        <button type="button" className="btn btn-quiet w-full" onClick={() => openNation('armies')}>
-          Open Armies
-        </button>
-      )}
-      {away && bound && <p className="text-[12px] text-[#ffd60a]">In {map.regions[bound.location]?.name ?? 'the field'}. March it home to recruit or train.</p>}
-      {!showForces && <p className="text-[12px] text-white/45">You cannot see the army that belongs here.</p>}
-      {mine && jobs.length > 0 && (
-        <div className="space-y-1.5">
-          {jobs.map((job, index) => {
-            const active = index === 0
-            const fraction = job.total > 0 ? Math.min(1, Math.max(0, (job.total - job.remaining) / job.total)) : 0
-            const label = !active ? 'Waiting' : job.clock === 'time' ? `${formatSeconds(job.remaining)} left` : job.remaining <= 1 ? 'Arrives when the month ends' : `${job.remaining} months left`
-            return (
-              <div key={job.id} className="space-y-1 rounded-xl bg-black/20 px-2.5 py-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-[13px] font-semibold">
-                      Raising {UNIT_SPECS[job.unit].name}
-                      {!active && <span className="font-medium text-white/40"> · waiting</span>}
-                    </div>
-                    <div className="text-[12px] tabular-nums text-white/45">{label}</div>
-                  </div>
-                  <button type="button" className="btn btn-quiet" onClick={() => issueOrder({ type: 'cancelTrain', nationId: player.id, jobId: job.id })}>
-                    Cancel
-                  </button>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-white/12" aria-hidden>
-                  <div className={`h-full rounded-full ${active ? 'bg-[#0a84ff]' : 'bg-white/25'}`} style={{ width: `${active ? Math.max(6, fraction * 100) : 0}%` }} />
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-      {!bound && canRaise && (
-        <ActionButton
-          order={{ type: 'recruit', nationId: player.id, territoryId, unit: 'infantry' }}
-          label={jobs.length ? `Raise another · ${jobs.length} training` : 'Raise an army'}
-          sub={`${UNIT_SPECS.infantry.capitalCost} money · ${UNIT_SPECS.infantry.manpowerCost},000 soldiers · eats ${UNIT_SPECS.infantry.food} food a month · ready in ${formatSeconds(TRAIN_SECONDS.infantry)}. Needs a barracks.`}
-          tone="btn-primary"
-        />
-      )}
-      {mine && bound && home && <ArmyControls army={bound} />}
-      {mine && (
-        <div className="grid grid-cols-2 gap-1.5">
-          <button type="button" className="btn" onClick={() => openTerritory(territoryId)}>
-            Develop
-          </button>
-          <button type="button" className="btn btn-primary" onClick={() => openMilitary(territoryId)}>
-            Train
-          </button>
-        </div>
-      )}
-      {canRebase && rebaseArmy && (
-        <ActionButton order={{ type: 'rebase', nationId: player.id, armyId: rebaseArmy.id, territoryId }} label="Station the selected army here" sub="This empty district becomes its home." tone="btn-quiet" />
-      )}
-    </div>
-  )
-}
-

@@ -404,21 +404,6 @@ input[type='range'] {
   display: block;
 }
 
-.nav-dock,
-.side-panel,
-.country-panel,
-.tech-panel {
-  top: var(--chrome-bottom, 12rem);
-}
-/* One working surface. A section already covers the task, so the country card does not sit on top of the map beside it. */
-body:has(.side-panel, .tech-panel) .country-panel {
-  display: none !important;
-}
-.nav-dock {
-  width: 96px;
-  max-height: calc(100vh - var(--chrome-bottom, 12rem) - 7rem);
-  overflow: hidden;
-}
 .panel-in {
   animation: panel-in 0.16s ease;
 }
@@ -470,55 +455,6 @@ body:has(.side-panel, .tech-panel) .country-panel {
     max-height: min(58vh, 480px);
     overflow: auto;
   }
-  .hud-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .hud-resources {
-    max-width: 100%;
-  }
-  .nav-dock {
-    left: 8px !important;
-    right: 8px !important;
-    top: auto !important;
-    bottom: 8px !important;
-    max-height: none !important;
-    transform: none !important;
-    width: auto !important;
-    overflow: visible !important;
-  }
-  .nav-dock > div {
-    flex-direction: row;
-    overflow-x: auto;
-    justify-content: space-between;
-  }
-  .nav-btn {
-    width: auto !important;
-    min-width: 0 !important;
-    height: 46px !important;
-    flex: 1 1 0;
-    padding: 0 2px;
-  }
-  .nav-btn span {
-    font-size: 10px;
-  }
-  .side-panel,
-  .country-panel,
-  .tech-panel {
-    left: 8px !important;
-    right: 8px !important;
-    width: auto !important;
-    min-width: 0 !important;
-    height: auto !important;
-    bottom: 78px !important;
-    top: max(var(--chrome-bottom, 8rem), calc(100vh - 78px - min(52vh, 520px))) !important;
-  }
-  .orders-tray {
-    top: auto !important;
-    bottom: calc(86px + min(52vh, 520px)) !important;
-    max-width: calc(100vw - 16px) !important;
-    z-index: 35;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -550,5 +486,204 @@ body:has(.side-panel, .tech-panel) .country-panel {
     bottom: 8px !important;
     width: auto !important;
     max-height: 56vh !important;
+  }
+}
+
+/* Readable by default: opaque surfaces, brighter secondary text, no tiny type. */
+:root {
+  --surface: #15171c;
+  --surface-2: #1d2026;
+  --line: rgba(255, 255, 255, 0.12);
+  --text-2: rgba(245, 245, 247, 0.76);
+  --text-3: rgba(245, 245, 247, 0.64);
+  --hud-h: 104px;
+}
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.text-white\/40,
+.text-white\/45,
+.text-white\/50,
+.text-white\/55,
+.text-slate-500,
+.text-slate-400 {
+  color: var(--text-3) !important;
+}
+.text-white\/60,
+.text-white\/65,
+.text-slate-300 {
+  color: var(--text-2) !important;
+}
+.text-\[10px\],
+.text-\[11px\] {
+  font-size: 12px !important;
+}
+.label {
+  color: var(--text-3);
+}
+
+.nav-dock {
+  position: absolute;
+  left: 16px;
+  top: calc(var(--hud-h) + 16px);
+  width: 88px;
+  z-index: 30;
+}
+.drawer {
+  position: absolute;
+  z-index: 20;
+  left: 116px;
+  top: calc(var(--hud-h) + 16px);
+  bottom: 16px;
+  width: clamp(380px, 34vw, 560px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  overflow: hidden;
+  animation: panel-in 0.16s ease;
+}
+.drawer-wide {
+  width: auto;
+  right: 16px;
+}
+.country-card {
+  position: absolute;
+  z-index: 19;
+  right: 16px;
+  top: calc(var(--hud-h) + 16px);
+  width: clamp(340px, 28vw, 440px);
+  max-height: calc(100% - var(--hud-h) - 32px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  overflow: hidden;
+}
+/* A drawer already covers the task, so the country card steps aside instead of stacking on the map. */
+body:has(.drawer) .country-card {
+  display: none;
+}
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.72);
+}
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: min(88dvh, 820px);
+  border-radius: 24px;
+  overflow: hidden;
+}
+.modal-wide {
+  width: min(960px, 100%);
+}
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+.modal-head,
+.modal-foot {
+  flex: none;
+  padding: 16px 24px;
+}
+.modal-head {
+  border-bottom: 1px solid var(--line);
+}
+.modal-foot {
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.toast-region {
+  position: absolute;
+  z-index: 55;
+  right: 16px;
+  top: calc(var(--hud-h) + 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --hud-h: 276px;
+  }
+  .hud-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .hud-resources {
+    max-width: 100%;
+  }
+  .nav-dock {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 8px;
+    width: auto;
+  }
+  .nav-dock > div {
+    flex-direction: row;
+    overflow-x: auto;
+    justify-content: space-between;
+  }
+  .nav-btn {
+    width: auto !important;
+    min-width: 0 !important;
+    height: 48px !important;
+    flex: 1 1 0;
+    padding: 0 2px;
+  }
+  .drawer,
+  .drawer-wide,
+  .country-card {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    top: auto;
+    bottom: 136px;
+    max-height: calc(100dvh - var(--hud-h) - 150px);
+    height: auto;
+  }
+  .hud-next {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 72px;
+    z-index: 31;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .hud-next .btn {
+    flex: 1;
+  }
+  .orders-tray {
+    bottom: 140px !important;
+    max-width: calc(100vw - 16px) !important;
+  }
+  .modal-body {
+    padding: 16px;
+  }
+  .toast-region {
+    right: 8px;
+    left: 8px;
+    top: calc(var(--hud-h) + 8px);
+    align-items: stretch;
   }
 }

@@ -1,23 +1,23 @@
 import { useEffect, useState } from 'react'
-import { ARMS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, UNIT_SPECS } from '../data/unitTypes'
-import { weaponTiers } from '../engine/arms'
-import { armiesOf, regionsOf, turnDate } from '../engine/helpers'
-import { UNIT_TYPES } from '../engine/types'
-import type { LawId, LogKind, UnitType } from '../engine/types'
+import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, buildingCost } from '../data/unitTypes'
+import { buildingCap, regionWorkforce } from '../engine/economy'
+import { regionsOf, turnDate } from '../engine/helpers'
+import { BUILDING_TYPES } from '../engine/types'
+import type { LawId, LogKind } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { ArmyManager } from './ArmyOrders'
+import { Pips } from './bits'
 import { signed, usePlayerView } from './hooks'
 import { OrderButton, PanelShell } from './panel'
 
-export function NationPanel() {
+export function CountryDrawer() {
   const view = usePlayerView()
   const setPolicy = useGame((s) => s.setPolicy)
-  const removeOrder = useGame((s) => s.removeOrder)
+  const tab = useGame((s) => s.countryTab)
+  const setTab = useGame((s) => s.setCountryTab)
   const [tax, setTax] = useState(view?.pendingPolicy.taxRate ?? 0.25)
   const [draft, setDraft] = useState(view?.pendingPolicy.draftRate ?? 0.05)
-  const tab = useGame((s) => s.nationTab)
-  const setNationTab = useGame((s) => s.setNationTab)
+  const [picked, setPicked] = useState<string | null>(null)
   const pTax = view?.pendingPolicy.taxRate
   const pDraft = view?.pendingPolicy.draftRate
   useEffect(() => {
@@ -27,168 +27,156 @@ export function NationPanel() {
     }
   }, [pTax, pDraft])
   if (!view) return null
-  const { game, player, econ, orders } = view
+  const { game, player, econ } = view
+  const { map } = getWorld()
   const maxDraft = player.laws.includes('conscription_act') ? DRAFT_LIMITS.maxWithConscription : DRAFT_LIMITS.max
-  const armies = armiesOf(game, player.id)
+  const owned = regionsOf(game, player.id)
+  const regionId = picked && owned.includes(picked) ? picked : owned.includes(player.capital) ? player.capital : owned[0]
+  const region = game.regions[regionId]
 
   return (
-    <PanelShell title="Nation" kicker={`${player.name} · ${regionsOf(game, player.id).length === 1 ? '1 country' : `${regionsOf(game, player.id).length} countries`}`} panel="nation">
+    <PanelShell title="Your country" kicker={`${player.name} · ${owned.length === 1 ? '1 country' : `${owned.length} countries`}`} panel="country">
       <div className="segmented">
         {([
+          ['build', 'Upgrades'],
           ['economy', 'Economy'],
           ['laws', 'Laws'],
-          ['arms', 'Weapons'],
-          ['armies', 'Armies'],
         ] as const).map(([id, label]) => (
-          <button key={id} type="button" aria-pressed={tab === id} onClick={() => setNationTab(id)}>
+          <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>
             {label}
           </button>
         ))}
       </div>
+
+      {tab === 'build' && region && (
+        <section className="space-y-3">
+          <p className="text-[14px] text-white/70">Each upgrade takes effect the moment you buy it. Bigger countries can reach higher levels.</p>
+          {owned.length > 1 && (
+            <label className="block text-[14px]">
+              <span className="label block mb-1">Country</span>
+              <select className="field w-full px-3 py-2" value={regionId} onChange={(e) => setPicked(e.target.value)}>
+                {owned.map((id) => (
+                  <option key={id} value={id}>
+                    {map.regions[id].name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {BUILDING_TYPES.map((b) => {
+            const spec = BUILDING_SPECS[b]
+            const level = region.buildings[b]
+            const cap = buildingCap(regionWorkforce(region, map.regions[regionId]), b)
+            if (spec.requiresCoast && !map.regions[regionId].coastal) return null
+            return (
+              <div key={b} className="inset-card p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[16px] font-semibold tracking-tight">{spec.name}</div>
+                    <div className="text-[13px] text-white/70 mt-0.5">{spec.effect}</div>
+                  </div>
+                  <span className="text-[14px] font-semibold tabular-nums shrink-0">
+                    {level}
+                    <span className="text-white/60">/{cap}</span>
+                  </span>
+                </div>
+                <div className="mt-2.5 flex items-center justify-between gap-3">
+                  <Pips value={Math.min(level, 10)} max={Math.min(cap, 10)} />
+                  {level >= cap ? (
+                    <span className="chip chip-green">Highest level</span>
+                  ) : (
+                    <OrderButton order={{ type: 'build', nationId: player.id, regionId, building: b }} label={`Upgrade · ${buildingCost(b, level)} money`} tone="btn-primary" />
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </section>
+      )}
+
       {tab === 'economy' && (
-      <section className="space-y-3">
-        <p className="text-[13px] text-white/55">Taxes and the draft take effect when the month ends.</p>
-        <div>
-          <div className="flex justify-between text-[14px]">
-            <span>Tax rate</span>
-            <span className="font-semibold tabular-nums">{Math.round(tax * 100)}%</span>
+        <section className="space-y-4">
+          <p className="text-[14px] text-white/70">Taxes and the draft take effect when you press Next turn.</p>
+          <div>
+            <div className="flex justify-between text-[15px]">
+              <span>Tax rate</span>
+              <span className="font-semibold tabular-nums">{Math.round(tax * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              className="w-full"
+              min={TAX_LIMITS.min}
+              max={TAX_LIMITS.max}
+              step={0.01}
+              value={tax}
+              onChange={(e) => {
+                const next = +e.target.value
+                setTax(next)
+                setPolicy(next, draft)
+              }}
+            />
+            <div className="text-[13px] text-white/65">Higher taxes bring in more money, and unsettle the country once they pass 20%.</div>
           </div>
-          <input
-            type="range"
-            className="w-full"
-            min={TAX_LIMITS.min}
-            max={TAX_LIMITS.max}
-            step={0.01}
-            value={tax}
-            onChange={(e) => {
-              const next = +e.target.value
-              setTax(next)
-              setPolicy(next, draft)
-            }}
-          />
-          <div className="text-[12px] text-white/45">Higher taxes bring in more money, and unsettle the country once they pass 20%.</div>
-        </div>
-        <div>
-          <div className="flex justify-between text-[14px]">
-            <span>Draft</span>
-            <span className="font-semibold tabular-nums">{Math.round(draft * 100)}%</span>
+          <div>
+            <div className="flex justify-between text-[15px]">
+              <span>Draft</span>
+              <span className="font-semibold tabular-nums">{Math.round(draft * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              className="w-full"
+              min={DRAFT_LIMITS.min}
+              max={maxDraft}
+              step={0.01}
+              value={draft}
+              onChange={(e) => {
+                const next = +e.target.value
+                setDraft(next)
+                setPolicy(tax, next)
+              }}
+            />
+            <div className="text-[13px] text-white/65">Moves civilians into the military. Fewer workers means less money, food, and factory output.</div>
           </div>
-          <input
-            type="range"
-            className="w-full"
-            min={DRAFT_LIMITS.min}
-            max={maxDraft}
-            step={0.01}
-            value={draft}
-            onChange={(e) => {
-              const next = +e.target.value
-              setDraft(next)
-              setPolicy(tax, next)
-            }}
-          />
-          <div className="text-[12px] text-white/45">Moves civilians into the army. Fewer workers means less money, food, and factory output.</div>
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-[13px] inset-card p-3">
-          <span className="text-white/50">Money / month</span>
-          <span className="text-right">{signed(econ.netCapital)}</span>
-          <span className="text-white/50">Food / month</span>
-          <span className={`text-right ${econ.netFood < 0 ? 'text-[#ff6961]' : ''}`}>{signed(econ.netFood)}</span>
-          <span className="text-white/50">Soldiers / month</span>
-          <span className="text-right">{signed(econ.militaryRegen, 0)}k</span>
-          <span className="text-white/50">Stability heading to</span>
-          <span className="text-right">{Math.round(econ.stabilityTarget)}%</span>
-          <span className="text-white/50">People at work</span>
-          <span className="text-right">{Math.round(econ.laborRatio * 100)}%</span>
-        </div>
-      </section>
+          <div className="grid grid-cols-2 gap-2 text-[14px] inset-card p-3.5">
+            <span className="text-white/70">Money / turn</span>
+            <span className="text-right">{signed(econ.netCapital)}</span>
+            <span className="text-white/70">Food / turn</span>
+            <span className={`text-right ${econ.netFood < 0 ? 'text-[#ff6961]' : ''}`}>{signed(econ.netFood)}</span>
+            <span className="text-white/70">Soldiers / turn</span>
+            <span className="text-right">{signed(econ.militaryRegen, 0)}k</span>
+            <span className="text-white/70">Stability heading to</span>
+            <span className="text-right">{Math.round(econ.stabilityTarget)}%</span>
+            <span className="text-white/70">People at work</span>
+            <span className="text-right">{Math.round(econ.laborRatio * 100)}%</span>
+          </div>
+        </section>
       )}
 
       {tab === 'laws' && (
-      <section className="space-y-2">
-        <p className="text-[13px] text-white/55">Laws change how the country runs. Passing one costs influence.</p>
-        {(Object.keys(LAW_SPECS) as LawId[]).map((law) => {
-          const active = player.laws.includes(law)
-          const queued = orders.findIndex((o) => (o.type === 'enactLaw' || o.type === 'repealLaw') && o.law === law)
-          return (
-            <div key={law} className="rounded-lg border border-slate-700/70 bg-slate-900/40 px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[14px] font-semibold tracking-tight">{LAW_SPECS[law].name}</span>
-                {queued >= 0 ? (
-                  <button className="btn btn-quiet" onClick={() => removeOrder(queued)}>
-                    Cancel
-                  </button>
-                ) : active ? (
-                  <OrderButton order={{ type: 'repealLaw', nationId: player.id, law }} label="Repeal" tone="btn-quiet" />
-                ) : (
-                  <OrderButton order={{ type: 'enactLaw', nationId: player.id, law }} label={`Pass · ${LAW_SPECS[law].cost} influence`} tone="btn-quiet" />
-                )}
+        <section className="space-y-3">
+          <p className="text-[14px] text-white/70">Laws change how the country runs. Passing one costs influence and takes effect at once.</p>
+          {(Object.keys(LAW_SPECS) as LawId[]).map((law) => {
+            const active = player.laws.includes(law)
+            return (
+              <div key={law} className="inset-card p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[16px] font-semibold tracking-tight">{LAW_SPECS[law].name}</span>
+                  {active ? (
+                    <OrderButton order={{ type: 'repealLaw', nationId: player.id, law }} label="Repeal" />
+                  ) : (
+                    <OrderButton order={{ type: 'enactLaw', nationId: player.id, law }} label={`Pass · ${LAW_SPECS[law].cost} influence`} tone="btn-primary" />
+                  )}
+                </div>
+                <p className="text-[13px] text-white/70 mt-1.5">
+                  {active ? 'In force. ' : ''}
+                  {LAW_SPECS[law].description}
+                </p>
               </div>
-              <p className="text-[12px] text-white/50 mt-1">{active ? 'In force. ' : ''}{LAW_SPECS[law].description}</p>
-            </div>
-          )
-        })}
-      </section>
-      )}
-
-      {tab === 'arms' && (
-      <section className="space-y-2">
-        <p className="text-[13px] text-white/55">Each level adds 10% attack for eight months. One contract per unit type. Diplomacy can buy the same bonus from another nation.</p>
-        {UNIT_TYPES.map((u) => (
-          <ContractRow key={u} unit={u} />
-        ))}
-      </section>
-      )}
-
-      {tab === 'armies' && (
-      <section className="space-y-3">
-        <div className="space-y-1 text-[13px] text-white/70">
-          <p>Every army fights as one force. Infantry, armor, planes, and ships inside it train separately, and only in their city.</p>
-          <p>Add a general and every unit trains for free each month. With no general, you pay for each unit. You have {player.generals.length} general{player.generals.length === 1 ? '' : 's'}, and each one can be added to a single army.</p>
-        </div>
-        {armies.length === 0 && <p className="text-[13px] text-white/45">No armies yet. Open one of your countries and raise one.</p>}
-        {[...armies]
-          .sort((a, b) => (getWorld().map.territories[a.homeTerritoryId]?.name ?? a.id).localeCompare(getWorld().map.territories[b.homeTerritoryId]?.name ?? b.id))
-          .map((a) => (
-            <ArmyManager key={a.id} army={a} />
-          ))}
-      </section>
+            )
+          })}
+        </section>
       )}
     </PanelShell>
-  )
-}
-
-function ContractRow({ unit }: { unit: UnitType }) {
-  const view = usePlayerView()!
-  const { game, player } = view
-  const active = (player.contracts ?? []).find((c) => c.unit === unit && c.until >= game.turn)
-  const liveTier = weaponTiers(player, game.turn)[unit] ?? 0
-  const initialTier = (liveTier === 2 || liveTier === 3 ? liveTier : 1) as 1 | 2 | 3
-  const [tier, setTier] = useState<1 | 2 | 3>(initialTier)
-  const bonus = Math.round(tier * ARMS.attackPerTier * 100)
-  const supplier = active?.supplier ? game.nations[active.supplier]?.name ?? 'Foreign' : 'Domestic'
-  return (
-    <div className="rounded-lg border border-slate-700/70 bg-slate-900/40 px-3 py-2 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[14px] font-semibold tracking-tight">{UNIT_SPECS[unit].name}</span>
-        <span className={`text-[12px] font-medium ${active ? 'text-[#ffd60a]' : 'text-white/40'}`}>{active ? `Level ${liveTier} · ${supplier}` : 'No contract'}</span>
-      </div>
-      {active && (
-        <p className="text-[11px] text-slate-400">
-          +{Math.round(active.tier * ARMS.attackPerTier * 100)}% attack through {turnDate(active.until)}
-          {active.payPerMonth > 0 ? ` · ${active.payPerMonth} money/month` : ''}.
-        </p>
-      )}
-      <div className="flex items-center gap-2">
-        <div className="segmented shrink-0">
-          {([1, 2, 3] as const).map((level) => (
-            <button key={level} type="button" aria-pressed={tier === level} className="!flex-none px-2.5" onClick={() => setTier(level)}>
-              {level}
-            </button>
-          ))}
-        </div>
-        <OrderButton className="flex-1" showError order={{ type: 'signContract', nationId: player.id, unit, tier }} label={`${active ? 'Replace' : 'Sign'} · ${ARMS.domesticCost[tier - 1]} money`} sub={`+${bonus}% attack for ${ARMS.months} months`} />
-      </div>
-    </div>
   )
 }
 
@@ -210,7 +198,7 @@ export function LogPanel() {
   const { game, player } = view
   const entries = game.log.filter((l) => scope === 'world' || l.nations.includes(player.id)).slice(-120).reverse()
   return (
-    <PanelShell title="News" kicker="What happened this year" panel="log">
+    <PanelShell title="News" kicker="What has happened lately" panel="log">
       <div className="segmented">
         <button type="button" aria-pressed={scope === 'mine'} onClick={() => setScope('mine')}>
           Your nation
@@ -236,47 +224,36 @@ export function SettingsPanel() {
   const settings = useGame((s) => s.settings)
   const update = useGame((s) => s.updateSettings)
   const quit = useGame((s) => s.quitToMenu)
+  const setHelp = useGame((s) => s.setHelp)
   return (
     <PanelShell title="Settings" kicker="The game saves itself." panel="settings">
-      <label className="flex items-center justify-between text-[14px]">
-        <span>Show tips</span>
-        <input type="checkbox" checked={settings.showTips} onChange={(e) => update({ showTips: e.target.checked })} />
-      </label>
-      <label className="flex items-center justify-between text-[14px]">
-        <span>Battle scenes</span>
-        <select className="field px-2 py-1" value={settings.battleScenes} onChange={(e) => update({ battleScenes: e.target.value as 'important' | 'all' | 'off' })}>
-          <option value="important">Captures and losses</option>
-          <option value="all">Every battle</option>
+      <label className="flex items-center justify-between text-[15px]">
+        <span>Battle windows</span>
+        <select className="field px-3 py-2" value={settings.battleScenes} onChange={(e) => update({ battleScenes: e.target.value as 'all' | 'mine' | 'off' })}>
+          <option value="all">Every battle I am in</option>
+          <option value="mine">Only my attacks</option>
           <option value="off">Off</option>
         </select>
       </label>
-      <label className="flex items-center justify-between text-[14px]">
-        <span>Reduce motion</span>
-        <input type="checkbox" checked={settings.reducedMotion} onChange={(e) => update({ reducedMotion: e.target.checked })} />
-      </label>
-      <label className="flex items-center justify-between text-[14px]">
+      <label className="flex items-center justify-between text-[15px]">
         <span>Battle speed</span>
-        <select className="field px-2 py-1" value={settings.fxSpeed} onChange={(e) => update({ fxSpeed: +e.target.value as 1 | 2 })}>
+        <select className="field px-3 py-2" value={settings.fxSpeed} onChange={(e) => update({ fxSpeed: +e.target.value as 1 | 2 })}>
           <option value={1}>1×</option>
           <option value={2}>2×</option>
         </select>
       </label>
-      <button className="btn" onClick={() => update({ showTips: true, tutorialStep: 0 })}>
-        Replay introduction
+      <label className="flex items-center justify-between text-[15px]">
+        <span>Reduce motion</span>
+        <input type="checkbox" checked={settings.reducedMotion} onChange={(e) => update({ reducedMotion: e.target.checked })} />
+      </label>
+      <button className="btn w-full py-2.5 text-[14px]" onClick={() => setHelp(true)}>
+        How to play
       </button>
-      <button className="btn btn-red" onClick={quit}>
+      <button className="btn btn-red w-full py-2.5 text-[14px]" onClick={quit}>
         Leave game
       </button>
-      <div className="text-[13px] text-white/55 pt-2 space-y-2">
-        <div className="text-[13px] font-semibold text-white">How to play</div>
-        <p>Click a country. If it is yours, raise an army in a district or open Build. If it is not, talk or declare war.</p>
-        <p>Open Nation, then Armies, to see every army. They fight as one force. Add a general and each unit trains for free every month. Without a general, you pay to train each unit in its city.</p>
-        <p>Select an army, press Attack, then click a highlighted border territory. Winning takes that territory. Lose every territory and the country is gone.</p>
-        <p>Time runs on its own. Pause with Space, or run at 1×, 2×, or 4×. The month bar is when wages, food, and treaties settle.</p>
-        <p>Win by taking the territories asked for at the start (3, 6, or 12), or by leading that share of the world’s people. You lose if your nation is wiped out.</p>
-        <div className="label pt-2">Shortcuts</div>
-        <p>Space pauses. Esc cancels or closes. R territories, M military, N nation, T research, D diplomacy, L news.</p>
-      </div>
+      <div className="label pt-2">Shortcuts</div>
+      <p className="text-[14px] text-white/70">Enter: next turn. Esc: close. C country, M military, T research, D diplomacy, L news. ?: how to play.</p>
     </PanelShell>
   )
 }

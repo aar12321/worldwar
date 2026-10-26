@@ -7,7 +7,6 @@ export const SPY = {
   baseSuccess: 0.65,
   satellitePenalty: 0.2,
   sabotageTurns: 3,
-  visionTurns: 6,
   failureCasusBelliTurns: 12,
 }
 
@@ -21,20 +20,15 @@ export function spySuccessChance(s: GameState, nationId: NationId, target: Regio
   return Math.max(0.1, Math.min(0.95, p))
 }
 
-export function runSpyMission(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, mission: SpyMission, rng: Rng) {
+export function runSpyMission(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, _mission: SpyMission, rng: Rng) {
   const region = s.regions[target]
   const ownerId = region.owner
   const n = s.nations[nationId]
   const owner = s.nations[ownerId]
   const name = map.regions[target].name
   if (rng.chance(spySuccessChance(s, nationId, target))) {
-    if (mission === 'sabotage') {
-      region.sabotaged = SPY.sabotageTurns
-      addLog(s, 'spy', `${n.name}'s agents sabotaged the factories of ${name}. Output halted for ${SPY.sabotageTurns} months.`, [nationId, ownerId])
-    } else {
-      n.vision[ownerId] = s.turn + SPY.visionTurns
-      addLog(s, 'spy', `${n.name}'s spies stole ${owner.name}'s military maps. Their armies are revealed for ${SPY.visionTurns} months.`, [nationId])
-    }
+    region.sabotaged = SPY.sabotageTurns
+    addLog(s, 'spy', `${n.name}'s agents sabotaged the factories of ${name}. Output halted for ${SPY.sabotageTurns} months.`, [nationId, ownerId])
   } else {
     s.casusBelli[`${ownerId}|${nationId}`] = s.turn + SPY.failureCasusBelliTurns
     addOpinion(s, ownerId, nationId, CAUGHT_SPYING, -25, 0.5)

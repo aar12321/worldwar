@@ -1,21 +1,17 @@
-import { UPGRADE_SPECS } from '../data/development'
 import { TECH_BY_ID } from '../data/techTree'
-import { ARMS, BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { ensureTerritoryDev } from './development'
-import { applyArmsContracts, grantArmsContract, pruneArmsContracts } from './arms'
+import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
 import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, propose, respond } from './diplomacy'
 import { applyEconomy } from './economy'
 import { runSpyMission } from './espionage'
 import { EVENT_GAP_TURNS, scheduleEvent } from './events'
-import { addLog, armiesOf, armyIsHome, regionsOf } from './helpers'
-import { addUnitAtTerritory, tickTraining, trainMonths } from './training'
+import { addLog, regionsOf } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
-import { applySupply } from './supply'
 import { research } from './tech'
-import { UNIT_TYPES, type GameState, type Order, type WorldMap } from './types'
+import { tickTraining, trainMonths } from './training'
+import { UNIT_TYPES, type BattleReport, type GameState, type Order, type WorldMap } from './types'
 import { checkOutcome } from './victory'
-import { killNation, resolveAttacks, resolveMoves, resolveRebels } from './warfare'
+import { killNation, resolveAttack, resolveRebels } from './warfare'
 
 export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
   const region = (id: string) => map.regions[id]?.name ?? id
@@ -24,38 +20,25 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'setPolicy':
       return `Set taxes ${Math.round(o.taxRate * 100)}% / draft ${Math.round(o.draftRate * 100)}%`
     case 'build':
-      return `Build ${BUILDING_SPECS[o.building].name} in ${region(o.regionId)}`
-    case 'recruit':
-      return `Recruit ${UNIT_SPECS[o.unit].name} at ${map.territories[o.territoryId]?.name ?? o.territoryId}`
+      return `Upgrade ${BUILDING_SPECS[o.building].name} in ${region(o.regionId)}`
     case 'queueTrain':
-      return `Train ${UNIT_SPECS[o.unit].name} at ${map.territories[o.territoryId]?.name ?? o.territoryId} (${trainMonths(o.unit)} mo)`
+      return `Train ${UNIT_SPECS[o.unit].name} (${trainMonths(o.unit)} mo)`
     case 'cancelTrain': {
       const job = s.trainingQueue?.find((item) => item.id === o.jobId)
-      const what = job ? UNIT_SPECS[job.unit].name : 'training'
-      return `Cancel ${what}`
+      return `Cancel ${job ? UNIT_SPECS[job.unit].name : 'training'}`
     }
-    case 'develop':
-      return `Develop ${UPGRADE_SPECS[o.upgrade].name} in ${map.territories[o.territoryId]?.name ?? o.territoryId}`
-    case 'train': {
-      const place = map.territories[s.armies[o.armyId]?.homeTerritoryId]?.name
-      const what = UNIT_SPECS[o.unit].name
-      return place ? `Train ${what} in ${place}` : `Train ${what}`
-    }
-    case 'rebase':
-      return `Re-base army at ${map.territories[o.territoryId]?.name ?? o.territoryId}`
-    case 'signContract':
-      return `Sign tier ${o.tier} ${UNIT_SPECS[o.unit].name} contract`
+    case 'train':
+      return `Drill ${UNIT_SPECS[o.unit].name}`
+    case 'upgradeWeapons':
+      return `Upgrade ${UNIT_SPECS[o.unit].name} weapons`
     case 'research':
       return `Research ${TECH_BY_ID[o.techId]?.name ?? o.techId}`
-    case 'move':
-      return `Move army to ${region(o.to)}`
     case 'attack':
-      return o.territoryId ? `Attack ${map.territories[o.territoryId]?.name ?? region(o.target)}` : `Attack ${region(o.target)}`
+      return `Attack ${region(o.target)}`
     case 'assignGeneral': {
-      const place = map.territories[s.armies[o.armyId]?.homeTerritoryId]?.name ?? 'the army'
-      if (!o.generalId) return `Remove the general from ${place}`
+      if (!o.generalId) return 'Remove the commander'
       const name = s.nations[o.nationId]?.generals.find((g) => g.id === o.generalId)?.name
-      return name ? `Add ${name} to ${place}` : `Add a general to ${place}`
+      return name ? `Appoint ${name} commander` : 'Appoint a commander'
     }
     case 'declareWar':
       return `Declare war on ${nation(o.target)}`
@@ -73,7 +56,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'leaveAlliance':
       return `Leave alliance with ${nation(o.target)}`
     case 'spy':
-      return `${o.mission === 'sabotage' ? 'Sabotage' : 'Steal maps of'} ${region(o.target)}`
+      return `Sabotage ${region(o.target)}`
     case 'enactLaw':
       return `Enact ${LAW_SPECS[o.law].name}`
     case 'repealLaw':
@@ -89,14 +72,15 @@ const PHASES: Order['type'][][] = [
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'propose'],
   ['cancelTrain'],
-  ['research', 'build', 'recruit', 'queueTrain', 'develop', 'rebase', 'signContract', 'suppressRebels', 'assignGeneral'],
+  ['research', 'build', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['spy'],
 ]
 
 /**
  * Resolves one month. Pure: returns a new state and never mutates `prev`.
- * All nations' orders are applied simultaneously in fixed phases, then combat, supply, and economy run.
+ * Month-end orders from every nation, and the AI's other orders, apply in fixed phases.
+ * Then training, one attack per nation, rebels, the economy and diplomacy run.
  */
 export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): GameState {
   if (prev.outcome !== 'playing' || prev.pendingEvent) return prev
@@ -104,7 +88,6 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   const rng = createRng(s.seed, s.turn)
   s.battles = []
   s.dispatches = []
-  pruneArmsContracts(s)
   const live = orders.filter((o) => s.nations[o.nationId]?.alive)
 
   for (const phase of PHASES) {
@@ -124,24 +107,23 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
     }
   }
 
-  tickTraining(s, map)
-  drillWithGenerals(s, map)
+  tickTraining(s)
+  drillWithCommanders(s)
 
-  const acted = new Set<string>()
-  resolveMoves(s, map, live, acted)
-  resolveAttacks(s, map, live, rng, acted)
+  // Each nation's one attack for the turn. The AI goes in a seeded order.
+  for (const o of live) {
+    if (o.type !== 'attack' || validateOrder(s, map, o)) continue
+    resolveAttack(s, map, o.nationId, o.target, rng)
+  }
   resolveRebels(s, map, rng)
-  for (const a of Object.values(s.armies)) a.entrenched = acted.has(a.id) ? 0 : Math.min(3, (a.entrenched ?? 0) + 1)
 
   const alive = Object.values(s.nations)
     .filter((n) => n.alive)
     .map((n) => n.id)
     .sort()
   for (const id of alive) if (regionsOf(s, id).length === 0) killNation(s, id, null)
-  for (const id of alive) if (s.nations[id].alive) applySupply(s, map, id)
   for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng)
   applyDeals(s)
-  applyArmsContracts(s)
 
   s.turn++
   expireDiplomacy(s)
@@ -150,21 +132,30 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
     s.pendingEvent = scheduleEvent(s, map, s.playerId, rng)
     s.nextEventTurn = s.turn + EVENT_GAP_TURNS
   }
-  s.outcome = checkOutcome(s, map)
+  s.outcome = checkOutcome(s)
   return s
 }
 
-/** Pays for one order and runs it at once. Used by the real-time clock for decisions that are not marches or construction. */
-export function applyResolvedOrder(s: GameState, map: WorldMap, o: Order): string | null {
+/**
+ * Pays for one order and runs it at once. The player's building, training, weapons, war and attack orders go through here.
+ * Mutates `s`; the caller passes a copy. An attack also returns its battle report.
+ */
+export function applyOrderNow(s: GameState, map: WorldMap, o: Order): { error: string | null; battle?: BattleReport } {
   const err = validateOrder(s, map, o)
-  if (err) return err
+  if (err) return { error: err }
   const n = s.nations[o.nationId]
   const cost = orderCost(s, o)
   n.resources.capital -= cost.capital
   n.resources.pp -= cost.pp
   n.militaryPool -= cost.manpower
-  executeOrder(s, map, o, createRng(s.seed, s.turn + s.nextId))
-  return null
+  const rng = createRng(s.seed, s.turn * 31 + s.nextId)
+  if (o.type === 'attack') {
+    const result = resolveAttack(s, map, o.nationId, o.target, rng)
+    s.outcome = checkOutcome(s)
+    return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
+  }
+  executeOrder(s, map, o, rng)
+  return { error: null }
 }
 
 function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typeof createRng>) {
@@ -202,23 +193,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'build':
       s.regions[o.regionId].buildings[o.building]++
-      if (n.isPlayer) addLog(s, 'economy', `Construction complete: ${BUILDING_SPECS[o.building].name} in ${map.regions[o.regionId].name}.`, [o.nationId])
-      break
-    case 'recruit':
-      addUnitAtTerritory(s, map, o.nationId, o.territoryId, o.unit)
+      if (n.isPlayer) addLog(s, 'economy', `${BUILDING_SPECS[o.building].name} upgraded to level ${s.regions[o.regionId].buildings[o.building]} in ${map.regions[o.regionId].name}.`, [o.nationId])
       break
     case 'queueTrain': {
       const total = trainMonths(o.unit)
       s.trainingQueue ??= []
-      s.trainingQueue.push({
-        id: `q${s.nextId++}`,
-        nationId: o.nationId,
-        territoryId: o.territoryId,
-        unit: o.unit,
-        remaining: total,
-        total,
-        orderedTurn: s.turn,
-      })
+      s.trainingQueue.push({ id: `q${s.nextId++}`, nationId: o.nationId, unit: o.unit, remaining: total, total })
       break
     }
     case 'cancelTrain': {
@@ -233,31 +213,13 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       if (n.isPlayer) addLog(s, 'info', `Cancelled ${spec.name} training. ${refund === 1 ? 'The full cost' : 'Half the cost'} was refunded.`, [o.nationId])
       break
     }
-    case 'develop': {
-      const dev = ensureTerritoryDev(s, o.territoryId)
-      dev[o.upgrade] += 1
-      if (n.isPlayer) {
-        const place = map.territories[o.territoryId]?.name ?? 'the territory'
-        addLog(s, 'economy', `${UPGRADE_SPECS[o.upgrade].name} finished in ${place}.`, [o.nationId])
-      }
+    case 'train':
+      n.military.drill[o.unit] = Math.min(5, (n.military.drill[o.unit] ?? 0) + 1)
+      if (n.isPlayer) addLog(s, 'info', `${UNIT_SPECS[o.unit].name} is now ${trainingRank(n.military.drill[o.unit])}.`, [o.nationId])
       break
-    }
-    case 'train': {
-      const a = s.armies[o.armyId]
-      a.training[o.unit] = Math.min(5, (a.training[o.unit] ?? 0) + 1)
-      if (n.isPlayer) {
-        const place = map.territories[a.homeTerritoryId]?.name ?? 'The army'
-        addLog(s, 'info', `${place}: ${UNIT_SPECS[o.unit].name} is now ${trainingRank(a.training[o.unit])}.`, [o.nationId])
-      }
-      break
-    }
-    case 'rebase':
-      s.armies[o.armyId].homeTerritoryId = o.territoryId
-      break
-    case 'signContract':
-      grantArmsContract(s, o.nationId, { unit: o.unit, tier: o.tier, supplier: null, payPerMonth: 0, months: ARMS.months })
-      if (n.isPlayer)
-        addLog(s, 'economy', `${n.name} signed a tier ${o.tier} ${UNIT_SPECS[o.unit].name} contract (+${o.tier * 10}% attack for ${ARMS.months} months).`, [o.nationId])
+    case 'upgradeWeapons':
+      n.military.weapons[o.unit] = (n.military.weapons[o.unit] ?? 0) + 1
+      if (n.isPlayer) addLog(s, 'economy', `${UNIT_SPECS[o.unit].name} weapons are now level ${n.military.weapons[o.unit]}.`, [o.nationId])
       break
     case 'suppressRebels': {
       const r = s.regions[o.regionId]
@@ -267,8 +229,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     }
     case 'assignGeneral':
-      for (const a of armiesOf(s, o.nationId)) if (o.generalId && a.generalId === o.generalId) a.generalId = null
-      s.armies[o.armyId].generalId = o.generalId
+      n.military.commanderId = o.generalId
       break
     case 'spy':
       runSpyMission(s, map, o.nationId, o.target, o.mission, rng)
@@ -278,22 +239,17 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
   }
 }
 
-/** A general drills every unit that is home, one rank per month, at no cost. */
-function drillWithGenerals(s: GameState, map: WorldMap) {
-  const armies = Object.values(s.armies).sort((a, b) => (a.id < b.id ? -1 : 1))
-  for (const a of armies) {
-    if (!a.generalId || !armyIsHome(s, map, a)) continue
-    const n = s.nations[a.owner]
-    if (!n?.alive) continue
-    const rose: string[] = []
-    for (const k of UNIT_TYPES) {
-      if (a.units[k] < 0.05 || a.training[k] >= 5) continue
-      a.training[k] += 1
-      rose.push(`${UNIT_SPECS[k].name} is now ${trainingRank(a.training[k])}`)
+/** A commander drills the least-trained unit type one rank each month, at no cost. */
+function drillWithCommanders(s: GameState) {
+  for (const n of Object.values(s.nations)) {
+    if (!n.alive || !n.military.commanderId) continue
+    const types = UNIT_TYPES.filter((k) => n.military.units[k] >= 0.05 && n.military.drill[k] < 5).sort((a, b) => n.military.drill[a] - n.military.drill[b])
+    const k = types[0]
+    if (!k) continue
+    n.military.drill[k] += 1
+    if (n.isPlayer) {
+      const name = n.generals.find((g) => g.id === n.military.commanderId)?.name ?? 'Your commander'
+      addLog(s, 'info', `${name} drilled the troops for free. ${UNIT_SPECS[k].name} is now ${trainingRank(n.military.drill[k])}.`, [n.id])
     }
-    if (!rose.length || !n.isPlayer) continue
-    const name = n.generals.find((g) => g.id === a.generalId)?.name ?? 'Your general'
-    const place = map.territories[a.homeTerritoryId]?.name ?? 'the city'
-    addLog(s, 'info', `${name} drilled ${place} for free. ${rose.join('. ')}.`, [a.owner])
   }
 }

@@ -1,6 +1,6 @@
 # Worlds of Others
 
-A browser-based grand strategy game of total global hegemony. You command one of 175 nations; every other nation is run by an AI rival. One turn is one month, starting January 1936. All orders are submitted simultaneously and resolved together when you press **Next Turn** (or the optional turn clock runs out).
+A browser-based, turn-based grand strategy game of total global hegemony. You command one of 175 nations; every other nation is run by an AI rival. One turn is one month, starting January 1936.
 
 ## Quick start
 
@@ -13,35 +13,32 @@ npm run build      # type-check + production bundle
 
 ## How to play
 
-1. Pick a nation on the main menu (search the list or click the globe), choose a victory condition (25% / 40% / 60% of world population), and begin.
-2. Click a country to open its panel. Every country is divided into territories (1 for the smallest, up to 8 for the largest), shown as pins on the globe. **Land** (`R`) develops a territory: housing, works, granaries, roads, and civic halls. **Military** (`M`) trains infantry, armor, air wings, and fleets into that territory’s army. Training takes one to three months and the finished unit fights with the army already there. An empty territory can still raise an army immediately.
-3. Drill an army up to five times, from Green to Guard, for up to +40% combat power. Sign a weapons contract on the Nation panel, or buy arms from another nation, to sharpen one unit type. Select an army, press **Attack** (or **Move**), then click a highlighted region on the globe to draw a front. Assign a general for trait bonuses.
-4. Balance the five resources in the HUD (hover any resource for a breakdown):
-   - **Manpower**: civilians work; the draft rate moves them into the military pool.
-   - **Capital**: taxes, factories, and port trade, minus upkeep.
-   - **Food**: shortages give armies -30% combat power and erode stability.
-   - **Political Points**: wars, laws, crackdowns, treaties.
-   - **Tech Points**: spend in the Tech Tree (press `T`).
-5. Every 2 to 4 turns a **Critical Decision** event demands a choice before the month can end.
+The game is turn based. One turn is one month, starting January 1936. Nothing moves until you press **Next turn** (or Enter).
 
-Shortcuts: `Enter` next turn, `Esc` cancel / close, `R` territories, `M` military, `T` tech, `N` nation, `D` diplomacy, `L` dispatches.
+1. Pick a nation on the main menu (search the list or click the globe), choose a victory condition (take 3, 6 or 12 countries, or lead 25% / 40% / 60% of world population), and begin.
+2. **Country** (`C`): buy upgrades for your whole country. Factory (money), Farm (food), University (research), Barracks (training slots and defenders), Port (trade and sea attacks) and Civic Hall (influence and research). Upgrades work the moment you buy them. The Economy tab sets taxes and the draft; the Laws tab passes laws.
+3. **Military** (`M`): you have one military. Train units (they arrive after 1 to 3 turns), drill each unit type, buy permanent weapon levels (0 to 5, gated by factory level), and appoint a commander who drills for free. The stat sheet shows every unit's attack and defense and where each bonus comes from. Battles use exactly those numbers.
+4. **War**: click a neighboring country, press **Declare war** (costs influence), then **Attack**. Your whole military fights the defender's whole military plus the country's garrison. A battle window plays three rounds, showing the damage each side dealt and the units lost. Win and you take the whole country. Each nation can attack once per turn.
+5. **Next turn** runs the rivals, training, research, income, diplomacy, rebels and any attacks on you, then replays the battles you were in. Decision events appear every few months.
+
+Shortcuts: `Enter` next turn, `C` country, `M` military, `T` research, `D` diplomacy, `L` news, `?` help, `Esc` close.
 
 ## Architecture
 
 ```
 src/
   engine/      Pure, deterministic simulation (no DOM). resolveTurn(state, map, orders) -> new state
-    economy.ts   resources, labor, food, stability, rebels
-    combat.ts    3-round battles: terrain, combined arms, generals
-    warfare.ts   moves, attacks, captures, secession
-    supply.ts    supply BFS from the capital, attrition, surrender
-    events.ts    decision event scheduling and effects
-    diplomacy.ts / espionage.ts / tech.ts / orders.ts / victory.ts / visibility.ts
-  data/        Tech tree, units, terrain, events, country stats, starting nations
-  ai/bot.ts    Rule-based bot orders for every non-player nation
+    resolveTurn.ts  one month: month-end orders, training, attacks, rebels, economy, diplomacy, events
+    orders.ts       validation and costs. Orders in MONTH_END_ORDERS wait for Next turn; the rest apply at once
+    militaryStats.ts  the per-unit stat sheet and military power (battles and the AI read the same numbers)
+    combat.ts / warfare.ts  3-round battles, whole-country capture, garrisons, rebels
+    arms.ts / training.ts   weapon levels, training slots and queue
+    economy.ts / diplomacy.ts / espionage.ts / tech.ts / victory.ts
+  data/        Tech tree, units, buildings, terrain, events, country stats, starting nations
+  ai/bot.ts    Rule-based orders for every non-player nation (same rules as the player)
   map/world.ts Natural Earth 110m countries -> regions, adjacency, coastlines, sea lanes
-  ui/          React components: globe, HUD, panels, tech tree, events, battle FX
-  store.ts     Zustand store: orders, turn flow, FX queue, autosave (localStorage)
+  ui/          React: globe, HUD, drawers, Modal, battle window, diplomacy, tech tree
+  store.ts     Zustand store: orders, turn flow, battle queue, autosave (localStorage)
 ```
 
 The engine is seeded and side-effect free, so the same seed and orders always produce the same world. That makes it straightforward to move turn resolution to an authoritative server for real multiplayer later.

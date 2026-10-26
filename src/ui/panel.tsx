@@ -6,23 +6,21 @@ import { useGame, type Panel } from '../store'
 import { usePlayerView } from './hooks'
 import { speak } from './plain'
 
-export function PanelShell({ title, kicker, panel, children }: { title: string; kicker: string; panel: Panel; children: ReactNode }) {
+/** A side drawer. The header stays put and the body is the only part that scrolls. */
+export function PanelShell({ title, kicker, panel, children, wide = false }: { title: string; kicker: string; panel: Panel; children: ReactNode; wide?: boolean }) {
   const setPanel = useGame((s) => s.setPanel)
   return (
-    <aside
-      data-section={panel}
-      className="glass side-panel panel-in absolute left-[120px] bottom-28 z-[22] w-[min(400px,calc(100vw-148px))] rounded-[22px] flex flex-col overflow-hidden"
-    >
-      <div className="px-4 py-3.5 border-b border-white/10 flex items-start justify-between gap-3">
+    <aside data-section={panel} aria-label={title} className={`drawer surface ${wide ? 'drawer-wide' : ''}`}>
+      <div className="px-5 py-4 border-b border-white/10 flex items-start justify-between gap-3 flex-none">
         <div>
-          <h2 className="text-[20px] font-semibold tracking-tight">{title}</h2>
-          <p className="text-[13px] text-white/55 mt-0.5">{kicker}</p>
+          <h2 className="text-[22px] font-semibold tracking-tight">{title}</h2>
+          <p className="text-[14px] text-white/65 mt-0.5">{kicker}</p>
         </div>
         <button className="icon-close" aria-label="Close" onClick={() => setPanel(panel)}>
           ×
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto scroll-thin p-4 space-y-5">{children}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin p-5 space-y-5">{children}</div>
     </aside>
   )
 }

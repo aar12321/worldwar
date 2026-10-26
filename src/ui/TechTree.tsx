@@ -35,7 +35,7 @@ function TechNode({ tech }: { tech: Tech }) {
       className={`relative w-full text-left rounded-2xl p-3 border transition-colors disabled:cursor-default ${state === 'locked' ? 'cursor-help border-white/10 bg-white/4' : 'border-white/10'}`}
       style={{
         background: owned ? `${color}22` : state === 'queued' ? 'rgba(255,255,255,0.08)' : state === 'available' ? 'rgba(255,255,255,0.06)' : undefined,
-        opacity: state === 'locked' ? 0.55 : 1,
+        opacity: state === 'locked' ? 0.85 : 1,
       }}
       title={err ? speak(err) : ''}
     >
@@ -58,11 +58,11 @@ export function TechTree() {
   if (!view) return null
   const { player, committed } = view
   return (
-    <div data-section="tech" className="tech-panel panel-in absolute left-[120px] right-4 bottom-28 z-[22] glass rounded-[22px] flex flex-col">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+    <div data-section="tech" aria-label="Research" className="drawer drawer-wide surface">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-none">
         <div>
           <h2 className="text-[28px] font-semibold tracking-tight">Research</h2>
-          <p className="text-[13px] text-white/55 mt-0.5">Click a technology to queue it. It finishes when the month ends.</p>
+          <p className="text-[13px] text-white/55 mt-0.5">Click a technology to queue it. It finishes when you press Next turn.</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
@@ -74,7 +74,7 @@ export function TechTree() {
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto scroll-thin p-6">
+      <div className="flex-1 min-h-0 overflow-auto scroll-thin p-6">
         <div className="tech-grid">
           {BRANCHES.map((b) => (
             <div key={b} className="space-y-3">

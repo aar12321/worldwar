@@ -1,10 +1,11 @@
-import { AnimatePresence, motion } from 'framer-motion'
 import { EVENT_BY_ID } from '../data/events'
 import { computeEconomy } from '../engine/economy'
 import { describeEffect, fillEventText } from '../engine/events'
 import { turnDate } from '../engine/helpers'
+import type { EventEffect } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
+import { Modal } from './Modal'
 
 const TONE = {
   crisis: { color: '#ff453a', label: 'Crisis' },
@@ -12,71 +13,72 @@ const TONE = {
   war: { color: '#ff9f0a', label: 'Security' },
 }
 
+/** Whether an effect helps or hurts the player, judged by what it does rather than how its text starts. */
+function effectTone(e: EventEffect): 'good' | 'bad' | 'neutral' {
+  switch (e.type) {
+    case 'resource':
+      return e.amount + (e.perWorkforce ?? 0) >= 0 ? 'good' : 'bad'
+    case 'stability':
+    case 'opinion':
+      return e.amount >= 0 ? 'good' : 'bad'
+    case 'militaryPool':
+      return e.fraction < 0 ? 'good' : 'bad'
+    case 'unlockRandomTech':
+    case 'addBuilding':
+    case 'clearCasusBelli':
+      return 'good'
+    case 'armyAttrition':
+    case 'casusBelliForRival':
+    case 'spawnRebels':
+    case 'loseBuilding':
+    case 'popLoss':
+    case 'embargo':
+      return 'bad'
+    case 'warWeariness':
+      return e.amount > 0 ? 'bad' : 'good'
+    case 'rivalResource':
+      return 'neutral'
+  }
+}
+
+const TONE_CLASS = { good: 'text-emerald-300', bad: 'text-rose-300', neutral: 'text-white/75' }
+
 export function EventModal() {
   const game = useGame((s) => s.game)
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
+  const summaryOpen = useGame((s) => !!s.summary)
   const choose = useGame((s) => s.chooseEventOption)
   const ev = game?.pendingEvent
-  const show = !!(game && ev && !fxBusy)
   const { map } = getWorld()
   const def = ev ? EVENT_BY_ID[ev.eventId] : null
-  const tone = def ? TONE[def.tone] : TONE.crisis
-  const workforce = game ? computeEconomy(game, map, game.playerId).workforce : 0
+  if (!game || !ev || !def || fxBusy || summaryOpen) return null
+  const tone = TONE[def.tone]
+  const workforce = computeEconomy(game, map, game.playerId).workforce
 
   return (
-    <AnimatePresence>
-      {show && def && ev && (
-        <motion.div role="dialog" aria-modal="true" aria-labelledby="event-title" className="absolute inset-0 z-50 flex items-center justify-center bg-black/75" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}>
-          <motion.div
-            initial={{ scale: 0.85, y: 30, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-            className="glass relative w-[640px] max-w-[92vw] rounded-[28px] overflow-hidden"
+    <Modal title={def.title} kicker={`Decision · ${tone.label} · ${turnDate(game.turn)}`} tone={tone.color} wide>
+      <p className="text-[17px] text-white/85 leading-relaxed">{fillEventText(def.text, game, map, ev)}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+        {def.options.map((opt, i) => (
+          <button
+            key={opt.label}
+            data-autofocus={i === 0 ? true : undefined}
+            onClick={() => choose(i)}
+            className="text-left rounded-2xl p-4 bg-white/7 hover:bg-white/12 focus-visible:outline-2 focus-visible:outline-[#0a84ff] transition-colors"
           >
-            <div className="h-1" style={{ background: tone.color }} />
-            <div className="p-7">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-semibold" style={{ color: tone.color }}>
-                  Decision · {tone.label}
-                </span>
-                <span className="text-[12px] text-white/45">{turnDate(game!.turn)}</span>
-              </div>
-              <motion.h2 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }} id="event-title" className="text-[32px] font-semibold tracking-tight mt-2">
-                {def.title}
-              </motion.h2>
-              <p className="mt-3 text-[16px] text-white/75 leading-relaxed">{fillEventText(def.text, game!, map, ev)}</p>
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                {def.options.map((opt, i) => (
-                  <motion.button
-                    key={opt.label}
-                    whileHover={{ y: -3 }}
-                    whileTap={{ scale: 0.98 }}
-                    autoFocus={i === 0}
-                    onClick={() => choose(i)}
-                    className="text-left rounded-2xl p-4 bg-white/6 hover:bg-white/10 transition-colors"
-                  >
-                    <div className="text-[12px] font-medium text-white/40">Choice {i + 1}</div>
-                    <div className="text-[17px] font-semibold tracking-tight mt-1">{opt.label}</div>
-                    <p className="text-[13px] text-white/55 mt-1">{fillEventText(opt.description, game!, map, ev)}</p>
-                    <ul className="mt-3 space-y-1">
-                      {opt.effects.map((e, j) => {
-                        const text = describeEffect(e, workforce, game!, map, ev)
-                        const bad = text.startsWith('-') || /grievance|Rebels|Lose|loses/.test(text)
-                        return (
-                          <li key={j} className={`text-sm font-semibold ${bad ? 'text-rose-300' : 'text-emerald-300'}`}>
-                            {text}
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            <div className="text-[13px] font-medium text-white/65">Choice {i + 1}</div>
+            <div className="text-[18px] font-semibold tracking-tight mt-1">{opt.label}</div>
+            <p className="text-[14px] text-white/75 mt-1">{fillEventText(opt.description, game, map, ev)}</p>
+            <ul className="mt-3 space-y-1">
+              {opt.effects.map((e, j) => (
+                <li key={j} className={`text-[14px] font-semibold ${TONE_CLASS[effectTone(e)]}`}>
+                  {describeEffect(e, workforce, game, map, ev)}
+                </li>
+              ))}
+            </ul>
+          </button>
+        ))}
+      </div>
+    </Modal>
   )
 }

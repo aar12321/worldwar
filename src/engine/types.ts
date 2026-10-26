@@ -2,21 +2,19 @@ export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
 export type NationId = string
 export type UnitType = 'infantry' | 'armor' | 'air' | 'naval'
-export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'depot'
+export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic'
 export type TechBranch = 'land' | 'air' | 'naval' | 'infra'
 export type LawId = 'martial_law' | 'war_economy' | 'conscription_act'
 export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marshal' | 'stalwart'
-export type SpyMission = 'sabotage' | 'stealVision'
+export type SpyMission = 'sabotage'
 export type Difficulty = 'easy' | 'normal' | 'hard'
 export type Personality = 'expansionist' | 'trader' | 'turtle' | 'opportunist' | 'honorable'
 export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower'
-export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms' | 'arms'
+export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms'
 
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'air', 'naval']
-export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'depot']
+export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic']
 export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower']
-export const TERRITORY_UPGRADES = ['housing', 'works', 'granary', 'roads', 'civic'] as const
-export type TerritoryUpgrade = (typeof TERRITORY_UPGRADES)[number]
 
 /** Static geography, never mutated during play. */
 export interface MapRegion {
@@ -34,71 +32,18 @@ export interface MapRegion {
   development: number
 }
 
-/** A district inside a country. Armies are raised here, and the player develops the land. */
-export interface Territory {
-  id: string
-  regionId: RegionId
-  name: string
-  lat: number
-  lng: number
-  /** 0 is the heartland, where the starting army is based. */
-  index: number
-}
-
-/** Levels bought on a territory. Missing keys mean undeveloped. */
-export interface TerritoryDev {
-  housing: number
-  works: number
-  granary: number
-  roads: number
-  civic: number
-}
-
-/** A unit in production at a territory. It joins that territory's army when it finishes. */
+/** A unit in production. It joins the national military when it finishes. */
 export interface TrainingJob {
   id: string
   nationId: NationId
-  territoryId: string
   unit: UnitType
   remaining: number
   total: number
-  /** Turn the order was resolved. The job does not advance during that same month. */
-  orderedTurn: number
-  /** `time` counts down in sim-seconds. `turn` counts down when a month resolves. */
-  clock?: 'time' | 'turn'
-}
-
-/** A factory or territory upgrade under construction. */
-export interface Project {
-  id: string
-  nationId: NationId
-  kind: 'build' | 'develop'
-  remaining: number
-  total: number
-  regionId?: RegionId
-  building?: BuildingType
-  territoryId?: string
-  upgrade?: TerritoryUpgrade
-}
-
-/** An army walking the globe. Progress is 0 at the start and 1 on arrival. */
-export interface ArmyMarch {
-  kind: 'move' | 'attack'
-  to: RegionId
-  territoryId: string
-  fromLat: number
-  fromLng: number
-  toLat: number
-  toLng: number
-  progress: number
-  duration: number
 }
 
 export interface WorldMap {
   regions: Record<RegionId, MapRegion>
   order: RegionId[]
-  territories: Record<string, Territory>
-  territoriesByRegion: Record<RegionId, string[]>
 }
 
 export type Buildings = Record<BuildingType, number>
@@ -122,22 +67,17 @@ export interface General {
   trait: GeneralTrait
 }
 
-export interface Army {
-  id: string
-  owner: NationId
-  location: RegionId
+/** A nation's whole armed force. */
+export interface Military {
   units: UnitCounts
-  /** Set when a general has been added. They train every unit here for free each month, while the army is home. */
-  generalId: string | null
-  outOfSupplyTurns: number
-  /** Consecutive months the army has held its position (capped at 3). */
-  entrenched: number
-  /** Muster this army is raised from. Empty when it has no base. */
-  homeTerritoryId: string
-  /** Drill rank 0–5 for each unit type. The army attacks as one; each unit trains on its own. */
-  training: Record<UnitType, number>
-  /** Set while the army is walking to a move or an attack. */
-  march?: ArmyMarch | null
+  /** Drill rank 0 to 5 for each unit type. */
+  drill: Record<UnitType, number>
+  /** Permanent weapon level 0 to 5 for each unit type. Raises attack and defense. */
+  weapons: Record<UnitType, number>
+  /** A commander drills the lowest-ranked unit type for free each month. */
+  commanderId: string | null
+  /** Turn of this nation's last attack. A nation may attack once per turn. */
+  lastAttackTurn: number
 }
 
 export interface Resources {
@@ -171,34 +111,9 @@ export interface Nation {
   debtTurns: number
   /** Turn until which this nation's port trade is embargoed. */
   embargoedUntil: number
-  /** Turn number until which this nation can see the given nation's armies. */
-  vision: Record<NationId, number>
   aggression: number
   personality: Personality
-  /** Live weapons contracts. One per unit type. */
-  contracts: ArmsContract[]
-}
-
-export interface ArmsContract {
-  id: string
-  unit: UnitType
-  /** 1–3. Each tier is +10% attack for this unit type. */
-  tier: number
-  /** Nation selling the weapons, or null for domestic industry. */
-  supplier: NationId | null
-  /** Last turn the bonus applies. */
-  until: number
-  /** Capital the buyer pays the supplier each month. 0 for domestic contracts. */
-  payPerMonth: number
-}
-
-export interface ArmsTerms {
-  unit: UnitType
-  tier: number
-  months: number
-  payPerMonth: number
-  /** One of the two parties. The other pays. */
-  seller: NationId
+  military: Military
 }
 
 export type ResourceBundle = Partial<Record<TradeResource, number>>
@@ -225,7 +140,6 @@ export type ProposalDraft =
   | { kind: 'alliance' }
   | { kind: 'trade'; terms: TradeTerms }
   | { kind: 'callToArms'; enemy: NationId }
-  | { kind: 'arms'; terms: ArmsTerms }
 
 export type Proposal = ProposalDraft & {
   id: string
@@ -295,17 +209,13 @@ export interface PendingEvent {
 export type Order =
   | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number }
   | { type: 'build'; nationId: NationId; regionId: RegionId; building: BuildingType }
-  | { type: 'recruit'; nationId: NationId; territoryId: string; unit: UnitType }
-  | { type: 'queueTrain'; nationId: NationId; territoryId: string; unit: UnitType }
+  | { type: 'queueTrain'; nationId: NationId; unit: UnitType }
   | { type: 'cancelTrain'; nationId: NationId; jobId: string }
-  | { type: 'develop'; nationId: NationId; territoryId: string; upgrade: TerritoryUpgrade }
-  | { type: 'train'; nationId: NationId; armyId: string; unit: UnitType }
-  | { type: 'rebase'; nationId: NationId; armyId: string; territoryId: string }
-  | { type: 'signContract'; nationId: NationId; unit: UnitType; tier: number }
+  | { type: 'train'; nationId: NationId; unit: UnitType }
+  | { type: 'upgradeWeapons'; nationId: NationId; unit: UnitType }
   | { type: 'research'; nationId: NationId; techId: string }
-  | { type: 'move'; nationId: NationId; armyId: string; to: RegionId }
-  | { type: 'attack'; nationId: NationId; armyId: string; target: RegionId; territoryId?: string }
-  | { type: 'assignGeneral'; nationId: NationId; armyId: string; generalId: string | null }
+  | { type: 'attack'; nationId: NationId; target: RegionId }
+  | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'propose'; nationId: NationId; target: NationId; proposal: ProposalDraft }
   | { type: 'respond'; nationId: NationId; proposalId: string; accept: boolean }
@@ -324,23 +234,24 @@ export interface BattleSide {
 
 export interface BattleRound {
   name: string
+  /** Damage the attacker dealt this round. */
   attackerDamage: number
+  /** Damage the defender dealt this round. */
   defenderDamage: number
+  /** Units each side lost this round. */
+  attackerLosses: UnitCounts
+  defenderLosses: UnitCounts
 }
 
 export interface BattleReport {
   id: string
   turn: number
   regionId: RegionId
-  /** Region the attack was launched from (null for rebel uprisings). */
-  fromRegionId: RegionId | null
   attacker: BattleSide
   defender: BattleSide
   rounds: BattleRound[]
   winner: 'attacker' | 'defender'
   captured: boolean
-  /** Territory that changed hands, when the battle was fought over one. */
-  territoryId?: string | null
   modifiers: string[]
 }
 
@@ -366,20 +277,7 @@ export interface GameState {
   playerId: NationId
   nations: Record<NationId, Nation>
   regions: Record<RegionId, RegionState>
-  armies: Record<string, Army>
-  /** Sparse development levels, keyed by territory id. */
-  territoryDev: Record<string, TerritoryDev>
-  /** Owner of a territory when it is not the owner of the surrounding country. */
-  territoryOwners: Record<string, NationId>
-  /** Factories and territory upgrades currently under construction. */
-  projects: Project[]
-  /** Seconds since the campaign started, at 1×. */
-  simTime: number
-  /** Seconds accumulated toward the next economy month. */
-  monthElapsed: number
-  /** Seconds until AI armies look for another march. */
-  militaryElapsed: number
-  /** Units in production. The front job of each territory advances each month. */
+  /** Units in production. The front jobs advance each month, up to the nation's training slots. */
   trainingQueue: TrainingJob[]
   /** Sorted "a|b" keys. */
   wars: string[]

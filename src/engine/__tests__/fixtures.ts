@@ -1,5 +1,4 @@
 import { createInitialState } from '../../data/startingNations'
-import { heartland, indexTerritories } from '../../data/territories'
 import type { GameState, MapRegion, Terrain, WorldMap } from '../types'
 
 /** A straight chain of regions r0 - r1 - ... - r{n-1}, all plains unless overridden. */
@@ -22,8 +21,7 @@ export function lineMap(n: number, terrain: Partial<Record<number, Terrain>> = {
     }
   }
   const order = Object.keys(regions).sort()
-  const { territories, territoriesByRegion } = indexTerritories(order.map((id) => heartland(regions[id])))
-  return { regions, order, territories, territoriesByRegion }
+  return { regions, order }
 }
 
 export function startState(map: WorldMap, player = 'r0', seed = 1): GameState {
@@ -38,12 +36,15 @@ export function giveRegions(s: GameState, owner: string, ids: string[]) {
   for (const id of ids) {
     s.regions[id].owner = owner
     s.regions[id].buildings.barracks = 0
-    s.regions[id].buildings.depot = 0
   }
   for (const id of ids) {
     if (id !== owner && s.nations[id]) {
       s.nations[id].alive = false
-      for (const a of Object.values(s.armies)) if (a.owner === id) delete s.armies[a.id]
     }
   }
+}
+
+/** Sets a nation's whole military. */
+export function setMilitary(s: GameState, nationId: string, units: Partial<Record<'infantry' | 'armor' | 'air' | 'naval', number>>) {
+  s.nations[nationId].military.units = { infantry: 0, armor: 0, air: 0, naval: 0, ...units }
 }

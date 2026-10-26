@@ -32,7 +32,7 @@ describe('economy', () => {
     const n = s.nations.r0
     s.regions.r0.buildings.farm = 0
     n.resources.food = 0
-    s.armies[Object.keys(s.armies).find((id) => s.armies[id].owner === 'r0')!].units.infantry = 200
+    n.military.units.infantry = 200
     applyEconomy(s, map, 'r0', createRng(1))
     expect(n.foodShortage).toBe(true)
     expect(n.resources.food).toBe(0)

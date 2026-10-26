@@ -1,25 +1,17 @@
-import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
 import { UNIT_SPECS } from '../data/unitTypes'
-import { totalUnits } from '../engine/helpers'
-import type { BattleReport, GameState, NationId } from '../engine/types'
+import { formatDivisions, totalUnits } from '../engine/helpers'
+import type { BattleReport, GameState, NationId, UnitCounts } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { NEON } from './colors'
 import { globeBridge, useFx } from './globeBridge'
+import { Modal } from './Modal'
 
-type Effect =
-  | { id: number; kind: 'slash'; x: number; y: number; angle: number; color: string; delay: number; length: number }
-  | { id: number; kind: 'burst'; x: number; y: number; size: number; color: string; delay: number }
-  | { id: number; kind: 'pop'; x: number; y: number; text: string; color: string; delay: number }
-  | { id: number; kind: 'flash'; color: string }
-
-let effectId = 1
-const ROUND_MS = 1080
-const INTRO_MS = 720
-const RESULT_MS = 1500
-const EASE = [0.22, 1, 0.36, 1] as const
+const INTRO_MS = 700
+const ROUND_MS = 1400
 
 function sideInfo(game: GameState, id: NationId) {
   if (id === 'rebels') return { name: 'Rebels', color: NEON.red }
@@ -27,39 +19,71 @@ function sideInfo(game: GameState, id: NationId) {
   return { name: n?.name ?? id, color: n?.color ?? '#94a3b8' }
 }
 
-function resultBanner(b: BattleReport, playerId: NationId): { text: string; good: boolean } {
+function verdict(b: BattleReport, playerId: NationId, place: string): { title: string; text: string; good: boolean } {
   const playerAttacking = b.attacker.nationId === playerId
   const attackerWon = b.winner === 'attacker'
   if (playerAttacking) {
-    if (b.defender.nationId === 'rebels') return attackerWon ? { text: 'Rebellion crushed', good: true } : { text: 'Rebels hold out', good: false }
-    return attackerWon && b.captured ? { text: 'Territory captured', good: true } : { text: 'Assault repulsed', good: false }
+    if (b.defender.nationId === 'rebels') return attackerWon ? { title: 'Rebellion crushed', text: 'The rebels are beaten.', good: true } : { title: 'Rebels hold out', text: 'They are still fighting.', good: false }
+    return attackerWon && b.captured
+      ? { title: `${place} captured`, text: `The whole country is now yours.`, good: true }
+      : { title: 'Attack repulsed', text: `${place} held. Rebuild and try again next turn.`, good: false }
   }
-  if (attackerWon && b.captured) return { text: b.attacker.nationId === 'rebels' ? 'The region breaks away' : 'Territory lost', good: false }
-  return { text: 'The line holds', good: true }
+  if (attackerWon && b.captured) return { title: b.attacker.nationId === 'rebels' ? `${place} breaks away` : `${place} lost`, text: 'The country has fallen.', good: false }
+  return { title: 'The line holds', text: `${place} was not taken.`, good: true }
 }
 
+function LossChips({ losses }: { losses: UnitCounts }) {
+  const hit = UNIT_TYPES.filter((k) => losses[k] >= 0.05)
+  if (!hit.length) return <span className="text-[13px] text-white/55">no losses</span>
+  return (
+    <span className="flex flex-wrap gap-1">
+      {hit.map((k) => (
+        <motion.span key={k} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="chip chip-red">
+          −{formatDivisions(losses[k])} {UNIT_SPECS[k].name}
+        </motion.span>
+      ))}
+    </span>
+  )
+}
+
+function Bar({ left, start, color }: { left: number; start: number; color: string }) {
+  const frac = start > 0 ? Math.max(0, Math.min(1, left / start)) : 0
+  return (
+    <div className="h-3 rounded-full bg-white/12 overflow-hidden" role="img" aria-label={`${formatDivisions(left)} of ${formatDivisions(start)} divisions left`}>
+      <motion.div className="h-full" style={{ background: color }} initial={false} animate={{ width: `${frac * 100}%` }} transition={{ duration: 0.5 }} />
+    </div>
+  )
+}
+
+/** One battle, round by round: who dealt what, what was lost, and how it ended. */
 export function BattleFX() {
   const battle = useGame((s) => s.fxQueue[0])
-  const remaining = useGame((s) => s.fxQueue.length)
+  const total = useGame((s) => s.fxTotal)
+  const left = useGame((s) => s.fxQueue.length)
   const game = useGame((s) => s.game)
   const settings = useGame((s) => s.settings)
   const updateSettings = useGame((s) => s.updateSettings)
   const shiftFx = useGame((s) => s.shiftFx)
   const clearFx = useGame((s) => s.clearFx)
-  const [stage, setStage] = useState<'intro' | 'round' | 'result'>('intro')
-  const [roundIdx, setRoundIdx] = useState(-1)
-  const [effects, setEffects] = useState<Effect[]>([])
-  const { map } = getWorld()
-  const speed = settings.fxSpeed
-  const speedRef = useRef(speed)
+  const [shown, setShown] = useState(0)
+  const endRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    speedRef.current = speed
-  }, [speed])
+    endRef.current?.scrollIntoView({ block: 'end', behavior: reducedMotionRef.current ? 'auto' : 'smooth' })
+  }, [shown])
+  const speedRef = useRef(settings.fxSpeed)
+  useEffect(() => {
+    speedRef.current = settings.fxSpeed
+  }, [settings.fxSpeed])
   const reduced = settings.reducedMotion
-  const active = !!battle
+  const reducedMotionRef = useRef(reduced)
+  useEffect(() => {
+    reducedMotionRef.current = reduced
+  }, [reduced])
   const savedView = useRef<{ lat: number; lng: number; altitude: number } | null>(null)
+  const { map } = getWorld()
+  const active = !!battle
 
-  // Declared before the per-battle effect so the view is saved before the camera flies to the first battle.
+  // Fly to the battle, then back when the last one is closed.
   useEffect(() => {
     const api = globeBridge.api
     if (!api) return
@@ -68,201 +92,164 @@ export function BattleFX() {
       return
     }
     if (savedView.current) {
-      api.pointOfView(savedView.current, reduced ? 0 : 950)
+      api.pointOfView(savedView.current, reduced ? 0 : 900)
       savedView.current = null
     }
   }, [active, reduced])
 
+  const battleId = battle?.id
+  const rounds = battle?.rounds.length ?? 0
   useEffect(() => {
-    if (!battle || !game) return
-    const t = (ms: number) => ms / speedRef.current
-    const timers: number[] = []
-    const at = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, t(ms)))
+    if (!battleId || !battle) return
+    setShown(0)
     const region = map.regions[battle.regionId]
-    if (!region) {
-      const id = window.setTimeout(() => shiftFx(), 0)
-      return () => window.clearTimeout(id)
+    if (region) globeBridge.api?.pointOfView({ lat: region.lat - 6, lng: region.lng, altitude: 0.9 }, reduced ? 0 : 600)
+    const timers: number[] = []
+    const step = (i: number) => {
+      if (i > rounds) return
+      timers.push(
+        window.setTimeout(
+          () => {
+            setShown(i + 1)
+            if (i < rounds && region) {
+              const r = battle.rounds[i]
+              useFx.getState().addRing({ lat: region.lat, lng: region.lng, color: i === 2 ? NEON.magenta : NEON.amber, maxRadius: 2.5 + Math.min(5, r.attackerDamage + r.defenderDamage) }, 1100)
+              if (!reduced) useFx.getState().shake(Math.min(0.8, 0.25 + (r.attackerDamage + r.defenderDamage) * 0.08))
+            }
+            if (i === rounds - 1) useFx.getState().reveal(battle.id)
+            step(i + 1)
+          },
+          (i === 0 ? INTRO_MS : ROUND_MS) / speedRef.current,
+        ),
+      )
     }
-    const att = sideInfo(game, battle.attacker.nationId)
-    const def = sideInfo(game, battle.defender.nationId)
-    globeBridge.api?.pointOfView({ lat: region.lat - 6, lng: region.lng, altitude: 0.78 }, reduced ? 0 : t(640))
-    setStage('intro')
-    setRoundIdx(-1)
-    setEffects([])
-
-    const spawnRound = (i: number) => {
-      const r = battle.rounds[i]
-      setStage('round')
-      setRoundIdx(i)
-      const p = globeBridge.api?.getScreenCoords(region.lat, region.lng, 0.02) ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 }
-      const total = r.attackerDamage + r.defenderDamage
-      useFx.getState().addRing({ lat: region.lat, lng: region.lng, color: i === 2 ? NEON.magenta : NEON.amber, maxRadius: 2.5 + Math.min(5, total) }, t(1200))
-      const list: Effect[] = []
-      list.push({ id: effectId++, kind: 'pop', x: p.x - 110, y: p.y - 24, text: `-${r.defenderDamage.toFixed(1)}`, color: att.color, delay: 160 })
-      list.push({ id: effectId++, kind: 'pop', x: p.x + 110, y: p.y - 24, text: `-${r.attackerDamage.toFixed(1)}`, color: def.color, delay: 230 })
-      if (!reduced) {
-        const slashes = Math.min(4, 2 + Math.round(total / 2))
-        for (let k = 0; k < slashes; k++) {
-          list.push({ id: effectId++, kind: 'slash', x: p.x + (Math.random() - 0.5) * 90, y: p.y + (Math.random() - 0.5) * 56, angle: -28 + Math.random() * 56 + (k % 2 ? 180 : 0), color: k % 2 ? def.color : k === 0 ? '#ffffff' : att.color, delay: k * 55, length: 0.28 + Math.random() * 0.16 })
-        }
-        const bursts = Math.min(4, 2 + Math.round(total / 2))
-        for (let k = 0; k < bursts; k++) {
-          list.push({ id: effectId++, kind: 'burst', x: p.x + (Math.random() - 0.5) * 110, y: p.y + (Math.random() - 0.5) * 70, size: 70 + Math.random() * 70, color: k % 2 === 0 ? '#fff7ed' : '#fb923c', delay: 40 + k * 70 })
-        }
-        list.push({ id: effectId++, kind: 'flash', color: i === 2 ? 'rgba(232,121,249,0.28)' : 'rgba(255,244,230,0.32)' })
-        useFx.getState().shake(Math.min(1, 0.35 + total * 0.1))
-      }
-      setEffects(list)
-    }
-
-    let cursor = INTRO_MS
-    battle.rounds.forEach((_, i) => {
-      at(cursor, () => spawnRound(i))
-      cursor += ROUND_MS
-    })
-    at(cursor, () => {
-      setStage('result')
-      setEffects([])
-      useFx.getState().reveal(battle.id)
-    })
-    cursor += RESULT_MS
-    at(cursor, () => shiftFx())
+    step(0)
     return () => timers.forEach(clearTimeout)
-  }, [battle?.id])
+    // The battle id is the only thing that restarts the scene.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [battleId])
 
-  const bars = useMemo(() => {
-    if (!battle) return null
-    const attStart = totalUnits(battle.attacker.units)
-    const defStart = totalUnits(battle.defender.units)
-    let attLoss = 0
-    let defLoss = 0
-    const upto = stage === 'result' ? battle.rounds.length - 1 : roundIdx
-    for (let i = 0; i <= upto; i++) {
-      attLoss += battle.rounds[i]?.defenderDamage ?? 0
-      defLoss += battle.rounds[i]?.attackerDamage ?? 0
-    }
-    if (stage === 'result') {
-      attLoss = totalUnits(battle.attacker.losses)
-      defLoss = totalUnits(battle.defender.losses)
-    }
-    return {
-      att: attStart > 0 ? Math.max(0, 1 - Math.min(attLoss, attStart) / attStart) : 0,
-      def: defStart > 0 ? Math.max(0, 1 - Math.min(defLoss, defStart) / defStart) : 0,
-      attStart,
-      defStart,
-    }
-  }, [battle, roundIdx, stage])
-
-  if (!battle || !game || !bars) return null
+  if (!battle || !game) return null
   const region = map.regions[battle.regionId]
-  if (!region) return null
+  const player = game.playerId
   const att = sideInfo(game, battle.attacker.nationId)
   const def = sideInfo(game, battle.defender.nationId)
-  const banner = resultBanner(battle, game.playerId)
-  const round = roundIdx >= 0 ? battle.rounds[roundIdx] : null
+  const playerAttacking = battle.attacker.nationId === player
+  const done = shown > rounds
+  const visibleRounds = Math.min(shown, rounds)
+  let attLost = 0
+  let defLost = 0
+  for (let i = 0; i < visibleRounds; i++) {
+    attLost += totalUnits(battle.rounds[i].attackerLosses)
+    defLost += totalUnits(battle.rounds[i].defenderLosses)
+  }
+  const attStart = totalUnits(battle.attacker.units)
+  const defStart = totalUnits(battle.defender.units)
+  const result = verdict(battle, player, region?.name ?? 'the country')
+  const finish = () => {
+    useFx.getState().reveal(battle.id)
+    shiftFx()
+  }
 
   return (
-    <div className="absolute inset-0 z-[45] pointer-events-none overflow-hidden">
-      <motion.div className="absolute top-0 inset-x-0 h-[8vh] origin-top bg-black" initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} />
-      <motion.div className="absolute bottom-0 inset-x-0 h-[8vh] origin-bottom bg-black" initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} />
-
-      <div className="absolute top-[9vh] inset-x-0 flex flex-col items-center">
-        <motion.div key={battle.id} initial={{ opacity: 0, scaleX: 0.7 }} animate={{ opacity: 1, scaleX: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} className="bg-gradient-to-r from-rose-600/0 via-rose-600/80 to-rose-600/0 px-16 py-1">
-          <span className="text-[13px] font-semibold tracking-tight text-white/80">Battle</span>
-        </motion.div>
-        <motion.h2 key={`${battle.id}-t`} initial={{ opacity: 0, y: 10, scale: 1.04 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.32 / speed, ease: EASE }} className="text-[36px] font-semibold mt-1 text-white tracking-tight">
-          {region.name}
-        </motion.h2>
-        <AnimatePresence mode="wait">
-          {round && stage === 'round' && (
-            <motion.div key={roundIdx} initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.18 / speed, ease: EASE }} className="mt-2 text-[13px] font-medium text-[#ffd60a]">
-              Round {roundIdx + 1} · {round.name}
-            </motion.div>
+    <Modal
+      title={`${att.name} attacks ${def.name}`}
+      kicker={total > 1 ? `Battle ${total - left + 1} of ${total} · ${region?.name}` : `Battle · ${region?.name}`}
+      tone={playerAttacking ? '#ff9f0a' : '#ff453a'}
+      wide
+      footer={
+        <>
+          {left > 1 && (
+            <button className="btn btn-quiet mr-auto" onClick={clearFx}>
+              Skip all
+            </button>
           )}
-        </AnimatePresence>
+          <button className={`btn ${settings.fxSpeed === 2 ? 'bg-white/25' : ''}`} onClick={() => updateSettings({ fxSpeed: settings.fxSpeed === 2 ? 1 : 2 })}>
+            2× speed
+          </button>
+          {!done && (
+            <button className="btn" onClick={() => setShown(rounds + 1)}>
+              Skip to result
+            </button>
+          )}
+          <button className="btn btn-primary px-5" data-autofocus disabled={!done} onClick={finish}>
+            Continue
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 gap-6">
+        {[
+          { side: att, units: battle.attacker.units, lost: attLost, start: attStart, label: 'Attacker' },
+          { side: def, units: battle.defender.units, lost: defLost, start: defStart, label: 'Defender' },
+        ].map((col) => (
+          <div key={col.label} className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full" style={{ background: col.side.color }} />
+              <span className="text-[17px] font-semibold">{col.side.name}</span>
+              <span className="label">{col.label}</span>
+            </div>
+            <Bar left={col.start - col.lost} start={col.start} color={col.side.color} />
+            <div className="text-[14px] tabular-nums text-white/80">
+              {formatDivisions(Math.max(0, col.start - col.lost))} of {formatDivisions(col.start)} divisions
+            </div>
+            <div className="flex flex-wrap gap-1.5 text-[13px] text-white/75">
+              {UNIT_TYPES.filter((k) => col.units[k] >= 0.05).map((k) => (
+                <span key={k} className="chip">
+                  {UNIT_SPECS[k].name} {formatDivisions(col.units[k])}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {effects.map((e) => {
-        if (e.kind === 'flash') return <div key={e.id} className="screen-flash" style={{ background: e.color }} />
-        if (e.kind === 'slash')
+      <div className="mt-6 space-y-3">
+        {battle.rounds.slice(0, visibleRounds).map((r, i) => {
+          const dealt = playerAttacking ? r.attackerDamage : r.defenderDamage
+          const took = playerAttacking ? r.defenderDamage : r.attackerDamage
           return (
-            <div key={e.id} className="absolute" style={{ left: e.x, top: e.y, transform: `translate(-50%, -50%) rotate(${e.angle}deg)`, width: `${e.length * 100}vw` }}>
-              <div className="slash-streak w-full" style={{ color: e.color, background: `linear-gradient(90deg, transparent, ${e.color} 42%, #fff 50%, ${e.color} 58%, transparent)`, animationDelay: `${e.delay / speed}ms`, ['--dur' as string]: `${260 / speed}ms`, opacity: 0 }} />
-            </div>
+            <motion.div key={i} initial={reduced ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="inset-card p-3.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[15px] font-semibold">
+                  Round {i + 1} · {r.name}
+                </span>
+                <span className="text-[15px] tabular-nums">
+                  <span className="text-[#6eeb8a]">You dealt {dealt.toFixed(1)}</span>
+                  <span className="text-white/50"> · </span>
+                  <span className="text-[#ff8a84]">took {took.toFixed(1)}</span>
+                </span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-4 text-[13px]">
+                <div>
+                  <div className="label mb-1">{att.name} lost</div>
+                  <LossChips losses={r.attackerLosses} />
+                </div>
+                <div>
+                  <div className="label mb-1">{def.name} lost</div>
+                  <LossChips losses={r.defenderLosses} />
+                </div>
+              </div>
+            </motion.div>
           )
-        if (e.kind === 'burst')
-          return <div key={e.id} className="burst" style={{ left: e.x, top: e.y, width: e.size, height: e.size, background: `radial-gradient(circle, #fff 0%, ${e.color} 42%, transparent 72%)`, animationDelay: `${e.delay / speed}ms`, ['--dur' as string]: `${460 / speed}ms`, opacity: 0 }} />
-        return (
-          <div key={e.id} className="damage-pop text-3xl" style={{ left: e.x, top: e.y, color: e.color, textShadow: `0 0 12px ${e.color}, 0 2px 0 #000`, animationDelay: `${e.delay / speed}ms`, opacity: 0 }}>
-            {e.text}
-          </div>
-        )
-      })}
+        })}
+        {!done && <p className="text-[14px] text-white/65">{visibleRounds === 0 ? 'The armies close in…' : 'Fighting…'}</p>}
+      </div>
 
-      <div className="absolute bottom-[9vh] inset-x-0 flex justify-center">
-        <motion.div initial={{ y: 28, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.28 / speed, ease: EASE }} className="glass rounded-xl px-6 py-4 w-[720px] max-w-[92vw]">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6">
-            {[
-              { side: battle.attacker, info: att, frac: bars.att, start: bars.attStart, label: 'Attacker' },
-              null,
-              { side: battle.defender, info: def, frac: bars.def, start: bars.defStart, label: 'Defender' },
-            ].map((x, i) =>
-              x === null ? (
-                <div key="vs" className="text-[13px] font-semibold text-white/40">
-                  vs
-                </div>
-              ) : (
-                <div key={i} className={i === 2 ? 'text-right' : ''}>
-                  <div className="label">{x.label}</div>
-                  <div className="text-[17px] font-semibold tracking-tight" style={{ color: x.info.color }}>
-                    {x.info.name}
-                  </div>
-                  <div className="h-2.5 rounded-full bg-slate-800 mt-2 overflow-hidden">
-                    <motion.div className={`h-full w-full rounded-full ${i === 2 ? 'origin-right' : 'origin-left'}`} style={{ background: x.info.color, boxShadow: `0 0 10px ${x.info.color}` }} initial={false} animate={{ scaleX: Math.max(0.001, x.frac) }} transition={{ duration: 0.4 / speed, ease: EASE }} />
-                  </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    {(x.start * x.frac).toFixed(1)} / {x.start.toFixed(1)} divisions
-                  </div>
-                  <div className={`text-[11px] text-slate-500 mt-0.5 flex gap-2 ${i === 2 ? 'justify-end' : ''}`}>
-                    {UNIT_TYPES.filter((k) => x.side.units[k] >= 0.05).map((k) => {
-                      const left = stage === 'result' ? Math.max(0, x.side.units[k] - x.side.losses[k]) : x.side.units[k] * x.frac
-                      return (
-                        <span key={k}>
-                          {UNIT_SPECS[k].name} {left.toFixed(1)}
-                        </span>
-                      )
-                    })}
-                  </div>
-                </div>
-              ),
-            )}
-          </div>
-          {stage === 'result' && battle.modifiers.length > 0 && <div className="mt-3 text-[11px] text-slate-400 text-center">{battle.modifiers.join(' · ')}</div>}
+      {done && (
+        <motion.div initial={reduced ? false : { opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className={`mt-5 rounded-2xl p-4 ${result.good ? 'bg-[#30d158]/15' : 'bg-[#ff453a]/15'}`}>
+          <div className={`text-[22px] font-semibold ${result.good ? 'text-[#6eeb8a]' : 'text-[#ff8a84]'}`}>{result.title}</div>
+          <p className="text-[15px] text-white/85 mt-1">{result.text}</p>
+          {battle.modifiers.length > 0 && (
+            <ul className="mt-3 space-y-0.5 text-[13px] text-white/70">
+              {battle.modifiers.map((m, i) => (
+                <li key={i}>{m}</li>
+              ))}
+            </ul>
+          )}
         </motion.div>
-      </div>
-
-      <AnimatePresence>
-        {stage === 'result' && (
-          <motion.div initial={{ scale: 1.35, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.28 / speed, ease: EASE }} className="absolute inset-0 flex items-center justify-center">
-            <div className={`text-[44px] font-semibold tracking-tight px-8 py-3 max-w-[92vw] text-center leading-none ${banner.good ? 'text-white' : 'text-[#ffb4af]'}`}>
-              {banner.text}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="absolute right-4 bottom-[10vh] flex gap-2 pointer-events-auto">
-        <span className="glass rounded-md px-3 py-2 text-xs text-slate-300">{remaining} battle{remaining === 1 ? '' : 's'} in report</span>
-        <button className={`btn ${speed === 2 ? 'bg-cyan-400/25' : ''}`} onClick={() => updateSettings({ fxSpeed: speed === 2 ? 1 : 2 })}>
-          2x
-        </button>
-        <button className="btn" onClick={shiftFx}>
-          Skip
-        </button>
-        <button className="btn btn-red" onClick={clearFx}>
-          Skip All
-        </button>
-      </div>
-    </div>
+      )}
+      <div ref={endRef} />
+    </Modal>
   )
 }
