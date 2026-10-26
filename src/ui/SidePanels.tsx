@@ -82,11 +82,11 @@ export function CountryDrawer() {
                 </div>
                 <div className="mt-2.5 flex items-center justify-between gap-3">
                   <Pips value={Math.min(level, 10)} max={Math.min(cap, 10)} />
-                  <OrderButton
-                    order={{ type: 'build', nationId: player.id, regionId, building: b }}
-                    label={level >= cap ? 'At highest level' : `Upgrade · ${buildingCost(b, level)} money`}
-                    tone="btn-primary"
-                  />
+                  {level >= cap ? (
+                    <span className="chip chip-green">Highest level</span>
+                  ) : (
+                    <OrderButton order={{ type: 'build', nationId: player.id, regionId, building: b }} label={`Upgrade · ${buildingCost(b, level)} money`} tone="btn-primary" />
+                  )}
                 </div>
               </div>
             )

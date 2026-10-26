@@ -46,7 +46,7 @@ export function forgetNation(s: GameState, id: NationId) {
   }
 }
 
-/** Rivals also band together once the player has taken half the territories their victory needs. */
+/** Rivals also band together once the player has taken half the countries their victory needs. */
 export function coalitionActive(s: GameState, map?: WorldMap): boolean {
   const p = s.nations[s.playerId]
   if (!p?.alive) return false

@@ -1,5 +1,7 @@
 # Worlds of Others: new-player audit
 
+> **Update:** the game has since become turn based, with one military per nation and no territories. Items about the live clock, pauses, territories, armies, supply and weapons contracts (P1-P5, R1-R6, R9, R11, U8, U9, F1 and related) no longer apply. Screenshots in `img/v2/` show the current game.
+
 How this was done: I played the game in headless Chromium (Playwright, 1440×900 and 390×844) as Germany on Normal, three sessions, and read every file under `src/engine`, `src/ai`, `src/data`, `src/ui` and `src/store.ts`. Checks: `npm test` (140 pass, 1 times out), `npm run lint` (3 warnings), `tsc -b` (clean).
 
 "Verified" means I saw it happen in play. "Code" means I found it by reading and did not reproduce it. There are no accounts, social features, monetization or networking in this game (single player, state in `localStorage`), so those areas are listed as not applicable at the end. Video was not possible; the screenshots in `img/` stand in.

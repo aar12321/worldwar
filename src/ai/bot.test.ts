@@ -139,7 +139,7 @@ describe('bots reason under fog of war', () => {
     expect(opinionReport(s, wide, 'r3', 'r0').parts.some((p) => p.label === 'Fears your power')).toBe(true)
   })
 
-  it('also band together once the player has taken half the territories they need', () => {
+  it('also band together once the player has taken half the countries they need', () => {
     const wide = lineMap(40)
     const s = startState(wide)
     s.settings.victoryShare = 0.4

@@ -219,14 +219,14 @@ export function HUD() {
           </Resource>
         </div>
 
-        <div className="glass rounded-2xl p-2 pointer-events-auto flex flex-col gap-1 min-w-[168px]">
+        <div className="hud-next glass rounded-2xl p-2 pointer-events-auto flex flex-col gap-1 min-w-[168px]">
           <button className={`btn btn-primary px-4 py-3 text-[15px] ${blocked ? '' : 'pulse-cta'}`} disabled={blocked} onClick={endTurn} title="Resolve the month (Enter)">
             {label}
           </button>
           <div className="px-1 text-center text-[12px] text-white/70">{orders.length > 0 ? `${orders.length} order${orders.length === 1 ? '' : 's'} waiting` : 'Enter'}</div>
         </div>
       </div>
-      {note && <div className="absolute left-1/2 -translate-x-1/2 top-[92px] max-w-xl rounded-full bg-black/70 border border-white/10 px-4 py-1.5 text-[14px] text-[#ffd60a] pointer-events-none">{note}</div>}
+      {note && <div className="absolute left-1/2 -translate-x-1/2 top-[100px] max-w-xl rounded-full bg-black/70 border border-white/10 px-4 py-1.5 text-[14px] text-[#ffd60a] pointer-events-none">{note}</div>}
     </div>
   )
 }

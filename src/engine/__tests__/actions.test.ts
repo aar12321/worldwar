@@ -7,8 +7,8 @@ import { computeEconomy } from '../economy'
 import { militarySheet } from '../militaryStats'
 import { applyEventChoice, effectAmount } from '../events'
 import { atWar, hasPact, isAllied } from '../helpers'
-import { orderCost, validateOrder } from '../orders'
-import { resolveTurn } from '../resolveTurn'
+import { MONTH_END_ORDERS, orderCost, validateOrder } from '../orders'
+import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, Order, Proposal, ProposalDraft } from '../types'
 import { netWarScore } from '../warscore'
 import { giveRegions, lineMap, startState } from './fixtures'
@@ -466,6 +466,26 @@ describe('every event choice', () => {
         }
       })
     }
+})
+
+describe('country upgrades', () => {
+  it('apply at once, cost more each level, and stop at the cap', () => {
+    const s = base()
+    const level = s.regions[P].buildings.farm
+    const cost = orderCost(s, { type: 'build', nationId: P, regionId: P, building: 'farm' }).capital
+    const result = applyOrderNow(s, map, { type: 'build', nationId: P, regionId: P, building: 'farm' })
+    expect(result.error).toBeNull()
+    expect(s.regions[P].buildings.farm).toBe(level + 1)
+    expect(orderCost(s, { type: 'build', nationId: P, regionId: P, building: 'farm' }).capital).toBeGreaterThan(cost)
+    s.regions[P].buildings.farm = 99
+    expect(validateOrder(s, map, { type: 'build', nationId: P, regionId: P, building: 'farm' })).toMatch(/highest level/)
+  })
+
+  it('month-end orders are the ones that wait', () => {
+    expect(MONTH_END_ORDERS.has('research')).toBe(true)
+    expect(MONTH_END_ORDERS.has('build')).toBe(false)
+    expect(MONTH_END_ORDERS.has('attack')).toBe(false)
+  })
 })
 
 describe('the national military', () => {

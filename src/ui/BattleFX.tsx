@@ -66,11 +66,19 @@ export function BattleFX() {
   const shiftFx = useGame((s) => s.shiftFx)
   const clearFx = useGame((s) => s.clearFx)
   const [shown, setShown] = useState(0)
+  const endRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end', behavior: reducedMotionRef.current ? 'auto' : 'smooth' })
+  }, [shown])
   const speedRef = useRef(settings.fxSpeed)
   useEffect(() => {
     speedRef.current = settings.fxSpeed
   }, [settings.fxSpeed])
   const reduced = settings.reducedMotion
+  const reducedMotionRef = useRef(reduced)
+  useEffect(() => {
+    reducedMotionRef.current = reduced
+  }, [reduced])
   const savedView = useRef<{ lat: number; lng: number; altitude: number } | null>(null)
   const { map } = getWorld()
   const active = !!battle
@@ -241,6 +249,7 @@ export function BattleFX() {
           )}
         </motion.div>
       )}
+      <div ref={endRef} />
     </Modal>
   )
 }

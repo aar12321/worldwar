@@ -28,7 +28,7 @@ function UnitCard({ line }: { line: UnitStatLine }) {
         </div>
         <div className="text-right">
           <div className="text-[24px] font-semibold tabular-nums leading-none">{formatDivisions(line.count)}</div>
-          <div className="label">divisions</div>
+          <div className="label">{Math.abs(line.count - 1) < 0.05 ? 'division' : 'divisions'}</div>
         </div>
       </div>
 

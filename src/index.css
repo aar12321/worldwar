@@ -496,7 +496,7 @@ input[type='range'] {
   --line: rgba(255, 255, 255, 0.12);
   --text-2: rgba(245, 245, 247, 0.76);
   --text-3: rgba(245, 245, 247, 0.64);
-  --hud-h: 88px;
+  --hud-h: 104px;
 }
 .surface {
   background: var(--surface);
@@ -620,7 +620,15 @@ body:has(.drawer) .country-card {
 
 @media (max-width: 900px) {
   :root {
-    --hud-h: 132px;
+    --hud-h: 276px;
+  }
+  .hud-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .hud-resources {
+    max-width: 100%;
   }
   .nav-dock {
     left: 8px;
@@ -648,9 +656,26 @@ body:has(.drawer) .country-card {
     right: 8px;
     width: auto;
     top: auto;
-    bottom: 72px;
-    max-height: min(68dvh, calc(100dvh - var(--hud-h) - 90px));
+    bottom: 136px;
+    max-height: calc(100dvh - var(--hud-h) - 150px);
     height: auto;
+  }
+  .hud-next {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 72px;
+    z-index: 31;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .hud-next .btn {
+    flex: 1;
+  }
+  .orders-tray {
+    bottom: 140px !important;
+    max-width: calc(100vw - 16px) !important;
   }
   .modal-body {
     padding: 16px;

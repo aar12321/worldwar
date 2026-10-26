@@ -40,8 +40,8 @@ export function attackableRegions(s: GameState, map: WorldMap, nationId: NationI
 export function garrisonStrength(s: GameState, map: WorldMap, regionId: RegionId): number {
   const r = s.regions[regionId]
   const owner = s.nations[r.owner]
-  const capitalBonus = owner?.capital === regionId ? 1 : 0
-  return 1 + r.buildings.barracks * 0.75 + regionWorkforce(r, map.regions[regionId]) * 0.05 + capitalBonus
+  const capitalBonus = owner?.capital === regionId ? 0.75 : 0
+  return 0.8 + r.buildings.barracks * 0.75 + regionWorkforce(r, map.regions[regionId]) * 0.05 + capitalBonus
 }
 
 export function emptyMilitary(units: UnitCounts = emptyUnits()): Military {
