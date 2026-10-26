@@ -3,7 +3,7 @@ import { EVENT_BY_ID, EVENTS, type GameEventDef } from '../data/events'
 import { TECH_BY_ID, TECHS } from '../data/techTree'
 import { BUILDING_SPECS } from '../data/unitTypes'
 import { computeEconomy, ECON } from './economy'
-import { addLog, armiesOf, clamp, regionsOf } from './helpers'
+import { addLog, clamp, regionsOf } from './helpers'
 import { createRng, type Rng } from './rng'
 import type { EventEffect, GameState, NationId, PendingEvent, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -99,7 +99,7 @@ export function describeEffect(e: EventEffect, workforce: number, s: GameState, 
     case 'militaryPool':
       return e.fraction > 0 ? `-${Math.round(e.fraction * 100)}% soldiers` : `+${Math.round(-e.fraction * 100)}% soldiers`
     case 'armyAttrition':
-      return `-${Math.round(e.fraction * 100)}% strength to all armies`
+      return `-${Math.round(e.fraction * 100)}% strength to your military`
     case 'unlockRandomTech':
       return 'Unlock a random available technology'
     case 'casusBelliForRival':
@@ -142,7 +142,7 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         n.militaryPool = Math.max(0, n.militaryPool * (1 - e.fraction))
         break
       case 'armyAttrition':
-        for (const a of armiesOf(s, nationId)) for (const k of UNIT_TYPES) a.units[k] *= 1 - e.fraction
+        for (const k of UNIT_TYPES) n.military.units[k] *= 1 - e.fraction
         break
       case 'unlockRandomTech': {
         const avail = availableTechs(s, nationId)

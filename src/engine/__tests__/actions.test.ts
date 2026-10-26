@@ -1,16 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { storedOpinion } from '../../ai/opinion'
 import { EVENTS } from '../../data/events'
-import { COSTS, PROPOSAL_COSTS, trainingCost } from '../../data/unitTypes'
-import { getWorld } from '../../map/world'
+import { BASE_TRAIN_SLOTS, COSTS, PROPOSAL_COSTS, trainingCost, weaponCost } from '../../data/unitTypes'
 import { combatMods } from '../arms'
-import { computeEconomy, unitPower } from '../economy'
+import { computeEconomy } from '../economy'
+import { militarySheet } from '../militaryStats'
 import { applyEventChoice, effectAmount } from '../events'
 import { atWar, hasPact, isAllied } from '../helpers'
-import { normalizeGame } from '../migrate'
 import { orderCost, validateOrder } from '../orders'
 import { resolveTurn } from '../resolveTurn'
-import type { GameState, Order, Proposal, ProposalDraft, WorldMap } from '../types'
+import type { GameState, Order, Proposal, ProposalDraft } from '../types'
 import { netWarScore } from '../warscore'
 import { giveRegions, lineMap, startState } from './fixtures'
 
@@ -26,8 +25,6 @@ function base(): GameState {
   n.militaryPool = 30
   return s
 }
-
-const armyOf = (s: GameState, owner: string) => Object.values(s.armies).find((a) => a.owner === owner)!
 
 function incoming(s: GameState, from: string, draft: ProposalDraft): Proposal {
   const p = { ...draft, id: `p-${from}-${draft.kind}`, from, to: P, created: s.turn, expires: s.turn + 2 } as Proposal
@@ -57,28 +54,21 @@ const ROWS: Row[] = [
     check: (n, p) => expect(n.regions[P].buildings.barracks).toBe(p.regions[P].buildings.barracks + 1),
   },
   {
-    name: 'build depot',
-    order: () => ({ type: 'build', nationId: P, regionId: P, building: 'depot' }),
-    check: (n) => expect(n.regions[P].buildings.depot).toBe(1),
-  },
-  {
-    name: 'recruit',
-    order: () => ({ type: 'recruit', nationId: P, territoryId: 'r0:0', unit: 'infantry' }),
-    check: (n, p) => expect(armyOf(n, P).units.infantry).toBeGreaterThan(armyOf(p, P).units.infantry + 0.5),
+    name: 'queueTrain',
+    order: () => ({ type: 'queueTrain', nationId: P, unit: 'infantry' }),
+    check: (n, p) => expect(n.trainingQueue.length + n.nations[P].military.units.infantry).toBeGreaterThan(p.trainingQueue.length + p.nations[P].military.units.infantry),
   },
   {
     name: 'train',
-    order: (s) => ({ type: 'train', nationId: P, armyId: armyOf(s, P).id, unit: 'infantry' }),
-    check: (n) => expect(armyOf(n, P).training.infantry).toBe(1),
+    order: () => ({ type: 'train', nationId: P, unit: 'infantry' }),
+    check: (n) => expect(n.nations[P].military.drill.infantry).toBe(1),
   },
   {
-    name: 'signContract',
-    order: () => ({ type: 'signContract', nationId: P, unit: 'infantry', tier: 1 }),
+    name: 'upgradeWeapons',
+    order: () => ({ type: 'upgradeWeapons', nationId: P, unit: 'infantry' }),
     check: (n) => {
-      const c = n.nations[P].contracts.find((x) => x.unit === 'infantry')
-      expect(c?.tier).toBe(1)
-      expect(c?.supplier).toBeNull()
-      expect(combatMods(n.nations[P], n.turn).unitAttack.infantry).toBeGreaterThan(0.09)
+      expect(n.nations[P].military.weapons.infantry).toBe(1)
+      expect(combatMods(n.nations[P]).unitAttack.infantry).toBeGreaterThan(0.05)
     },
   },
   {
@@ -87,18 +77,12 @@ const ROWS: Row[] = [
     check: (n) => expect(n.nations[P].techs).toContain('infra_farming'),
   },
   {
-    name: 'move',
-    setup: (s) => giveRegions(s, P, ['r1']),
-    order: (s) => ({ type: 'move', nationId: P, armyId: armyOf(s, P).id, to: 'r1' }),
-    check: (n) => expect(armyOf(n, P).location).toBe('r1'),
-  },
-  {
     name: 'attack',
     setup: (s) => {
       s.wars.push('r0|r1')
-      armyOf(s, P).units.infantry = 60
+      s.nations[P].military.units.infantry = 60
     },
-    order: (s) => ({ type: 'attack', nationId: P, armyId: armyOf(s, P).id, target: 'r1' }),
+    order: () => ({ type: 'attack', nationId: P, target: 'r1' }),
     check: (n) => {
       expect(n.battles.some((b) => b.regionId === 'r1' && b.attacker.nationId === P)).toBe(true)
       expect(n.regions.r1.owner).toBe(P)
@@ -106,11 +90,8 @@ const ROWS: Row[] = [
   },
   {
     name: 'assignGeneral',
-    setup: (s) => {
-      armyOf(s, P).generalId = null
-    },
-    order: (s) => ({ type: 'assignGeneral', nationId: P, armyId: armyOf(s, P).id, generalId: s.nations[P].generals[0].id }),
-    check: (n) => expect(armyOf(n, P).generalId).toBe(n.nations[P].generals[0].id),
+    order: (s) => ({ type: 'assignGeneral', nationId: P, generalId: s.nations[P].generals[0].id }),
+    check: (n) => expect(n.nations[P].military.commanderId).toBe(n.nations[P].generals[0].id),
   },
   {
     name: 'declareWar',
@@ -210,11 +191,6 @@ const ROWS: Row[] = [
     check: (n) => expect(n.regions.r1.sabotaged > 0 || (n.casusBelli['r1|r0'] ?? 0) > 0).toBe(true),
   },
   {
-    name: 'spy stealVision',
-    order: () => ({ type: 'spy', nationId: P, target: 'r1', mission: 'stealVision' }),
-    check: (n) => expect(Object.keys(n.nations[P].vision).length > 0 || (n.casusBelli['r1|r0'] ?? 0) > 0).toBe(true),
-  },
-  {
     name: 'enactLaw',
     order: () => ({ type: 'enactLaw', nationId: P, law: 'martial_law' }),
     check: (n) => expect(n.nations[P].laws).toContain('martial_law'),
@@ -237,7 +213,7 @@ const ROWS: Row[] = [
   },
 ]
 
-const COVERED: Order['type'][] = ['setPolicy', 'build', 'recruit', 'research', 'move', 'attack', 'assignGeneral', 'declareWar', 'propose', 'respond', 'cancelDeal', 'leaveAlliance', 'spy', 'enactLaw', 'repealLaw', 'suppressRebels']
+const COVERED: Order['type'][] = ['setPolicy', 'build', 'queueTrain', 'train', 'upgradeWeapons', 'research', 'attack', 'assignGeneral', 'declareWar', 'propose', 'respond', 'cancelDeal', 'leaveAlliance', 'spy', 'enactLaw', 'repealLaw', 'suppressRebels']
 
 describe('every order type', () => {
   it('has at least one row', () => {
@@ -292,14 +268,12 @@ describe('every order type', () => {
     expect(validateOrder(s, map, { ...yes, accept: false }, [yes])).toBe('Already answered')
   })
 
-  it('allies cannot declare war on each other, and a depot is one per region', () => {
+  it('allies cannot declare war on each other, and a building stops at its highest level', () => {
     const s = base()
     s.alliances.push('r0|r1')
     expect(validateOrder(s, map, { type: 'declareWar', nationId: P, target: 'r1' })).toBe('You are allied')
-    const depot: Order = { type: 'build', nationId: P, regionId: P, building: 'depot' }
-    expect(validateOrder(s, map, depot, [depot])).toBe('Already building one here')
-    s.regions[P].buildings.depot = 1
-    expect(validateOrder(s, map, depot)).toBe('Already built here')
+    s.regions[P].buildings.port = 99
+    expect(validateOrder(s, map, { type: 'build', nationId: P, regionId: P, building: 'port' })).toMatch(/highest level|coastline/)
   })
 
   it('leaving an alliance costs PP', () => {
@@ -410,21 +384,12 @@ describe('proposal lifecycle and war score', () => {
     const s = base()
     s.wars.push('r0|r1')
     giveRegions(s, 'r1', ['r2', 'r3'])
-    armyOf(s, P).units.infantry = 60
+    s.nations[P].military.units.infantry = 60
     expect(validateOrder(s, map, { type: 'propose', nationId: P, target: 'r1', proposal: { kind: 'peace', terms: { cede: ['r2'], reparations: 0 } } })).toMatch(/war score/)
-    const next = resolveTurn(s, map, [{ type: 'attack', nationId: P, armyId: armyOf(s, P).id, target: 'r1' }])
+    const next = resolveTurn(s, map, [{ type: 'attack', nationId: P, target: 'r1' }])
     expect(netWarScore(next, P, 'r1')).toBeGreaterThan(10)
   })
 
-  it('armies that hold position entrench, and acting resets it', () => {
-    const s = base()
-    let next = resolveTurn(s, map, [])
-    next = resolveTurn(next, map, [])
-    expect(armyOf(next, P).entrenched).toBe(2)
-    giveRegions(next, P, ['r1'])
-    next = resolveTurn(next, map, [{ type: 'move', nationId: P, armyId: armyOf(next, P).id, to: 'r1' }])
-    expect(armyOf(next, P).entrenched).toBe(0)
-  })
 })
 
 describe('every event choice', () => {
@@ -465,7 +430,7 @@ describe('every event choice', () => {
               expect(Math.sign(m.militaryPool - n.militaryPool)).toBe(-Math.sign(e.fraction))
               break
             case 'armyAttrition':
-              expect(armyOf(next, P).units.infantry).toBeLessThan(armyOf(s, P).units.infantry)
+              expect(next.nations[P].military.units.infantry).toBeLessThan(s.nations[P].military.units.infantry)
               break
             case 'unlockRandomTech':
               expect(m.techs.length).toBe(n.techs.length + 1)
@@ -503,140 +468,59 @@ describe('every event choice', () => {
     }
 })
 
-function withSecondMuster(base: WorldMap): WorldMap {
-  const next = structuredClone(base)
-  const id = 'r0:1'
-  next.territories[id] = { id, regionId: 'r0', name: 'Northern Region 0', lat: 2, lng: 2, index: 1 }
-  next.territoriesByRegion.r0 = [...next.territoriesByRegion.r0, id]
-  return next
-}
-
-describe('musters, training, and arms', () => {
-  const units = { infantry: 10, armor: 0, air: 0, naval: 0 }
-
-  it('summons a new army at an empty muster and will not raise a second one there', () => {
-    const musterMap = withSecondMuster(lineMap(2))
-    const s = startState(musterMap)
-    s.nations[P].resources.capital = 500
-    s.nations[P].militaryPool = 30
-    const summoned = resolveTurn(s, musterMap, [{ type: 'recruit', nationId: P, territoryId: 'r0:1', unit: 'infantry' }])
-    const raised = Object.values(summoned.armies).filter((a) => a.owner === P && a.homeTerritoryId === 'r0:1')
-    expect(raised).toHaveLength(1)
-    expect(raised[0].units.infantry).toBe(1)
-    raised[0].location = 'r1'
-    expect(validateOrder(summoned, musterMap, { type: 'recruit', nationId: P, territoryId: 'r0:1', unit: 'infantry' })).toMatch(/return/)
-  })
-
-  it('refuses to train away from home, caps training, and notes the bonus in battle', () => {
+describe('the national military', () => {
+  it('trains each unit type on its own, and a commander drills for free', () => {
     const s = base()
-    const army = armyOf(s, P)
-    army.location = 'r1'
-    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' })).toMatch(/home muster/)
-    army.location = 'r0'
-    army.training = { infantry: 5, armor: 5, air: 5, naval: 5 }
-    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' })).toMatch(/fully trained/)
-    expect(unitPower(units, null, 5)).toBeCloseTo(unitPower(units, null, 0) * 1.4)
-
-    army.units = { infantry: 80, armor: 0, air: 0, naval: 0 }
-    s.wars.push('r0|r1')
-    const defender = Object.values(s.armies).find((a) => a.owner === 'r1')!
-    defender.units = { infantry: 1, armor: 0, air: 0, naval: 0 }
-    const next = resolveTurn(s, map, [{ type: 'attack', nationId: P, armyId: army.id, target: 'r1' }])
-    expect(next.battles[0].modifiers.join(' ')).toMatch(/training \(\+/)
-  })
-
-  it('re-bases an army onto an empty muster in the country it is standing in', () => {
-    const musterMap = withSecondMuster(lineMap(2))
-    const s = startState(musterMap)
-    s.nations[P].resources.capital = 500
-    const army = armyOf(s, P)
-    const next = resolveTurn(s, musterMap, [{ type: 'rebase', nationId: P, armyId: army.id, territoryId: 'r0:1' }])
-    expect(next.armies[army.id].homeTerritoryId).toBe('r0:1')
-  })
-
-  it('an arms deal pays the seller and is cancelled when the two go to war', () => {
-    const s = base()
-    s.nations.r1.personality = 'trader'
-    const offer: Order = {
-      type: 'propose',
-      nationId: P,
-      target: 'r1',
-      proposal: { kind: 'arms', terms: { unit: 'infantry', tier: 1, months: 6, payPerMonth: 20, seller: 'r1' } },
-    }
-    const quiet = resolveTurn(structuredClone(s), map, [])
-    const dealt = resolveTurn(structuredClone(s), map, [offer])
-    expect(dealt.nations[P].contracts.find((c) => c.unit === 'infantry')?.supplier).toBe('r1')
-    expect(quiet.nations[P].resources.capital - dealt.nations[P].resources.capital).toBe(20)
-    expect(dealt.nations.r1.resources.capital - quiet.nations.r1.resources.capital).toBe(20)
-    const war = resolveTurn(dealt, map, [{ type: 'declareWar', nationId: P, target: 'r1' }])
-    expect(war.nations[P].contracts.some((c) => c.supplier === 'r1')).toBe(false)
-    expect(war.log.some((l) => /cancelled/i.test(l.text))).toBe(true)
-  })
-
-  it('gives large countries several named musters and fills missing save fields', () => {
-    const world = getWorld().map
-    const america = world.territoriesByRegion['united-states-of-america']
-    expect(america.length).toBeGreaterThan(2)
-    expect(world.territories[america[0]].name).toBe('The Heartland')
-    expect(world.territoriesByRegion.fiji).toHaveLength(1)
-
-    const saved = startState(lineMap(1))
-    const army = armyOf(saved, 'r0')
-    const raw = structuredClone(saved)
-    ;(raw.armies[army.id] as unknown as { homeTerritoryId?: string; training?: number }).homeTerritoryId = undefined
-    ;(raw.armies[army.id] as unknown as { training?: number }).training = undefined
-    for (const n of Object.values(raw.nations)) (n as { contracts?: unknown }).contracts = undefined
-    normalizeGame(raw, lineMap(1))
-    expect(raw.armies[army.id].homeTerritoryId).toBe('r0:0')
-    expect(raw.armies[army.id].training).toEqual({ infantry: 0, armor: 0, air: 0, naval: 0 })
-    expect(raw.nations.r0.contracts).toEqual([])
-
-    const ranked = structuredClone(saved)
-    const rankedArmy = armyOf(ranked, 'r0')
-    rankedArmy.units = { infantry: 3, armor: 0, air: 2, naval: 0 }
-    ;(ranked.armies[rankedArmy.id] as unknown as { training?: number }).training = 4
-    normalizeGame(ranked, lineMap(1))
-    expect(ranked.armies[rankedArmy.id].training).toEqual({ infantry: 4, armor: 0, air: 4, naval: 0 })
-  })
-
-  it('trains each unit on its own, and a general does it for free while the army is home', () => {
-    const s = base()
-    const army = armyOf(s, P)
-    army.units = { infantry: 6, armor: 2, air: 0, naval: 0 }
-    army.training = { infantry: 0, armor: 1, air: 0, naval: 0 }
+    const m = s.nations[P].military
+    m.units = { infantry: 6, armor: 2, air: 0, naval: 0 }
+    m.drill = { infantry: 0, armor: 1, air: 0, naval: 0 }
     const generalId = s.nations[P].generals[0].id
-    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id, unit: 'air' })).toMatch(/No troops/)
-    expect(validateOrder(s, map, { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' }, [{ type: 'assignGeneral', nationId: P, armyId: army.id, generalId }])).toMatch(/general/i)
-
+    expect(validateOrder(s, map, { type: 'train', nationId: P, unit: 'air' })).toMatch(/No troops/)
     const paid = resolveTurn(structuredClone(s), map, [
-      { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' },
-      { type: 'train', nationId: P, armyId: army.id, unit: 'armor' },
+      { type: 'train', nationId: P, unit: 'infantry' },
+      { type: 'train', nationId: P, unit: 'armor' },
     ])
-    expect(paid.armies[army.id].training.infantry).toBe(1)
-    expect(paid.armies[army.id].training.armor).toBe(2)
-    expect(paid.armies[army.id].training.air).toBe(0)
+    expect(paid.nations[P].military.drill).toEqual({ infantry: 1, armor: 2, air: 0, naval: 0 })
     const idle = resolveTurn(structuredClone(s), map, [])
     expect(idle.nations[P].resources.capital - paid.nations[P].resources.capital).toBe(trainingCost(0) + trainingCost(1))
 
-    const withGeneral = structuredClone(s)
-    withGeneral.armies[army.id].generalId = generalId
-    const free = resolveTurn(withGeneral, map, [])
-    expect(free.armies[army.id].training.infantry).toBe(1)
-    expect(free.armies[army.id].training.armor).toBe(2)
+    const withCommander = structuredClone(s)
+    withCommander.nations[P].military.commanderId = generalId
+    expect(validateOrder(withCommander, map, { type: 'train', nationId: P, unit: 'infantry' })).toMatch(/commander/i)
+    const free = resolveTurn(withCommander, map, [])
+    expect(free.nations[P].military.drill.infantry).toBe(1)
     expect(free.nations[P].resources.capital).toBe(idle.nations[P].resources.capital)
+  })
 
-    const both = resolveTurn(structuredClone(s), map, [
-      { type: 'train', nationId: P, armyId: army.id, unit: 'infantry' },
-      { type: 'assignGeneral', nationId: P, armyId: army.id, generalId },
-    ])
-    expect(both.armies[army.id].generalId).toBe(generalId)
-    expect(both.armies[army.id].training.infantry).toBe(1)
-    expect(both.armies[army.id].training.armor).toBe(2)
-    expect(both.nations[P].resources.capital).toBe(idle.nations[P].resources.capital)
+  it('trained units arrive after their training months, a slot at a time', () => {
+    const s = base()
+    const before = s.nations[P].military.units.infantry
+    const queued = structuredClone(s)
+    for (let i = 0; i < 4; i++) queued.trainingQueue.push({ id: `q${i}`, nationId: P, unit: 'infantry', remaining: 1, total: 1 })
+    const slots = BASE_TRAIN_SLOTS + queued.regions[P].buildings.barracks
+    const next = resolveTurn(queued, map, [])
+    expect(next.nations[P].military.units.infantry).toBe(before + Math.min(4, slots))
+    expect(next.trainingQueue).toHaveLength(Math.max(0, 4 - slots))
+  })
 
-    const away = structuredClone(withGeneral)
-    away.armies[army.id].location = 'r1'
-    const parked = resolveTurn(away, map, [])
-    expect(parked.armies[army.id].training).toEqual(army.training)
+  it('upgrading weapons costs more each level and needs factories', () => {
+    const s = base()
+    s.regions[P].buildings.factory = 0
+    expect(validateOrder(s, map, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' })).toBe('Requires a Factory')
+    s.regions[P].buildings.factory = 2
+    expect(orderCost(s, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' }).capital).toBe(weaponCost(0))
+    s.nations[P].military.weapons.infantry = 2
+    expect(orderCost(s, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' }).capital).toBe(weaponCost(2))
+    expect(validateOrder(s, map, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' })).toMatch(/factory level 3/)
+  })
+
+  it('the stat sheet shows each source of a unit bonus', () => {
+    const s = base()
+    const m = s.nations[P].military
+    m.weapons.infantry = 2
+    m.drill.infantry = 3
+    const line = militarySheet(s, P).units.find((u) => u.unit === 'infantry')!
+    expect(line.attack).toBeGreaterThan(line.baseAttack)
+    expect(line.sources.map((x) => x.kind)).toEqual(expect.arrayContaining(['weapons', 'drill']))
   })
 })

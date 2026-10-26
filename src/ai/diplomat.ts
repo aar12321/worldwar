@@ -1,41 +1,14 @@
 import { PERSONALITIES } from '../data/personalities'
-import { ARMS } from '../data/unitTypes'
-import { combatMods } from '../engine/arms'
-import { computeEconomy, militaryPower, unitPower, type EconomyReport } from '../engine/economy'
-import { alliesOf, atWar, canUseUnit, enemiesOf, factoryCount, hasCasusBelli, hasPact, isAllied, pairKey } from '../engine/helpers'
+import { computeEconomy, militaryPower, type EconomyReport } from '../engine/economy'
+import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey } from '../engine/helpers'
 import type { Rng } from '../engine/rng'
 import { bundleEmpty, bundleEntries, marketPrices, stockOf, type MarketPrices } from '../engine/trade'
-import type { Army, GameState, NationId, Proposal, RegionId, ResourceBundle, TradeResource, WorldMap } from '../engine/types'
-import { visibleRegions } from '../engine/visibility'
+import type { GameState, NationId, Proposal, ResourceBundle, TradeResource, WorldMap } from '../engine/types'
 import { netWarScore, termsCost } from '../engine/warscore'
 import { coalitionActive, nationNeighbors, opinionOf } from './opinion'
 
-function hash01(...parts: (string | number)[]): number {
-  let h = 2166136261
-  const str = parts.join('|')
-  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619)
-  return (h >>> 0) / 4294967296
-}
-
-/**
- * What `viewer` believes `target`'s military power to be. Armies it can see are counted exactly;
- * hidden ones are guessed with a +-20% error that drifts every few months, like real intelligence.
- */
-export function perceivedPower(s: GameState, map: WorldMap, viewer: NationId, target: NationId, vis?: Set<RegionId> | 'all', armies?: Army[]): number {
-  if (viewer === target) return militaryPower(s, target)
-  const n = s.nations[target]
-  if (!n) return 0
-  const seen = vis ?? visibleRegions(s, map, viewer)
-  const mods = combatMods(n, s.turn)
-  let visible = 0
-  let hidden = 0
-  for (const a of armies ?? Object.values(s.armies)) {
-    if (a.owner !== target) continue
-    const p = unitPower(a.units, mods, a.training)
-    if (seen === 'all' || seen.has(a.location)) visible += p
-    else hidden += p
-  }
-  return visible + hidden * (0.8 + 0.4 * hash01(viewer, target, Math.floor(s.turn / 3)))
+export function perceivedPower(s: GameState, _map: WorldMap, _viewer: NationId, target: NationId): number {
+  return militaryPower(s, target)
 }
 
 /** How badly `n` wants more of a resource right now (1 = normal market value). */
@@ -79,11 +52,10 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
   const persona = PERSONALITIES[me.personality ?? 'honorable']
   const myNeighbors = nationNeighbors(s, map, botId)
   const borders = myNeighbors.has(p.from)
-  const coalition = coalitionActive(s)
+  const coalition = coalitionActive(s, map)
   const op = opinionOf(s, map, botId, p.from, { borders, coalition })
-  const vis = visibleRegions(s, map, botId)
   const myP = Math.max(1, militaryPower(s, botId))
-  const theirP = perceivedPower(s, map, botId, p.from, vis)
+  const theirP = perceivedPower(s, map, botId, p.from)
   const ratio = theirP / myP
   const noise = rng.range(-6, 6)
   const verdict = (accept: boolean, reason: string): Verdict => ({ accept, reason: withOpinion(reason, op), opinion: op })
@@ -125,14 +97,14 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       for (const x of myNeighbors) {
         if (x === p.from || !s.nations[x]?.alive) continue
         if (!(theirNeighbors.has(x) || atWar(s, p.from, x))) continue
-        const px = perceivedPower(s, map, botId, x, vis) * (coalition && x === s.playerId ? 1.4 : 1)
+        const px = perceivedPower(s, map, botId, x) * (coalition && x === s.playerId ? 1.4 : 1)
         if (px > myP * 1.3 && opinionOf(s, map, botId, x, { borders: true, coalition }) < 10) {
           threat = x
           break
         }
       }
       let dragged = 0
-      for (const e of enemiesOf(s, p.from)) if (!myEnemies.has(e) && perceivedPower(s, map, botId, e, vis) > myP * 0.6) dragged += 18
+      for (const e of enemiesOf(s, p.from)) if (!myEnemies.has(e) && perceivedPower(s, map, botId, e) > myP * 0.6) dragged += 18
       dragged = Math.min(40, dragged)
       const allies = alliesOf(s, botId).length
       const score = -28 + op * 0.7 + shared * 28 + (threat ? 22 : 0) + Math.min(15, ratio * 8) + (persona.loyalty - 1) * 20 - dragged - Math.max(0, allies - 1) * 12 + noise
@@ -173,7 +145,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       const enemy = p.enemy
       const enemyName = s.nations[enemy]?.name ?? 'them'
       if (hasPact(s, botId, enemy) || isAllied(s, botId, enemy)) return verdict(false, `we are bound by treaty with ${enemyName}`)
-      const eP = perceivedPower(s, map, botId, enemy, vis)
+      const eP = perceivedPower(s, map, botId, enemy)
       const opEnemy = opinionOf(s, map, botId, enemy, { borders: myNeighbors.has(enemy), coalition })
       const score =
         -8 +
@@ -190,22 +162,6 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       if (eP > myP * 1.2) return verdict(false, `${enemyName} is too strong for us`)
       if (me.warWeariness > 20) return verdict(false, 'our people are weary of war')
       return verdict(false, 'we will not bleed for you')
-    }
-    case 'arms': {
-      const { tier, payPerMonth, seller, unit } = p.terms
-      const list = ARMS.foreignPay[tier - 1] ?? ARMS.foreignPay[0]
-      const trader = me.personality === 'trader'
-      if (botId === seller) {
-        if (!canUseUnit(me, unit) || factoryCount(s, botId) < tier) return verdict(false, 'we cannot build those weapons')
-        const want = list * (trader ? 0.9 : 1.25) * (op < -15 ? 1.4 : op > 25 ? 0.85 : 1)
-        if (payPerMonth + noise / 20 >= want) return verdict(true, trader ? 'a profitable arms contract' : 'we can spare the weapons')
-        return verdict(false, 'the price is too low')
-      }
-      const atWarNow = enemiesOf(s, botId).length > 0
-      const max = list * (atWarNow ? 1.5 : 1.15)
-      if (payPerMonth > max + Math.max(0, noise) / 10) return verdict(false, 'too expensive')
-      if (atWarNow || trader || payPerMonth <= list) return verdict(true, 'we need the weapons')
-      return verdict(false, 'we have no need of these weapons')
     }
   }
 }

@@ -1,7 +1,7 @@
 import { PERSONALITIES } from '../data/personalities'
 import { atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
 import type { GameState, NationId, OpinionModifier, WorldMap } from '../engine/types'
-import { conquestGoal, populationShare, territoriesTaken } from '../engine/victory'
+import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
 
 /** A coalition forms against the player once they hold this fraction of their victory target. */
 export const COALITION_THRESHOLD = 0.35
@@ -51,7 +51,7 @@ export function coalitionActive(s: GameState, map?: WorldMap): boolean {
   const p = s.nations[s.playerId]
   if (!p?.alive) return false
   if (populationShare(s, p.id) >= s.settings.victoryShare * COALITION_THRESHOLD) return true
-  return !!map && territoriesTaken(s, map) >= Math.ceil(conquestGoal(s.settings.victoryShare) / 2)
+  return !!map && countriesTaken(s) >= Math.ceil(conquestGoal(s.settings.victoryShare) / 2)
 }
 
 /** Nations sharing a land border or sea lane with `id`. */

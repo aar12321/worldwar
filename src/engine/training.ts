@@ -1,66 +1,48 @@
-import { TRAIN_MONTHS, UNIT_SPECS } from '../data/unitTypes'
-import { addLog, boundArmy, createArmy, emptyUnits } from './helpers'
-import { territoryOwner } from './territory'
-import type { GameState, NationId, TrainingJob, UnitType, WorldMap } from './types'
+import { BASE_TRAIN_SLOTS, TRAIN_MONTHS, UNIT_SPECS } from '../data/unitTypes'
+import { addLog } from './helpers'
+import type { GameState, NationId, TrainingJob, UnitType } from './types'
 
-/** Puts one trained unit into the army bound to this territory, creating that army if needed. */
-export function addUnitAtTerritory(s: GameState, map: WorldMap, nationId: NationId, territoryId: string, unit: UnitType) {
-  const t = map.territories[territoryId]
-  if (!t) return null
-  let army = boundArmy(s, t.id, nationId)
-  if (!army) army = createArmy(s, { owner: nationId, location: t.regionId, units: emptyUnits(), homeTerritoryId: t.id })
-  // A new recruit is green, so it pulls the army's average rank for that unit down.
-  const have = army.units[unit]
-  army.training[unit] = Math.round((army.training[unit] * have) / (have + 1))
-  army.units[unit] = have + 1
-  return army
+/** Units that can train at once: a base number plus one per barracks level. */
+export function trainingSlots(s: GameState, nationId: NationId): number {
+  let barracks = 0
+  for (const r of Object.values(s.regions)) if (r.owner === nationId) barracks += r.buildings.barracks
+  return BASE_TRAIN_SLOTS + barracks
+}
+
+/** Puts one trained unit into the nation's military. A new recruit is green, so it pulls the drill of that type down. */
+export function addUnitToMilitary(s: GameState, nationId: NationId, unit: UnitType) {
+  const m = s.nations[nationId].military
+  const have = m.units[unit]
+  m.drill[unit] = Math.round((m.drill[unit] * have) / (have + 1))
+  m.units[unit] = have + 1
 }
 
 /**
- * Advances every training queue by one month.
- * Jobs ordered this same resolution wait until the next month.
- * A finished unit joins the territory's army and can fight with it immediately.
+ * Advances every training queue by one month. Each nation works on its first jobs, up to its training slots.
+ * A finished unit joins the military and can fight at once.
  */
-export function tickTraining(s: GameState, map: WorldMap) {
+export function tickTraining(s: GameState) {
   const queue = s.trainingQueue ?? []
   if (queue.length === 0) return
   const next: TrainingJob[] = []
-  const advanced = new Set<string>()
+  const used = new Map<NationId, number>()
   for (const job of queue) {
-    const territory = map.territories[job.territoryId]
-    const owner = territory ? territoryOwner(s, map, job.territoryId) : null
     const nation = s.nations[job.nationId]
-    if (!territory || owner !== job.nationId || !nation?.alive) {
-      if (nation?.alive) {
-        const spec = UNIT_SPECS[job.unit]
-        nation.resources.capital += spec.capitalCost * 0.5
-        nation.militaryPool += spec.manpowerCost * 0.5
-        if (nation.isPlayer) {
-          addLog(s, 'info', `Training of ${spec.name} stopped because the territory was lost. Half the cost was refunded.`, [job.nationId])
-        }
-      }
-      continue
-    }
-    if (job.clock === 'time' || job.orderedTurn === s.turn) {
+    if (!nation?.alive) continue
+    const slots = trainingSlots(s, job.nationId)
+    const taken = used.get(job.nationId) ?? 0
+    if (taken >= slots) {
       next.push(job)
       continue
     }
-    // One slot per territory. Later jobs wait their turn.
-    if (advanced.has(job.territoryId)) {
-      next.push(job)
-      continue
-    }
-    advanced.add(job.territoryId)
+    used.set(job.nationId, taken + 1)
     const remaining = job.remaining - 1
     if (remaining > 0) {
       next.push({ ...job, remaining })
       continue
     }
-    const army = addUnitAtTerritory(s, map, job.nationId, job.territoryId, job.unit)
-    if (nation.isPlayer && army) {
-      const where = army.location === territory.regionId ? territory.name : map.regions[army.location]?.name ?? territory.name
-      addLog(s, 'info', `${UNIT_SPECS[job.unit].name} finished training at ${territory.name} and joined the army in ${where}.`, [job.nationId])
-    }
+    addUnitToMilitary(s, job.nationId, job.unit)
+    if (nation.isPlayer) addLog(s, 'info', `${UNIT_SPECS[job.unit].name} finished training and joined your military.`, [job.nationId])
   }
   s.trainingQueue = next
 }

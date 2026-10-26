@@ -1,11 +1,9 @@
 import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
-import { TRAINING, UNIT_SPECS, clampTraining, type UnitTraining } from '../data/unitTypes'
-import { combatMods } from './arms'
-import { developmentBonus, housingInRegion, populationGrowth } from './development'
-import { addLog, armiesOf, clamp, enemiesOf, nationModifiers, type AggregatedModifiers } from './helpers'
+import { BUILDING_SPECS, UNIT_SPECS } from '../data/unitTypes'
+import { addLog, clamp, enemiesOf, nationModifiers } from './helpers'
 import type { Rng } from './rng'
-import type { Buildings, GameState, MapRegion, NationId, RegionState, UnitType, WorldMap } from './types'
+import type { Buildings, BuildingType, GameState, MapRegion, NationId, RegionState, WorldMap } from './types'
 import { BUILDING_TYPES, UNIT_TYPES } from './types'
 
 export const ECON = {
@@ -36,6 +34,12 @@ export function regionWorkforce(region: RegionState, mapRegion: MapRegion): numb
   return Math.pow(Math.max(0.05, region.population), 0.6) * (0.3 + 0.7 * mapRegion.development)
 }
 
+/** Highest level of a building a country can reach. Bigger countries have room for more. */
+export function buildingCap(workforce: number, building: BuildingType): number {
+  const big = building === 'port' || building === 'civic' ? 15 : 6
+  return BUILDING_SPECS[building].max + Math.floor(workforce / big)
+}
+
 export interface EconomyReport {
   workforce: number
   civilianWorkforce: number
@@ -64,7 +68,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const n = s.nations[nationId]
   const mods = nationModifiers(n)
   const owned = Object.values(s.regions).filter((r) => r.owner === nationId)
-  const buildings: Buildings = { factory: 0, farm: 0, university: 0, barracks: 0, port: 0, depot: 0 }
+  const buildings: Buildings = { factory: 0, farm: 0, university: 0, barracks: 0, port: 0, civic: 0 }
   let workforce = 0
   let baseFood = 0
   let activeFactories = 0
@@ -95,20 +99,18 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const factoryIncome =
     activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + (warEconomy ? 0.25 : 0)) * outputMult * (1 + botBonus)
   const tradeIncome = buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1)
-  const land = developmentBonus(s, map, nationId)
+  const land = { capital: 0, food: 0, pp: buildings.civic * 0.6, tp: buildings.civic * 0.3 }
 
-  const armies = armiesOf(s, nationId)
   let upkeep = 0
   let armyFood = 0
   let divisions = 0
-  for (const a of armies)
-    for (const k of UNIT_TYPES) {
-      upkeep += a.units[k] * UNIT_SPECS[k].upkeep
-      armyFood += a.units[k] * UNIT_SPECS[k].food
-      divisions += a.units[k]
-    }
+  for (const k of UNIT_TYPES) {
+    upkeep += n.military.units[k] * UNIT_SPECS[k].upkeep
+    armyFood += n.military.units[k] * UNIT_SPECS[k].food
+    divisions += n.military.units[k]
+  }
   const totalBuildings = BUILDING_TYPES.reduce((sum, b) => sum + buildings[b], 0)
-  upkeep += totalBuildings * ECON.buildingUpkeep + land.upkeep
+  upkeep += totalBuildings * ECON.buildingUpkeep
 
   const foodProduction = baseFood + owned.length * ECON.subsistencePerRegion + buildings.farm * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food
   const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce + armyFood
@@ -169,9 +171,9 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   n.debtTurns = n.inDebt ? (n.debtTurns ?? 0) + 1 : 0
   if (n.debtTurns >= ECON.desertionAfter) {
     const loss = Math.min(ECON.maxDesertion, ECON.desertionPerMonth * (n.debtTurns - ECON.desertionAfter + 1))
-    for (const a of armiesOf(s, nationId)) for (const k of UNIT_TYPES) a.units[k] *= 1 - loss
+    for (const k of UNIT_TYPES) n.military.units[k] *= 1 - loss
     if (n.isPlayer || n.debtTurns === ECON.desertionAfter)
-      addLog(s, 'economy', `${n.name} cannot pay its soldiers: ${Math.round(loss * 100)}% of every army has deserted.`, [nationId])
+      addLog(s, 'economy', `${n.name} cannot pay its soldiers: ${Math.round(loss * 100)}% of the military has deserted.`, [nationId])
   }
   r.food += e.netFood
   if (r.food < 0) {
@@ -194,8 +196,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
     .filter((x) => x.owner === nationId)
     .sort((a, b) => (a.id < b.id ? -1 : 1))
   for (const region of owned) {
-    const slots = map.territoriesByRegion[region.id]?.length ?? 1
-    region.population *= populationGrowth(n.foodShortage, housingInRegion(s, map, region.id), slots)
+    region.population *= n.foodShortage ? 0.997 : 1.0008
     if (region.sabotaged > 0) region.sabotaged--
   }
 
@@ -209,23 +210,4 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   }
 }
 
-/** Total army strength, including technology, training, and weapons contracts. */
-export function militaryPower(s: GameState, nationId: NationId): number {
-  const n = s.nations[nationId]
-  if (!n) return 0
-  const mods = combatMods(n, s.turn)
-  let p = 0
-  for (const a of Object.values(s.armies)) if (a.owner === nationId) p += unitPower(a.units, mods, a.training)
-  return p
-}
-
-export function unitPower(units: Record<UnitType, number>, mods?: AggregatedModifiers | null, training: number | UnitTraining = 0): number {
-  let p = 0
-  for (const k of UNIT_TYPES) {
-    const spec = UNIT_SPECS[k]
-    const rank = clampTraining(typeof training === 'number' ? training : training[k] ?? 0)
-    const drilled = 1 + rank * TRAINING.bonusPerLevel
-    p += units[k] * (spec.attack * (1 + (mods?.unitAttack[k] ?? 0)) + spec.defense * (1 + (mods?.unitDefense[k] ?? 0))) * 0.5 * drilled
-  }
-  return p
-}
+export { militaryPower } from './militaryStats'

@@ -2,38 +2,36 @@ import { describe, expect, it } from 'vitest'
 import { generateBotOrders } from '../../ai/bot'
 import { createInitialState } from '../../data/startingNations'
 import { computeEconomy } from '../economy'
-import { atWar } from '../helpers'
 import { validateOrder } from '../orders'
-import { attackableTerritoryIds } from '../territory'
-import { canReach } from '../warfare'
-import { checkOutcome, conquestGoal, territoriesTaken } from '../victory'
-import { lineMap, startState } from './fixtures'
+import { attackableRegions, canAttackRegion } from '../warfare'
+import { checkOutcome, conquestGoal, countriesTaken } from '../victory'
+import { lineMap, setMilitary, startState } from './fixtures'
 
 describe('victory', () => {
-  it('asks for 3, 6, or 12 territories', () => {
+  it('asks for 3, 6, or 12 countries', () => {
     expect(conquestGoal(0.25)).toBe(3)
     expect(conquestGoal(0.4)).toBe(6)
     expect(conquestGoal(0.6)).toBe(12)
   })
 
-  it('wins by taking the asked-for territories, and loses when the nation is gone', () => {
+  it('wins by taking the asked-for countries, and loses when the nation is gone', () => {
     const map = lineMap(6)
     const s = startState(map, 'r0')
     s.settings.victoryShare = 0.25
-    expect(checkOutcome(s, map)).toBe('playing')
-    expect(territoriesTaken(s, map)).toBe(0)
+    expect(checkOutcome(s)).toBe('playing')
+    expect(countriesTaken(s)).toBe(0)
 
     s.regions.r1.owner = 'r0'
     s.regions.r2.owner = 'r0'
     for (const region of Object.values(s.regions)) region.population = region.owner === 'r0' ? 1 : 500
-    expect(territoriesTaken(s, map)).toBe(2)
-    expect(checkOutcome(s, map)).toBe('playing')
+    expect(countriesTaken(s)).toBe(2)
+    expect(checkOutcome(s)).toBe('playing')
     s.regions.r3.owner = 'r0'
-    expect(checkOutcome(s, map)).toBe('victory')
+    expect(checkOutcome(s)).toBe('victory')
 
     const lost = startState(map, 'r0')
     lost.nations.r0.alive = false
-    expect(checkOutcome(lost, map)).toBe('defeat')
+    expect(checkOutcome(lost)).toBe('defeat')
   })
 
   it('still wins by leading enough people', () => {
@@ -42,19 +40,17 @@ describe('victory', () => {
     s.settings.victoryShare = 0.4
     s.regions.r0.population = 50
     s.regions.r1.population = 10
-    expect(checkOutcome(s, map)).toBe('victory')
+    expect(checkOutcome(s)).toBe('victory')
   })
 })
 
 describe('food and sea landings', () => {
-  it('refuses recruits that the farms cannot feed', () => {
+  it('refuses training that the farms cannot feed', () => {
     const map = lineMap(2)
     const s = startState(map)
     s.nations.r0.resources.food = 0
     s.nations.r0.foodShortage = true
-    const home = map.territoriesByRegion.r0[0]
-    expect(validateOrder(s, map, { type: 'recruit', nationId: 'r0', territoryId: home, unit: 'infantry' })).toMatch(/food/)
-    expect(validateOrder(s, map, { type: 'queueTrain', nationId: 'r0', territoryId: home, unit: 'infantry' })).toMatch(/food/)
+    expect(validateOrder(s, map, { type: 'queueTrain', nationId: 'r0', unit: 'infantry' })).toMatch(/food/)
   })
 
   it('lets a port launch a sea invasion without Destroyers', () => {
@@ -65,12 +61,12 @@ describe('food and sea landings', () => {
     map.regions.r1.seaLanes = ['r0']
     const s = startState(map)
     s.regions.r0.buildings.port = 1
-    expect(canReach(s, map, 'r0', 'r0', 'r1', 'attack')).toEqual({ ok: true, bySea: true })
+    expect(canAttackRegion(s, map, 'r0', 'r1')).toEqual({ ok: true, bySea: true })
     s.regions.r0.buildings.port = 0
-    expect(canReach(s, map, 'r0', 'r0', 'r1', 'attack').ok).toBe(false)
+    expect(canAttackRegion(s, map, 'r0', 'r1').ok).toBe(false)
   })
 
-  it('hides a sea landing until the army has a port', () => {
+  it('lists a sea target only once there is a port', () => {
     const map = lineMap(2)
     map.regions.r0.neighbors = []
     map.regions.r1.neighbors = []
@@ -78,19 +74,10 @@ describe('food and sea landings', () => {
     map.regions.r1.seaLanes = ['r0']
     const s = startState(map)
     s.wars = ['r0|r1']
-    const reachable = (port: number) => {
-      s.regions.r0.buildings.port = port
-      return attackableTerritoryIds(
-        s,
-        map,
-        'r0',
-        'r0',
-        (owner) => atWar(s, 'r0', owner),
-        (regionId) => canReach(s, map, 'r0', 'r0', regionId, 'attack').ok,
-      )
-    }
-    expect(reachable(0)).not.toContain('r1:0')
-    expect(reachable(1)).toContain('r1:0')
+    s.regions.r0.buildings.port = 0
+    expect(attackableRegions(s, map, 'r0')).toEqual([])
+    s.regions.r0.buildings.port = 1
+    expect(attackableRegions(s, map, 'r0')).toEqual(['r1'])
   })
 
   it('starts a tiny country with food to spare', () => {
@@ -113,10 +100,8 @@ describe('rivals pick on the weak', () => {
       s.nations.r1.personality = 'expansionist'
       s.nations.r1.aggression = 0.95
       s.settings.difficulty = 'normal'
-      const r1 = Object.values(s.armies).find((a) => a.owner === 'r1')!
-      const r0 = Object.values(s.armies).find((a) => a.owner === 'r0')!
-      r1.units.infantry = 30
-      r0.units.infantry = 1
+      setMilitary(s, 'r1', { infantry: 30 })
+      setMilitary(s, 'r0', { infantry: 1 })
       const orders = generateBotOrders(s, map, 'r1')
       if (orders.some((o) => o.type === 'declareWar' && o.target === 'r0')) wars++
     }

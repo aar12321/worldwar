@@ -2,18 +2,18 @@ import { difficultyOf } from '../data/difficulty'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { TECHS } from '../data/techTree'
-import { ARMS, TRAINING, UNIT_SPECS } from '../data/unitTypes'
-import { combatMods } from '../engine/arms'
+import { TRAINING, UNIT_SPECS, weaponCost } from '../data/unitTypes'
+import { nextWeaponLevel } from '../engine/arms'
 import { recentlyProposed } from '../engine/diplomacy'
-import { computeEconomy, unitPower, type EconomyReport } from '../engine/economy'
-import { armyIsHome, atWar, boundArmy, canUseUnit, clamp, factoryCount, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex, totalUnits } from '../engine/helpers'
+import { computeEconomy, type EconomyReport } from '../engine/economy'
+import { atWar, canUseUnit, clamp, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex } from '../engine/helpers'
+import { militaryPower } from '../engine/militaryStats'
 import { validateOrder } from '../engine/orders'
 import { createRng, type Rng } from '../engine/rng'
 import { marketPrices, stockOf, type MarketPrices } from '../engine/trade'
-import type { Army, BuildingType, GameState, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
+import type { BuildingType, GameState, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
 import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
-import { visibleRegions } from '../engine/visibility'
-import { canReach, garrisonStrength } from '../engine/warfare'
+import { canAttackRegion, garrisonStrength } from '../engine/warfare'
 import { MAX_REPARATIONS, netWarScore, regionValue } from '../engine/warscore'
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
 import { coalitionActive, opinionOf } from './opinion'
@@ -29,15 +29,14 @@ export const BOT = {
   maxPlayerProposalsPerTurn: 1,
   maxPlayerInbox: 3,
   maxAlliances: 2,
-  /** Months after a bot declares war on the player before its armies may attack. */
-  reactionTurns: 2,
+  /** Months after a bot declares war on the player before its military may attack. */
+  reactionTurns: 1,
 }
 
 /** Shared per-turn facts every bot reads, computed once instead of once per bot. */
 export interface TurnContext {
   power: Map<NationId, number>
   neighbors: Map<NationId, Set<NationId>>
-  armies: Map<NationId, Army[]>
   regions: Map<NationId, RegionId[]>
   enemies: Map<NationId, NationId[]>
   allies: Map<NationId, NationId[]>
@@ -49,12 +48,6 @@ export interface TurnContext {
 }
 
 export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
-  const armies = new Map<NationId, Army[]>()
-  for (const a of Object.values(s.armies).sort((x, y) => (x.id < y.id ? -1 : 1))) {
-    const list = armies.get(a.owner)
-    if (list) list.push(a)
-    else armies.set(a.owner, [a])
-  }
   const regions = new Map<NationId, RegionId[]>()
   const neighbors = new Map<NationId, Set<NationId>>()
   const link = (a: NationId, b: NationId) => {
@@ -78,15 +71,13 @@ export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
   const power = new Map<NationId, number>()
   for (const n of Object.values(s.nations)) {
     if (!n.alive) continue
-    const mods = combatMods(n, s.turn)
-    power.set(n.id, (armies.get(n.id) ?? []).reduce((sum, a) => sum + unitPower(a.units, mods, a.training), 0))
+    power.set(n.id, militaryPower(s, n.id))
   }
   const player = s.playerId
   const enemies = partnerIndex(s.wars)
   return {
     power,
     neighbors,
-    armies,
     regions,
     enemies,
     allies: partnerIndex(s.alliances),
@@ -114,32 +105,8 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
 }
 
 function estimateDefense(s: GameState, map: WorldMap, ctx: TurnContext, regionId: RegionId): number {
-  const r = s.regions[regionId]
-  const owner = s.nations[r.owner]
-  const mods = owner ? combatMods(owner, s.turn) : null
-  const armyPower = (ctx.armies.get(r.owner) ?? []).filter((a) => a.location === regionId).reduce((sum, a) => sum + unitPower(a.units, mods, a.training), 0)
-  return (armyPower + garrisonStrength(s, map, regionId) * UNIT_SPECS.infantry.defense) * TERRAIN[map.regions[regionId].terrain].defense
-}
-
-/** One step along the shortest path through owned territory toward any region in `goals`. */
-function stepToward(s: GameState, map: WorldMap, nationId: NationId, from: RegionId, goals: Set<RegionId>): RegionId | null {
-  if (goals.has(from)) return null
-  const prev = new Map<RegionId, RegionId>([[from, from]])
-  const queue = [from]
-  for (let head = 0; head < queue.length; head++) {
-    const cur = queue[head]
-    if (goals.has(cur)) {
-      let step = cur
-      while (prev.get(step) !== from) step = prev.get(step)!
-      return step
-    }
-    for (const nb of map.regions[cur].neighbors) {
-      if (prev.has(nb) || s.regions[nb]?.owner !== nationId) continue
-      prev.set(nb, cur)
-      queue.push(nb)
-    }
-  }
-  return null
+  const owner = s.regions[regionId].owner
+  return ((ctx.power.get(owner) ?? 0) + garrisonStrength(s, map, regionId) * UNIT_SPECS.infantry.defense) * TERRAIN[map.regions[regionId].terrain].defense
 }
 
 const BRANCH_PRIORITY: Record<'aggressive' | 'builder', TechBranch[]> = {
@@ -160,7 +127,6 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   const persona = PERSONALITIES[n.personality ?? 'honorable']
   const rng: Rng = createRng(s.seed, s.turn * 100003 + hashString(nationId))
   const econ = computeEconomy(s, map, nationId)
-  const vis = visibleRegions(s, map, nationId)
   const myNeighbors = ctx.neighbors.get(nationId) ?? new Set<NationId>()
   const playerId = s.playerId
   const orders: Order[] = []
@@ -175,7 +141,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   const perceivedCache = new Map<NationId, number>()
   const perceived = (id: NationId) => {
     let v = perceivedCache.get(id)
-    if (v === undefined) perceivedCache.set(id, (v = perceivedPower(s, map, nationId, id, vis, ctx.armies.get(id) ?? [])))
+    if (v === undefined) perceivedCache.set(id, (v = perceivedPower(s, map, nationId, id)))
     return v
   }
   const opinionCache = new Map<NationId, number>()
@@ -205,7 +171,6 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   const enemies = enemiesOf(nationId)
   const atWarNow = enemies.length > 0
   const owned = ctx.regions.get(nationId) ?? []
-  const myArmies = ctx.armies.get(nationId) ?? []
 
   for (const p of s.proposals) {
     if (p.to !== nationId) continue
@@ -222,16 +187,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   const draft = atWarNow ? (n.warWeariness > 30 ? 0.07 : 0.1) : 0.05
   if (Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft })
 
-  const takenGenerals = new Set(myArmies.map((a) => a.generalId).filter((id): id is string => !!id))
-  const freeGenerals = n.generals.filter((g) => !takenGenerals.has(g.id))
-  const needsGeneral = myArmies
-    .filter((a) => !a.generalId && totalUnits(a.units) >= 0.1)
-    .sort((a, b) => Number(!armyIsHome(s, map, a)) - Number(!armyIsHome(s, map, b)) || (a.id < b.id ? -1 : 1))
-  for (const a of needsGeneral) {
-    const g = freeGenerals.shift()
-    if (!g) break
-    tryAdd({ type: 'assignGeneral', nationId, armyId: a.id, generalId: g.id })
-  }
+  if (!n.military.commanderId && n.generals.length > 0) tryAdd({ type: 'assignGeneral', nationId, generalId: n.generals[0].id })
 
   const reserve = 15
   let budget = Math.max(0, n.resources.capital - reserve)
@@ -254,11 +210,6 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
 
     economy() {
       let used = false
-      const starving = myArmies.find((a) => a.outOfSupplyTurns > 0 && s.regions[a.location]?.owner === nationId && s.regions[a.location].buildings.depot === 0)
-      if (starving && budget > 30 && tryAdd({ type: 'build', nationId, regionId: starving.location, building: 'depot' })) {
-        budget -= 30
-        used = true
-      }
       const mainRegion = owned.reduce((best, id) => (s.regions[id].population > s.regions[best].population ? id : best), owned[0])
       const builds = Math.min(BOT.maxBuildsPerTurn, 1 + Math.floor(budget / 150))
       for (let i = 0; i < builds && mainRegion; i++) {
@@ -285,82 +236,62 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       const income = econ.taxIncome + econ.factoryIncome + econ.tradeIncome
       const upkeepRoom = income * 0.65 - econ.upkeep
       const wantsArmy = atWarNow || rng.chance(0.25 + n.aggression * persona.aggression * 0.2)
-      const trainHome = () => {
-        const ready = myArmies
-          .filter((a) => armyIsHome(s, map, a) && !a.generalId)
-          .flatMap((a) => UNIT_TYPES.filter((unit) => a.units[unit] >= 0.05 && a.training[unit] < TRAINING.max).map((unit) => ({ a, unit, rank: a.training[unit] })))
-          .sort((x, y) => x.rank - y.rank || (x.a.id < y.a.id ? -1 : 1) || (x.unit < y.unit ? -1 : 1))
-        let trained = 0
-        for (const row of ready) {
-          if (trained >= 2) break
-          if (tryAdd({ type: 'train', nationId, armyId: row.a.id, unit: row.unit })) trained++
+      const units = n.military.units
+      let used = false
+      // Drill what is least trained, unless a commander does it for free.
+      const drill = UNIT_TYPES.filter((u) => units[u] >= 0.05 && n.military.drill[u] < TRAINING.max).sort((a, b) => n.military.drill[a] - n.military.drill[b])
+      let drilled = 0
+      for (const u of drill) {
+        if (drilled >= 2) break
+        if (tryAdd({ type: 'train', nationId, unit: u })) {
+          drilled++
+          used = true
         }
-        return trained > 0
       }
-      const signDomestic = () => {
-        if (!rng.chance(0.35) || n.resources.capital < 120) return false
-        const factories = factoryCount(s, nationId)
-        if (factories < 1) return false
-        const unit: UnitType = canUseUnit(n, 'armor') && rng.chance(0.4) ? 'armor' : 'infantry'
-        if (!canUseUnit(n, unit)) return false
-        const tier = factories >= 3 && n.resources.capital > 220 ? 2 : 1
-        if ((n.contracts ?? []).some((c) => c.unit === unit && c.until >= s.turn && c.tier >= tier)) return false
-        return tryAdd({ type: 'signContract', nationId, unit, tier })
-      }
-      if (!wantsArmy || upkeepRoom <= 0) return trainHome() || signDomestic()
-      const frontline = owned.filter((id) => map.regions[id].neighbors.some((nb) => enemies.includes(s.regions[nb]?.owner)))
-      const musterIds = (regionIds: RegionId[]) => {
-        const ids: string[] = []
-        for (const regionId of regionIds) {
-          for (const tid of map.territoriesByRegion[regionId] ?? []) {
-            const bound = boundArmy(s, tid, nationId)
-            if (bound && bound.location !== map.territories[tid].regionId) continue
-            ids.push(tid)
+      // Better weapons for the unit type it fields the most of.
+      if (rng.chance(0.4)) {
+        const mostly = [...UNIT_TYPES].filter((u) => units[u] >= 0.5).sort((a, b) => units[b] - units[a])
+        for (const u of mostly) {
+          if (nextWeaponLevel(s, nationId, u).error || budget < nextWeaponLevel(s, nationId, u).cost + 20) continue
+          if (tryAdd({ type: 'upgradeWeapons', nationId, unit: u })) {
+            budget -= weaponCost(n.military.weapons[u])
+            used = true
+            break
           }
         }
-        return ids.sort()
       }
-      let sites = musterIds(frontline.length ? frontline : owned)
-      if (!sites.length) sites = musterIds(owned)
-      const occupied = sites.filter((tid) => boundArmy(s, tid, nationId))
-      const empty = sites.filter((tid) => !boundArmy(s, tid, nationId))
-      const recruitTerritory = (empty.length && rng.chance(0.35) ? empty[0] : occupied[0]) ?? empty[0]
-      if (!recruitTerritory) {
-        const site = frontline[0] ?? owned[0]
-        if (site && budget > 40 && tryAdd({ type: 'build', nationId, regionId: site, building: 'barracks' })) {
-          budget -= 30
-          return true
-        }
-        return trainHome()
-      }
+      if (!wantsArmy || upkeepRoom <= 0) return used
+      // Raise units, up to the queue limit, scaled by income and the difficulty.
       let room = upkeepRoom
-      let recruited = 0
       const maxRecruits = clamp(Math.round((income / 30) * diff.production), BOT.minRecruitsPerTurn, BOT.maxRecruitsPerTurn)
-      // Rich nations raise units at several sites at once instead of queueing everything at one.
-      const siteCount = clamp(Math.ceil(maxRecruits / 3), 1, 4)
-      const rotation = [recruitTerritory, ...sites.filter((tid) => tid !== recruitTerritory)].slice(0, siteCount)
-      for (let i = 0; i < maxRecruits && budget > 10 && rotation.length > 0; i++) {
-        const site = rotation[i % rotation.length]
-        const recruitRegion = map.territories[site].regionId
+      let recruited = 0
+      for (let i = 0; i < maxRecruits && budget > 10; i++) {
         const roll = rng.next()
         let unit: UnitType = 'infantry'
         if (roll < 0.3 && canUseUnit(n, 'armor')) unit = 'armor'
-        else if (roll < 0.45 && canUseUnit(n, 'air') && s.regions[recruitRegion].buildings.factory > 0) unit = 'air'
-        else if (roll < 0.5 && canUseUnit(n, 'naval') && s.regions[recruitRegion].buildings.port > 0) unit = 'naval'
+        else if (roll < 0.45 && canUseUnit(n, 'air')) unit = 'air'
+        else if (roll < 0.5 && canUseUnit(n, 'naval')) unit = 'naval'
         const spec = UNIT_SPECS[unit]
         if (spec.upkeep > room || spec.capitalCost > budget) break
         if (n.foodShortage || n.resources.food <= 0) break
         if (econ.netFood < spec.food && n.resources.food < econ.foodConsumption * 2) break
-        if (!tryAdd({ type: 'recruit', nationId, territoryId: site, unit })) {
-          rotation.splice(i % rotation.length, 1)
-          i--
+        if (!tryAdd({ type: 'queueTrain', nationId, unit })) {
+          if (unit === 'infantry') break
           continue
         }
         budget -= spec.capitalCost
         room -= spec.upkeep
         recruited++
       }
-      return recruited > 0
+      if (recruited === 0 && budget > 40) {
+        // No way to train: raise barracks in the biggest country.
+        const place = owned.reduce((best, id) => (s.regions[id].population > s.regions[best].population ? id : best), owned[0])
+        if (place && tryAdd({ type: 'build', nationId, regionId: place, building: 'barracks' })) {
+          budget -= 30
+          return true
+        }
+      }
+      return used || recruited > 0
     },
 
     peace() {
@@ -394,7 +325,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
 
     trade() {
       if (planTrade(s, ctx, nationId, econ, rng, persona.dealAppetite, opinion, proposeTo)) return true
-      return planArms(s, ctx, nationId, rng, myPower, atWarNow, opinion, perceived, proposeTo)
+      return false
     },
 
     diplomacy() {
@@ -480,39 +411,19 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   }
 
   const attackRatio = (diff.attackRatio / persona.risk) * (mistake === 'overconfident' ? 0.75 : 1)
-  // A war declared on the player gives them a couple of months to raise an army before the first blow.
+  // A war declared on the player gives them a couple of months to raise a military before the first blow.
   const warTargets = new Set(enemies.filter((e) => e !== playerId || s.turn - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
-  const fronts = new Set(enemies)
-  for (const o of orders) {
-    if (o.type !== 'declareWar') continue
-    fronts.add(o.target)
-    // The player gets a month to react to a declaration before the first blow lands.
-    if (o.target !== playerId) warTargets.add(o.target)
-  }
-  const borderGoals = new Set(owned.filter((id) => map.regions[id].neighbors.some((nb) => fronts.has(s.regions[nb]?.owner))))
-  const committed = new Map<RegionId, number>()
-  const mods = combatMods(n, s.turn)
-  for (const a of myArmies) {
-    if (s.regions[a.location].rebels > 0) {
-      tryAdd({ type: 'attack', nationId, armyId: a.id, target: a.location })
-      continue
-    }
-    const options = [...map.regions[a.location].neighbors, ...map.regions[a.location].seaLanes]
-      .filter((id) => warTargets.has(s.regions[id]?.owner) && canReach(s, map, nationId, a.location, id, 'attack').ok)
-      .map((id) => ({ id, def: estimateDefense(s, map, ctx, id) - (committed.get(id) ?? 0) }))
+  for (const o of orders) if (o.type === 'declareWar' && o.target !== playerId) warTargets.add(o.target)
+  // One attack a turn, at the weakest country on the front that the whole military can beat.
+  if (mistake !== 'idle' && n.military.lastAttackTurn !== s.turn) {
+    const options = Object.values(s.regions)
+      .filter((r) => warTargets.has(r.owner) && canAttackRegion(s, map, nationId, r.id).ok)
+      .map((r) => ({ id: r.id, def: estimateDefense(s, map, ctx, r.id) }))
       .sort((x, y) => x.def - y.def || (x.id < y.id ? -1 : 1))
-    const power = unitPower(a.units, mods, a.training)
     const target = options[0]
-    if (target && power > target.def * attackRatio) {
-      if (tryAdd({ type: 'attack', nationId, armyId: a.id, target: target.id })) committed.set(target.id, (committed.get(target.id) ?? 0) + power)
-      continue
-    }
-    if (mistake === 'idle' || a.outOfSupplyTurns > 0) continue
-    if (borderGoals.size && !borderGoals.has(a.location)) {
-      const step = stepToward(s, map, nationId, a.location, borderGoals)
-      if (step) tryAdd({ type: 'move', nationId, armyId: a.id, to: step })
-    }
+    if (target && myPower > target.def * attackRatio) tryAdd({ type: 'attack', nationId, target: target.id })
   }
+  // Rebels in a country are fought every month with no order needed.
 
   return orders
 }
@@ -539,42 +450,6 @@ function peaceTerms(s: GameState, map: WorldMap, me: NationId, enemy: NationId, 
   }
   if (net <= -10 && desperate) return { cede: [], reparations: -clamp(Math.round(-net * 0.4), 3, 20) }
   return { cede: [], reparations: 0 }
-}
-
-/** Traders offer weapons to neighbors under pressure. A nation at war asks a neighbor to sell. */
-function planArms(
-  s: GameState,
-  ctx: TurnContext,
-  nationId: NationId,
-  rng: Rng,
-  myPower: number,
-  atWarNow: boolean,
-  opinion: (id: NationId) => number,
-  perceived: (id: NationId) => number,
-  proposeTo: (target: NationId, p: ProposalDraft) => boolean,
-): boolean {
-  const n = s.nations[nationId]
-  const factories = factoryCount(s, nationId)
-  if (n.personality === 'trader' && factories >= 1 && canUseUnit(n, 'infantry') && rng.chance(0.4)) {
-    const buyers = [...(ctx.neighbors.get(nationId) ?? [])]
-      .filter((id) => s.nations[id]?.alive && !atWar(s, nationId, id) && opinion(id) > -5 && !recentlyProposed(s, nationId, id, 'arms', 8))
-      .filter((id) => (ctx.enemies.get(id) ?? []).length > 0 || perceived(id) < myPower)
-      .sort((a, b) => opinion(b) - opinion(a) || (a < b ? -1 : 1))
-    for (const buyer of buyers.slice(0, 2)) {
-      if (proposeTo(buyer, { kind: 'arms', terms: { unit: 'infantry', tier: 1, months: 6, payPerMonth: ARMS.foreignPay[0], seller: nationId } })) return true
-    }
-  }
-  const needsGuns = atWarNow && !(n.contracts ?? []).some((c) => c.unit === 'infantry' && c.until >= s.turn)
-  if (needsGuns && n.resources.capital > 60 && rng.chance(0.5)) {
-    const sellers = [...new Set([...(ctx.neighbors.get(nationId) ?? []), ...(ctx.allies.get(nationId) ?? [])])]
-      .filter((id) => s.nations[id]?.alive && !atWar(s, nationId, id) && opinion(id) > -5 && !recentlyProposed(s, nationId, id, 'arms', 8))
-      .filter((id) => canUseUnit(s.nations[id], 'infantry') && factoryCount(s, id) >= 1)
-      .sort((a, b) => Number(s.nations[b].personality === 'trader') - Number(s.nations[a].personality === 'trader') || (a < b ? -1 : 1))
-    for (const seller of sellers.slice(0, 2)) {
-      if (proposeTo(seller, { kind: 'arms', terms: { unit: 'infantry', tier: 1, months: 6, payPerMonth: ARMS.foreignPay[0], seller } })) return true
-    }
-  }
-  return false
 }
 
 /** Bots buy what they lack with what they have spare, and pay a little over market when desperate. */

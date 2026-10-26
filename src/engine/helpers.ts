@@ -1,6 +1,5 @@
 import { TECH_BY_ID, type TechModifiers } from '../data/techTree'
-import { asTraining, type UnitTraining } from '../data/unitTypes'
-import type { Army, GameState, LogKind, Nation, NationId, RegionId, UnitCounts, UnitType, WorldMap } from './types'
+import type { GameState, LogKind, Nation, NationId, RegionId, UnitCounts, UnitType } from './types'
 
 export const pairKey = (a: NationId, b: NationId) => (a < b ? `${a}|${b}` : `${b}|${a}`)
 
@@ -51,30 +50,7 @@ export function regionsOf(s: GameState, id: NationId): RegionId[] {
     .sort()
 }
 
-export function armiesOf(s: GameState, id: NationId): Army[] {
-  return Object.values(s.armies)
-    .filter((a) => a.owner === id)
-    .sort((a, b) => (a.id < b.id ? -1 : 1))
-}
-
-export function armiesIn(s: GameState, regionId: RegionId, owner?: NationId): Army[] {
-  return Object.values(s.armies)
-    .filter((a) => a.location === regionId && (owner === undefined || a.owner === owner))
-    .sort((a, b) => (a.id < b.id ? -1 : 1))
-}
-
-/** The army this nation raises from a muster, if it still has one. */
-export function boundArmy(s: GameState, territoryId: string, owner: NationId): Army | undefined {
-  for (const a of Object.values(s.armies)) if (a.homeTerritoryId === territoryId && a.owner === owner) return a
-  return undefined
-}
-
-/** True when the army is standing in the country of the muster it was raised from, and that country is still theirs. */
-export function armyIsHome(s: GameState, map: WorldMap, army: Army): boolean {
-  const t = map.territories[army.homeTerritoryId]
-  return !!t && army.location === t.regionId && s.regions[t.regionId]?.owner === army.owner
-}
-
+/** Highest factory level in any country the nation owns, summed across countries. */
 export function factoryCount(s: GameState, id: NationId): number {
   let n = 0
   for (const r of Object.values(s.regions)) if (r.owner === id) n += r.buildings.factory
@@ -176,25 +152,6 @@ export function addLog(s: GameState, kind: LogKind, text: string, nations: Natio
 }
 
 export const newId = (s: GameState, prefix: string) => `${prefix}${s.nextId++}`
-
-export function createArmy(
-  s: GameState,
-  spec: { owner: NationId; location: RegionId; units: UnitCounts; homeTerritoryId: string; training?: number | UnitTraining },
-): Army {
-  const army: Army = {
-    id: newId(s, 'a'),
-    owner: spec.owner,
-    location: spec.location,
-    units: spec.units,
-    generalId: null,
-    outOfSupplyTurns: 0,
-    entrenched: 0,
-    homeTerritoryId: spec.homeTerritoryId,
-    training: asTraining(spec.training, spec.units),
-  }
-  s.armies[army.id] = army
-  return army
-}
 
 export const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 

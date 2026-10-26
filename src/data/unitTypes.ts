@@ -12,7 +12,7 @@ export interface UnitSpec {
   requiresBuilding: BuildingType
 }
 
-/** Months after the order resolves before the unit joins its territory's army. */
+/** Months after the order resolves before the unit joins the military. */
 export const TRAIN_MONTHS: Record<UnitType, number> = {
   infantry: 1,
   armor: 2,
@@ -20,7 +20,7 @@ export const TRAIN_MONTHS: Record<UnitType, number> = {
   naval: 3,
 }
 
-/** Waiting jobs allowed at one territory, not counting the one already in production. */
+/** Jobs a nation may have waiting beyond its training slots. */
 export const TRAIN_QUEUE_LIMIT = 4
 
 export const UNIT_SPECS: Record<UnitType, UnitSpec> = {
@@ -32,21 +32,33 @@ export const UNIT_SPECS: Record<UnitType, UnitSpec> = {
 
 export interface BuildingSpec {
   name: string
+  /** Cost of the first level. Each further level costs more. */
   cost: number
+  /** Highest level this country can reach. */
+  max: number
+  /** What each level does, in one line. */
+  effect: string
   description: string
   requiresCoast?: boolean
-  /** Per-region cap, if lower than the global one. */
-  max?: number
 }
 
 export const BUILDING_SPECS: Record<BuildingType, BuildingSpec> = {
-  factory: { name: 'Factory', cost: 40, description: 'Earns money each month. Required before you can build air wings.' },
-  farm: { name: 'Farm', cost: 25, description: 'Grows food each month.' },
-  university: { name: 'University', cost: 45, description: 'Produces research each month.' },
-  barracks: { name: 'Barracks', cost: 30, description: 'Lets you recruit infantry and armor, and keeps nearby troops supplied.' },
-  port: { name: 'Port', cost: 35, description: 'Trade, fleets, and invasions by sea. Coastal countries only.', requiresCoast: true },
-  depot: { name: 'Supply Depot', cost: 30, description: 'Feeds armies farther from your capital. Lost if the country is captured.', max: 1 },
+  factory: { name: 'Factory', cost: 40, max: 5, effect: '+6 money a month per level. Level N lets you buy weapon level N.', description: 'Heavy industry. It pays for the war, and air wings need one.' },
+  farm: { name: 'Farm', cost: 25, max: 5, effect: '+3 food a month per level.', description: 'Feeds your people and your soldiers.' },
+  university: { name: 'University', cost: 45, max: 5, effect: '+2.5 research a month per level.', description: 'Turns money into new technology.' },
+  barracks: { name: 'Barracks', cost: 30, max: 5, effect: '+1 training slot and +0.75 defenders per level.', description: 'Trains infantry and armor, and holds the border.' },
+  port: { name: 'Port', cost: 35, max: 3, effect: '+3 money from trade per level. Fleets and sea attacks need one.', description: 'Trade, fleets, and invasions by sea. Coastal countries only.', requiresCoast: true },
+  civic: { name: 'Civic Hall', cost: 30, max: 3, effect: '+0.6 influence and +0.3 research a month per level.', description: 'Offices and schools.' },
 }
+
+/** Money for the next level of a building. Level 0 costs the base price. */
+export function buildingCost(building: BuildingType, level: number): number {
+  const step = Math.max(0, Math.floor(level))
+  return Math.round(BUILDING_SPECS[building].cost * (1 + step * 0.6))
+}
+
+/** Training slots every nation has before any barracks. */
+export const BASE_TRAIN_SLOTS = 2
 
 export interface LawSpec {
   name: string
@@ -74,7 +86,6 @@ export const PROPOSAL_COSTS: Record<ProposalKind, number> = {
   alliance: 25,
   trade: 5,
   callToArms: 10,
-  arms: 10,
 }
 
 export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
@@ -83,10 +94,9 @@ export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
   alliance: 'Defensive alliance',
   trade: 'Trade deal',
   callToArms: 'Call to arms',
-  arms: 'Weapons contract',
 }
 
-/** Repeatable drilling at a home muster. Rank 0 is Green; rank 5 is Guard. */
+/** Repeatable drilling. Rank 0 is Green; rank 5 is Guard. */
 export const TRAINING = {
   max: 5,
   bonusPerLevel: 0.08,
@@ -133,17 +143,15 @@ export function asTraining(raw: unknown, units?: UnitCounts): UnitTraining {
   return out
 }
 
-/** Domestic industry and foreign arms deals. One live contract per unit type. */
-export const ARMS = {
-  maxTier: 3,
-  months: 8,
-  attackPerTier: 0.1,
-  domesticCost: [50, 90, 140] as const,
-  /** Monthly price a seller of that tier usually asks. */
-  foreignPay: [8, 16, 28] as const,
-  maxPay: 200,
-  minMonths: 3,
-  maxMonths: 8,
+/** Permanent weapon levels. Each level raises one unit type's attack and defense. */
+export const WEAPONS = {
+  maxLevel: 5,
+  bonusPerLevel: 0.06,
+}
+
+/** Money for the next weapon level. Level 0 costs 40. */
+export function weaponCost(level: number): number {
+  return Math.round(40 * (1 + 0.8 * Math.max(0, Math.floor(level))))
 }
 
 export interface MarketSpec {

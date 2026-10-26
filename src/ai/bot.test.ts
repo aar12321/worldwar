@@ -5,7 +5,7 @@ import { applyEventChoice } from '../engine/events'
 import { enemiesOf } from '../engine/helpers'
 import { resolveTurn } from '../engine/resolveTurn'
 import { createRng } from '../engine/rng'
-import { giveRegions, lineMap, startState } from '../engine/__tests__/fixtures'
+import { giveRegions, lineMap, setMilitary, startState } from '../engine/__tests__/fixtures'
 import type { Difficulty, GameState, Proposal, ProposalDraft } from '../engine/types'
 import { getWorld } from '../map/world'
 import { generateAllBotOrders, generateBotOrders } from './bot'
@@ -156,41 +156,30 @@ describe('bots at war with the player', () => {
     s.turn = turn
     s.wars.push('r0|r1')
     s.warStarted['r0|r1'] = 5
-    for (const a of Object.values(s.armies)) a.units = a.owner === 'r1' ? { infantry: 80, armor: 20, air: 10, naval: 0 } : { infantry: 1, armor: 0, air: 0, naval: 0 }
+    setMilitary(s, 'r1', { infantry: 80, armor: 20, air: 10 })
+    setMilitary(s, 'r0', { infantry: 1 })
     return s
   }
   const attacksPlayer = (s: GameState) => generateBotOrders(s, map, 'r1').some((o) => o.type === 'attack' && o.target === 'r0')
 
-  it('give the player a couple of months before the first attack', () => {
+  it('give the player a month before the first attack', () => {
     expect(attacksPlayer(front(5))).toBe(false)
-    expect(attacksPlayer(front(7))).toBe(false)
-    expect(attacksPlayer(front(9))).toBe(true)
+    expect(attacksPlayer(front(6))).toBe(false)
+    expect(attacksPlayer(front(7))).toBe(true)
   })
 })
 
 describe('bot production', () => {
   it('grows with the difficulty setting', () => {
     const { map: world } = getWorld()
-    const recruits = (difficulty: Difficulty) => {
+    const queued = (difficulty: Difficulty) => {
       const s = createInitialState(world, { playerRegionId: 'china', seed: 3, victoryShare: 0.6, difficulty })
       s.wars.push('france|germany')
       s.nations.germany.resources.capital = 600
-      let count = 0
-      const sites = new Set<string>()
-      for (let turn = 2; turn <= 8; turn++) {
-        s.turn = turn
-        for (const o of generateBotOrders(s, world, 'germany')) {
-          if (o.type !== 'recruit') continue
-          count++
-          sites.add(o.territoryId)
-        }
-      }
-      return { count, sites: sites.size }
+      s.turn = 3
+      return generateBotOrders(s, world, 'germany').filter((o) => o.type === 'queueTrain').length
     }
-    const easy = recruits('easy')
-    const hard = recruits('hard')
-    expect(hard.count).toBeGreaterThan(easy.count)
-    expect(hard.sites).toBeGreaterThan(1)
+    expect(queued('hard')).toBeGreaterThan(queued('easy'))
   })
 })
 

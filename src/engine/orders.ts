@@ -1,27 +1,24 @@
-import { UPGRADE_SPECS, upgradeCost } from '../data/development'
 import { TECH_BY_ID } from '../data/techTree'
-import { ARMS, BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, trainingCost } from '../data/unitTypes'
+import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
+import { nextWeaponLevel } from './arms'
 import { validateProposal } from './diplomacy'
-import { computeEconomy } from './economy'
-import { armyIsHome, atWar, boundArmy, canUseUnit, factoryCount, hasCasusBelli, hasPact, isAllied } from './helpers'
-import { attackableTerritoryIds, territoryOwner } from './territory'
+import { buildingCap, computeEconomy, regionWorkforce } from './economy'
+import { atWar, canUseUnit, hasCasusBelli, hasPact, isAllied, totalUnits } from './helpers'
+import { trainingSlots } from './training'
 import type { GameState, Order, UnitType, WorldMap } from './types'
-import { canReach } from './warfare'
+import { canAttackRegion } from './warfare'
 
-export const MAX_BUILDINGS_PER_TYPE = 12
+/** Orders that wait for the month to end. Everything else happens the moment you issue it. */
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance'])
 
-/** Blocks recruitment that would march a nation into a food shortage. */
-export function foodForTroops(s: GameState, map: WorldMap, nationId: string, unit: UnitType, pending: Order[]): string | null {
+/** Blocks training that would march a nation into a food shortage. */
+export function foodForTroops(s: GameState, map: WorldMap, nationId: string, unit: UnitType): string | null {
   const nation = s.nations[nationId]
   const spec = UNIT_SPECS[unit]
   const econ = computeEconomy(s, map, nationId)
-  const queued = pending.reduce((sum, order) => {
-    if ((order.type === 'recruit' || order.type === 'queueTrain') && order.nationId === nationId) return sum + UNIT_SPECS[order.unit].food
-    return sum
-  }, 0)
   const training = (s.trainingQueue ?? []).reduce((sum, job) => (job.nationId === nationId ? sum + UNIT_SPECS[job.unit].food : sum), 0)
   if (nation.foodShortage || nation.resources.food <= 0) return 'Not enough food to feed them. Build a farm first.'
-  if (econ.netFood < spec.food + queued + training && nation.resources.food < econ.foodConsumption * 2) return 'Not enough food to feed them. Build a farm first.'
+  if (econ.netFood < spec.food + training && nation.resources.food < econ.foodConsumption * 2) return 'Not enough food to feed them. Build a farm first.'
   return null
 }
 
@@ -36,21 +33,17 @@ export function orderCost(s: GameState, o: Order): OrderCost {
   const c: OrderCost = { capital: 0, pp: 0, tp: 0, manpower: 0 }
   switch (o.type) {
     case 'build':
-      c.capital = BUILDING_SPECS[o.building].cost
+      c.capital = buildingCost(o.building, s.regions[o.regionId]?.buildings[o.building] ?? 0)
       break
-    case 'recruit':
     case 'queueTrain':
       c.capital = UNIT_SPECS[o.unit].capitalCost
       c.manpower = UNIT_SPECS[o.unit].manpowerCost
       break
-    case 'develop':
-      c.capital = upgradeCost(o.upgrade, s.territoryDev?.[o.territoryId]?.[o.upgrade] ?? 0)
-      break
     case 'train':
-      c.capital = trainingCost(s.armies[o.armyId]?.training[o.unit] ?? 0)
+      c.capital = trainingCost(s.nations[o.nationId]?.military.drill[o.unit] ?? 0)
       break
-    case 'signContract':
-      c.capital = ARMS.domesticCost[o.tier - 1] ?? 0
+    case 'upgradeWeapons':
+      c.capital = weaponCost(s.nations[o.nationId]?.military.weapons[o.unit] ?? 0)
       break
     case 'research':
       c.tp = TECH_BY_ID[o.techId]?.cost ?? 0
@@ -106,22 +99,6 @@ export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Or
   return null
 }
 
-function musterReady(s: GameState, map: WorldMap, nationId: string, territoryId: string, unit: UnitType, requireHome: boolean): string | null {
-  const n = s.nations[nationId]
-  const t = map.territories[territoryId]
-  if (!t) return 'Unknown territory'
-  const r = s.regions[t.regionId]
-  if (r?.owner !== nationId) return 'You do not control this territory'
-  if (!canUseUnit(n, unit)) return 'Technology required'
-  const spec = UNIT_SPECS[unit]
-  if (r.buildings[spec.requiresBuilding] <= 0) return `Requires a ${BUILDING_SPECS[spec.requiresBuilding].name}`
-  if (requireHome) {
-    const bound = boundArmy(s, t.id, nationId)
-    if (bound && !armyIsHome(s, map, bound)) return 'Army must return to this muster to recruit'
-  }
-  return null
-}
-
 function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
   switch (o.type) {
@@ -133,24 +110,21 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     }
     case 'build': {
       const r = s.regions[o.regionId]
-      if (r?.owner !== o.nationId) return 'You do not control this region'
+      if (r?.owner !== o.nationId) return 'You do not control this country'
       if (BUILDING_SPECS[o.building].requiresCoast && !map.regions[o.regionId].coastal) return 'Requires a coastline'
-      const queued = pending.filter((p) => p.type === 'build' && p.regionId === o.regionId && p.building === o.building).length
-      const underway = (s.projects ?? []).filter((p) => p.kind === 'build' && p.regionId === o.regionId && p.building === o.building).length
-      if (queued + underway > 0) return 'Already building one here'
-      const cap = BUILDING_SPECS[o.building].max ?? MAX_BUILDINGS_PER_TYPE
-      if (r.buildings[o.building] >= cap) return cap === 1 ? 'Already built here' : 'Region is at capacity'
+      const cap = buildingCap(regionWorkforce(r, map.regions[o.regionId]), o.building)
+      if (r.buildings[o.building] >= cap) return `${BUILDING_SPECS[o.building].name} is at its highest level (${cap})`
       return null
     }
-    case 'recruit':
     case 'queueTrain': {
-      const ready = musterReady(s, map, o.nationId, o.territoryId, o.unit, o.type === 'recruit')
-      if (ready) return ready
-      const hungry = foodForTroops(s, map, o.nationId, o.unit, pending)
+      if (!canUseUnit(n, o.unit)) return 'Technology required'
+      const spec = UNIT_SPECS[o.unit]
+      const owned = Object.values(s.regions).filter((r) => r.owner === o.nationId)
+      if (!owned.some((r) => r.buildings[spec.requiresBuilding] > 0)) return `Requires a ${BUILDING_SPECS[spec.requiresBuilding].name}`
+      const hungry = foodForTroops(s, map, o.nationId, o.unit)
       if (hungry) return hungry
-      const live = (s.trainingQueue ?? []).filter((job) => job.territoryId === o.territoryId && job.nationId === o.nationId).length
-      const queued = pending.filter((p) => (p.type === 'queueTrain' || p.type === 'recruit') && p.territoryId === o.territoryId).length
-      if (live + queued >= TRAIN_QUEUE_LIMIT) return 'Training queue is full'
+      const waiting = (s.trainingQueue ?? []).filter((job) => job.nationId === o.nationId).length
+      if (waiting >= trainingSlots(s, o.nationId) + TRAIN_QUEUE_LIMIT) return 'Training queue is full'
       return null
     }
     case 'cancelTrain': {
@@ -158,51 +132,14 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (!job || job.nationId !== o.nationId) return 'No such training'
       return null
     }
-    case 'develop': {
-      const t = map.territories[o.territoryId]
-      if (!t) return 'Unknown territory'
-      if (territoryOwner(s, map, o.territoryId) !== o.nationId) return 'You do not control this territory'
-      const spec = UPGRADE_SPECS[o.upgrade]
-      const level = s.territoryDev?.[o.territoryId]?.[o.upgrade] ?? 0
-      const queued = pending.filter((p) => p.type === 'develop' && p.territoryId === o.territoryId && p.upgrade === o.upgrade).length
-      const underway = (s.projects ?? []).filter((p) => p.kind === 'develop' && p.territoryId === o.territoryId && p.upgrade === o.upgrade).length
-      if (queued + underway > 0) return 'Already building one here'
-      if (level >= spec.max) return 'Already fully developed'
-      return null
-    }
     case 'train': {
-      const a = s.armies[o.armyId]
-      if (!a || a.owner !== o.nationId) return 'Not your army'
-      if (!armyIsHome(s, map, a)) return 'Army must be at its home muster'
-      if ((a.units[o.unit] ?? 0) < 0.05) return 'No troops of that type'
-      if ((a.training[o.unit] ?? 0) >= TRAINING.max) return 'Already fully trained'
-      const assigning = pending.find((p) => p.type === 'assignGeneral' && p.armyId === a.id)
-      const generalId = assigning && assigning.type === 'assignGeneral' ? assigning.generalId : a.generalId
-      if (generalId) return 'A general trains this army for free'
-      if (pending.some((p) => p.type === 'train' && p.armyId === a.id && p.unit === o.unit)) return 'Already training'
+      if (n.military.units[o.unit] < 0.05) return 'No troops of that type'
+      if (n.military.drill[o.unit] >= TRAINING.max) return 'Already fully trained'
+      if (n.military.commanderId) return 'A commander trains your military for free'
       return null
     }
-    case 'rebase': {
-      const a = s.armies[o.armyId]
-      if (!a || a.owner !== o.nationId) return 'Not your army'
-      const t = map.territories[o.territoryId]
-      if (!t) return 'Unknown territory'
-      if (s.regions[t.regionId]?.owner !== o.nationId) return 'You do not control this territory'
-      if (a.location !== t.regionId) return 'Army must be standing in that country'
-      if (a.homeTerritoryId === t.id) return 'Already based here'
-      const occupant = boundArmy(s, t.id, o.nationId)
-      if (occupant && occupant.id !== a.id) return 'That muster already has an army'
-      if (pending.some((p) => p.type === 'rebase' && p.territoryId === t.id && p.armyId !== a.id)) return 'That muster already has an army'
-      return null
-    }
-    case 'signContract': {
-      if (!Number.isInteger(o.tier) || o.tier < 1 || o.tier > ARMS.maxTier) return 'Invalid tier'
-      if (!canUseUnit(n, o.unit)) return 'Technology required'
-      const factories = factoryCount(s, o.nationId)
-      if (factories < o.tier) return factories === 0 ? 'Requires a Factory' : `Needs ${o.tier} factories`
-      if (pending.some((p) => p.type === 'signContract' && p.unit === o.unit)) return 'Already queued'
-      return null
-    }
+    case 'upgradeWeapons':
+      return nextWeaponLevel(s, o.nationId, o.unit).error
     case 'research': {
       const t = TECH_BY_ID[o.techId]
       if (!t) return 'Unknown technology'
@@ -212,49 +149,20 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (!t.requires.every((r) => n.techs.includes(r) || queuedTechs.includes(r))) return 'Prerequisites missing'
       return null
     }
-    case 'move': {
-      const a = s.armies[o.armyId]
-      if (!a || a.owner !== o.nationId) return 'Not your army'
-      if (s.regions[o.to]?.owner !== o.nationId) return 'Can only move within your territory'
-      if (!canReach(s, map, o.nationId, a.location, o.to, 'move').ok) return 'Not adjacent (sea moves need a port and Coastal Gunboats)'
-      return null
-    }
     case 'attack': {
-      const a = s.armies[o.armyId]
-      if (!a || a.owner !== o.nationId) return 'Not your army'
       const target = s.regions[o.target]
-      if (!target) return 'Unknown region'
-      if (target.owner === o.nationId) {
-        // Your own country: put down rebels, or retake a territory an enemy holds.
-        const holder = o.territoryId ? territoryOwner(s, map, o.territoryId) : o.nationId
-        const retake = holder !== o.nationId && atWar(s, o.nationId, holder)
-        if (!retake) return target.rebels > 0 ? null : 'Region is already yours'
-      }
+      if (!target) return 'Unknown country'
+      if (target.owner === o.nationId) return 'That country is already yours'
       const pendingWar = pending.some((p) => p.type === 'declareWar' && p.target === target.owner)
-      if (target.owner !== o.nationId && !atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
-      if (!canReach(s, map, o.nationId, a.location, o.target, 'attack').ok)
-        return 'Not adjacent. A sea invasion needs a port.'
-      if (o.territoryId) {
-        const territory = map.territories[o.territoryId]
-        if (!territory || territory.regionId !== o.target) return 'Unknown territory'
-        const legal = attackableTerritoryIds(
-          s,
-          map,
-          o.nationId,
-          a.location,
-          (owner) => atWar(s, o.nationId, owner) || pendingWar,
-          (regionId) => canReach(s, map, o.nationId, a.location, regionId, 'attack').ok,
-        )
-        if (!legal.includes(o.territoryId)) return 'That territory is not on your border'
-      }
+      if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
+      if (n.military.lastAttackTurn === s.turn) return 'Your military has already attacked this turn'
+      if (totalUnits(n.military.units) < 0.1) return 'You have no military to attack with'
+      if (!canAttackRegion(s, map, o.nationId, o.target).ok) return 'Not on your border. A sea attack needs a port.'
       return null
     }
-    case 'assignGeneral': {
-      const a = s.armies[o.armyId]
-      if (!a || a.owner !== o.nationId) return 'Not your army'
-      if (o.generalId && !n.generals.some((g) => g.id === o.generalId)) return 'Unknown general'
+    case 'assignGeneral':
+      if (o.generalId && !n.generals.some((g) => g.id === o.generalId)) return 'Unknown commander'
       return null
-    }
     case 'declareWar': {
       const t = s.nations[o.target]
       if (!t?.alive || o.target === o.nationId) return 'Invalid target'

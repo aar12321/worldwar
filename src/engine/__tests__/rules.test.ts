@@ -5,7 +5,6 @@ import { normalizeGame } from '../migrate'
 import { validateOrder } from '../orders'
 import { resolveTurn } from '../resolveTurn'
 import { createRng } from '../rng'
-import { visibleRegions } from '../visibility'
 import { giveRegions, lineMap, startState } from './fixtures'
 
 describe('tech tree', () => {
@@ -27,13 +26,6 @@ describe('tech tree', () => {
     const next = resolveTurn(s, map, [{ type: 'research', nationId: 'r0', techId: 'infra_farming' }])
     expect(next.nations.r0.techs).toContain('infra_farming')
     expect(next.nations.r0.resources.tp).toBeLessThan(100)
-  })
-
-  it('orbital satellites reveal every army', () => {
-    const s = startState(map)
-    expect(visibleRegions(s, map, 'r0')).not.toBe('all')
-    s.nations.r0.techs.push('air_satellites')
-    expect(visibleRegions(s, map, 'r0')).toBe('all')
   })
 })
 
