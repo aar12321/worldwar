@@ -1,43 +1,32 @@
 import { create } from 'zustand'
-import { normalizeGame } from './engine/migrate'
-import { PLAYER_COLOR } from './data/mapColors'
-import { turnDate } from './engine/helpers'
+import { generateAllBotOrders } from './ai/bot'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import { applyEventChoice } from './engine/events'
-import { validateOrder } from './engine/orders'
-import { QUEUED_ORDERS, advance, applyImmediate, cancelMarch, cancelProject, type SimNotice } from './engine/realtime'
+import { turnDate } from './engine/helpers'
+import { normalizeGame } from './engine/migrate'
+import { MONTH_END_ORDERS, validateOrder } from './engine/orders'
+import { applyOrderNow, resolveTurn } from './engine/resolveTurn'
 import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
-import { globeBridge, useFx } from './ui/globeBridge'
+import { useFx } from './ui/globeBridge'
 import { speak } from './ui/plain'
 
-const SAVE_KEY = 'worlds-of-others-save-v2'
-const ORDERS_KEY = 'worlds-of-others-orders-v1'
-const SETTINGS_KEY = 'worlds-of-others-settings-v1'
+const SAVE_KEY = 'worlds-of-others-save-v3'
+const ORDERS_KEY = 'worlds-of-others-orders-v3'
+const SETTINGS_KEY = 'worlds-of-others-settings-v2'
 /** Everything a crashed game may have left behind. */
 export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
-export type Panel = 'none' | 'nation' | 'tech' | 'diplomacy' | 'log' | 'settings' | 'territories' | 'military'
-export type NationTab = 'economy' | 'laws' | 'arms' | 'armies'
-
-export interface March {
-  armyId: string
-  owner: string
-  from: RegionId
-  to: RegionId
-}
+export type Panel = 'none' | 'country' | 'military' | 'tech' | 'diplomacy' | 'log' | 'settings'
+export type CountryTab = 'build' | 'economy' | 'laws'
 
 export interface Settings {
   reducedMotion: boolean
   fxSpeed: 1 | 2
-  /** How fast the live clock runs. */
-  simSpeed: 1 | 2 | 4
-  /** Which of your battles play the full-screen scene. The rest become a toast. */
-  battleScenes: 'important' | 'all' | 'off'
-  /** Quiet “what to do” prompt on the globe. */
-  showTips: boolean
-  /** 0–2 are the introduction cards. 3 means the introduction is finished. */
-  tutorialStep: number
+  /** Which battles play the round-by-round window: every battle you are in, only your attacks, or none. */
+  battleScenes: 'all' | 'mine' | 'off'
+  /** Whether the How to play window has been shown. */
+  seenHelp: boolean
 }
 
 export interface Toast {
@@ -46,34 +35,27 @@ export interface Toast {
   tone: 'info' | 'error' | 'success'
 }
 
-export interface Banner {
-  text: string
-  tone: 'good' | 'bad'
-  territoryId?: string
-}
-
-export interface Flash {
-  id: string
-  until: number
+/** What happened while the turn resolved, shown once the battles have played. */
+export interface TurnSummary {
+  turn: number
+  lines: string[]
 }
 
 interface GameStore {
   game: GameState | null
+  /** Orders that wait for Next Turn. */
   orders: Order[]
   selectedRegion: RegionId | null
-  selectedTerritory: string | null
-  selectedArmy: string | null
-  targetMode: 'move' | 'attack' | null
   panel: Panel
-  nationTab: NationTab
+  countryTab: CountryTab
   diploFocus: NationId | null
+  /** Battles waiting to play in the battle window. The first one is showing. */
   fxQueue: BattleReport[]
-  marches: March[]
-  marchStamp: number
+  /** How many battles this batch started with, for "Battle 2 of 4". */
+  fxTotal: number
+  summary: TurnSummary | null
+  helpOpen: boolean
   settings: Settings
-  paused: boolean
-  banner: Banner | null
-  flashes: Flash[]
   toasts: Toast[]
   hasSave: boolean
 
@@ -83,29 +65,20 @@ interface GameStore {
   /** Leaves a finished or unwanted game and deletes its save. */
   abandonGame(): void
   selectRegion(id: RegionId | null): void
-  focusTerritory(id: string, look?: boolean): void
-  openTerritory(id?: string): void
-  openMilitary(id?: string): void
-  selectArmy(id: string | null): void
-  setTargetMode(mode: 'move' | 'attack' | null): void
   setPanel(panel: Panel): void
-  setNationTab(tab: NationTab): void
-  openNation(tab: NationTab): void
+  setCountryTab(tab: CountryTab): void
+  openCountry(tab: CountryTab): void
   openDiplomacy(nationId: NationId | null): void
   issueOrder(order: Order): boolean
   removeOrder(index: number): void
   setPolicy(taxRate: number, draftRate: number): void
-  clickRegion(id: RegionId): void
-  step(dt: number): void
-  togglePause(): void
-  setSpeed(speed: 1 | 2 | 4): void
-  resume(): void
-  cancelLiveProject(id: string): void
-  cancelLiveMarch(armyId: string): void
-  clickTerritory(id: string): void
+  attack(target: RegionId): boolean
+  endTurn(): void
   chooseEventOption(index: number): void
   shiftFx(): void
   clearFx(): void
+  dismissSummary(): void
+  setHelp(open: boolean): void
   updateSettings(patch: Partial<Settings>): void
   toast(text: string, tone?: Toast['tone'], ms?: number): void
   dismissToast(id: number): void
@@ -113,25 +86,21 @@ interface GameStore {
 }
 
 const defaultSettings: Settings = {
-  reducedMotion: typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+  reducedMotion: typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
   fxSpeed: 1,
-  simSpeed: 1,
-  battleScenes: 'important',
-  showTips: true,
-  tutorialStep: 0,
+  battleScenes: 'all',
+  seenHelp: false,
 }
 
-/** Keeps a stored setting only if it has a value the game understands. A bad one would freeze the clock. */
+/** Keeps a stored setting only if it has a value the game understands. */
 function sanitizeSettings(raw: Partial<Settings>): Settings {
   const merged = { ...defaultSettings, ...raw }
   const oneOf = <T,>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? (value as T) : fallback)
   return {
     reducedMotion: typeof merged.reducedMotion === 'boolean' ? merged.reducedMotion : defaultSettings.reducedMotion,
     fxSpeed: oneOf(merged.fxSpeed, [1, 2], 1),
-    simSpeed: oneOf(merged.simSpeed, [1, 2, 4], 1),
-    battleScenes: oneOf(merged.battleScenes, ['important', 'all', 'off'], 'important'),
-    showTips: typeof merged.showTips === 'boolean' ? merged.showTips : true,
-    tutorialStep: Number.isFinite(merged.tutorialStep) ? merged.tutorialStep : 0,
+    battleScenes: oneOf(merged.battleScenes, ['all', 'mine', 'off'], 'all'),
+    seenHelp: merged.seenHelp === true,
   }
 }
 
@@ -142,11 +111,6 @@ function loadSettings(): Settings {
   } catch {
     return defaultSettings
   }
-}
-
-/** The clock waits while the introduction cards are on screen. */
-function introOpen(settings: Settings): boolean {
-  return settings.showTips && (settings.tutorialStep ?? 0) < 3
 }
 
 function writeOrders(orders: Order[]) {
@@ -208,87 +172,18 @@ function loadOrders(playerId: string): Order[] {
 function keptOrder(item: unknown, playerId: string): item is Order {
   if (!item || typeof item !== 'object') return false
   const order = item as Order
-  if (typeof order.type !== 'string' || order.nationId !== playerId || !QUEUED_ORDERS.has(order.type)) return false
+  if (typeof order.type !== 'string' || order.nationId !== playerId || !MONTH_END_ORDERS.has(order.type)) return false
   if (order.type === 'setPolicy') return Number.isFinite(order.taxRate) && Number.isFinite(order.draftRate)
   if (order.type === 'propose') return typeof order.target === 'string' && !!order.proposal && typeof order.proposal.kind === 'string'
   if (order.type === 'respond') return typeof order.proposalId === 'string' && typeof order.accept === 'boolean'
   if (order.type === 'research') return typeof order.techId === 'string'
-  if (order.type === 'spy') return typeof order.target === 'string' && (order.mission === 'sabotage' || order.mission === 'stealVision')
+  if (order.type === 'spy') return typeof order.target === 'string' && order.mission === 'sabotage'
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance') return typeof order.target === 'string'
-  if (order.type === 'train') return typeof order.armyId === 'string' && typeof order.unit === 'string'
   return false
 }
 
 let toastId = 1
-
-function absorb(state: GameState, notices: SimNotice[], flushOrders: boolean) {
-  const store = useGame.getState()
-  const player = state.playerId
-  const seen = new Set(store.game?.battles.map((b) => b.id) ?? [])
-  const mine = state.battles.filter((b) => !seen.has(b.id) && (b.attacker.nationId === player || b.defender.nationId === player))
-  const mode = store.settings.battleScenes
-  const fresh = mine.filter((b) => mode === 'all' || (mode === 'important' && b.captured))
-  for (const b of mine) {
-    if (b.captured || fresh.includes(b)) continue
-    const won = (b.attacker.nationId === player) === (b.winner === 'attacker')
-    store.toast(quietBattleText(b, player), won ? 'success' : 'error', 4200)
-  }
-  const now = performance.now()
-  const flashes = store.flashes.filter((flash) => flash.until > now)
-  let banner = store.banner
-  let paused = store.paused
-  let stops = 0
-  for (const notice of notices) {
-    if (notice.territoryId) {
-      flashes.push({ id: notice.territoryId, until: now + 2600 })
-      const territory = getWorld().map.territories[notice.territoryId]
-      const color = state.nations[player]?.color ?? PLAYER_COLOR
-      if (territory) useFx.getState().addRing({ lat: territory.lat, lng: territory.lng, color: notice.type === 'loss' ? '#ff453a' : color, maxRadius: 3.2 }, 1800)
-    }
-    if (notice.type === 'capture' || notice.type === 'loss') useFx.getState().shake(notice.type === 'loss' ? 1.15 : 0.7)
-    if (notice.pause) {
-      paused = true
-      stops++
-      // Several stops in one tick share one banner.
-      banner = stops === 1 ? { text: notice.text, tone: notice.type === 'loss' ? 'bad' : 'good', territoryId: notice.territoryId } : { ...banner!, text: `${banner!.text} (+${stops - 1} more)` }
-    } else store.toast(notice.text, notice.type === 'loss' ? 'error' : 'success', 4200)
-  }
-  if (flushOrders) {
-    const mineNews = state.dispatches.filter((d) => d.to === player || d.from === player)
-    for (const d of mineNews.slice(-4)) store.toast(d.text, DISPATCH_TONE[d.kind], 6000)
-  }
-  const selected = store.selectedArmy
-  if (paused || flushOrders) save(state, flushOrders ? [] : store.orders)
-  if (flashes.length) {
-    window.setTimeout(() => {
-      useGame.setState((current) => ({ flashes: current.flashes.filter((flash) => flash.until > performance.now()) }))
-    }, 2700)
-  }
-  useGame.setState({
-    game: state,
-    orders: flushOrders ? [] : store.orders,
-    fxQueue: [...store.fxQueue, ...fresh],
-    paused,
-    banner,
-    flashes,
-    selectedArmy: selected && state.armies[selected] ? selected : null,
-  })
-}
-
-function quietBattleText(b: BattleReport, player: NationId): string {
-  const where = getWorld().map.regions[b.regionId]?.name ?? 'the front'
-  const attackerWon = b.winner === 'attacker'
-  if (b.attacker.nationId === player) return attackerWon ? `Won the battle at ${where}` : `Your assault on ${where} was repulsed`
-  return attackerWon ? `Lost the battle at ${where}` : `Held the line at ${where}`
-}
-
-function heartlandOf(state: { game: GameState | null; selectedRegion: RegionId | null }): string | null {
-  const game = state.game
-  if (!game) return null
-  const regionId = state.selectedRegion && game.regions[state.selectedRegion]?.owner === game.playerId ? state.selectedRegion : game.playerId
-  return getWorld().map.territoriesByRegion[regionId]?.[0] ?? null
-}
 
 const DISPATCH_TONE: Record<Dispatch['kind'], Toast['tone']> = {
   proposal: 'info',
@@ -301,23 +196,37 @@ const DISPATCH_TONE: Record<Dispatch['kind'], Toast['tone']> = {
   expired: 'error',
 }
 
+/** Rings and a shake on the globe where land changed hands. */
+function flashCapture(regionId: RegionId, loss: boolean, color: string) {
+  const region = getWorld().map.regions[regionId]
+  if (!region) return
+  useFx.getState().addRing({ lat: region.lat, lng: region.lng, color: loss ? '#ff453a' : color, maxRadius: 3.2 }, 1800)
+  useFx.getState().shake(loss ? 1.15 : 0.7)
+}
+
+/** Which of these battles play in the window, by the player's setting. */
+function scenesFor(settings: Settings, player: NationId, battles: BattleReport[]): BattleReport[] {
+  if (settings.battleScenes === 'off') return []
+  return battles.filter((b) => b.attacker.nationId === player || (settings.battleScenes === 'all' && b.defender.nationId === player))
+}
+
+/** Lines for the turn summary: what happened to the player this turn, from the log. */
+function summaryLines(game: GameState, player: NationId): string[] {
+  return game.log.filter((e) => e.turn === game.turn - 1 && e.nations.includes(player) && e.kind !== 'battle').map((e) => e.text)
+}
+
 export const useGame = create<GameStore>((set, get) => ({
   game: null,
   orders: [],
   selectedRegion: null,
-  selectedTerritory: null,
-  selectedArmy: null,
-  targetMode: null,
   panel: 'none',
-  nationTab: 'economy',
+  countryTab: 'build',
   diploFocus: null,
   fxQueue: [],
-  marches: [],
-  marchStamp: 0,
+  fxTotal: 0,
+  summary: null,
+  helpOpen: false,
   settings: loadSettings(),
-  paused: false,
-  banner: null,
-  flashes: [],
   toasts: [],
   hasSave: hasStoredSave(),
 
@@ -325,7 +234,17 @@ export const useGame = create<GameStore>((set, get) => ({
     const { map } = getWorld()
     const game = createInitialState(map, opts)
     save(game, [])
-    set({ game, orders: [], selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], hasSave: true, paused: introOpen(get().settings), banner: null, flashes: [] })
+    set({
+      game,
+      orders: [],
+      selectedRegion: game.playerId,
+      panel: 'none',
+      fxQueue: [],
+      fxTotal: 0,
+      summary: null,
+      hasSave: true,
+      helpOpen: !get().settings.seenHelp,
+    })
   },
 
   loadGame() {
@@ -333,7 +252,7 @@ export const useGame = create<GameStore>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
       const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
-      set({ game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], marches: [], paused: false, banner: null, flashes: [] })
+      set({ game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
@@ -342,61 +261,28 @@ export const useGame = create<GameStore>((set, get) => ({
   quitToMenu() {
     const { game, orders } = get()
     if (game) save(game, orders)
-    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], hasSave: hasStoredSave() })
+    set({ game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, hasSave: hasStoredSave() })
   },
 
   abandonGame() {
     save(null)
-    set({ game: null, orders: [], selectedRegion: null, selectedTerritory: null, selectedArmy: null, targetMode: null, panel: 'none', fxQueue: [], paused: false, banner: null, hasSave: false })
+    set({ game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, hasSave: false })
   },
 
   selectRegion(id) {
-    set({ selectedRegion: id, selectedTerritory: null, targetMode: null })
-  },
-
-  focusTerritory(id, look = false) {
-    const territory = getWorld().map.territories[id]
-    if (!territory) return
-    set({ selectedTerritory: id, selectedRegion: territory.regionId, targetMode: null })
-    const api = globeBridge.api
-    if (!look || !api) return
-    const current = api.pointOfView()
-    const altitude = current && current.altitude >= 1.5 ? current.altitude : 1.8
-    api.pointOfView({ lat: territory.lat, lng: territory.lng, altitude }, get().settings.reducedMotion ? 0 : 700)
-  },
-
-  openTerritory(id) {
-    const territoryId = id ?? get().selectedTerritory ?? heartlandOf(get())
-    const territory = territoryId ? getWorld().map.territories[territoryId] : null
-    set({ panel: 'territories', diploFocus: null, selectedTerritory: territoryId, ...(territory ? { selectedRegion: territory.regionId } : {}) })
-  },
-
-  openMilitary(id) {
-    const territoryId = id ?? get().selectedTerritory ?? heartlandOf(get())
-    const territory = territoryId ? getWorld().map.territories[territoryId] : null
-    set({ panel: 'military', diploFocus: null, selectedTerritory: territoryId, ...(territory ? { selectedRegion: territory.regionId } : {}) })
-  },
-
-  selectArmy(id) {
-    const game = get().game
-    const army = id && game ? game.armies[id] : null
-    set({ selectedArmy: id, targetMode: null, ...(army ? { selectedRegion: army.location } : {}) })
-  },
-
-  setTargetMode(mode) {
-    set({ targetMode: mode })
+    set({ selectedRegion: id })
   },
 
   setPanel(panel) {
     set((st) => ({ panel: st.panel === panel ? 'none' : panel, diploFocus: null }))
   },
 
-  setNationTab(tab) {
-    set({ nationTab: tab })
+  setCountryTab(tab) {
+    set({ countryTab: tab })
   },
 
-  openNation(tab) {
-    set({ panel: 'nation', nationTab: tab, diploFocus: null })
+  openCountry(tab) {
+    set({ panel: 'country', countryTab: tab, diploFocus: null })
   },
 
   openDiplomacy(nationId) {
@@ -407,29 +293,19 @@ export const useGame = create<GameStore>((set, get) => ({
     const { game, orders } = get()
     if (!game) return false
     const { map } = getWorld()
-    if (!QUEUED_ORDERS.has(order.type)) {
-      const result = applyImmediate(game, map, order)
+    if (!MONTH_END_ORDERS.has(order.type)) {
+      const next = structuredClone(game)
+      const result = applyOrderNow(next, map, order)
       if (result.error) {
         get().toast(result.error, 'error')
         return false
       }
-      absorb(result.state, result.notices, false)
-      save(result.state)
+      set({ game: next })
+      save(next)
       return true
     }
     let rest = orders
-    if (order.type === 'move' || order.type === 'attack')
-      rest = orders.filter((o) => !((o.type === 'move' || o.type === 'attack') && o.armyId === order.armyId))
-    else if (order.type === 'respond') rest = orders.filter((o) => !(o.type === 'respond' && o.proposalId === order.proposalId))
-    else if (order.type === 'train') rest = orders.filter((o) => !(o.type === 'train' && o.armyId === order.armyId && o.unit === order.unit))
-    else if (order.type === 'assignGeneral') {
-      rest = orders.filter((o) => !(o.type === 'assignGeneral' && (o.armyId === order.armyId || (!!order.generalId && o.generalId === order.generalId))))
-      if (order.generalId) rest = rest.filter((o) => !(o.type === 'train' && o.armyId === order.armyId))
-    }
-    else if (order.type === 'rebase') rest = orders.filter((o) => !(o.type === 'rebase' && o.armyId === order.armyId))
-    else if (order.type === 'develop') rest = orders.filter((o) => !(o.type === 'develop' && o.territoryId === order.territoryId && o.upgrade === order.upgrade))
-    else if (order.type === 'cancelTrain') rest = orders.filter((o) => !(o.type === 'cancelTrain' && o.jobId === order.jobId))
-    else if (order.type === 'signContract') rest = orders.filter((o) => !(o.type === 'signContract' && o.unit === order.unit))
+    if (order.type === 'respond') rest = orders.filter((o) => !(o.type === 'respond' && o.proposalId === order.proposalId))
     const err = validateOrder(game, map, order, rest)
     if (err) {
       get().toast(err, 'error')
@@ -458,84 +334,58 @@ export const useGame = create<GameStore>((set, get) => ({
     writeOrders(next)
   },
 
-  clickRegion(id) {
-    const { targetMode, selectedArmy, game } = get()
-    if (targetMode && selectedArmy && game) {
-      const ok =
-        targetMode === 'move'
-          ? get().issueOrder({ type: 'move', nationId: game.playerId, armyId: selectedArmy, to: id })
-          : get().issueOrder({ type: 'attack', nationId: game.playerId, armyId: selectedArmy, target: id })
-      if (ok) {
-        const { map } = getWorld()
-        get().toast(`${targetMode === 'move' ? 'Move' : 'Attack'} order issued: ${map.regions[id].name}`, 'success')
-        set({ targetMode: null })
-      }
-      return
+  /** Your military attacks a country now. The battle window plays it round by round. */
+  attack(target) {
+    const { game, settings } = get()
+    if (!game) return false
+    const { map } = getWorld()
+    const next = structuredClone(game)
+    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target })
+    if (result.error || !result.battle) {
+      get().toast(result.error ?? 'The attack could not be made', 'error')
+      return false
     }
-    const current = get().selectedTerritory
-    const territory = current ? getWorld().map.territories[current] : null
-    set({ selectedRegion: id, targetMode: null, selectedTerritory: territory?.regionId === id ? current : null })
-  },
-
-  step(dt) {
-    const { game, orders, settings, fxQueue, paused } = get()
-    if (!game || paused || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
-    const result = advance(game, getWorld().map, dt * (settings.simSpeed ?? 1), orders)
-    absorb(result.state, result.notices, result.flushOrders)
-  },
-
-  togglePause() {
-    const { game, paused, banner } = get()
-    if (!game) return
-    if (paused) {
-      set({ paused: false, banner: null })
-      return
+    const queue = settings.battleScenes === 'off' ? [] : [result.battle]
+    if (result.battle.captured) flashCapture(target, false, next.nations[game.playerId].color)
+    set({ game: next, fxQueue: [...get().fxQueue, ...queue], fxTotal: get().fxQueue.length + queue.length })
+    if (!queue.length) {
+      const name = map.regions[target].name
+      get().toast(result.battle.captured ? `${name} captured` : `The attack on ${name} was repulsed`, result.battle.captured ? 'success' : 'error', 5000)
     }
-    set({ paused: true, banner: banner ?? { text: 'Paused', tone: 'good' } })
-    save(game, get().orders)
-  },
-
-  setSpeed(speed) {
-    get().updateSettings({ simSpeed: speed })
-    if (get().paused) set({ paused: false, banner: null })
-  },
-
-  resume() {
-    set({ paused: false, banner: null })
-  },
-
-  cancelLiveProject(id) {
-    const { game } = get()
-    if (!game) return
-    const next = cancelProject(game, id)
-    if (next === game) return
     save(next)
-    set({ game: next })
-    get().toast('Construction cancelled. What you get back is in your treasury.', 'info')
+    return true
   },
 
-  cancelLiveMarch(armyId) {
-    const { game } = get()
-    if (!game) return
-    const next = cancelMarch(game, armyId)
-    if (next === game) return
-    save(next)
-    set({ game: next })
-  },
-
-  clickTerritory(id) {
-    const territory = getWorld().map.territories[id]
-    if (!territory) return
-    const { targetMode, selectedArmy, game } = get()
-    if (targetMode === 'attack' && selectedArmy && game) {
-      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, armyId: selectedArmy, target: territory.regionId, territoryId: id })
-      if (ok) {
-        get().toast(`Attacking ${territory.name}`, 'success')
-        set({ targetMode: null })
+  endTurn() {
+    const { game, orders, settings, fxQueue } = get()
+    if (!game || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
+    const { map } = getWorld()
+    const botOrders = generateAllBotOrders(game, map)
+    const next = resolveTurn(game, map, [...orders, ...botOrders])
+    const player = game.playerId
+    // Attacks on you play first, then the rebel uprisings.
+    const mine = next.battles
+      .filter((b) => b.attacker.nationId === player || b.defender.nationId === player)
+      .sort((a, b) => Number(b.defender.nationId === player && b.attacker.nationId !== 'rebels') - Number(a.defender.nationId === player && a.attacker.nationId !== 'rebels'))
+    const fx = scenesFor(settings, player, mine)
+    for (const b of mine) if (b.captured) flashCapture(b.regionId, b.defender.nationId === player, next.nations[player]?.color ?? '#fff')
+    save(next, [])
+    const lines = summaryLines(next, player)
+    set({
+      game: next,
+      orders: [],
+      fxQueue: fx,
+      fxTotal: fx.length,
+      summary: lines.length ? { turn: next.turn - 1, lines } : null,
+    })
+    const mineNews = next.dispatches.filter((d) => d.to === player || d.from === player)
+    for (const d of mineNews.slice(-4)) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
+    if (!fx.length) {
+      for (const b of mine) {
+        const name = map.regions[b.regionId]?.name ?? 'the front'
+        if (b.captured) get().toast(b.defender.nationId === player ? `${name} was taken from you` : `${name} captured`, b.defender.nationId === player ? 'error' : 'success', 6000)
       }
-      return
     }
-    get().focusTerritory(id, true)
   },
 
   chooseEventOption(index) {
@@ -551,7 +401,16 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   clearFx() {
-    set({ fxQueue: [] })
+    set({ fxQueue: [], fxTotal: 0 })
+  },
+
+  dismissSummary() {
+    set({ summary: null })
+  },
+
+  setHelp(open) {
+    set({ helpOpen: open })
+    if (!open && !get().settings.seenHelp) get().updateSettings({ seenHelp: true })
   },
 
   updateSettings(patch) {
@@ -567,8 +426,9 @@ export const useGame = create<GameStore>((set, get) => ({
   toast(text, tone = 'info', ms = 3500) {
     const id = toastId++
     const shown = tone === 'error' ? speak(text) : text
+    const life = tone === 'error' ? Math.max(ms, 8000) : ms
     set((st) => ({ toasts: [...st.toasts.slice(-3), { id, text: shown, tone }] }))
-    setTimeout(() => get().dismissToast(id), ms)
+    setTimeout(() => get().dismissToast(id), life)
   },
 
   dismissToast(id) {

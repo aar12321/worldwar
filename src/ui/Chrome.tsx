@@ -2,15 +2,15 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { turnDate } from '../engine/helpers'
 import { describeOrder } from '../engine/resolveTurn'
-import { conquestGoal, populationShare, territoriesTaken } from '../engine/victory'
+import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { useGame, type Panel } from '../store'
 import { usePlayerView } from './hooks'
+import { Modal } from './Modal'
 
 const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
-  { panel: 'territories', label: 'Land', key: 'R', icon: <LandIcon /> },
+  { panel: 'country', label: 'Country', key: 'C', icon: <NationIcon /> },
   { panel: 'military', label: 'Military', key: 'M', icon: <MilitaryIcon /> },
-  { panel: 'nation', label: 'Nation', key: 'N', icon: <NationIcon /> },
   { panel: 'tech', label: 'Research', key: 'T', icon: <ResearchIcon /> },
   { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <PeopleIcon /> },
   { panel: 'log', label: 'News', key: 'L', icon: <NewsIcon /> },
@@ -26,20 +26,20 @@ export function NavRail() {
     return unanswered.length
   })
   return (
-    <nav className="nav-dock absolute left-3 z-30 flex flex-col" aria-label="Game sections">
-      <div className="glass max-h-full overflow-y-auto scroll-thin rounded-[22px] p-1.5 flex flex-col gap-0.5">
+    <nav className="nav-dock" aria-label="Game sections">
+      <div className="surface max-h-full overflow-y-auto scroll-thin rounded-[22px] p-1.5 flex flex-col gap-0.5">
         {NAV.map((n) => (
           <button
             key={n.panel}
             onClick={() => setPanel(n.panel)}
-            aria-current={panel === n.panel ? 'page' : undefined}
-            className={`nav-btn relative w-[72px] h-[52px] rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-colors ${panel === n.panel ? 'bg-white/14 text-white' : 'text-white/55 hover:text-white hover:bg-white/8'}`}
+            aria-pressed={panel === n.panel}
+            className={`nav-btn relative w-[72px] h-[56px] rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-colors ${panel === n.panel ? 'bg-white/16 text-white' : 'text-white/75 hover:text-white hover:bg-white/8'}`}
             title={n.key ? `${n.label} (${n.key})` : n.label}
           >
             {n.icon}
-            <span className="text-[11px] font-medium tracking-tight">{n.label}</span>
+            <span className="text-[12px] font-medium tracking-tight">{n.label}</span>
             {n.panel === 'diplomacy' && offers > 0 && (
-              <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full bg-[#ff453a] text-[10px] font-semibold text-white flex items-center justify-center">{offers}</span>
+              <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full bg-[#ff453a] text-[11px] font-semibold text-white flex items-center justify-center">{offers}</span>
             )}
           </button>
         ))}
@@ -55,9 +55,9 @@ export function OrdersTray() {
   const { game, orders } = view
   const { map } = getWorld()
   return (
-    <div className="orders-tray absolute bottom-6 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
-      <div className="glass rounded-full px-3 py-1.5 flex items-center gap-2 overflow-x-auto scroll-thin">
-        <span className="label whitespace-nowrap px-1">This month</span>
+    <div className="orders-tray absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
+      <div className="surface rounded-full px-3 py-1.5 flex items-center gap-2 overflow-x-auto scroll-thin">
+        <span className="label whitespace-nowrap px-1">Next turn</span>
         <AnimatePresence initial={false}>
           {orders.map((o, i) => (
             <motion.button
@@ -66,7 +66,7 @@ export function OrdersTray() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               onClick={() => removeOrder(i)}
-              className={`whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium hover:line-through ${o.type === 'attack' || o.type === 'declareWar' ? 'bg-[#ff453a]/18 text-[#ff8a84]' : 'bg-white/10 text-white/90'}`}
+              className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-medium hover:line-through bg-white/10 text-white/90"
               title="Click to cancel"
             >
               {describeOrder(game, map, o)}
@@ -78,54 +78,11 @@ export function OrdersTray() {
   )
 }
 
-export function TargetHint() {
-  const targetMode = useGame((s) => s.targetMode)
-  const setTargetMode = useGame((s) => s.setTargetMode)
-  return (
-    <AnimatePresence>
-      {targetMode && (
-        <motion.div initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -8, opacity: 0 }} className="absolute left-1/2 -translate-x-1/2 z-30" style={{ top: 'calc(var(--chrome-bottom, 7rem) + 0.5rem)' }}>
-          <div className="glass rounded-full px-4 py-2 text-[13px] flex items-center gap-3">
-            <span className="font-semibold">{targetMode === 'attack' ? 'Choose where to attack' : 'Choose where to move'}</span>
-            <span className="text-white/60">{targetMode === 'attack' ? 'Click a highlighted border territory.' : 'Click a highlighted country.'}</span>
-            <button className="btn btn-quiet" onClick={() => setTargetMode(null)}>
-              Cancel
-            </button>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
-
-export function LiveBanner() {
-  const banner = useGame((s) => s.banner)
-  const paused = useGame((s) => s.paused)
-  const resume = useGame((s) => s.resume)
-  const sceneOn = useGame((s) => s.fxQueue.length > 0)
-  if (!banner || !paused || sceneOn) return null
-  return (
-    <motion.div initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="live-banner pointer-events-auto self-center w-[min(440px,calc(100vw-48px))]">
-      <div className={`glass rounded-2xl px-4 py-3 flex items-center gap-3 ${banner.tone === 'bad' ? 'ring-1 ring-[#ff453a]/50' : 'ring-1 ring-[#30d158]/40'}`}>
-        <div className="min-w-0 flex-1">
-          <div className="label">
-            {banner.text.toLowerCase().includes('captured') ? 'Territory captured' : banner.tone === 'bad' ? 'Territory lost' : banner.text.toLowerCase().includes('war') ? 'War' : banner.text.toLowerCase().includes('training') ? 'Unit ready' : 'Paused'}
-          </div>
-          <p className="text-[15px] font-semibold tracking-tight">{banner.text}</p>
-        </div>
-        <button className="btn btn-primary shrink-0" onClick={resume}>
-          Resume
-        </button>
-      </div>
-    </motion.div>
-  )
-}
-
 export function Toasts() {
   const toasts = useGame((s) => s.toasts)
   const dismiss = useGame((s) => s.dismissToast)
   return (
-    <div className="pointer-events-none absolute bottom-28 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center">
+    <div className="toast-region" aria-live="polite">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.div
@@ -135,13 +92,43 @@ export function Toasts() {
             exit={{ x: 40, opacity: 0 }}
             onClick={() => dismiss(t.id)}
             role={t.tone === 'error' ? 'alert' : 'status'}
-            className={`pointer-events-auto glass rounded-2xl px-4 py-2.5 text-[13px] cursor-pointer max-w-sm ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
+            className={`pointer-events-auto surface rounded-2xl px-4 py-3 text-[14px] cursor-pointer max-w-sm ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
           >
             {t.text}
           </motion.div>
         ))}
       </AnimatePresence>
     </div>
+  )
+}
+
+/** What happened this turn, once the battles have played. */
+export function TurnSummary() {
+  const summary = useGame((s) => s.summary)
+  const fxBusy = useGame((s) => s.fxQueue.length > 0)
+  const eventPending = useGame((s) => !!s.game?.pendingEvent)
+  const outcome = useGame((s) => s.game?.outcome)
+  const dismiss = useGame((s) => s.dismissSummary)
+  if (!summary || fxBusy || outcome !== 'playing') return null
+  return (
+    <Modal
+      title={`${turnDate(summary.turn)} is over`}
+      kicker={`Turn ${summary.turn}`}
+      onClose={dismiss}
+      footer={
+        <button className="btn btn-primary px-5 py-2.5 text-[15px]" data-autofocus onClick={dismiss}>
+          {eventPending ? 'Continue' : 'Start the next turn'}
+        </button>
+      }
+    >
+      <ul className="space-y-2">
+        {summary.lines.slice(-14).map((line, i) => (
+          <li key={i} className="text-[15px] text-white/85 border-l-2 border-white/20 pl-3">
+            {line}
+          </li>
+        ))}
+      </ul>
+    </Modal>
   )
 }
 
@@ -153,41 +140,44 @@ export function GameOver() {
   if (!game || game.outcome === 'playing' || fxBusy) return null
   const win = game.outcome === 'victory'
   const p = game.nations[game.playerId]
+  const taken = countriesTaken(game)
+  const reason = win
+    ? taken >= conquestGoal(game.settings.victoryShare)
+      ? `${p.name} holds ${taken} countries beyond its first borders, as of ${turnDate(game.turn)}.`
+      : `${p.name} leads ${(populationShare(game, p.id) * 100).toFixed(1)}% of the world's people, as of ${turnDate(game.turn)}.`
+    : `${p.name} fell in ${turnDate(game.turn)}. The nation is gone, so the game is lost.`
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }} role="dialog" aria-modal="true" aria-label={win ? 'You won' : 'Your nation has fallen'} className="absolute inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md">
-      <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }} className="text-center px-6">
-        <div className="text-[56px] font-semibold tracking-tight text-white">{win ? 'You won' : 'Your nation has fallen'}</div>
-        <p className="mt-3 text-[17px] text-white/70">
-          {win
-            ? territoriesTaken(game, getWorld().map) >= conquestGoal(game.settings.victoryShare)
-              ? `${p.name} holds ${territoriesTaken(game, getWorld().map)} territories beyond its first borders, as of ${turnDate(game.turn)}.`
-              : `${p.name} leads ${(populationShare(game, p.id) * 100).toFixed(1)}% of the world's people, as of ${turnDate(game.turn)}.`
-            : `${p.name} fell in ${turnDate(game.turn)}. The nation is gone, so the game is lost.`}
-        </p>
-        <dl className="mt-6 flex justify-center gap-8 text-center">
-          <div>
-            <dt className="label">Territories taken</dt>
-            <dd className="text-[22px] font-semibold">{territoriesTaken(game, getWorld().map)}</dd>
-          </div>
-          <div>
-            <dt className="label">World population</dt>
-            <dd className="text-[22px] font-semibold">{(populationShare(game, p.id) * 100).toFixed(1)}%</dd>
-          </div>
-          <div>
-            <dt className="label">Nations left</dt>
-            <dd className="text-[22px] font-semibold">{Object.values(game.nations).filter((n) => n.alive).length}</dd>
-          </div>
-        </dl>
-        <div className="mt-8 flex justify-center gap-3">
-          <button className="btn btn-primary px-6 py-3 text-[15px]" onClick={abandon} autoFocus>
-            New game
-          </button>
-          <button className="btn px-6 py-3 text-[15px]" onClick={quit}>
+    <Modal
+      title={win ? 'You won' : 'Your nation has fallen'}
+      kicker={win ? 'Victory' : 'Defeat'}
+      tone={win ? '#30d158' : '#ff453a'}
+      footer={
+        <>
+          <button className="btn px-5 py-2.5 text-[15px]" onClick={quit}>
             Back to the menu
           </button>
+          <button className="btn btn-primary px-5 py-2.5 text-[15px]" data-autofocus onClick={abandon}>
+            New game
+          </button>
+        </>
+      }
+    >
+      <p className="text-[16px] text-white/85">{reason}</p>
+      <dl className="mt-6 grid grid-cols-3 gap-3 text-center">
+        <div className="inset-card py-3">
+          <dt className="label">Countries taken</dt>
+          <dd className="text-[26px] font-semibold">{taken}</dd>
         </div>
-      </motion.div>
-    </motion.div>
+        <div className="inset-card py-3">
+          <dt className="label">World population</dt>
+          <dd className="text-[26px] font-semibold">{(populationShare(game, p.id) * 100).toFixed(1)}%</dd>
+        </div>
+        <div className="inset-card py-3">
+          <dt className="label">Nations left</dt>
+          <dd className="text-[26px] font-semibold">{Object.values(game.nations).filter((n) => n.alive).length}</dd>
+        </div>
+      </dl>
+    </Modal>
   )
 }
 
@@ -196,15 +186,6 @@ function IconFrame({ children }: { children: ReactNode }) {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       {children}
     </svg>
-  )
-}
-
-function LandIcon() {
-  return (
-    <IconFrame>
-      <path d="M4 18V8l5 3 5-5 6 4v8" />
-      <path d="M4 18h16" />
-    </IconFrame>
   )
 }
 

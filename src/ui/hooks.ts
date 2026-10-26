@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { committedCost, type OrderCost } from '../engine/orders'
-import type { GameState, Nation, Order, RegionId } from '../engine/types'
-import { visibleRegions } from '../engine/visibility'
+import type { GameState, Nation, Order } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 
@@ -48,21 +47,6 @@ function buildPlayerView(game: GameState, orders: Order[]): PlayerView {
     orders,
     pendingPolicy,
   }
-}
-
-const visionCache = new WeakMap<GameState, Set<RegionId> | 'all'>()
-
-/** The player's fog of war, recomputed only when the game state changes. */
-export function usePlayerVision(): Set<RegionId> | 'all' {
-  const game = useGame((s) => s.game)
-  return useMemo(() => {
-    if (!game) return new Set<RegionId>()
-    const hit = visionCache.get(game)
-    if (hit) return hit
-    const vision = visibleRegions(game, getWorld().map, game.playerId)
-    visionCache.set(game, vision)
-    return vision
-  }, [game])
 }
 
 /** Matches the CSS `@media (max-width)` breakpoints, including the boundary pixel. */

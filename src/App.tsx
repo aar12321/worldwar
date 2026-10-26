@@ -1,18 +1,18 @@
 import { useEffect, useRef } from 'react'
 import { useGame } from './store'
 import { BattleFX } from './ui/BattleFX'
-import { GameOver, NavRail, OrdersTray, TargetHint, Toasts } from './ui/Chrome'
+import { GameOver, NavRail, OrdersTray, Toasts, TurnSummary } from './ui/Chrome'
 import { CountryPanel } from './ui/CountryPanel'
+import { DiplomacyPanel } from './ui/Diplomacy'
 import { EventModal } from './ui/EventModal'
 import { WorldGlobe } from './ui/Globe'
 import { useFx } from './ui/globeBridge'
+import { Help } from './ui/Help'
 import { HUD } from './ui/HUD'
-import { Setup } from './ui/Setup'
-import { DiplomacyPanel } from './ui/Diplomacy'
 import { MilitaryPanel } from './ui/MilitaryPanel'
-import { LogPanel, NationPanel, SettingsPanel } from './ui/SidePanels'
+import { Setup } from './ui/Setup'
+import { CountryDrawer, LogPanel, SettingsPanel } from './ui/SidePanels'
 import { TechTree } from './ui/TechTree'
-import { TerritoriesPanel } from './ui/TerritoriesPanel'
 
 function useShortcuts() {
   useEffect(() => {
@@ -22,24 +22,20 @@ function useShortcuts() {
       if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') return
       const st = useGame.getState()
       if (!st.game) return
-      if (st.game.pendingEvent || st.game.outcome !== 'playing') return
+      // A dialog is open: it handles its own keys.
+      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary) return
       if (e.key === 'Escape') {
-        if (st.fxQueue.length > 0) st.clearFx()
-        else if (st.targetMode) st.setTargetMode(null)
-        else if (st.panel !== 'none') st.setPanel(st.panel)
+        if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
-      } else if (e.key === ' ' || e.code === 'Space') {
+      } else if (e.key === 'Enter') {
+        // A focused button uses Enter for itself.
+        if (target.tagName === 'BUTTON' || e.repeat) return
         e.preventDefault()
-        if (!e.repeat) st.togglePause()
+        st.endTurn()
+      } else if (e.key === '?') {
+        st.setHelp(true)
       } else {
-        const map: Record<string, 'tech' | 'nation' | 'diplomacy' | 'log' | 'territories' | 'military'> = {
-          t: 'tech',
-          n: 'nation',
-          d: 'diplomacy',
-          l: 'log',
-          r: 'territories',
-          m: 'military',
-        }
+        const map: Record<string, 'tech' | 'country' | 'diplomacy' | 'log' | 'military'> = { t: 'tech', c: 'country', d: 'diplomacy', l: 'log', m: 'military' }
         const panel = map[e.key.toLowerCase()]
         if (panel) st.setPanel(panel)
       }
@@ -69,39 +65,15 @@ function ShakeLayer({ children }: { children: React.ReactNode }) {
   )
 }
 
-function useClock() {
+/** Saves when the tab is hidden or closed. The game itself saves after every order and turn. */
+function useFlushOnExit() {
   useEffect(() => {
-    let last = performance.now()
-    let acc = 0
-    let saveAcc = 0
-    let frame = 0
-    const tick = (now: number) => {
-      frame = requestAnimationFrame(tick)
-      const dt = Math.min(1, (now - last) / 1000)
-      last = now
-      acc += dt
-      if (acc < 0.1) return
-      const stepDt = acc
-      acc = 0
-      const st = useGame.getState()
-      if (!st.game || st.paused || st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0) return
-      st.step(stepDt)
-      saveAcc += stepDt
-      if (saveAcc > 5) {
-        saveAcc = 0
-        useGame.getState().persist()
-      }
-    }
-    frame = requestAnimationFrame(tick)
     const flush = () => {
       const st = useGame.getState()
       if (st.game) st.persist()
     }
     window.addEventListener('pagehide', flush)
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener('pagehide', flush)
-    }
+    return () => window.removeEventListener('pagehide', flush)
   }, [])
 }
 
@@ -109,7 +81,7 @@ export default function App() {
   const inGame = useGame((s) => !!s.game)
   const panel = useGame((s) => s.panel)
   useShortcuts()
-  useClock()
+  useFlushOnExit()
 
   return (
     <div className="relative w-full h-full select-none">
@@ -122,18 +94,18 @@ export default function App() {
         <>
           <HUD />
           <NavRail />
-          <TargetHint />
-          {panel === 'territories' && <TerritoriesPanel key="territories" />}
           {panel === 'military' && <MilitaryPanel key="military" />}
-          {panel === 'nation' && <NationPanel key="nation" />}
+          {panel === 'country' && <CountryDrawer key="country" />}
           {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
           {panel === 'log' && <LogPanel key="log" />}
           {panel === 'settings' && <SettingsPanel key="settings" />}
-          <CountryPanel />
           {panel === 'tech' && <TechTree key="tech" />}
+          <CountryPanel />
           <OrdersTray />
           <BattleFX />
+          <TurnSummary />
           <EventModal />
+          <Help />
           <GameOver />
         </>
       )}
