@@ -11,11 +11,11 @@ const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dm
 const GENERAL_LAST = ['Varga', 'Okafor', 'Takeda', 'Brandt', 'Montoya', 'Haddad', 'Volkov', 'Byrne', 'Rahman', 'Lin', 'Moreau', 'Nowak', 'Mensah', 'Petrova', 'Lindqvist', 'Sato', 'Reyes', 'Kader', 'Horvat', 'Silva']
 /** Names kept for older saves. A general's only effect is free training at home. */
 export const GENERAL_TRAITS: Record<GeneralTrait, { name: string; description: string }> = {
-  mountaineer: { name: 'General', description: 'Trains every unit in this city for free each month.' },
-  logistician: { name: 'General', description: 'Trains every unit in this city for free each month.' },
-  blitz: { name: 'General', description: 'Trains every unit in this city for free each month.' },
-  air_marshal: { name: 'General', description: 'Trains every unit in this city for free each month.' },
-  stalwart: { name: 'General', description: 'Trains every unit in this city for free each month.' },
+  mountaineer: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
+  logistician: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
+  blitz: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
+  air_marshal: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
+  stalwart: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
 }
 const TRAITS = Object.keys(GENERAL_TRAITS) as GeneralTrait[]
 

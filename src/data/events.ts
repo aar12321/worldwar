@@ -91,7 +91,7 @@ export const EVENTS: GameEventDef[] = [
     options: [
       {
         label: 'Divert Troops',
-        description: 'Crush the rising by force. Rebels appear in {region}; station or send an army there to defeat them.',
+        description: 'Crush the rising by force. Rebels appear in {region}; your military and the garrison there must defeat them.',
         effects: [{ type: 'spawnRebels', strength: 2.5 }, { type: 'stability', amount: 3 }],
       },
       {
@@ -150,7 +150,7 @@ export const EVENTS: GameEventDef[] = [
     options: [
       {
         label: 'Purge the Officers',
-        description: 'Arrest hundreds. Your armies lose cohesion, but the regime is secure.',
+        description: 'Arrest hundreds. Your military loses cohesion, but the regime is secure.',
         effects: [{ type: 'armyAttrition', fraction: 0.1 }, { type: 'stability', amount: 8 }],
       },
       {

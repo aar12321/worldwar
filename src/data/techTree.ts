@@ -11,8 +11,6 @@ export interface TechModifiers {
   researchOutput?: number
   stability?: number
   ppPerTurn?: number
-  supplyRange?: number
-  seaSupplyRange?: number
   allOutput?: number
   amphibiousPenaltyReduction?: number
 }
@@ -27,7 +25,6 @@ export interface Tech {
   description: string
   unlocksUnit?: UnitType
   enablesSeaInvasion?: boolean
-  globalVision?: boolean
   modifiers: TechModifiers
 }
 
@@ -55,17 +52,17 @@ export const TECHS: Tech[] = [
   t({ id: 'air_radar', name: 'Radar Networks', branch: 'air', tier: 3, requires: ['air_jets'], description: 'Early warning grids. Air defense +25%, infantry defense +10%.', modifiers: { unitDefense: { air: 0.25, infantry: 0.1 } } }),
   t({ id: 'air_stealth', name: 'Stealth Bombers', branch: 'air', tier: 4, requires: ['air_radar'], description: 'Radar-evading strike craft. Air attack +40%.', modifiers: { unitAttack: { air: 0.4 } } }),
   t({ id: 'air_missiles', name: 'Guided Missiles', branch: 'air', tier: 5, requires: ['air_stealth'], description: 'Precision munitions. Air +20%, armor +10%.', modifiers: { unitAttack: { air: 0.2, armor: 0.1 } } }),
-  t({ id: 'air_satellites', name: 'Orbital Satellites', branch: 'air', tier: 6, requires: ['air_missiles'], globalVision: true, description: 'Eyes in orbit. Reveals every army on the map; all defense +10%.', modifiers: { unitDefense: { infantry: 0.1, armor: 0.1, air: 0.1, naval: 0.1 } } }),
+  t({ id: 'air_satellites', name: 'Orbital Satellites', branch: 'air', tier: 6, requires: ['air_missiles'], description: 'Eyes in orbit. All defense +10%.', modifiers: { unitDefense: { infantry: 0.1, armor: 0.1, air: 0.1, naval: 0.1 } } }),
 
   t({ id: 'naval_gunboats', name: 'Coastal Gunboats', branch: 'naval', tier: 1, requires: [], unlocksUnit: 'naval', description: 'Brown-water patrol craft. Unlocks naval fleets.', modifiers: {} }),
   t({ id: 'naval_destroyers', name: 'Destroyers', branch: 'naval', tier: 2, requires: ['naval_gunboats'], enablesSeaInvasion: true, description: 'Ocean escorts. Naval attack +30%, and landings launched from your ports lose less strength.', modifiers: { unitAttack: { naval: 0.3 }, amphibiousPenaltyReduction: 0.25 } }),
   t({ id: 'naval_submarines', name: 'Submarines', branch: 'naval', tier: 3, requires: ['naval_destroyers'], description: 'Silent hunters. Naval attack +25%.', modifiers: { unitAttack: { naval: 0.25 } } }),
   t({ id: 'naval_amphibious', name: 'Amphibious Doctrine', branch: 'naval', tier: 4, requires: ['naval_submarines'], description: 'Landing craft. Sea invasion penalty halved.', modifiers: { amphibiousPenaltyReduction: 0.5 } }),
   t({ id: 'naval_carriers', name: 'Aircraft Carriers', branch: 'naval', tier: 5, requires: ['naval_amphibious'], description: 'Floating airfields. Naval +40%, air +10%.', modifiers: { unitAttack: { naval: 0.4, air: 0.1 } } }),
-  t({ id: 'naval_bluewater', name: 'Blue-Water Navy', branch: 'naval', tier: 6, requires: ['naval_carriers'], description: 'Global power projection. Sea supply range +2.', modifiers: { seaSupplyRange: 2, unitDefense: { naval: 0.3 } } }),
+  t({ id: 'naval_bluewater', name: 'Blue-Water Navy', branch: 'naval', tier: 6, requires: ['naval_carriers'], description: 'Global power projection. Naval defense +30%, sea landings lose far less strength.', modifiers: { amphibiousPenaltyReduction: 0.25, unitDefense: { naval: 0.3 } } }),
 
   t({ id: 'infra_farming', name: 'Mechanized Farming', branch: 'infra', tier: 1, requires: [], description: 'Tractors and fertilizer. Food output +25%.', modifiers: { foodOutput: 0.25 } }),
-  t({ id: 'infra_railways', name: 'Railway Networks', branch: 'infra', tier: 2, requires: ['infra_farming'], description: 'Rapid rail logistics. Supply range +1.', modifiers: { supplyRange: 1 } }),
+  t({ id: 'infra_railways', name: 'Railway Networks', branch: 'infra', tier: 2, requires: ['infra_farming'], description: 'Rapid rail logistics. Factory output +10%, food +10%.', modifiers: { factoryOutput: 0.1, foodOutput: 0.1 } }),
   t({ id: 'infra_automation', name: 'Factory Automation', branch: 'infra', tier: 3, requires: ['infra_railways'], description: 'Assembly lines. Factory output +30%, jobs needed -25%.', modifiers: { factoryOutput: 0.3, jobsReduction: 0.25 } }),
   t({ id: 'infra_universities', name: 'Research Universities', branch: 'infra', tier: 4, requires: ['infra_automation'], description: 'National research grants. Tech output +40%.', modifiers: { researchOutput: 0.4 } }),
   t({ id: 'infra_propaganda', name: 'Propaganda Networks', branch: 'infra', tier: 5, requires: ['infra_universities'], description: 'Control the narrative. Stability +10, +1 PP per turn.', modifiers: { stability: 10, ppPerTurn: 1 } }),

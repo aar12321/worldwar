@@ -140,8 +140,9 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
  * Pays for one order and runs it at once. The player's building, training, weapons, war and attack orders go through here.
  * Mutates `s`; the caller passes a copy. An attack also returns its battle report.
  */
-export function applyOrderNow(s: GameState, map: WorldMap, o: Order): { error: string | null; battle?: BattleReport } {
-  const err = validateOrder(s, map, o)
+/** `pending` are month-end orders already queued: their costs are held back from what this order may spend. */
+export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Order[] = []): { error: string | null; battle?: BattleReport } {
+  const err = validateOrder(s, map, o, pending)
   if (err) return { error: err }
   const n = s.nations[o.nationId]
   const cost = orderCost(s, o)
