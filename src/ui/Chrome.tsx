@@ -11,6 +11,7 @@ import { Modal } from './Modal'
 const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
   { panel: 'country', label: 'Country', key: 'C', icon: <NationIcon /> },
   { panel: 'military', label: 'Military', key: 'M', icon: <MilitaryIcon /> },
+  { panel: 'wars', label: 'Wars', key: 'W', icon: <WarIcon /> },
   { panel: 'tech', label: 'Research', key: 'T', icon: <ResearchIcon /> },
   { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <PeopleIcon /> },
   { panel: 'log', label: 'News', key: 'L', icon: <NewsIcon /> },
@@ -186,6 +187,16 @@ function IconFrame({ children }: { children: ReactNode }) {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       {children}
     </svg>
+  )
+}
+
+function WarIcon() {
+  return (
+    <IconFrame>
+      <path d="M5 19L19 5" />
+      <path d="M14 5h5v5" />
+      <path d="M5 5l14 14" />
+    </IconFrame>
   )
 }
 

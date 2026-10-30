@@ -440,7 +440,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         const total = totalUnits(n.military.units)
         const bigLine = lineMax(s, map, target.id) > 6
         const stance: Stance = total > 0 && armored / total > 0.45 && econ.netCapital > -10 ? 'blitz' : bigLine ? 'siege' : 'assault'
-        tryAdd({ type: 'attack', nationId, target: target.id, commit, stance }) || tryAdd({ type: 'attack', nationId, target: target.id, commit, stance: 'assault' })
+        if (!tryAdd({ type: 'attack', nationId, target: target.id, commit, stance })) tryAdd({ type: 'attack', nationId, target: target.id, commit, stance: 'assault' })
       }
     }
   }

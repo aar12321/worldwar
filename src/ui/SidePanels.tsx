@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, buildingCost } from '../data/unitTypes'
 import { buildingCap, regionWorkforce } from '../engine/economy'
-import { regionsOf, turnDate } from '../engine/helpers'
+import { enemiesOf, regionsOf, turnDate } from '../engine/helpers'
 import { BUILDING_TYPES } from '../engine/types'
 import type { LawId, LogKind } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -40,6 +40,7 @@ export function CountryDrawer() {
         {([
           ['build', 'Upgrades'],
           ['economy', 'Economy'],
+          ['people', 'People'],
           ['laws', 'Laws'],
         ] as const).map(([id, label]) => (
           <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>
@@ -149,6 +150,55 @@ export function CountryDrawer() {
             <span className="text-white/70">People at work</span>
             <span className="text-right">{Math.round(econ.laborRatio * 100)}%</span>
           </div>
+        </section>
+      )}
+
+      {tab === 'people' && (
+        <section className="space-y-3">
+          <p className="text-[14px] text-white/70">You rule these people. When their needs go unmet, they work less and fight less, and in the end they rise up.</p>
+          {[
+            {
+              label: 'Food',
+              value: econ.foodConsumption > 0 ? (econ.foodProduction / econ.foodConsumption) * 80 : 100,
+              status: player.foodShortage ? 'Starving' : econ.netFood < 0 ? 'Running down' : 'Fed',
+              tip: econ.netFood < 0 ? 'Build farms, lower the draft, or trade for food. Soldiers eat too.' : 'Enough to eat.',
+            },
+            {
+              label: 'Work',
+              value: econ.laborRatio * 100,
+              status: `${Math.round(econ.laborRatio * 100)}% of jobs filled`,
+              tip: econ.laborRatio < 0.9 ? 'Factories and farms need workers. A high draft or too many buildings leaves them empty.' : 'Your buildings are fully staffed.',
+            },
+            {
+              label: 'Pay',
+              value: 100 - player.taxRate * 250,
+              status: `${Math.round(player.taxRate * 100)}% tax`,
+              tip: player.taxRate > 0.2 ? 'Taxes above 20% anger people.' : 'Taxes are bearable.',
+            },
+            {
+              label: 'Peace',
+              value: 100 - (player.warWeariness / 60) * 100,
+              status: player.warWeariness > 25 ? 'War-weary' : player.warWeariness > 8 ? 'Tired of war' : 'Calm',
+              tip: enemiesOf(game, player.id).length > 0 ? 'Every war and every lost soldier adds to this. Peace lets it fade.' : 'No wars. Weariness is fading.',
+            },
+            {
+              label: 'Order',
+              value: player.stability,
+              status: `${Math.round(player.stability)}% stable`,
+              tip: econ.occupied > 0 ? `${econ.occupied} conquered ${econ.occupied === 1 ? 'country is' : 'countries are'} still settling in. Hold them with troops and time.` : 'Below 30%, rebels may rise.',
+            },
+          ].map((g) => (
+            <div key={g.label} className="inset-card p-3.5 space-y-1.5">
+              <div className="flex items-baseline justify-between text-[15px]">
+                <span className="font-semibold">{g.label}</span>
+                <span className="text-white/80">{g.status}</span>
+              </div>
+              <div className="h-2.5 rounded-full bg-white/12 overflow-hidden" role="img" aria-label={`${g.label} ${Math.round(Math.max(0, Math.min(100, g.value)))} out of 100`}>
+                <div className="h-full" style={{ width: `${Math.max(2, Math.min(100, g.value))}%`, background: g.value < 35 ? '#ff453a' : g.value < 60 ? '#ffd60a' : '#30d158' }} />
+              </div>
+              <p className="text-[13px] text-white/70">{g.tip}</p>
+            </div>
+          ))}
         </section>
       )}
 

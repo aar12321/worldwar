@@ -1,3 +1,5 @@
+> **Campaign update.** Wars are now multi-turn campaigns (Defense Lines, commit sizes, stances, monthly war bills, a three-war cap, occupation). Screenshots: `docs/audit/img/v3/`.
+
 # Worlds of Others: new-player audit
 
 > **Update:** the game has since become turn based, with one military per nation and no territories. Items about the live clock, pauses, territories, armies, supply and weapons contracts (P1-P5, R1-R6, R9, R11, U8, U9, F1 and related) no longer apply. Screenshots in `img/v2/` show the current game.

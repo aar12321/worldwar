@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeEconomy, lineMax } from '../economy'
+import { forecastAttack } from '../warfare'
 import { hasCombinedArms, resolveBattle, sidePower, type Combatant } from '../combat'
 import { combatMods } from '../arms'
 import { createRng } from '../rng'
@@ -199,6 +200,33 @@ describe('campaigns', () => {
     const { map, s } = front()
     s.nations.r0.resources.capital = 3
     expect(validateOrder(s, map, { type: 'attack', nationId: 'r0', target: 'r1', commit: 'main', stance: 'blitz' })).toMatch(/Not enough money/)
+  })
+})
+
+describe('the forecast', () => {
+  it('says Likely for a crushing force and Risky for a hopeless one, without changing the game', () => {
+    const strong = (() => {
+      const map = lineMap(2)
+      const s = startState(map)
+      s.wars = ['r0|r1']
+      setMilitary(s, 'r0', { infantry: 40, armor: 10, air: 6 })
+      setMilitary(s, 'r1', { infantry: 1 })
+      return { map, s }
+    })()
+    const before = JSON.stringify(strong.s)
+    const f = forecastAttack(strong.s, strong.map, 'r0', 'r1', 'allin', 'assault')!
+    expect(f.label).toBe('Likely')
+    expect(f.lineDamage).toBeGreaterThan(0)
+    expect(JSON.stringify(strong.s)).toBe(before)
+    const weak = (() => {
+      const map = lineMap(2)
+      const s = startState(map)
+      s.wars = ['r0|r1']
+      setMilitary(s, 'r0', { infantry: 1 })
+      setMilitary(s, 'r1', { infantry: 40, armor: 10 })
+      return { map, s }
+    })()
+    expect(forecastAttack(weak.s, weak.map, 'r0', 'r1', 'allin', 'assault')!.label).toBe('Risky')
   })
 })
 

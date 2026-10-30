@@ -4,6 +4,7 @@ import { combatMods } from './arms'
 import { COMMITS, STANCES, WAR, type Commit, type Stance } from '../data/war'
 import { lineMax, regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
+import { createRng } from './rng'
 import { recordBattle } from './warscore'
 import { addLog, atWar, emptyUnits, nationModifiers, newId, pairKey, regionsOf, totalUnits } from './helpers'
 import type { Rng } from './rng'
@@ -142,15 +143,16 @@ export interface AttackResult {
  * One nation's whole military attacks a country. The defender is its whole military plus the country's garrison.
  * A win takes the country. Returns null when the attack is not allowed to happen.
  */
-export function resolveAttack(
-  s: GameState,
-  map: WorldMap,
-  nationId: NationId,
-  target: RegionId,
-  rng: Rng,
-  commit: Commit = 'main',
-  stance: Stance = 'assault',
-): AttackResult | null {
+interface Setup {
+  attacker: Combatant
+  defender: Combatant
+  garrison: UnitCounts
+  share: number
+  bySea: boolean
+}
+
+/** Builds both sides of an attack, or null if it is not allowed. Shared by the real fight and the forecast. */
+function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance): Setup | null {
   const attackerNation = s.nations[nationId]
   const targetRegion = s.regions[target]
   const mr = map.regions[target]
@@ -177,6 +179,81 @@ export function resolveAttack(
   garrison.infantry = garrisonStrength(s, map, target)
   const defNotes: string[] = []
   const defender = makeCombatant(defenderNation, defenderNation.military, garrison, defNotes, 1, defendingShare(defenderNation, defNotes))
+  return { attacker, defender, garrison, share, bySea: reach.bySea }
+}
+
+export interface AttackForecast {
+  /** Share of your military this attack would send. */
+  share: number
+  winChance: number
+  /** Average Defense Line points pushed back, counting losses as zero. */
+  lineDamage: number
+  lineBefore: number
+  lineMax: number
+  /** Chance the country falls to this one attack. */
+  captureChance: number
+  /** Average divisions you lose. */
+  yourLosses: number
+  theirLosses: number
+  label: 'Likely' | 'Even' | 'Risky'
+}
+
+/** Plays the attack out several times on fixed seeds, so the War Room can show honest odds without changing the game. */
+export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs = 16): AttackForecast | null {
+  const setup = prepareAttack(s, map, nationId, target, commit, stance)
+  if (!setup) return null
+  const mr = map.regions[target]
+  const max = lineMax(s, map, target)
+  const before = Math.min(s.regions[target].line, max)
+  const spec = STANCES[stance]
+  let wins = 0
+  let damage = 0
+  let captures = 0
+  let mine = 0
+  let theirs = 0
+  for (let i = 0; i < runs; i++) {
+    const out = resolveBattle({ attacker: setup.attacker, defender: setup.defender, terrain: mr.terrain, coastal: mr.coastal }, createRng(s.seed, 90210 + i))
+    mine += totalUnits(out.attackerLosses)
+    theirs += totalUnits(out.defenderLosses)
+    if (out.winner !== 'attacker') continue
+    wins++
+    const ratio = Math.min(WAR.maxPowerRatio, Math.max(WAR.minPowerRatio, out.attackerPower / Math.max(0.1, out.defenderPower)))
+    const push = WAR.advanceBase * ratio * spec.advance
+    damage += Math.min(before, push)
+    if (push >= before) captures++
+  }
+  const winChance = wins / runs
+  return {
+    share: setup.share,
+    winChance,
+    lineDamage: damage / runs,
+    lineBefore: before,
+    lineMax: max,
+    captureChance: captures / runs,
+    yourLosses: mine / runs,
+    theirLosses: theirs / runs,
+    label: winChance >= 0.75 ? 'Likely' : winChance >= 0.4 ? 'Even' : 'Risky',
+  }
+}
+
+export function resolveAttack(
+  s: GameState,
+  map: WorldMap,
+  nationId: NationId,
+  target: RegionId,
+  rng: Rng,
+  commit: Commit = 'main',
+  stance: Stance = 'assault',
+): AttackResult | null {
+  const setup = prepareAttack(s, map, nationId, target, commit, stance)
+  if (!setup) return null
+  const { attacker, defender, garrison, share } = setup
+  const attackerNation = s.nations[nationId]
+  const targetRegion = s.regions[target]
+  const mr = map.regions[target]
+  const defenderId = targetRegion.owner
+  const defenderNation = s.nations[defenderId]
+  const spec = STANCES[stance]
 
   const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
   applyLosses(attackerNation.military, emptyUnits(), outcome.attackerLosses)

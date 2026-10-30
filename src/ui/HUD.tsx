@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { enemiesOf, turnDate } from '../engine/helpers'
+import { MAX_WARS } from '../data/war'
 import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
 import { garrisonStrength } from '../engine/warfare'
 import { getWorld } from '../map/world'
@@ -148,7 +149,7 @@ function firstWarHint({ game, player }: NonNullable<ReturnType<typeof usePlayerV
       if (!weakest || def < weakest.def) weakest = { name: map.regions[nb].name, def }
     }
   }
-  return weakest ? `Tip: ${weakest.name} is your weakest neighbor. Train troops, open its panel, declare war, then Attack.` : null
+  return weakest ? `Tip: ${weakest.name} is your weakest neighbor. Train troops, open its panel, declare war, then plan the attack in the War Room.` : null
 }
 
 export function HUD() {
@@ -189,7 +190,7 @@ export function HUD() {
             </div>
             <div className="mt-1.5 space-y-1" title={`Win by taking ${lands} countries, or by leading ${(goal * 100).toFixed(0)}% of the world's people. You lose if ${player.name} is wiped out.`}>
               <div className="flex items-center justify-between gap-3 text-[12px] text-white/70 tabular-nums">
-                <span>Countries {taken}/{lands}</span>
+                <span>Countries {taken}/{lands} · Wars {econ.warBills.length}/{MAX_WARS}</span>
                 <span>People {(share * 100).toFixed(1)}%/{(goal * 100).toFixed(0)}%</span>
               </div>
               <div className="h-1 w-full min-w-24 rounded-full bg-white/10 overflow-hidden">
@@ -213,6 +214,7 @@ export function HUD() {
             <Row k="Factories" v={signed(econ.factoryIncome)} />
             <Row k="Trade" v={signed(econ.tradeIncome)} />
             <Row k="Upkeep" v={signed(-econ.upkeep)} warn />
+            {econ.warBills.length > 0 && <Row k={`War bills (${econ.warBills.length} of ${MAX_WARS})`} v={signed(-econ.warBillTotal)} warn />}
             <Row k="Waiting for next turn" v={fmt(-committed.capital)} />
             {player.inDebt && <p className="text-[13px] text-[#ff6961]">In debt. Stability is falling.</p>}
           </Resource>

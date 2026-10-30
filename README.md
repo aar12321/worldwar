@@ -18,10 +18,13 @@ The game is turn based. One turn is one month, starting January 1936. Nothing mo
 1. Pick a nation on the main menu (search the list or click the globe), choose a victory condition (take 3, 6 or 12 countries, or lead 25% / 40% / 60% of world population), and begin.
 2. **Country** (`C`): buy upgrades for your whole country. Factory (money), Farm (food), University (research), Barracks (training slots and defenders), Port (trade and sea attacks) and Civic Hall (influence and research). Upgrades work the moment you buy them. The Economy tab sets taxes and the draft; the Laws tab passes laws.
 3. **Military** (`M`): you have one military. Train units (they arrive after 1 to 3 turns), drill each unit type, buy permanent weapon levels (0 to 5, gated by factory level), and appoint a commander who drills for free. The stat sheet shows every unit's attack and defense and where each bonus comes from. Battles use exactly those numbers.
-4. **War**: click a neighboring country, press **Declare war** (costs influence), then **Attack**. Your whole military fights the defender's whole military plus the country's garrison. A battle window plays three rounds, showing the damage each side dealt and the units lost. Win and you take the whole country. Each nation can attack once per turn.
+4. **War is a campaign.** Click a neighboring country and press **Declare war** (costs influence). Then open the **War Room** (`A`): choose how much of your military to send (Probe, Main force or All in) and how to fight (Assault, Blitz or Siege). The room shows honest odds, expected losses and what the war costs. Each win pushes back the country's **Defense Line**; when it reaches zero the country falls. Big countries and capitals have long lines, small ones short. Lines heal a little in months nobody attacks them.
+   - **Units you send are away until the turn ends**, so your home army fights at reduced strength and rivals can punish an all-in attack.
+   - **Every war costs a monthly bill** that grows with your military and the enemy's size, and tires your people. You can be in **at most three wars** at once (the Wars panel, `W`, tracks them).
+   - **Conquered land starts restless** and produces about 40% at first, settling over a year. Holding many countries strains stability. The People tab in Country shows food, work, pay, peace and order.
 5. **Next turn** runs the rivals, training, research, income, diplomacy, rebels and any attacks on you, then replays the battles you were in. Decision events appear every few months.
 
-Shortcuts: `Enter` next turn, `A` attack the selected country, `C` country, `M` military, `T` research, `D` diplomacy, `L` news, `?` help, `Esc` close.
+Shortcuts: `Enter` next turn, `A` open the War Room for the selected country, `W` wars, `C` country, `M` military, `T` research, `D` diplomacy, `L` news, `?` help, `Esc` close.
 
 ## Architecture
 
