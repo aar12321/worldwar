@@ -649,6 +649,10 @@ body:has(.drawer) .country-card {
     flex: 1 1 0;
     padding: 0 2px;
   }
+  .nav-btn > span:not(.absolute) {
+    font-size: 10.5px;
+    letter-spacing: -0.02em;
+  }
   .drawer,
   .drawer-wide,
   .country-card {

@@ -1,3 +1,4 @@
+import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
 export type NationId = string
@@ -58,6 +59,12 @@ export interface RegionState {
   sabotaged: number
   /** Strength of a rebel insurgency (in infantry divisions). */
   rebels: number
+  /** Defense Line: points of resistance left. At 0 the country falls. */
+  line: number
+  /** 0 when just conquered, 1 when fully part of the nation. Scales its output. */
+  integration: number
+  /** Last turn an enemy attacked this country. It heals only in quiet months. */
+  attackedTurn: number
 }
 
 export interface General {
@@ -76,8 +83,12 @@ export interface Military {
   weapons: Record<UnitType, number>
   /** A commander drills the lowest-ranked unit type for free each month. */
   commanderId: string | null
-  /** Turn of this nation's last attack. A nation may attack once per turn. */
+  /** Turn of this nation's last attack. */
   lastAttackTurn: number
+  /** Attacks made on `lastAttackTurn`. */
+  attacksThisTurn: number
+  /** Share of the military committed this turn (0 to 1). Those units defend at half strength until the turn ends. */
+  exposed: number
 }
 
 export interface Resources {
@@ -214,7 +225,7 @@ export type Order =
   | { type: 'train'; nationId: NationId; unit: UnitType }
   | { type: 'upgradeWeapons'; nationId: NationId; unit: UnitType }
   | { type: 'research'; nationId: NationId; techId: string }
-  | { type: 'attack'; nationId: NationId; target: RegionId }
+  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'propose'; nationId: NationId; target: NationId; proposal: ProposalDraft }
@@ -253,6 +264,12 @@ export interface BattleReport {
   winner: 'attacker' | 'defender'
   captured: boolean
   modifiers: string[]
+  /** Campaign detail. Missing on rebel fights. */
+  commit?: Commit
+  stance?: Stance
+  lineBefore?: number
+  lineAfter?: number
+  lineMax?: number
 }
 
 export type LogKind = 'info' | 'war' | 'battle' | 'tech' | 'economy' | 'event' | 'spy' | 'diplomacy'

@@ -4,7 +4,7 @@ import { Modal } from './Modal'
 const STEPS = [
   { title: 'Build up your country', body: 'Open Country and buy upgrades. Factories bring money, farms bring food, universities bring research, barracks let you train more at once. Upgrades work the moment you buy them.' },
   { title: 'Train and upgrade your military', body: 'Open Military. Train units, drill them, and buy weapon levels. Every bonus shows in the attack and defense numbers, and those are the numbers battles use.' },
-  { title: 'Declare war, then attack', body: 'Click a neighboring country and press Declare war. Then press Attack. Your whole military fights, and you watch each round. Win and you take the whole country. You can attack once a turn.' },
+  { title: 'Declare war, then campaign', body: 'Click a neighboring country and press Declare war. Then open the War Room: choose how much to send and how to fight. Each win wears down the country’s Defense Line. When it hits zero, the country is yours. Every war costs money each month, you can fight at most three at once, and conquered land takes a year to settle.' },
   { title: 'Press Next turn', body: 'Nothing moves until you do. Rivals act, the month ends, income arrives, and any attacks on you play out. Treaties, research, and tax changes settle then too.' },
 ]
 
@@ -39,7 +39,7 @@ export function Help() {
       <p className="mt-6 text-[15px] text-white/80">
         <strong>To win:</strong> take {goal <= 0.25 ? 3 : goal >= 0.6 ? 12 : 6} countries outside your own, or lead {Math.round(goal * 100)}% of the world's people. You lose if your nation is wiped out.
       </p>
-      <p className="mt-2 text-[14px] text-white/65">Shortcuts: Enter for next turn, A attack the selected country, C country, M military, T research, D diplomacy, L news, ? for this help.</p>
+      <p className="mt-2 text-[14px] text-white/65">Shortcuts: Enter for next turn, A open the War Room, C country, M military, W wars, T research, D diplomacy, L news, ? for this help.</p>
     </Modal>
   )
 }

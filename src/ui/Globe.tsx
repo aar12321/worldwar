@@ -142,7 +142,7 @@ export function WorldGlobe() {
   }, [fxQueue, revealedBattleId, game])
 
   const targets = useMemo(() => {
-    if (!game || game.outcome !== 'playing' || game.nations[game.playerId].military.lastAttackTurn === game.turn) return EMPTY_REGIONS
+    if (!game || game.outcome !== 'playing' || game.nations[game.playerId].military.exposed >= 0.95) return EMPTY_REGIONS
     return new Set(attackableRegions(game, map, game.playerId))
   }, [game])
 

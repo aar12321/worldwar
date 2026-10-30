@@ -15,6 +15,8 @@ import { MilitaryPanel } from './ui/MilitaryPanel'
 import { Setup } from './ui/Setup'
 import { CountryDrawer, LogPanel, SettingsPanel } from './ui/SidePanels'
 import { TechTree } from './ui/TechTree'
+import { WarRoom } from './ui/WarRoom'
+import { WarsPanel } from './ui/WarsPanel'
 
 function useShortcuts() {
   useEffect(() => {
@@ -25,7 +27,7 @@ function useShortcuts() {
       const st = useGame.getState()
       if (!st.game) return
       // A dialog is open: it handles its own keys.
-      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary) return
+      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom) return
       if (e.key === 'Escape') {
         if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
@@ -37,12 +39,12 @@ function useShortcuts() {
       } else if (e.key.toLowerCase() === 'a') {
         // Attack the selected country if your military can reach it.
         const target = st.selectedRegion
-        if (target && attackableRegions(st.game, getWorld().map, st.game.playerId).includes(target)) st.attack(target)
+        if (target && attackableRegions(st.game, getWorld().map, st.game.playerId).includes(target)) st.openWarRoom(target)
         else st.toast('Select an enemy country you are at war with and border, then press A', 'error')
       } else if (e.key === '?') {
         st.setHelp(true)
       } else {
-        const map: Record<string, 'tech' | 'country' | 'diplomacy' | 'log' | 'military'> = { t: 'tech', c: 'country', d: 'diplomacy', l: 'log', m: 'military' }
+        const map: Record<string, 'tech' | 'country' | 'diplomacy' | 'log' | 'military' | 'wars'> = { t: 'tech', c: 'country', d: 'diplomacy', l: 'log', m: 'military', w: 'wars' }
         const panel = map[e.key.toLowerCase()]
         if (panel) st.setPanel(panel)
       }
@@ -102,6 +104,7 @@ export default function App() {
           <HUD />
           <NavRail />
           {panel === 'military' && <MilitaryPanel key="military" />}
+          {panel === 'wars' && <WarsPanel key="wars" />}
           {panel === 'country' && <CountryDrawer key="country" />}
           {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
           {panel === 'log' && <LogPanel key="log" />}
@@ -109,6 +112,7 @@ export default function App() {
           {panel === 'tech' && <TechTree key="tech" />}
           <CountryPanel />
           <OrdersTray />
+          <WarRoom />
           <BattleFX />
           <TurnSummary />
           <EventModal />

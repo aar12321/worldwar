@@ -45,7 +45,7 @@ export function CountryPanel() {
   const openDiplomacy = useGame((s) => s.openDiplomacy)
   const openCountry = useGame((s) => s.openCountry)
   const setPanel = useGame((s) => s.setPanel)
-  const attack = useGame((s) => s.attack)
+  const openWarRoom = useGame((s) => s.openWarRoom)
   const { map } = getWorld()
   if (!view || !selected) return null
   const { game, player, orders } = view
@@ -62,7 +62,7 @@ export function CountryPanel() {
   const purpose = mine
     ? 'Your country. Upgrade it in Country, and train its military in Military.'
     : war
-      ? `At war with ${owner.name}. Attack takes the whole country if your military wins.`
+      ? `At war with ${owner.name}. Win battles to wear down its Defense Line. The country falls when the line reaches zero.`
       : allied
         ? `${owner.name} is an ally. You can ask them to join a war.`
         : pact
@@ -141,8 +141,8 @@ export function CountryPanel() {
             <div className="flex flex-wrap gap-2">
               {war ? (
                 <>
-                  <button className="btn btn-red" disabled={!!attackErr} title={attackErr ? speak(attackErr) : 'Attack with your whole military'} onClick={() => attack(selected)}>
-                    <span className="block">Attack</span>
+                  <button className="btn btn-red" disabled={!!attackErr} title={attackErr ? speak(attackErr) : 'Plan an attack in the War Room'} onClick={() => openWarRoom(selected)}>
+                    <span className="block">War Room</span>
                     {attackErr && <span className="block text-[12px] font-medium text-white/85 normal-case">{speak(attackErr)}</span>}
                   </button>
                   <button className="btn btn-primary" onClick={() => openDiplomacy(owner.id)}>

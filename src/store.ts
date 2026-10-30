@@ -5,6 +5,7 @@ import { applyEventChoice } from './engine/events'
 import { turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
 import { MONTH_END_ORDERS, validateOrder } from './engine/orders'
+import type { Commit, Stance } from './data/war'
 import { applyOrderNow, resolveTurn } from './engine/resolveTurn'
 import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
@@ -17,8 +18,8 @@ const SETTINGS_KEY = 'worlds-of-others-settings-v2'
 /** Everything a crashed game may have left behind. */
 export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
-export type Panel = 'none' | 'country' | 'military' | 'tech' | 'diplomacy' | 'log' | 'settings'
-export type CountryTab = 'build' | 'economy' | 'laws'
+export type Panel = 'none' | 'country' | 'military' | 'wars' | 'tech' | 'diplomacy' | 'log' | 'settings'
+export type CountryTab = 'build' | 'economy' | 'people' | 'laws'
 
 export interface Settings {
   reducedMotion: boolean
@@ -55,6 +56,8 @@ interface GameStore {
   fxTotal: number
   summary: TurnSummary | null
   helpOpen: boolean
+  /** Country whose War Room is open, if any. */
+  warRoom: RegionId | null
   settings: Settings
   toasts: Toast[]
   hasSave: boolean
@@ -72,7 +75,8 @@ interface GameStore {
   issueOrder(order: Order): boolean
   removeOrder(index: number): void
   setPolicy(taxRate: number, draftRate: number): void
-  attack(target: RegionId): boolean
+  attack(target: RegionId, commit?: Commit, stance?: Stance): boolean
+  openWarRoom(target: RegionId | null): void
   endTurn(): void
   chooseEventOption(index: number): void
   shiftFx(): void
@@ -226,6 +230,7 @@ export const useGame = create<GameStore>((set, get) => ({
   fxTotal: 0,
   summary: null,
   helpOpen: false,
+  warRoom: null,
   settings: loadSettings(),
   toasts: [],
   hasSave: hasStoredSave(),
@@ -252,7 +257,7 @@ export const useGame = create<GameStore>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
       const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
-      set({ game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null })
+      set({ game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
@@ -261,12 +266,12 @@ export const useGame = create<GameStore>((set, get) => ({
   quitToMenu() {
     const { game, orders } = get()
     if (game) save(game, orders)
-    set({ game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, hasSave: hasStoredSave() })
+    set({ game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
   },
 
   abandonGame() {
     save(null)
-    set({ game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, hasSave: false })
+    set({ game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: false })
   },
 
   selectRegion(id) {
@@ -335,22 +340,28 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   /** Your military attacks a country now. The battle window plays it round by round. */
-  attack(target) {
+  openWarRoom(target) {
+    set({ warRoom: target })
+  },
+
+  attack(target, commit = 'main', stance = 'assault') {
     const { game, settings } = get()
     if (!game) return false
     const { map } = getWorld()
     const next = structuredClone(game)
-    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target }, get().orders)
+    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance }, get().orders)
     if (result.error || !result.battle) {
       get().toast(result.error ?? 'The attack could not be made', 'error')
       return false
     }
+    set({ warRoom: null })
     const queue = settings.battleScenes === 'off' ? [] : [result.battle]
     if (result.battle.captured) flashCapture(target, false, next.nations[game.playerId].color)
     set({ game: next, fxQueue: [...get().fxQueue, ...queue], fxTotal: get().fxQueue.length + queue.length })
     if (!queue.length) {
       const name = map.regions[target].name
-      get().toast(result.battle.captured ? `${name} captured` : `The attack on ${name} was repulsed`, result.battle.captured ? 'success' : 'error', 5000)
+      const b = result.battle
+      get().toast(b.captured ? `${name} captured` : b.winner === 'attacker' ? `The defense of ${name} was pushed back` : `The attack on ${name} was repulsed`, b.winner === 'attacker' ? 'success' : 'error', 5000)
     }
     save(next)
     return true

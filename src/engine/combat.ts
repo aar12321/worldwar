@@ -13,6 +13,10 @@ export interface Combatant {
   /** Multiplier applied to all combat power (supply, food, amphibious). */
   penalty: number
   penaltyNotes: string[]
+  /** Stance multipliers on each unit type's attack. */
+  boost?: Partial<Record<UnitType, number>>
+  /** Multiplier on the damage this side takes. */
+  damageTaken?: number
 }
 
 export interface BattleInput {
@@ -28,6 +32,9 @@ export interface BattleOutcome {
   rounds: BattleRound[]
   winner: 'attacker' | 'defender'
   modifiers: string[]
+  /** Starting strength of each side with every unit type weighted evenly. */
+  attackerPower: number
+  defenderPower: number
 }
 
 export const COMBAT = {
@@ -67,7 +74,8 @@ export function sidePower(
     const base = defending ? spec.defense : spec.attack
     const tech = 1 + (defending ? (c.mods?.unitDefense[k] ?? 0) : (c.mods?.unitAttack[k] ?? 0))
     const drilled = 1 + (c.drill?.[k] ?? 0) * TRAINING.bonusPerLevel
-    power += c.units[k] * weights[k] * base * tech * drilled * terrainMultiplier(terrain, k, c.mods)
+    const stance = defending ? 1 : (c.boost?.[k] ?? 1)
+    power += c.units[k] * weights[k] * base * tech * drilled * stance * terrainMultiplier(terrain, k, c.mods)
   }
   if (hasCombinedArms(c.units)) {
     const bonus = COMBAT.combinedArmsBonus + (c.mods?.combinedArms ?? 0)
@@ -99,12 +107,15 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
   const startAtt = totalUnits(att.units)
   const startDef = totalUnits(def.units)
   const rounds: BattleRound[] = []
+  const even = { infantry: 1, armor: 1, air: 1, naval: 1 }
+  const attackerPower = sidePower(att, even, terrain, coastal, false)
+  const defenderPower = sidePower(def, even, terrain, coastal, true)
 
   for (const round of ROUNDS) {
     const ap = sidePower(att, round.weights, terrain, coastal, false)
     const dp = sidePower(def, round.weights, terrain, coastal, true)
-    const toDef = ap * rng.range(0.85, 1.15) * COMBAT.damagePerPower
-    const toAtt = dp * rng.range(0.85, 1.15) * COMBAT.damagePerPower
+    const toDef = ap * rng.range(0.85, 1.15) * COMBAT.damagePerPower * (def.damageTaken ?? 1)
+    const toAtt = dp * rng.range(0.85, 1.15) * COMBAT.damagePerPower * (att.damageTaken ?? 1)
     const roundDefLoss = emptyUnits()
     const roundAttLoss = emptyUnits()
     applyLosses(def.units, defenderLosses, toDef, coastal, roundDefLoss)
@@ -129,5 +140,5 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
   for (const note of input.attacker.penaltyNotes) modifiers.push(`Attacker: ${note}`)
   for (const note of input.defender.penaltyNotes) modifiers.push(`Defender: ${note}`)
 
-  return { attackerLosses, defenderLosses, rounds, winner: attackerWins ? 'attacker' : 'defender', modifiers }
+  return { attackerLosses, defenderLosses, rounds, winner: attackerWins ? 'attacker' : 'defender', modifiers, attackerPower, defenderPower }
 }
