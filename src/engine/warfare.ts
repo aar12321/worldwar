@@ -1,7 +1,8 @@
 import { addOpinion, forgetNation } from '../ai/opinion'
 import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
-import { regionWorkforce } from './economy'
+import { COMMITS, STANCES, WAR, type Commit, type Stance } from '../data/war'
+import { lineMax, regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
 import { recordBattle } from './warscore'
 import { addLog, atWar, emptyUnits, nationModifiers, newId, pairKey, regionsOf, totalUnits } from './helpers'
@@ -45,7 +46,7 @@ export function garrisonStrength(s: GameState, map: WorldMap, regionId: RegionId
 }
 
 export function emptyMilitary(units: UnitCounts = emptyUnits()): Military {
-  return { units, drill: emptyTraining(), weapons: emptyTraining(), commanderId: null, lastAttackTurn: 0 }
+  return { units, drill: emptyTraining(), weapons: emptyTraining(), commanderId: null, lastAttackTurn: 0, attacksThisTurn: 0, exposed: 0 }
 }
 
 export function killNation(s: GameState, id: NationId, by: NationId | null) {
@@ -74,6 +75,10 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
   region.owner = newOwner
   region.rebels = 0
   if (raze) region.buildings.barracks = 0
+  region.attackedTurn = s.turn
+  // Conquered land starts restless and half-productive. A negotiated cession is gentler.
+  region.integration = raze ? 0 : 0.5
+  region.line = raze ? lineMax(s, map, regionId) * WAR.capturedLine : lineMax(s, map, regionId)
   const old = s.nations[oldOwner]
   if (!old) return
   const remaining = regionsOf(s, oldOwner)
@@ -99,7 +104,7 @@ function applyLosses(military: Military, garrison: UnitCounts, losses: UnitCount
   }
 }
 
-function makeCombatant(n: Nation | null, military: Military | null, garrison: UnitCounts | null, notes: string[], penalty: number): Combatant {
+function makeCombatant(n: Nation | null, military: Military | null, garrison: UnitCounts | null, notes: string[], penalty: number, share = 1): Combatant {
   let p = penalty
   if (n?.foodShortage) {
     p *= 0.7
@@ -108,13 +113,25 @@ function makeCombatant(n: Nation | null, military: Military | null, garrison: Un
   const units = emptyUnits()
   const drill = emptyTraining()
   for (const k of UNIT_TYPES) {
-    const army = military?.units[k] ?? 0
+    const army = (military?.units[k] ?? 0) * share
     const extra = garrison?.[k] ?? 0
     units[k] = army + extra
     // The garrison is green, so it pulls the drill of its type down.
     drill[k] = army + extra > 0 ? ((military?.drill[k] ?? 0) * army) / (army + extra) : 0
   }
   return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes }
+}
+
+/** Share of a nation's military that is free to defend: units committed to attacks this turn fight at half strength. */
+function defendingShare(n: Nation, notes: string[]): number {
+  const tired = n.military.exposed * WAR.exposedDefenseLoss
+  if (tired > 0.01) notes.push(`army committed abroad (-${Math.round(tired * 100)}% of the military)`)
+  return 1 - tired
+}
+
+/** Share of the military an attack by `n` would commit right now, or 0 if it is spent. */
+export function commitShare(n: Nation, commit: Commit): number {
+  return Math.max(0, Math.min(COMMITS[commit].share, 1 - n.military.exposed))
 }
 
 export interface AttackResult {
@@ -125,7 +142,15 @@ export interface AttackResult {
  * One nation's whole military attacks a country. The defender is its whole military plus the country's garrison.
  * A win takes the country. Returns null when the attack is not allowed to happen.
  */
-export function resolveAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, rng: Rng): AttackResult | null {
+export function resolveAttack(
+  s: GameState,
+  map: WorldMap,
+  nationId: NationId,
+  target: RegionId,
+  rng: Rng,
+  commit: Commit = 'main',
+  stance: Stance = 'assault',
+): AttackResult | null {
   const attackerNation = s.nations[nationId]
   const targetRegion = s.regions[target]
   const mr = map.regions[target]
@@ -134,8 +159,10 @@ export function resolveAttack(s: GameState, map: WorldMap, nationId: NationId, t
   const defenderNation = s.nations[defenderId]
   if (defenderId === nationId || !defenderNation?.alive || !atWar(s, nationId, defenderId)) return null
   const reach = canAttackRegion(s, map, nationId, target)
-  if (!reach.ok || totalUnits(attackerNation.military.units) < 0.1) return null
+  const share = commitShare(attackerNation, commit)
+  if (!reach.ok || share < 0.05 || totalUnits(attackerNation.military.units) < 0.1) return null
 
+  const spec = STANCES[stance]
   const attNotes: string[] = []
   let attPenalty = 1
   if (reach.bySea) {
@@ -143,21 +170,39 @@ export function resolveAttack(s: GameState, map: WorldMap, nationId: NationId, t
     attPenalty *= 1 - 0.4 * (1 - reduction)
     attNotes.push(`amphibious assault (-${Math.round(40 * (1 - reduction))}%)`)
   }
-  const attacker = makeCombatant(attackerNation, attackerNation.military, null, attNotes, attPenalty)
+  const attacker = makeCombatant(attackerNation, attackerNation.military, null, attNotes, attPenalty, share)
+  attacker.boost = spec.boost
+  attacker.damageTaken = spec.ownLosses
   const garrison = emptyUnits()
   garrison.infantry = garrisonStrength(s, map, target)
-  const defender = makeCombatant(defenderNation, defenderNation.military, garrison, [], 1)
+  const defNotes: string[] = []
+  const defender = makeCombatant(defenderNation, defenderNation.military, garrison, defNotes, 1, defendingShare(defenderNation, defNotes))
 
   const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
   applyLosses(attackerNation.military, emptyUnits(), outcome.attackerLosses)
   applyLosses(defenderNation.military, garrison, outcome.defenderLosses)
-  attackerNation.military.lastAttackTurn = s.turn
+  const m = attackerNation.military
+  m.attacksThisTurn = m.lastAttackTurn === s.turn ? m.attacksThisTurn + 1 : 1
+  m.lastAttackTurn = s.turn
+  m.exposed = Math.min(1, m.exposed + share)
   const attLoss = totalUnits(outcome.attackerLosses)
   const defLoss = totalUnits(outcome.defenderLosses)
   attackerNation.warWeariness = Math.min(60, attackerNation.warWeariness + attLoss * 0.6)
   defenderNation.warWeariness = Math.min(60, defenderNation.warWeariness + defLoss * 0.6)
 
-  const captured = outcome.winner === 'attacker'
+  // A win pushes the Defense Line back. More force and a bigger edge push it further.
+  const max = lineMax(s, map, target)
+  const lineBefore = Math.min(targetRegion.line, max)
+  let lineAfter = lineBefore
+  if (outcome.winner === 'attacker') {
+    const ratio = Math.min(WAR.maxPowerRatio, Math.max(WAR.minPowerRatio, outcome.attackerPower / Math.max(0.1, outcome.defenderPower)))
+    lineAfter = Math.max(0, lineBefore - WAR.advanceBase * ratio * spec.advance)
+    if (spec.siegeTurns > 0) targetRegion.sabotaged = Math.max(targetRegion.sabotaged, spec.siegeTurns)
+  }
+  targetRegion.line = lineAfter
+  targetRegion.attackedTurn = s.turn
+
+  const captured = outcome.winner === 'attacker' && lineAfter <= 0
   const wasCapital = defenderNation.capital === target
   const report: BattleReport = {
     id: newId(s, 'b'),
@@ -168,18 +213,19 @@ export function resolveAttack(s: GameState, map: WorldMap, nationId: NationId, t
     rounds: outcome.rounds,
     winner: outcome.winner,
     captured,
-    modifiers: outcome.modifiers,
+    modifiers: [...outcome.modifiers, `${spec.name} with ${COMMITS[commit].name.toLowerCase()} (${Math.round(share * 100)}% of the military)`],
+    commit,
+    stance,
+    lineBefore,
+    lineAfter,
+    lineMax: max,
   }
   s.battles.push(report)
   if (captured) transferRegion(s, map, target, nationId)
   recordBattle(s, report, captured && wasCapital)
   if (captured) addOpinion(s, defenderId, nationId, 'Seized our land', -8, 0.2)
-  addLog(
-    s,
-    'battle',
-    `${attackerNation.name} ${captured ? 'captured' : 'was repulsed attacking'} ${mr.name} (held by ${defenderNation.name}).`,
-    [nationId, defenderId],
-  )
+  const verb = captured ? 'captured' : outcome.winner === 'attacker' ? 'pushed back the defense of' : 'was repulsed attacking'
+  addLog(s, 'battle', `${attackerNation.name} ${verb} ${mr.name} (held by ${defenderNation.name}).`, [nationId, defenderId])
   return { report }
 }
 
@@ -230,6 +276,8 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
   let nationId: NationId = regionId
   const existing = s.nations[regionId]
   const military = emptyMilitary({ ...emptyUnits(), infantry: strength })
+  s.regions[regionId].integration = 1
+  s.regions[regionId].line = lineMax(s, map, regionId) * 0.5
   if (existing && !existing.alive) {
     existing.alive = true
     existing.capital = regionId

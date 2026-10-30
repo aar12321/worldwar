@@ -1,7 +1,8 @@
 import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, UNIT_SPECS } from '../data/unitTypes'
-import { addLog, clamp, enemiesOf, nationModifiers } from './helpers'
+import { WAR } from '../data/war'
+import { addLog, clamp, enemiesOf, nationModifiers, pairKey } from './helpers'
 import type { Rng } from './rng'
 import type { Buildings, BuildingType, GameState, MapRegion, NationId, RegionState, WorldMap } from './types'
 import { BUILDING_TYPES, UNIT_TYPES } from './types'
@@ -40,6 +41,21 @@ export function buildingCap(workforce: number, building: BuildingType): number {
   return BUILDING_SPECS[building].max + Math.floor(workforce / big)
 }
 
+/** Defense Line points a country starts with. Big, fortified countries and capitals hold out longer. */
+export function lineMax(s: GameState, map: WorldMap, regionId: string): number {
+  const r = s.regions[regionId]
+  const capital = s.nations[r.owner]?.capital === regionId ? WAR.lineCapital : 0
+  return WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
+}
+
+/** Share of a country's output that counts, rising as conquered land is integrated. */
+export const integrationFactor = (r: RegionState) => WAR.integrationFloor + (1 - WAR.integrationFloor) * Math.min(1, Math.max(0, r.integration))
+
+export interface WarBill {
+  enemy: NationId
+  amount: number
+}
+
 export interface EconomyReport {
   workforce: number
   civilianWorkforce: number
@@ -51,6 +67,10 @@ export interface EconomyReport {
   tradeIncome: number
   upkeep: number
   netCapital: number
+  warBills: WarBill[]
+  warBillTotal: number
+  /** Conquered countries not yet fully integrated. */
+  occupied: number
   foodProduction: number
   foodConsumption: number
   netFood: number
@@ -72,17 +92,24 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   let workforce = 0
   let baseFood = 0
   let activeFactories = 0
+  let workingFarms = 0
+  let workingUniversities = 0
   let population = 0
   let rebelRegions = 0
+  let occupied = 0
   for (const r of owned) {
     const mr = map.regions[r.id]
-    const w = regionWorkforce(r, mr)
+    const eff = integrationFactor(r)
+    const w = regionWorkforce(r, mr) * eff
     workforce += w
     population += r.population
     baseFood += w * (1 - n.draftRate) * ECON.baseFoodPerWorkforce * TERRAIN[mr.terrain].food
     for (const b of BUILDING_TYPES) buildings[b] += r.buildings[b]
-    if (r.sabotaged <= 0) activeFactories += r.buildings.factory
+    workingFarms += r.buildings.farm * eff
+    workingUniversities += r.buildings.university * eff
+    if (r.sabotaged <= 0) activeFactories += r.buildings.factory * eff
     if (r.rebels > 0) rebelRegions++
+    if (r.integration < 1) occupied++
   }
   const civilianWorkforce = workforce * (1 - n.draftRate)
   const jobs = (buildings.factory + buildings.farm + buildings.university) * ECON.jobsPerBuilding * (1 - mods.jobsReduction)
@@ -109,15 +136,23 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     armyFood += n.military.units[k] * UNIT_SPECS[k].food
     divisions += n.military.units[k]
   }
+  const warBills: WarBill[] = []
+  for (const enemy of enemiesOf(s, nationId)) {
+    let enemyWorkforce = 0
+    for (const r of Object.values(s.regions)) if (r.owner === enemy) enemyWorkforce += regionWorkforce(r, map.regions[r.id])
+    warBills.push({ enemy, amount: WAR.billBase + WAR.billPerUnit * divisions + WAR.billPerEnemyWorkforce * enemyWorkforce })
+  }
+  warBills.sort((a, b) => (a.enemy < b.enemy ? -1 : 1))
+  const warBillTotal = warBills.reduce((sum, b) => sum + b.amount, 0)
   const totalBuildings = BUILDING_TYPES.reduce((sum, b) => sum + buildings[b], 0)
   upkeep += totalBuildings * ECON.buildingUpkeep
 
-  const foodProduction = baseFood + owned.length * ECON.subsistencePerRegion + buildings.farm * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food
+  const foodProduction = baseFood + owned.length * ECON.subsistencePerRegion + workingFarms * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food
   const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce + armyFood
 
   const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn + land.pp
   const tpGain =
-    0.5 + workforce * 0.04 + buildings.university * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput) * outputMult + land.tp
+    0.5 + workforce * 0.04 + workingUniversities * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput) * outputMult + land.tp
 
   const highTax = Math.max(0, n.taxRate - 0.2) * 150
   const lowTax = Math.max(0, 0.2 - n.taxRate) * 50
@@ -131,7 +166,8 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
       (martial ? 15 : 0) -
       (warEconomy ? 10 : 0) +
       mods.stability -
-      rebelRegions * 3,
+      rebelRegions * 3 -
+      Math.max(0, occupied - WAR.overextendFree) * WAR.overextendPenalty,
     0,
     100,
   )
@@ -146,7 +182,10 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     factoryIncome,
     tradeIncome,
     upkeep,
-    netCapital: taxIncome + factoryIncome + tradeIncome + land.capital - upkeep,
+    netCapital: taxIncome + factoryIncome + tradeIncome + land.capital - upkeep - warBillTotal,
+    warBills,
+    warBillTotal,
+    occupied,
     foodProduction,
     foodConsumption,
     netFood: foodProduction - foodConsumption,
@@ -189,8 +228,13 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   n.militaryPool = Math.min(e.militaryCap, n.militaryPool + e.militaryRegen)
 
   n.stability = clamp(n.stability + (e.stabilityTarget - n.stability) * 0.25, 0, 100)
-  const atWar = enemiesOf(s, nationId).length > 0
-  n.warWeariness = clamp(n.warWeariness + (atWar ? 0.8 : -2), 0, 60)
+  const enemies = enemiesOf(s, nationId)
+  let weariness = 0
+  for (const e of enemies) {
+    const months = s.turn - (s.warStarted[pairKey(nationId, e)] ?? s.turn)
+    weariness += WAR.weariness + Math.min(WAR.wearinessPerMonthCap, months * WAR.wearinessPerMonth)
+  }
+  n.warWeariness = clamp(n.warWeariness + (enemies.length > 0 ? weariness : -2), 0, 60)
 
   const owned = Object.values(s.regions)
     .filter((x) => x.owner === nationId)
@@ -198,6 +242,16 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   for (const region of owned) {
     region.population *= n.foodShortage ? 0.997 : 1.0008
     if (region.sabotaged > 0) region.sabotaged--
+    if (region.integration < 1) {
+      region.integration = Math.min(1, region.integration + 1 / WAR.integrationTurns)
+      // Unrest in land you have not yet won over.
+      if (rng.chance(0.07 * (1 - region.integration))) region.rebels += 0.4 + e.workforce * 0.02
+    }
+    // A country heals its Defense Line in months nobody attacks it.
+    if (region.attackedTurn < s.turn) {
+      const max = lineMax(s, map, region.id)
+      region.line = Math.min(max, region.line + WAR.healPerTurn + region.buildings.barracks * WAR.healPerBarracks)
+    }
   }
 
   if (n.stability < 30 && rng.chance((30 - n.stability) / 120)) {

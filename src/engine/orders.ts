@@ -1,12 +1,13 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
+import { MAX_WARS, STANCES, WAR } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { validateProposal } from './diplomacy'
 import { buildingCap, computeEconomy, regionWorkforce } from './economy'
-import { atWar, canUseUnit, hasCasusBelli, hasPact, isAllied, totalUnits } from './helpers'
+import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, totalUnits } from './helpers'
 import { trainingSlots } from './training'
 import type { GameState, Order, UnitType, WorldMap } from './types'
-import { canAttackRegion } from './warfare'
+import { canAttackRegion, commitShare } from './warfare'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
 export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance'])
@@ -44,6 +45,9 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     case 'upgradeWeapons':
       c.capital = weaponCost(s.nations[o.nationId]?.military.weapons[o.unit] ?? 0)
+      break
+    case 'attack':
+      c.capital = STANCES[o.stance ?? 'assault'].cost
       break
     case 'research':
       c.tp = TECH_BY_ID[o.techId]?.cost ?? 0
@@ -155,8 +159,9 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (target.owner === o.nationId) return 'That country is already yours'
       const pendingWar = pending.some((p) => p.type === 'declareWar' && p.target === target.owner)
       if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
-      if (n.military.lastAttackTurn === s.turn) return 'Your military has already attacked this turn'
+      if (n.military.lastAttackTurn === s.turn && n.military.attacksThisTurn >= WAR.maxAttacksPerTurn) return `Your military has already attacked ${WAR.maxAttacksPerTurn} times this turn`
       if (totalUnits(n.military.units) < 0.1) return 'You have no military to attack with'
+      if (commitShare(n, o.commit ?? 'main') < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
       if (!canAttackRegion(s, map, o.nationId, o.target).ok) return 'Not on your border. A sea attack needs a port.'
       return null
     }
@@ -169,6 +174,9 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (atWar(s, o.nationId, o.target)) return 'Already at war'
       if (isAllied(s, o.nationId, o.target)) return 'You are allied'
       if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
+      const pendingWars = pending.filter((p) => p.type === 'declareWar').length
+      if (enemiesOf(s, o.nationId).length + pendingWars >= MAX_WARS) return `You are already fighting ${MAX_WARS} wars. End one first.`
+      if (enemiesOf(s, o.target).length >= MAX_WARS) return `${t.name} is already fighting ${MAX_WARS} wars`
       return null
     }
     case 'propose': {
@@ -184,6 +192,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const p = s.proposals.find((x) => x.id === o.proposalId && x.to === o.nationId)
       if (!p) return 'No such proposal'
       if (pending.some((x) => x.type === 'respond' && x.proposalId === o.proposalId)) return 'Already answered'
+      if (o.accept && p.kind === 'callToArms' && enemiesOf(s, o.nationId).length >= MAX_WARS) return `You are already fighting ${MAX_WARS} wars`
       return o.accept ? validateProposal(s, map, p.from, p.to, p, true) : null
     }
     case 'cancelDeal': {

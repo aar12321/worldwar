@@ -113,9 +113,11 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   // Each nation's one attack for the turn. The AI goes in a seeded order.
   for (const o of live) {
     if (o.type !== 'attack' || validateOrder(s, map, o)) continue
-    resolveAttack(s, map, o.nationId, o.target, rng)
+    resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance)
   }
   resolveRebels(s, map, rng)
+  // Armies that fought this turn are back at their posts for the next one.
+  for (const n of Object.values(s.nations)) n.military.exposed = 0
 
   const alive = Object.values(s.nations)
     .filter((n) => n.alive)
@@ -151,7 +153,7 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
   n.militaryPool -= cost.manpower
   const rng = createRng(s.seed, s.turn * 31 + s.nextId)
   if (o.type === 'attack') {
-    const result = resolveAttack(s, map, o.nationId, o.target, rng)
+    const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance)
     s.outcome = checkOutcome(s)
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
   }

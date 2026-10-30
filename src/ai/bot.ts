@@ -3,10 +3,11 @@ import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { TECHS } from '../data/techTree'
 import { TRAINING, UNIT_SPECS, weaponCost } from '../data/unitTypes'
+import { COMMITS, type Stance } from '../data/war'
 import { nextWeaponLevel } from '../engine/arms'
 import { recentlyProposed } from '../engine/diplomacy'
-import { computeEconomy, type EconomyReport } from '../engine/economy'
-import { atWar, canUseUnit, clamp, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex } from '../engine/helpers'
+import { computeEconomy, lineMax, type EconomyReport } from '../engine/economy'
+import { atWar, canUseUnit, clamp, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex, totalUnits } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { validateOrder } from '../engine/orders'
 import { createRng, type Rng } from '../engine/rng'
@@ -34,7 +35,7 @@ export const BOT = {
   /** Chance a bot that could attack this turn actually does, before difficulty scaling. Keeps the world from collapsing in two years. */
   attackChance: 0.15,
   /** Turns a bot's military rests between attacks, so one nation cannot roll up a continent. */
-  attackRestTurns: 6,
+  attackRestTurns: 1,
 }
 
 /** Shared per-turn facts every bot reads, computed once instead of once per bot. */
@@ -418,14 +419,30 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   // A war declared on the player gives them a couple of months to raise a military before the first blow.
   const warTargets = new Set(enemies.filter((e) => e !== playerId || s.turn - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
   for (const o of orders) if (o.type === 'declareWar' && o.target !== playerId) warTargets.add(o.target)
-  // One attack a turn, at the weakest country on the front that the whole military can beat.
-  if (mistake !== 'idle' && s.turn - n.military.lastAttackTurn >= BOT.attackRestTurns) {
+  // One attack a turn. A bot starts a campaign only now and then, but keeps pressing a front it has already cracked.
+  if (mistake !== 'idle' && s.turn - n.military.lastAttackTurn >= BOT.attackRestTurns && n.military.exposed < 0.05) {
     const options = Object.values(s.regions)
       .filter((r) => warTargets.has(r.owner) && canAttackRegion(s, map, nationId, r.id).ok)
-      .map((r) => ({ id: r.id, def: estimateDefense(s, map, ctx, r.id) }))
+      .map((r) => {
+        const max = lineMax(s, map, r.id)
+        // A cracked line is cheaper to finish, so it counts as weaker.
+        return { id: r.id, def: estimateDefense(s, map, ctx, r.id) * (0.6 + 0.4 * Math.min(1, r.line / max)), started: r.line < max - 0.01 }
+      })
       .sort((x, y) => x.def - y.def || (x.id < y.id ? -1 : 1))
     const target = options[0]
-    if (target && myPower > target.def * attackRatio && rng.chance(BOT.attackChance * diff.aggression)) tryAdd({ type: 'attack', nationId, target: target.id })
+    if (target && rng.chance(target.started ? 0.85 : BOT.attackChance * diff.aggression)) {
+      // Send the smallest force that clears the bar, and keep some home when a strong neighbor is also at war with us.
+      const needed = (target.def * attackRatio) / Math.max(0.1, myPower)
+      const threatened = enemies.some((e) => e !== s.regions[target.id].owner && (ctx.power.get(e) ?? 0) > myPower * 0.6)
+      const commit = needed <= COMMITS.probe.share ? 'probe' : needed <= COMMITS.main.share ? 'main' : !threatened || needed > 1 ? 'allin' : 'main'
+      if (needed <= 1) {
+        const armored = n.military.units.armor + n.military.units.air
+        const total = totalUnits(n.military.units)
+        const bigLine = lineMax(s, map, target.id) > 6
+        const stance: Stance = total > 0 && armored / total > 0.45 && econ.netCapital > -10 ? 'blitz' : bigLine ? 'siege' : 'assault'
+        tryAdd({ type: 'attack', nationId, target: target.id, commit, stance }) || tryAdd({ type: 'attack', nationId, target: target.id, commit, stance: 'assault' })
+      }
+    }
   }
   // Rebels in a country are fought every month with no order needed.
 
