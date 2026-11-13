@@ -1,5 +1,6 @@
 import { addOpinion } from '../ai/opinion'
 import { AGENCY, DOMESTIC_OPS, FOREIGN_OPS, levelsCost, agencyName, type AgencyId, type DomesticOp, type ForeignOp, type OpSpec } from '../data/agencies'
+import { FRONTIER } from '../data/systems'
 import { TECH_BY_ID } from '../data/techTree'
 import { JUSTIFY } from '../data/war'
 import { SPY } from './espionage'
@@ -40,6 +41,9 @@ export function operationOdds(s: GameState, nationId: NationId, op: ForeignOp, t
     if (security > 0) parts.push({ label: `${nm(s, target)}'s security`, value: -security })
     if (t.secureUntil >= s.turn) parts.push({ label: 'Hunting our agents', value: -AGENCY.counterBonus })
     if (hasTech(t, 'cyber_warfare') && (op === 'cyber' || op === 'intel')) parts.push({ label: 'Cyber defense', value: -0.08 })
+    // The target's Quantum Codebreaking, Cyber Command and Orbital Network all make foreign agents easier to catch.
+    const guard = (t.systems?.quantum ?? 0) * FRONTIER.quantumOps + (t.systems?.cyber ?? 0) * FRONTIER.cyberOps + (t.systems?.orbital ?? 0) * 0.03
+    if (guard > 0) parts.push({ label: `${nm(s, target)}'s quantum, cyber and orbital systems`, value: -guard })
   }
   if (spec.hard > 0) parts.push({ label: 'Hard operation', value: -spec.hard })
   const chance = clamp(parts.reduce((sum, p) => sum + p.value, 0), 0.05, 0.9)
@@ -187,7 +191,8 @@ export function runOperation(s: GameState, map: WorldMap, nationId: NationId, op
       addLog(s, 'news', `A coup in ${t.name}. The new government answers to ${n.name}, and the world suspects who helped.`, [nationId, target])
       break
     case 'cyber':
-      t.resources.capital *= 0.7
+      // A Cyber Command at home blunts the blow.
+      t.resources.capital *= 1 - 0.3 * (1 - FRONTIER.cyberDefense * (t.systems?.cyber ?? 0))
       if (regions.length) s.regions[regions[0]].sabotaged = 2
       addInfamy(s, nationId, 4)
       addLog(s, 'spy', `A cyber attack hit ${t.name}'s banks and power grid.`, [nationId, target])

@@ -27,6 +27,9 @@ export const TRAIN_MONTHS: Record<UnitType, number> = {
   fighter: 2,
   air: 2,
   naval: 3,
+  drone: 1,
+  robot: 2,
+  missile: 3,
 }
 
 /** Jobs a nation may have waiting beyond its training slots. */
@@ -39,6 +42,9 @@ export const UNIT_SPECS: Record<UnitType, UnitSpec> = {
   fighter: { name: 'Fighters', role: 'Wins the air. The side with more fighters makes the other side\'s bombers far weaker.', attack: 1.2, defense: 1.4, capitalCost: 26, manpowerCost: 2, upkeep: 1.3, food: 0.1, steel: 2, oil: 0.1, requiresBuilding: 'factory' },
   air: { name: 'Strike Aircraft', role: 'Strikes first and hard. Useless if the enemy rules the air.', attack: 2.4, defense: 0.5, capitalCost: 32, manpowerCost: 3, upkeep: 1.5, food: 0.1, steel: 3, oil: 0.12, requiresBuilding: 'factory' },
   naval: { name: 'Warships', role: 'Fights only on coasts. A port lets you attack across the sea.', attack: 1.6, defense: 1.4, capitalCost: 35, manpowerCost: 4, upkeep: 1.6, food: 0.15, steel: 5, oil: 0.2, requiresBuilding: 'port' },
+  drone: { name: 'Drone Swarms', role: 'Cheap and expendable, they take the first losses so your soldiers live. Deadly to tanks and guns. Interceptor shields and enemy fighters shoot them down; Cyber Command can jam them.', attack: 1.8, defense: 0.6, capitalCost: 12, manpowerCost: 0, upkeep: 0.4, food: 0, steel: 1, oil: 0.05, requiresBuilding: 'factory' },
+  robot: { name: 'Robot Infantry', role: 'A line unit that needs no soldiers, strong in cities and mountains, and its losses never tire your people. Stronger Cyber Command on the other side can hack it.', attack: 1.6, defense: 2.2, capitalCost: 30, manpowerCost: 0, upkeep: 1.2, food: 0, steel: 4, oil: 0.1, requiresBuilding: 'factory' },
+  missile: { name: 'Hypersonic Batteries', role: 'Strikes first, before the air war, and cracks the Defense Line directly. Can also hit a country far away. An Interceptor Shield stops a share of every salvo.', attack: 3, defense: 0.4, capitalCost: 45, manpowerCost: 0, upkeep: 1.8, food: 0, steel: 6, oil: 0.05, requiresBuilding: 'factory' },
 }
 
 export interface BuildingSpec {
@@ -146,7 +152,7 @@ export function trainingRank(level: number): string {
 export type UnitTraining = Record<UnitType, number>
 
 export function emptyTraining(): UnitTraining {
-  return { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0 }
+  return { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 }
 }
 
 export function clampTraining(level: number): number {

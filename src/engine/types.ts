@@ -1,10 +1,12 @@
 import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
+import type { SystemId } from '../data/systems'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
 export type NationId = string
 /** Planes are two types: fighters win the air, bombers (`air`) strike the ground. */
-export type UnitType = 'infantry' | 'armor' | 'artillery' | 'fighter' | 'air' | 'naval'
+/** Drones, robot infantry and hypersonic batteries are the Frontier units. They need no soldiers. */
+export type UnitType = 'infantry' | 'armor' | 'artillery' | 'fighter' | 'air' | 'naval' | 'drone' | 'robot' | 'missile'
 export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic'
 export type TechBranch = 'land' | 'air' | 'naval' | 'infra' | 'economy' | 'frontier'
 export type LawId =
@@ -42,7 +44,7 @@ export type Material = 'oil' | 'steel' | 'goods'
 export type Milestone = 'build' | 'train' | 'research' | 'war' | 'win' | 'capture'
 export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms' | 'loan' | 'guarantee'
 
-export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'artillery', 'fighter', 'air', 'naval']
+export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'artillery', 'fighter', 'air', 'naval', 'drone', 'robot', 'missile']
 export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic']
 export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower', 'oil', 'steel', 'goods']
 export const MATERIALS_LIST: Material[] = ['oil', 'steel', 'goods']
@@ -177,6 +179,11 @@ export interface Nation {
   /** The nation that rules this one as a puppet, if any. */
   overlord: NationId | null
   agencies: { foreign: Agency; domestic: Agency }
+  /** Frontier systems, each from 0 to 3. */
+  systems: Record<SystemId, number>
+  /** The turn of the last strike from afar and the last orbital strike, for the cooldowns. */
+  lastStrike: number
+  lastOrbital: number
   /** The turn until which foreign operations against this nation are harder. */
   secureUntil: number
   /** The turn it became a puppet, so a master can only annex one that has settled. */
@@ -359,6 +366,8 @@ export type Order =
   | { type: 'spy'; nationId: NationId; target: RegionId; mission: SpyMission }
   | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
+  | { type: 'fundSystem'; nationId: NationId; system: SystemId; levels?: number }
+  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital' }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId; /** How many levels to buy at once. One if left out. */ levels?: number }
   | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
   | { type: 'buyShares'; nationId: NationId; company: string; shares: number }

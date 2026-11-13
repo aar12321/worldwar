@@ -6,6 +6,7 @@ import { EMPIRE, WAR } from '../data/war'
 import { NO_EFFECTS, type PolicyEffects } from '../data/government'
 import { TRAITS, traitOf } from '../data/traits'
 import { agencyUpkeep } from './agencies'
+import { systemUpkeep } from './systems'
 import { addLog, clamp, enemiesOf, nationModifiers, pairKey, sanctionersOf } from './helpers'
 import type { Rng } from './rng'
 import { checkDefault, type CreditReport, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
@@ -226,7 +227,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const warBillTotal = warBills.reduce((sum, b) => sum + b.amount, 0)
   const totalBuildings = BUILDING_TYPES.reduce((sum, b) => sum + buildings[b], 0)
   upkeep += totalBuildings * ECON.buildingUpkeep
-  upkeep += agencyUpkeep(n)
+  upkeep += agencyUpkeep(n) + systemUpkeep(n)
   upkeep *= Math.max(0.3, 1 + pol.upkeep)
 
   const foodProduction = sy.food + baseFood + owned.length * ECON.subsistencePerRegion + workingFarms * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food

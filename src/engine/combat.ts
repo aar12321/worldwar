@@ -1,3 +1,4 @@
+import { CYBER_JAM_MAX, CYBER_JAM_PER_LEVEL, FRONTIER, NANO_LESS_DAMAGE, SHIELD_STOPS, type SystemId } from '../data/systems'
 import { TERRAIN } from '../data/terrain'
 import { TRAINING, UNIT_SPECS } from '../data/unitTypes'
 import { emptyUnits, totalUnits, type AggregatedModifiers } from './helpers'
@@ -21,6 +22,16 @@ export interface Combatant {
   bomberMult?: number
   /** Strength of everything but infantry: 1, or less when the nation is out of oil. */
   vehicleMult?: number
+  /** Frontier system levels this side fields. */
+  sys?: Partial<Record<SystemId, number>>
+  /** Share of this side's missiles, drones and bombers that get through the other side's Interceptor Shield. Set by resolveBattle. */
+  interceptMult?: number
+  /** Strength of this side's drones and robots after the other side's Cyber Command jams them. Set by resolveBattle. */
+  cyberMult?: number
+  /** Strength of this side's drones against enemy fighters. Set by resolveBattle. */
+  droneMult?: number
+  /** Extra drone damage against an army heavy in tanks and guns. Set by resolveBattle. */
+  droneBonus?: number
 }
 
 export interface BattleInput {
@@ -48,11 +59,24 @@ export const COMBAT = {
   minPresence: 0.5,
 }
 
+/** The opening round, fought only when either side has drones or hypersonic batteries. */
+const STRIKE_ROUND = { name: 'Missile & Drone Strike', weights: { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0.7, robot: 0, missile: 1 } as Record<UnitType, number> }
+
 const ROUNDS: { name: string; weights: Record<UnitType, number> }[] = [
-  { name: 'Air War & Bombardment', weights: { infantry: 0.1, armor: 0, artillery: 0.7, fighter: 1, air: 1, naval: 0.7 } },
-  { name: 'Infantry Envelopment', weights: { infantry: 1, armor: 0.3, artillery: 0.6, fighter: 0.15, air: 0.2, naval: 0.1 } },
-  { name: 'Armored Push', weights: { infantry: 0.5, armor: 1, artillery: 0.5, fighter: 0.15, air: 0.3, naval: 0.2 } },
+  { name: 'Air War & Bombardment', weights: { infantry: 0.1, armor: 0, artillery: 0.7, fighter: 1, air: 1, naval: 0.7, drone: 0.5, robot: 0, missile: 0 } },
+  { name: 'Infantry Envelopment', weights: { infantry: 1, armor: 0.3, artillery: 0.6, fighter: 0.15, air: 0.2, naval: 0.1, drone: 0.4, robot: 1, missile: 0 } },
+  { name: 'Armored Push', weights: { infantry: 0.5, armor: 1, artillery: 0.5, fighter: 0.15, air: 0.3, naval: 0.2, drone: 0.8, robot: 0.6, missile: 0 } },
 ]
+
+const sysLevel = (c: Combatant, id: SystemId) => Math.max(0, Math.min(3, Math.round(c.sys?.[id] ?? 0)))
+
+/** The share of an enemy's missiles and drones this side's Interceptor Shield lets through. */
+export const interceptFactor = (shield: number) => 1 - SHIELD_STOPS[Math.max(0, Math.min(3, Math.round(shield)))]
+
+/** Strength drones and robots keep against an enemy Cyber Command that is ahead of this side's. */
+export function jamFactor(ownCyber: number, enemyCyber: number): number {
+  return 1 - Math.min(CYBER_JAM_MAX, CYBER_JAM_PER_LEVEL * Math.max(0, enemyCyber - ownCyber))
+}
 
 /**
  * Who rules the air, from 0 to 1: this side's fighter power against the other's. Level means 0.5.
@@ -69,6 +93,20 @@ const bomberFactor = (superiority: number) => Math.max(0.4, Math.min(1.6, 0.4 + 
 
 export function hasCombinedArms(u: UnitCounts): boolean {
   return u.infantry >= COMBAT.minPresence && u.armor >= COMBAT.minPresence && u.air + u.fighter >= COMBAT.minPresence
+}
+
+/** Drones fly at 70% against enemy fighters that outmatch theirs, 85% when the enemy has some, and fully otherwise. */
+function droneAgainstFighters(own: Combatant, other: Combatant): number {
+  if (other.units.fighter < COMBAT.minPresence) return 1
+  const a = own.units.fighter * UNIT_SPECS.fighter.attack * (1 + (own.mods?.unitAttack.fighter ?? 0))
+  const b = other.units.fighter * UNIT_SPECS.fighter.attack * (1 + (other.mods?.unitAttack.fighter ?? 0))
+  return b > a ? FRONTIER.droneVsFighters : FRONTIER.droneVsFightersWeak
+}
+
+/** Extra drone damage against an army made mostly of tanks and guns. */
+function droneAgainstHeavy(enemy: UnitCounts): number {
+  const total = totalUnits(enemy)
+  return total > 0 ? 1 + FRONTIER.droneVsHeavy * ((enemy.armor + enemy.artillery) / total) : 1
 }
 
 function terrainMultiplier(terrain: Terrain, unit: UnitType, mods: AggregatedModifiers | null): number {
@@ -92,12 +130,17 @@ export function sidePower(
     const tech = 1 + (defending ? (c.mods?.unitDefense[k] ?? 0) : (c.mods?.unitAttack[k] ?? 0))
     const drilled = 1 + (c.drill?.[k] ?? 0) * TRAINING.bonusPerLevel
     const stance = defending ? 1 : (c.boost?.[k] ?? 1)
-    const air = k === 'air' ? (c.bomberMult ?? 1) : 1
-    const fuel = k === 'infantry' ? 1 : (c.vehicleMult ?? 1)
-    power += c.units[k] * weights[k] * base * tech * drilled * stance * air * fuel * terrainMultiplier(terrain, k, c.mods)
+    const air = k === 'air' ? (c.bomberMult ?? 1) * (1 - 0.3 * (1 - (c.interceptMult ?? 1))) : 1
+    // Drones, robots and missiles are mostly electronics, so a shortage of oil does not slow them as much.
+    const fuel = k === 'infantry' || k === 'robot' || k === 'missile' ? 1 : (c.vehicleMult ?? 1)
+    let frontier = 1
+    if (k === 'drone') frontier = (c.droneMult ?? 1) * (c.interceptMult ?? 1) * (c.cyberMult ?? 1) * (c.droneBonus ?? 1)
+    else if (k === 'robot') frontier = c.cyberMult ?? 1
+    else if (k === 'missile') frontier = c.interceptMult ?? 1
+    power += c.units[k] * weights[k] * base * tech * drilled * stance * air * fuel * frontier * terrainMultiplier(terrain, k, c.mods)
   }
   if (hasCombinedArms(c.units)) {
-    const bonus = COMBAT.combinedArmsBonus + (c.mods?.combinedArms ?? 0)
+    const bonus = COMBAT.combinedArmsBonus + (c.mods?.combinedArms ?? 0) + 0.05 * sysLevel(c, 'ai')
     power *= 1 + (defending ? bonus * COMBAT.defenderCombinedArmsShare : bonus)
   }
   if (defending) power *= TERRAIN[terrain].defense
@@ -108,9 +151,20 @@ function applyLosses(units: UnitCounts, losses: UnitCounts, damage: number, coas
   const eligible = UNIT_TYPES.filter((k) => units[k] > 0 && (coastal || k !== 'naval'))
   const total = eligible.reduce((s, k) => s + units[k], 0)
   if (total <= 0) return
-  const dmg = Math.min(damage, total)
-  for (const k of eligible) {
-    const share = (units[k] / total) * dmg
+  let dmg = Math.min(damage, total)
+  // Drone swarms are expendable: they take the first losses, so the soldiers behind them live.
+  if (units.drone > 0) {
+    const take = Math.min(units.drone, dmg)
+    units.drone -= take
+    losses.drone += take
+    if (round) round.drone += take
+    dmg -= take
+  }
+  const rest = eligible.filter((k) => k !== 'drone')
+  const restTotal = rest.reduce((s, k) => s + units[k], 0)
+  if (restTotal <= 0 || dmg <= 0) return
+  for (const k of rest) {
+    const share = (units[k] / restTotal) * dmg
     units[k] -= share
     losses[k] += share
     if (round) round[k] += share
@@ -123,20 +177,31 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
   const def = { ...input.defender, units: { ...input.defender.units } }
   att.bomberMult = bomberFactor(airSuperiority(att, def))
   def.bomberMult = bomberFactor(airSuperiority(def, att))
+  // The new weapons and what answers them: shields stop missiles and drones, fighters shoot drones down,
+  // a higher Cyber Command jams drones and robots, and drones tear into tanks and guns.
+  att.interceptMult = interceptFactor(sysLevel(def, 'shield'))
+  def.interceptMult = interceptFactor(sysLevel(att, 'shield'))
+  att.cyberMult = jamFactor(sysLevel(att, 'cyber'), sysLevel(def, 'cyber'))
+  def.cyberMult = jamFactor(sysLevel(def, 'cyber'), sysLevel(att, 'cyber'))
+  att.droneMult = droneAgainstFighters(att, def)
+  def.droneMult = droneAgainstFighters(def, att)
+  att.droneBonus = droneAgainstHeavy(def.units)
+  def.droneBonus = droneAgainstHeavy(att.units)
   const attackerLosses = emptyUnits()
   const defenderLosses = emptyUnits()
   const startAtt = totalUnits(att.units)
   const startDef = totalUnits(def.units)
   const rounds: BattleRound[] = []
-  const even = { infantry: 1, armor: 1, artillery: 1, fighter: 1, air: 1, naval: 1 }
+  const even = { infantry: 1, armor: 1, artillery: 1, fighter: 1, air: 1, naval: 1, drone: 1, robot: 1, missile: 1 }
   const attackerPower = sidePower(att, even, terrain, coastal, false)
   const defenderPower = sidePower(def, even, terrain, coastal, true)
 
-  for (const round of ROUNDS) {
+  const strike = att.units.drone + att.units.missile + def.units.drone + def.units.missile >= 0.05
+  for (const round of strike ? [STRIKE_ROUND, ...ROUNDS] : ROUNDS) {
     const ap = sidePower(att, round.weights, terrain, coastal, false)
     const dp = sidePower(def, round.weights, terrain, coastal, true)
-    const toDef = ap * rng.range(0.85, 1.15) * COMBAT.damagePerPower * (def.damageTaken ?? 1)
-    const toAtt = dp * rng.range(0.85, 1.15) * COMBAT.damagePerPower * (att.damageTaken ?? 1)
+    const toDef = ap * rng.range(0.85, 1.15) * COMBAT.damagePerPower * (def.damageTaken ?? 1) * (1 - NANO_LESS_DAMAGE[sysLevel(def, 'nano')])
+    const toAtt = dp * rng.range(0.85, 1.15) * COMBAT.damagePerPower * (att.damageTaken ?? 1) * (1 - NANO_LESS_DAMAGE[sysLevel(att, 'nano')])
     const roundDefLoss = emptyUnits()
     const roundAttLoss = emptyUnits()
     applyLosses(def.units, defenderLosses, toDef, coastal, roundDefLoss)

@@ -46,5 +46,5 @@ export function giveRegions(s: GameState, owner: string, ids: string[]) {
 
 /** Sets a nation's whole military. */
 export function setMilitary(s: GameState, nationId: string, units: Partial<Record<UnitType, number>>) {
-  s.nations[nationId].military.units = { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, ...units }
+  s.nations[nationId].military.units = { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0, ...units }
 }

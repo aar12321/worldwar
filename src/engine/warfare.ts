@@ -3,31 +3,25 @@ import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { MATERIALS } from '../data/deposits'
 import { TECH_BY_ID } from '../data/techTree'
+import { FRONTIER, NANO_REVIVE } from '../data/systems'
 import { COMMITS, EMPIRE, JUSTIFY, REACH, STANCES, WAR, type Commit, type Stance } from '../data/war'
 import { cityEffects, razeCities } from './cities'
 import { lineMax, regionWorkforce } from './economy'
-import { resolveBattle, type Combatant } from './combat'
+import { interceptFactor, resolveBattle, type Combatant } from './combat'
 import { createRng } from './rng'
 import { recordBattle } from './warscore'
-import { addInfamy, addLog, atWar, emptyUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
+import { addInfamy, addLog, atWar, distanceKm, emptyUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
 import type { Rng } from './rng'
 import type { BattleReport, GameState, Military, Nation, NationId, RegionId, UnitCounts, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
+
+export { distanceKm }
 
 export interface Reach {
   ok: boolean
   /** Whether the attack crosses water or air and so fights with the amphibious penalty. */
   bySea: boolean
   via?: 'land' | 'lane' | 'fleet' | 'air'
-}
-
-/** Great-circle distance between two countries' centers, in kilometers. */
-export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const rad = Math.PI / 180
-  const dLat = (b.lat - a.lat) * rad
-  const dLng = (b.lng - a.lng) * rad
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
-  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)))
 }
 
 /**
@@ -165,6 +159,19 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
   }
 }
 
+/** Nano-medicine returns part of a side's losses to its military. Returns the divisions saved. */
+function reviveLosses(n: Nation, losses: UnitCounts): number {
+  const share = NANO_REVIVE[Math.max(0, Math.min(3, n.systems?.nano ?? 0))]
+  if (share <= 0) return 0
+  let saved = 0
+  for (const k of UNIT_TYPES) {
+    const back = losses[k] * share
+    n.military.units[k] += back
+    saved += back
+  }
+  return saved
+}
+
 /** Spreads a side's losses over its military and the garrison that stood beside it. */
 function applyLosses(military: Military, garrison: UnitCounts, losses: UnitCounts) {
   for (const k of UNIT_TYPES) {
@@ -195,7 +202,7 @@ function makeCombatant(n: Nation | null, military: Military | null, garrison: Un
     vehicleMult = MATERIALS.noOilStrength
     notes.push(`no oil (tanks, planes and ships at ${Math.round(MATERIALS.noOilStrength * 100)}%)`)
   }
-  return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes, vehicleMult }
+  return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes, vehicleMult, sys: n ? { ...n.systems } : undefined }
 }
 
 /** Share of a nation's military that is free to defend: units committed to attacks this turn fight at half strength. */
@@ -249,7 +256,8 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const attNotes: string[] = []
   let attPenalty = 1
   if (reach.bySea) {
-    const reduction = nationModifiers(attackerNation).amphibiousPenaltyReduction
+    // An Orbital Network helps every landing, from sea or air.
+    const reduction = Math.min(0.9, nationModifiers(attackerNation).amphibiousPenaltyReduction + FRONTIER.orbitalLanding * (attackerNation.systems?.orbital ?? 0))
     attPenalty *= 1 - 0.4 * (1 - reduction)
     attNotes.push(`amphibious assault (-${Math.round(40 * (1 - reduction))}%)`)
   }
@@ -267,6 +275,8 @@ export interface AttackForecast {
   /** Share of your military this attack would send. */
   share: number
   winChance: number
+  /** True when AI Battle Command ran the fight enough times to make the odds exact. */
+  exact: boolean
   /** Average Defense Line points pushed back, counting losses as zero. */
   lineDamage: number
   lineBefore: number
@@ -280,13 +290,17 @@ export interface AttackForecast {
 }
 
 /** Plays the attack out several times on fixed seeds, so the War Room can show honest odds without changing the game. */
-export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs = 16): AttackForecast | null {
+export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs?: number): AttackForecast | null {
   const setup = prepareAttack(s, map, nationId, target, commit, stance)
   if (!setup) return null
+  // AI Battle Command plays the fight many more times, so its odds are exact.
+  const exact = (s.nations[nationId]?.systems?.ai ?? 0) > 0
+  runs ??= exact ? 64 : 16
   const mr = map.regions[target]
   const max = lineMax(s, map, target)
   const before = Math.min(s.regions[target].line, max)
   const spec = STANCES[stance]
+  const missileCut = setup.attacker.units.missile * FRONTIER.missileLine * interceptFactor(s.nations[s.regions[target].owner]?.systems?.shield ?? 0)
   let wins = 0
   let damage = 0
   let captures = 0
@@ -300,13 +314,14 @@ export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, 
     wins++
     const ratio = Math.min(WAR.maxPowerRatio, Math.max(WAR.minPowerRatio, out.attackerPower / Math.max(0.1, out.defenderPower)))
     const push = WAR.advanceBase * ratio * spec.advance
-    damage += Math.min(before, push)
-    if (push >= before) captures++
+    damage += Math.min(before, push + missileCut)
+    if (push + missileCut >= before) captures++
   }
   const winChance = wins / runs
   return {
     share: setup.share,
     winChance,
+    exact,
     lineDamage: damage / runs,
     lineBefore: before,
     lineMax: max,
@@ -339,12 +354,16 @@ export function resolveAttack(
   const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
   applyLosses(attackerNation.military, emptyUnits(), outcome.attackerLosses)
   applyLosses(defenderNation.military, garrison, outcome.defenderLosses)
+  // Nano-medicine brings part of what a side lost back.
+  const savedA = reviveLosses(attackerNation, outcome.attackerLosses)
+  const savedD = reviveLosses(defenderNation, outcome.defenderLosses)
   const m = attackerNation.military
   m.attacksThisTurn = m.lastAttackTurn === s.turn ? m.attacksThisTurn + 1 : 1
   m.lastAttackTurn = s.turn
   m.exposed = Math.min(1, m.exposed + share)
-  const attLoss = totalUnits(outcome.attackerLosses)
-  const defLoss = totalUnits(outcome.defenderLosses)
+  // Machines do not tire a people: robot losses add no war weariness.
+  const attLoss = totalUnits(outcome.attackerLosses) - outcome.attackerLosses.robot
+  const defLoss = totalUnits(outcome.defenderLosses) - outcome.defenderLosses.robot
   attackerNation.warWeariness = Math.min(60, attackerNation.warWeariness + attLoss * 0.6)
   defenderNation.warWeariness = Math.min(60, defenderNation.warWeariness + defLoss * 0.6)
 
@@ -358,6 +377,9 @@ export function resolveAttack(
     lineAfter = Math.max(0, lineBefore - WAR.advanceBase * ratio * spec.advance * guns)
     if (spec.siegeTurns > 0) targetRegion.sabotaged = Math.max(targetRegion.sabotaged, spec.siegeTurns)
   }
+  // Hypersonic batteries crack the Defense Line directly, win or lose, unless the shield stops them.
+  const missileHits = attacker.units.missile * FRONTIER.missileLine * interceptFactor(defenderNation.systems?.shield ?? 0)
+  if (missileHits > 0 && lineAfter > 0) lineAfter = Math.max(outcome.winner === 'attacker' ? 0 : 0.5, lineAfter - missileHits)
   targetRegion.line = lineAfter
   targetRegion.attackedTurn = s.turn
 
@@ -390,6 +412,8 @@ export function resolveAttack(
   }
   const verb = captured ? 'captured' : outcome.winner === 'attacker' ? 'pushed back the defense of' : 'was repulsed attacking'
   addLog(s, 'battle', `${attackerNation.name} ${verb} ${mr.name} (held by ${defenderNation.name}).`, [nationId, defenderId])
+  if (missileHits > 0) report.modifiers.push(`Hypersonic batteries cut the Defense Line by ${missileHits.toFixed(1)}`)
+  if (savedA + savedD > 0) report.modifiers.push(`Nano-medicine saved ${(savedA + savedD).toFixed(1)} divisions`)
   return { report }
 }
 
