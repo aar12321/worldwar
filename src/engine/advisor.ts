@@ -18,7 +18,7 @@ import { netWarScore } from './warscore'
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'; region?: RegionId }
-  | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' }
+  | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
   | { desk: 'warRoom'; region: RegionId }
@@ -134,6 +134,31 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       action: 'Read them',
       target: { desk: 'diplomacy', nation: first.from },
     })
+  }
+
+  // Quantum Codebreaking: where an enemy could strike next month, and how likely it is to work.
+  const quantum = n.systems?.quantum ?? 0
+  if (quantum > 0 && enemies.length > 0) {
+    const threats: { region: RegionId; enemy: NationId; chance: number }[] = []
+    for (const e of enemies) {
+      for (const r of Object.values(s.regions)) {
+        if (r.owner !== nationId || !canAttackRegion(s, map, e, r.id).ok) continue
+        const f = forecastAttack(s, map, e, r.id, 'main', 'assault', 8)
+        if (f && f.winChance >= 0.45) threats.push({ region: r.id, enemy: e, chance: f.winChance })
+      }
+    }
+    threats.sort((a, b) => b.chance - a.chance || (a.region < b.region ? -1 : 1))
+    const shown = threats.slice(0, quantum === 1 ? 1 : quantum === 2 ? 2 : 5)
+    if (shown.length > 0) {
+      const top = shown[0]
+      add('soon', 45, {
+        id: 'quantum-threat',
+        title: `Intercepted: ${s.nations[top.enemy]?.name ?? 'an enemy'} could take ${name(top.region)}`,
+        detail: `Quantum Codebreaking reads their plans: about ${Math.round(top.chance * 100)}% to win there next month${shown.length > 1 ? `, and ${shown.length - 1} more front${shown.length > 2 ? 's' : ''} at risk` : ''}. Reinforce it, or strike first.`,
+        action: 'See the country',
+        target: { desk: 'map', region: top.region },
+      })
+    }
   }
 
   // Idle agencies

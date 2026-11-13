@@ -26,7 +26,7 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 /** The five desks, plus News and Settings which open from the top bar. */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'log' | 'settings'
 export type EconomyTab = 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'
-export type MilitaryTab = 'forces' | 'wars' | 'agencies'
+export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts'
 
