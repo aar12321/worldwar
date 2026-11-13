@@ -3,6 +3,7 @@ import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { MATERIALS } from '../data/deposits'
 import { COMMITS, STANCES, WAR, type Commit, type Stance } from '../data/war'
+import { cityEffects, razeCities } from './cities'
 import { lineMax, regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
 import { createRng } from './rng'
@@ -44,7 +45,7 @@ export function garrisonStrength(s: GameState, map: WorldMap, regionId: RegionId
   const r = s.regions[regionId]
   const owner = s.nations[r.owner]
   const capitalBonus = owner?.capital === regionId ? 0.75 : 0
-  return 0.8 + r.buildings.barracks * 0.75 + regionWorkforce(r, map.regions[regionId]) * 0.05 + capitalBonus
+  return 0.8 + r.buildings.barracks * 0.75 + regionWorkforce(r, map.regions[regionId]) * 0.05 + capitalBonus + cityEffects(r).garrison
 }
 
 export function emptyMilitary(units: UnitCounts = emptyUnits()): Military {
@@ -78,6 +79,7 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
   region.rebels = 0
   if (raze) region.buildings.barracks = 0
   region.attackedTurn = s.turn
+  if (raze) razeCities(region)
   // Conquered land starts restless and half-productive. A negotiated cession is gentler.
   region.integration = raze ? 0 : 0.5
   region.line = raze ? lineMax(s, map, regionId) * WAR.capturedLine : lineMax(s, map, regionId)

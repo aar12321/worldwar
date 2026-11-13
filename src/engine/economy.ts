@@ -5,7 +5,8 @@ import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { WAR } from '../data/war'
 import { addLog, clamp, enemiesOf, nationModifiers, pairKey } from './helpers'
 import type { Rng } from './rng'
-import { checkDefault, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
+import { checkDefault, type CreditReport, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
+import { cityEffects, cityWorkforceBonus } from './cities'
 import { policyEffects } from './policy'
 import { marketPrices, type MarketPrices } from './trade'
 import type { Buildings, BuildingType, GameState, MapRegion, NationId, RegionState, TradeResource, WorldMap } from './types'
@@ -43,7 +44,7 @@ export function nationWorkforce(s: GameState, map: WorldMap, nationId: NationId)
 }
 
 export function regionWorkforce(region: RegionState, mapRegion: MapRegion): number {
-  return Math.pow(Math.max(0.05, region.population), 0.6) * (0.3 + 0.7 * mapRegion.development)
+  return Math.pow(Math.max(0.05, region.population), 0.6) * (0.3 + 0.7 * mapRegion.development) * (1 + cityWorkforceBonus(region))
 }
 
 /** Highest level of a building a country can reach. Bigger countries have room for more. */
@@ -56,7 +57,7 @@ export function buildingCap(workforce: number, building: BuildingType): number {
 export function lineMax(s: GameState, map: WorldMap, regionId: string): number {
   const r = s.regions[regionId]
   const capital = s.nations[r.owner]?.capital === regionId ? WAR.lineCapital : 0
-  return WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
+  return cityEffects(r).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
 }
 
 /** Share of a country's output that counts, rising as conquered land is integrated. */
@@ -78,6 +79,8 @@ export interface EconomyReport {
   tradeIncome: number
   upkeep: number
   netCapital: number
+  /** How lenders see this nation. */
+  credit: CreditReport
   /** What private businesses produce each month. */
   business: ReturnType<typeof sectorYield>
   /** Tax on business profit. */
@@ -133,6 +136,12 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   let steelProduction = 0
   let goodsProduction = 0
   let portLevels = 0
+  let cityFood = 0
+  let cityMoney = 0
+  let cityResearch = 0
+  let cityFactory = 0
+  let cityTrade = 0
+  let cityCredit = 0
   for (const r of owned) {
     const mr = map.regions[r.id]
     const eff = integrationFactor(r)
@@ -150,6 +159,14 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     steelProduction += ((STEEL_DEPOSITS[r.id] ?? 0) + r.buildings.factory * MATERIALS.steelPerFactory) * eff
     goodsProduction += (w * MATERIALS.goodsPerWorkforce + r.buildings.factory * MATERIALS.goodsPerFactory) * eff
     portLevels += r.buildings.port * eff
+    const ce = cityEffects(r)
+    cityFood += ce.food * eff
+    cityMoney += ce.money * eff
+    cityResearch += ce.research * eff
+    cityFactory += ce.factory * eff
+    steelProduction += ce.steel * eff
+    cityTrade += ce.tradeCapacity * eff
+    cityCredit += ce.credit * eff
   }
   const sy = sectorYield(n)
   oilProduction += sy.oil
@@ -167,17 +184,17 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
 
   const taxIncome = n.taxRate * civilianWorkforce * ECON.taxPerWorkforce * outputMult * (1 + botBonus)
   const factoryIncome =
-    activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + pol.factory) * outputMult * (1 + botBonus)
+    activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + pol.factory + cityFactory) * outputMult * (1 + botBonus)
   const tradeIncome = buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1)
   const biz = sy
   const corporateIncome = (n.corporateTax ?? 0) * biz.profit * outputMult + biz.money
   const dividends = dividendsFor(s, nationId)
   const subsidies = subsidyBill(n)
   const gross = taxIncome + factoryIncome + tradeIncome + corporateIncome
-  const credit = creditReport(s, n, gross, enemiesOf(s, nationId).length > 0)
+  const credit = creditReport(s, n, gross, enemiesOf(s, nationId).length > 0, cityCredit)
   const interest = n.debt * credit.rate
   const policyMoney = pol.money * gross
-  const land = { capital: 0, food: 0, pp: buildings.civic * 0.6, tp: buildings.civic * 0.3 }
+  const land = { capital: cityMoney, food: cityFood, pp: buildings.civic * 0.6, tp: buildings.civic * 0.3 + cityResearch }
 
   let upkeep = 0
   let armyFood = 0
@@ -239,6 +256,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     upkeep,
     netCapital: taxIncome + factoryIncome + tradeIncome + corporateIncome + dividends + land.capital - upkeep - warBillTotal - interest - subsidies + policyMoney,
     business: biz,
+    credit,
     corporateIncome,
     dividends,
     interest,
@@ -257,7 +275,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     goodsProduction,
     goodsUse,
     netGoods: goodsProduction - goodsUse,
-    tradeCapacity: (MATERIALS.tradeBase + portLevels * MATERIALS.tradePerPort) * Math.max(0.3, 1 + pol.trade),
+    tradeCapacity: (MATERIALS.tradeBase + portLevels * MATERIALS.tradePerPort + cityTrade) * Math.max(0.3, 1 + pol.trade),
     ppGain,
     tpGain,
     militaryRegen: workforce * n.draftRate * ECON.militaryRegenPerWorkforce,

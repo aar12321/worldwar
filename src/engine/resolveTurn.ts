@@ -1,4 +1,5 @@
 import { TECH_BY_ID } from '../data/techTree'
+import { FOCUS } from '../data/cities'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -25,6 +26,14 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
   switch (o.type) {
     case 'setPolicy':
       return `Set taxes ${Math.round(o.taxRate * 100)}% / draft ${Math.round(o.draftRate * 100)}%${o.corporateTax !== undefined ? ` / business tax ${Math.round(o.corporateTax * 100)}%` : ''}${o.budget ? ' / new budget' : ''}`
+    case 'developCity': {
+      const city = s.regions[o.regionId]?.cities.find((c) => c.id === o.cityId)
+      return `Develop ${city?.name ?? 'a city'}`
+    }
+    case 'setCityFocus': {
+      const city = s.regions[o.regionId]?.cities.find((c) => c.id === o.cityId)
+      return `Make ${city?.name ?? 'a city'} a ${FOCUS[o.focus].name.toLowerCase()} city`
+    }
     case 'fundSector':
       return `Fund ${SECTORS[o.sector].name.toLowerCase()} with ${Math.round(o.amount)}`
     case 'setSubsidies':
@@ -97,7 +106,7 @@ const PHASES: Order['type'][][] = [
   ['declareWar', 'propose'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy'],
-  ['issueBonds', 'repayDebt', 'fundSector', 'invest'],
+  ['issueBonds', 'repayDebt', 'fundSector', 'invest', 'developCity', 'setCityFocus'],
   ['research', 'build', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['spy'],
@@ -210,6 +219,19 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       if (o.corporateTax !== undefined) n.corporateTax = o.corporateTax
       if (o.budget) n.budget = { ...o.budget }
       break
+    case 'developCity': {
+      const city = s.regions[o.regionId].cities.find((c) => c.id === o.cityId)
+      if (city) {
+        city.level++
+        if (n.isPlayer) addLog(s, 'economy', `${city.name} grew to level ${city.level}.`, [o.nationId])
+      }
+      break
+    }
+    case 'setCityFocus': {
+      const city = s.regions[o.regionId].cities.find((c) => c.id === o.cityId)
+      if (city) city.focus = o.focus
+      break
+    }
     case 'fundSector':
       addToSector(n, o.sector, o.amount, nationWorkforce(s, map, o.nationId))
       break

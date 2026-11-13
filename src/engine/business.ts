@@ -118,10 +118,10 @@ export interface CreditReport {
 }
 
 /** How lenders see a nation: its debt against its income, its calm, its wars and its banks. */
-export function creditReport(s: GameState, n: Nation, grossIncome: number, atWarNow: boolean): CreditReport {
+export function creditReport(s: GameState, n: Nation, grossIncome: number, atWarNow: boolean, bonus = 0): CreditReport {
   const locked = n.defaultedUntil > s.turn
   const ratio = n.debt / Math.max(10, grossIncome * 12)
-  const score = 92 - ratio * 70 - Math.max(0, 50 - n.stability) * 0.7 - (atWarNow ? 8 : 0) + (n.sectors?.finance ?? 0) * 1.2 - (locked ? 45 : 0) - (n.inDebt ? 15 : 0)
+  const score = 92 - ratio * 70 - Math.max(0, 50 - n.stability) * 0.7 - (atWarNow ? 8 : 0) + (n.sectors?.finance ?? 0) * 1.2 + bonus - (locked ? 45 : 0) - (n.inDebt ? 15 : 0)
   const tier = TREASURY.ratings.find((r) => score >= r.min) ?? TREASURY.ratings[TREASURY.ratings.length - 1]
   const limit = locked ? 0 : Math.max(0, grossIncome * 12 * tier.limit - n.debt)
   return { score, rating: tier.name, rate: tier.rate, room: limit, locked }

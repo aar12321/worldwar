@@ -1,11 +1,13 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
+import { CITY_RULES, FOCUS } from '../data/cities'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS, TREASURY } from '../data/business'
 import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
 import { MAX_WARS, STANCES, WAR } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { validateProposal } from './diplomacy'
-import { creditReport, investedIn, sectorCap, sectorYield } from './business'
+import { cityDevelopCost, cityLevelCap } from './cities'
+import { investedIn, sectorCap, sectorYield } from './business'
 import { buildingCap, computeEconomy, nationWorkforce, regionWorkforce } from './economy'
 import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, totalUnits } from './helpers'
 import { trainingSlots } from './training'
@@ -43,6 +45,14 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     case 'setGovernment':
       c.pp = REFORM.cost
+      break
+    case 'developCity': {
+      const city = s.regions[o.regionId]?.cities.find((x) => x.id === o.cityId)
+      c.capital = city ? cityDevelopCost(city) : 0
+      break
+    }
+    case 'setCityFocus':
+      c.capital = CITY_RULES.focusCost
       break
     case 'fundSector':
     case 'repayDebt':
@@ -124,12 +134,6 @@ export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Or
   return null
 }
 
-/** Gross monthly income, which lenders judge a nation by. */
-function economyGross(s: GameState, map: WorldMap, nationId: string): number {
-  const e = computeEconomy(s, map, nationId)
-  return e.taxIncome + e.factoryIncome + e.tradeIncome + e.corporateIncome
-}
-
 function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
   switch (o.type) {
@@ -152,12 +156,28 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (at >= cap - 0.05) return `${SECTORS[o.sector].name} cannot grow any bigger in your country`
       return null
     }
+    case 'developCity': {
+      const r = s.regions[o.regionId]
+      const city = r?.cities.find((c) => c.id === o.cityId)
+      if (r?.owner !== o.nationId || !city) return 'You do not hold that city'
+      if (city.level >= CITY_RULES.maxLevel) return `${city.name} is as big as a city can get`
+      const cap = cityLevelCap(regionWorkforce(r, map.regions[o.regionId]))
+      if (city.level >= cap) return `${city.name} cannot grow past level ${cap} in a country this size. A bigger workforce raises it.`
+      return null
+    }
+    case 'setCityFocus': {
+      const r = s.regions[o.regionId]
+      const city = r?.cities.find((c) => c.id === o.cityId)
+      if (r?.owner !== o.nationId || !city) return 'You do not hold that city'
+      if (city.focus === o.focus) return 'It already has that focus'
+      if (FOCUS[o.focus].needsPort && !city.port) return `${city.name} is not on the coast, so it cannot be a harbor`
+      return null
+    }
     case 'setSubsidies':
       return o.sectors.every((x) => SECTOR_IDS.includes(x)) ? null : 'Unknown sector'
     case 'issueBonds': {
       if (!Number.isFinite(o.amount) || o.amount < TREASURY.min) return `Bonds start at ${TREASURY.min} money`
-      const gross = economyGross(s, map, o.nationId)
-      const credit = creditReport(s, n, gross, enemiesOf(s, o.nationId).length > 0)
+      const credit = computeEconomy(s, map, o.nationId).credit
       if (credit.locked) return 'Nobody will lend to you after your default'
       if (o.amount > credit.room + 1e-6) return `Lenders will give you at most ${Math.floor(credit.room)} more (rating ${credit.rating})`
       return null

@@ -1,4 +1,5 @@
 import { EVENT_BY_ID } from '../data/events'
+import { startingCities } from './cities'
 import { lineMax } from './economy'
 import { UNIT_TYPES } from './types'
 import { EVENT_GAP_TURNS, FIRST_EVENT_TURN } from './events'
@@ -36,6 +37,7 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     n.military.exposed ??= 0
   }
   for (const r of Object.values(game.regions)) {
+    r.cities ??= startingCities(map.regions[r.id])
     r.integration ??= 1
     r.attackedTurn ??= -1
     if (!Number.isFinite(r.line)) r.line = lineMax(game, map, r.id)

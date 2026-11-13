@@ -18,6 +18,7 @@ export type LawId =
   | 'austerity'
   | 'research_grants'
 export type SectorId = 'farming' | 'energy' | 'manufacturing' | 'arms' | 'technology' | 'finance'
+export type CityFocus = 'balanced' | 'industry' | 'farming' | 'harbor' | 'research' | 'fortress' | 'finance'
 export type GovernmentType = 'democracy' | 'monarchy' | 'junta' | 'one_party'
 /** Where tax money goes. Each share is 0 to 1 and the four add up to 1. */
 export type BudgetKey = 'military' | 'education' | 'health' | 'infrastructure'
@@ -71,6 +72,18 @@ export interface WorldMap {
 export type Buildings = Record<BuildingType, number>
 export type UnitCounts = Record<UnitType, number>
 
+/** A city inside a country. It grows with money and takes a focus that boosts the country. */
+export interface City {
+  id: string
+  name: string
+  /** 1 to 5. */
+  level: number
+  focus: CityFocus
+  port: boolean
+  lat?: number
+  lng?: number
+}
+
 export interface RegionState {
   id: RegionId
   owner: NationId
@@ -86,6 +99,7 @@ export interface RegionState {
   integration: number
   /** Last turn an enemy attacked this country. It heals only in quiet months. */
   attackedTurn: number
+  cities: City[]
 }
 
 export interface General {
@@ -284,6 +298,8 @@ export interface PendingEvent {
 export type Order =
   | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number; corporateTax?: number; budget?: Budget }
   | { type: 'setGovernment'; nationId: NationId; government: GovernmentType }
+  | { type: 'developCity'; nationId: NationId; regionId: RegionId; cityId: string }
+  | { type: 'setCityFocus'; nationId: NationId; regionId: RegionId; cityId: string; focus: CityFocus }
   | { type: 'fundSector'; nationId: NationId; sector: SectorId; amount: number }
   | { type: 'setSubsidies'; nationId: NationId; sectors: SectorId[] }
   | { type: 'issueBonds'; nationId: NationId; amount: number }

@@ -2,6 +2,7 @@ import { PLAYER_COLOR, mapColor } from './mapColors'
 import { OIL_DEPOSITS, STEEL_DEPOSITS } from './deposits'
 import { SECTOR_IDS, SECTORS } from './business'
 import { sectorCap } from '../engine/business'
+import { startingCities } from '../engine/cities'
 import { CORPORATE_TAX, EVEN_BUDGET, GOVERNMENTS } from './government'
 import { UNIT_SPECS, emptyTraining } from './unitTypes'
 import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
@@ -94,6 +95,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       line: 0,
       integration: 1,
       attackedTurn: -1,
+      cities: startingCities(mr),
     }
     const w = regionWorkforce(region, mr)
     const dev = mr.development
