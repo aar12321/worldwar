@@ -368,6 +368,11 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     }
     case 'leaveAlliance':
       return isAllied(s, o.nationId, o.target) ? null : 'Not allied'
+    case 'setGovernor': {
+      const r = s.regions[o.regionId]
+      if (r?.owner !== o.nationId) return 'You do not control this country'
+      return ['off', 'growth', 'industry', 'farming', 'research'].includes(o.governor) ? null : 'Unknown plan'
+    }
     case 'operation':
       return validateOperation(s, o, pending)
     case 'domestic':

@@ -6,7 +6,7 @@ export type NationId = string
 /** Planes are two types: fighters win the air, bombers (`air`) strike the ground. */
 export type UnitType = 'infantry' | 'armor' | 'artillery' | 'fighter' | 'air' | 'naval'
 export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic'
-export type TechBranch = 'land' | 'air' | 'naval' | 'infra' | 'economy'
+export type TechBranch = 'land' | 'air' | 'naval' | 'infra' | 'economy' | 'frontier'
 export type LawId =
   | 'martial_law'
   | 'war_economy'
@@ -92,8 +92,12 @@ export interface City {
   lng?: number
 }
 
+export type Governor = 'off' | 'growth' | 'industry' | 'farming' | 'research'
+
 export interface RegionState {
   id: RegionId
+  /** An official who upgrades this country each month on a plan the player chose. */
+  governor?: Governor
   owner: NationId
   population: number
   buildings: Buildings
@@ -356,6 +360,7 @@ export type Order =
   | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId }
+  | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }

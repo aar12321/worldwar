@@ -12,7 +12,7 @@ export const AGENCY = {
   expCap: 0.1,
   /** Techs known, as odds. */
   techBonus: 0.004,
-  techCap: 0.12,
+  techCap: 0.08,
   /** Each partner (ally) adds this much, up to the cap. */
   partnerBonus: 0.03,
   partnerCap: 0.12,

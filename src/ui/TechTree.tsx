@@ -7,8 +7,8 @@ import { useGame } from '../store'
 import { fmt, usePlayerView } from './hooks'
 import { speak } from './plain'
 
-const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy']
-const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2', economy: '#30d158' }
+const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy', 'frontier']
+const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2', economy: '#30d158', frontier: '#ff375f' }
 
 function TechNode({ tech }: { tech: Tech }) {
   const view = usePlayerView()!
@@ -47,6 +47,7 @@ function TechNode({ tech }: { tech: Tech }) {
       </div>
       <div className="text-[15px] font-semibold tracking-tight mt-1">{tech.name}</div>
       <div className="text-[12px] text-white/55 mt-1 leading-snug">{tech.description}</div>
+      {tech.unlocks && <div className="text-[12px] text-[#ff8a9f] mt-1 font-medium">Unlocks: {tech.unlocks.join(', ')}</div>}
       {state === 'locked' && err && <div className="text-[12px] text-[#ff8a84] mt-1">{speak(err)}</div>}
     </motion.button>
   )

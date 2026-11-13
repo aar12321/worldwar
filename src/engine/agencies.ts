@@ -3,7 +3,7 @@ import { AGENCY, DOMESTIC_OPS, FOREIGN_OPS, levelCost, agencyName, type AgencyId
 import { TECH_BY_ID } from '../data/techTree'
 import { JUSTIFY } from '../data/war'
 import { SPY } from './espionage'
-import { addInfamy, addLog, alliesOf, atWar, clamp, grantJustification, hasTech, isAllied, regionsOf } from './helpers'
+import { addInfamy, addLog, alliesOf, atWar, clamp, grantJustification, hasTech, isAllied, nationModifiers, regionsOf } from './helpers'
 import type { Rng } from './rng'
 import type { GameState, NationId, Order, WorldMap } from './types'
 
@@ -27,6 +27,8 @@ export function operationOdds(s: GameState, nationId: NationId, op: ForeignOp, t
   const spec = FOREIGN_OPS[op]
   const a = n.agencies.foreign
   const parts: { label: string; value: number }[] = [{ label: 'Base', value: 0.4 }, { label: `Agency level ${a.level}`, value: a.level * 0.07 }]
+  const bonus = nationModifiers(n).agencyBonus
+  if (bonus > 0) parts.push({ label: 'Frontier technology', value: bonus })
   const exp = Math.min(AGENCY.expCap, a.exp * AGENCY.expBonus)
   if (exp > 0) parts.push({ label: 'Experience', value: exp })
   const tech = Math.min(AGENCY.techCap, n.techs.length * AGENCY.techBonus)

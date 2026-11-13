@@ -3,6 +3,8 @@ import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, DIPLOMACY, UNIT_SPECS } from '../data/unitTypes'
 import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { EMPIRE, WAR } from '../data/war'
+import { NO_EFFECTS, type PolicyEffects } from '../data/government'
+import { TRAITS, traitOf } from '../data/traits'
 import { agencyUpkeep } from './agencies'
 import { addLog, clamp, enemiesOf, nationModifiers, pairKey, sanctionersOf } from './helpers'
 import type { Rng } from './rng'
@@ -58,7 +60,7 @@ export function buildingCap(workforce: number, building: BuildingType): number {
 export function lineMax(s: GameState, map: WorldMap, regionId: string): number {
   const r = s.regions[regionId]
   const capital = s.nations[r.owner]?.capital === regionId ? WAR.lineCapital : 0
-  return cityEffects(r).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
+  return (TRAITS[traitOf(regionId, map.regions[regionId])].line ?? 0) + cityEffects(r).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
 }
 
 /** Share of a country's output that counts, rising as conquered land is integrated. */
@@ -143,6 +145,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   let cityFactory = 0
   let cityTrade = 0
   let cityCredit = 0
+  const traitEff: PolicyEffects = { ...NO_EFFECTS }
   for (const r of owned) {
     const mr = map.regions[r.id]
     const eff = integrationFactor(r)
@@ -168,6 +171,9 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     steelProduction += ce.steel * eff
     cityTrade += ce.tradeCapacity * eff
     cityCredit += ce.credit * eff
+    // What makes this country special helps the whole nation, more as it settles in.
+    const trait = TRAITS[traitOf(r.id, mr)]
+    for (const [k, v] of Object.entries(trait.effects)) traitEff[k as keyof PolicyEffects] += v * eff
   }
   const sy = sectorYield(n)
   oilProduction += sy.oil
@@ -178,6 +184,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const laborRatio = jobs > 0 ? Math.min(1, civilianWorkforce / jobs) : 1
   const stabilityFactor = 0.6 + (0.4 * n.stability) / 100
   const pol = policyEffects(n)
+  for (const k of Object.keys(traitEff) as (keyof PolicyEffects)[]) pol[k] += traitEff[k]
   const outputMult = stabilityFactor * (1 + mods.allOutput + pol.output)
   const atWarCount = enemiesOf(s, nationId).length
   const botBonus = n.isPlayer ? 0 : difficultyOf(s.settings.difficulty).botIncomeBonus

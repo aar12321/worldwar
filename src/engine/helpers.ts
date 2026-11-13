@@ -126,6 +126,7 @@ export interface AggregatedModifiers {
   ppPerTurn: number
   allOutput: number
   amphibiousPenaltyReduction: number
+  agencyBonus: number
   seaInvasion: boolean
 }
 
@@ -143,6 +144,7 @@ export function nationModifiers(n: Nation): AggregatedModifiers {
     ppPerTurn: 0,
     allOutput: 0,
     amphibiousPenaltyReduction: 0,
+    agencyBonus: 0,
     seaInvasion: false,
   }
   for (const id of n.techs) {
@@ -161,6 +163,7 @@ export function nationModifiers(n: Nation): AggregatedModifiers {
     m.ppPerTurn += mod.ppPerTurn ?? 0
     m.allOutput += mod.allOutput ?? 0
     m.amphibiousPenaltyReduction += mod.amphibiousPenaltyReduction ?? 0
+    m.agencyBonus += mod.agencyBonus ?? 0
     m.seaInvasion ||= !!tech.enablesSeaInvasion
   }
   return m

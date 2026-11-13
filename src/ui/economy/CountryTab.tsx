@@ -1,5 +1,9 @@
 import { CITY_RULES, FOCUS, FOCUS_IDS } from '../../data/cities'
+import { TRAITS, traitOf } from '../../data/traits'
 import { BUILDING_SPECS } from '../../data/unitTypes'
+import { EMPIRE } from '../../data/war'
+import { GOVERNOR_LABELS } from '../../engine/governors'
+import type { Governor } from '../../engine/types'
 import { cityDevelopCost, cityLevelCap } from '../../engine/cities'
 import { buildingCap, integrationFactor, regionWorkforce } from '../../engine/economy'
 import { orderCost } from '../../engine/orders'
@@ -12,11 +16,62 @@ import { usePlayerView } from '../hooks'
 import { OrderButton } from '../panel'
 import { Card } from './parts'
 
+/** Every country you hold, in one list: its trait, how settled it is, and a governor who develops it for you. */
+function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
+  const view = usePlayerView()!
+  const setPicked = useGame((s) => s.setEconomyRegion)
+  const issueOrder = useGame((s) => s.issueOrder)
+  const { game, player } = view
+  const { map } = getWorld()
+  const unsettled = owned.filter((id) => game.regions[id].integration < 1).length
+  return (
+    <div className="span-all inset-card p-3.5 space-y-2.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[16px] font-semibold">Your empire</h3>
+        <span className="text-[13px] text-white/70">
+          {owned.length} countries{unsettled > 0 ? ` · ${unsettled} still settling` : ''}. A governor upgrades a country each month and never spends your last {EMPIRE.governorReserve} money.
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {owned.map((id) => {
+          const r = game.regions[id]
+          const tr = TRAITS[traitOf(id, map.regions[id])]
+          return (
+            <li key={id} className={`rounded-xl px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 ${id === regionId ? 'bg-[#0a84ff]/18 border border-[#0a84ff]/50' : 'bg-white/5'}`}>
+              <button className="min-w-0 flex-1 text-left" onClick={() => setPicked(id)} aria-pressed={id === regionId}>
+                <span className="block text-[15px] font-semibold truncate">
+                  {map.regions[id].name}
+                  {id === player.capital && <span className="ml-1.5 text-[12px] text-white/60 font-normal">capital</span>}
+                </span>
+                <span className="block text-[12px] text-white/70">
+                  {tr.name} · {r.integration < 1 ? `settling, ${Math.round(integrationFactor(r) * 100)}% output` : 'fully settled'}
+                  {r.rebels > 0 ? ' · rebels' : ''}
+                </span>
+              </button>
+              <select
+                className="field px-2 py-1.5 text-[13px]"
+                aria-label={`Governor of ${map.regions[id].name}`}
+                value={r.governor ?? 'off'}
+                onChange={(e) => issueOrder({ type: 'setGovernor', nationId: player.id, regionId: id, governor: e.target.value as Governor })}
+              >
+                {(Object.keys(GOVERNOR_LABELS) as Governor[]).map((g) => (
+                  <option key={g} value={g}>
+                    {GOVERNOR_LABELS[g]}
+                  </option>
+                ))}
+              </select>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 /** Upgrades and cities for one of your countries. */
 export function CountryTab() {
   const view = usePlayerView()!
   const picked = useGame((s) => s.economyRegion)
-  const setPicked = useGame((s) => s.setEconomyRegion)
   const { game, player } = view
   const { map } = getWorld()
   const owned = regionsOf(game, player.id)
@@ -25,22 +80,15 @@ export function CountryTab() {
   const workforce = regionWorkforce(region, map.regions[regionId])
   const levelCap = cityLevelCap(workforce)
   if (!region) return null
+  const trait = traitOf(regionId, map.regions[regionId])
 
   return (
     <section className="econ-grid">
-      {owned.length > 1 && (
-        <label className="block text-[14px] span-all">
-          <span className="label block mb-1">Country</span>
-          <select className="field w-full px-3 py-2" value={regionId} onChange={(e) => setPicked(e.target.value)}>
-            {owned.map((id) => (
-              <option key={id} value={id}>
-                {map.regions[id].name}
-                {game.regions[id].integration < 1 ? ` (settling, ${Math.round(integrationFactor(game.regions[id]) * 100)}% output)` : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      {owned.length > 1 && <Empire owned={owned} regionId={regionId} />}
+      <div className="span-all flex flex-wrap items-center gap-2 text-[14px]">
+        <span className="chip">{TRAITS[trait].name}</span>
+        <span className="text-white/70">{TRAITS[trait].blurb}</span>
+      </div>
 
       <div className="space-y-2.5">
         <div>

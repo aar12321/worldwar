@@ -4,6 +4,7 @@ import { JUSTIFY } from '../data/war'
 import { ACTION_LABELS } from '../data/crises'
 import { DOMESTIC_OPS, FOREIGN_OPS } from '../data/agencies'
 import { fundAgency, runDomestic, runOperation } from './agencies'
+import { GOVERNOR_LABELS, governorOrders } from './governors'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -95,6 +96,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `${FOREIGN_OPS[o.op].name}: ${nation(o.target)}`
     case 'domestic':
       return DOMESTIC_OPS[o.op].name
+    case 'setGovernor':
+      return `Governor of ${region(o.regionId)}: ${GOVERNOR_LABELS[o.governor]}`
     case 'fundAgency':
       return `Grow the ${o.agency === 'foreign' ? 'foreign' : 'domestic'} agency`
     case 'crisisAction':
@@ -125,7 +128,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 
 const PHASES: Order['type'][][] = [
   ['respond'],
-  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw'],
+  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor'],
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose'],
   ['cancelTrain'],
@@ -148,7 +151,8 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   const rng = createRng(s.seed, s.turn)
   s.battles = []
   s.dispatches = []
-  const live = orders.filter((o) => s.nations[o.nationId]?.alive)
+  // A player's governors add their own upgrades to the month's orders.
+  const live = [...orders, ...governorOrders(s, map)].filter((o) => s.nations[o.nationId]?.alive)
 
   for (const phase of PHASES) {
     for (const o of live) {
@@ -389,6 +393,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'fundAgency':
       fundAgency(s, o.nationId, o.agency)
+      break
+    case 'setGovernor':
+      s.regions[o.regionId].governor = o.governor
       break
     case 'spy':
       runSpyMission(s, map, o.nationId, o.target, o.mission, rng)
