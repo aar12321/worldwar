@@ -1,5 +1,5 @@
 import { TECH_BY_ID, type TechModifiers } from '../data/techTree'
-import { EMPIRE, MAX_WARS } from '../data/war'
+import { EMPIRE, MAX_WARS, WAR } from '../data/war'
 import type { GameState, LogKind, Milestone, Nation, NationId, RegionId, UnitCounts, UnitType } from './types'
 
 export const pairKey = (a: NationId, b: NationId) => (a < b ? `${a}|${b}` : `${b}|${a}`)
@@ -35,6 +35,11 @@ export function addInfamy(s: GameState, id: NationId, amount: number) {
 /** Wars a nation can fight at once. It grows with the size of its empire. */
 export function maxWars(s: GameState, id: NationId): number {
   return Math.min(EMPIRE.maxWarsCap, MAX_WARS + Math.floor(regionsOf(s, id).length / EMPIRE.warsPerRegions))
+}
+
+/** Attacks a nation's military can launch in one month. A bigger empire has more armies and more fronts. */
+export function maxAttacks(s: GameState, id: NationId): number {
+  return Math.min(EMPIRE.maxAttacksCap, WAR.maxAttacksPerTurn + Math.floor(regionsOf(s, id).length / EMPIRE.attacksPerRegions))
 }
 
 /** Nations that have promised to defend `id`. */

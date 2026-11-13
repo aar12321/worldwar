@@ -10,12 +10,23 @@ export const EMPIRE = {
   warsPerRegions: 12,
   maxWarsCap: 8,
   /** Unsettled countries you can hold before stability suffers, plus one for every this many you control. */
-  settleRegions: 6,
+  settleRegions: 4,
   /** A defeated nation whose capital has fallen gives up entirely when its army is under this many divisions. */
   surrenderUnits: 3,
+  /** Or when its army is under this share of a player conqueror's. */
+  surrenderShare: 0.2,
   /** Months a puppet must serve before it can be annexed, and the influence that costs per country. */
-  annexMonths: 6,
-  annexCost: 30,
+  annexMonths: 3,
+  annexCost: 20,
+  /** One more attack a month for every this many countries you control, up to the cap. */
+  attacksPerRegions: 6,
+  /** One more training slot for every this many countries you control. */
+  slotsPerRegions: 3,
+  /** Influence each country adds every month, for the officials who run it. */
+  influencePerRegion: 0.15,
+  maxAttacksCap: 9,
+  /** Most war score a puppet can cost, however big the nation. A broken giant still bows. */
+  puppetCap: 80,
   annexInfamy: 2,
   /** Share of a fallen nation's treasury its conqueror takes. */
   spoilsShare: 0.4,
@@ -96,7 +107,7 @@ export const WAR = {
   /** Where a freshly conquered country's line starts, as a share of its maximum. */
   capturedLine: 0.4,
   /** Months for conquered land to be fully yours. */
-  integrationTurns: 12,
+  integrationTurns: 6,
   integrationFloor: 0.4,
   /** Conquered countries beyond this many each cost stability. */
   overextendFree: 2,

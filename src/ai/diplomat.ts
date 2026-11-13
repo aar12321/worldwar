@@ -77,7 +77,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       const fresh = s.turn - started < 3
       const bias = { expansionist: -12, opportunist: -4, turtle: 10, trader: 8, honorable: 0 }[me.personality ?? 'honorable']
       const score = me.warWeariness * 1.1 + (ratio - 1) * 25 + net * 0.6 + concession - demand * 0.8 + op * 0.15 + bias - (fresh ? 12 : 0) - 8 + noise
-      if (p.terms.puppet && score <= 25) return verdict(false, 'we will never be your puppet')
+      if (p.terms.puppet && score <= 8) return verdict(false, 'we will never be your puppet')
       if (score > 0) {
         if (me.warWeariness > 25) return verdict(true, 'the war has bled us dry')
         if (ratio > 1.3 || net > 15) return verdict(true, 'we cannot win this war')

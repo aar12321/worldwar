@@ -3,7 +3,7 @@ import { TRAINING, UNIT_SPECS, WEAPONS, trainingRank } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { COMBAT, hasCombinedArms } from './combat'
 import { nationModifiers, totalUnits } from './helpers'
-import { BASE_TRAIN_SLOTS } from '../data/unitTypes'
+import { trainingSlots } from './training'
 import type { GameState, NationId, UnitType } from './types'
 import { UNIT_TYPES } from './types'
 
@@ -83,7 +83,6 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
       sources,
     }
   })
-  const barracks = Object.values(s.regions).reduce((sum, r) => (r.owner === nationId ? sum + r.buildings.barracks : sum), 0)
   const units = n.military.units
   return {
     units: lines,
@@ -93,7 +92,7 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
     foodUse: UNIT_TYPES.reduce((sum, k) => sum + units[k] * UNIT_SPECS[k].food, 0),
     combinedArms: hasCombinedArms(units),
     combinedArmsBonus: COMBAT.combinedArmsBonus + base.combinedArms,
-    trainingSlots: BASE_TRAIN_SLOTS + barracks,
+    trainingSlots: trainingSlots(s, nationId),
     trainingUsed: (s.trainingQueue ?? []).filter((j) => j.nationId === nationId).length,
   }
 }

@@ -92,7 +92,7 @@ export interface City {
   lng?: number
 }
 
-export type Governor = 'off' | 'growth' | 'industry' | 'farming' | 'research'
+export type Governor = 'off' | 'growth' | 'industry' | 'farming' | 'research' | 'military'
 
 export interface RegionState {
   id: RegionId

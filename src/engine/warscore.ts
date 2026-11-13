@@ -1,4 +1,5 @@
 import { DIPLOMACY } from '../data/unitTypes'
+import { EMPIRE } from '../data/war'
 import { regionWorkforce } from './economy'
 import { clamp, totalUnits } from './helpers'
 import type { BattleReport, GameState, NationId, PeaceTerms, RegionId, WorldMap } from './types'
@@ -51,7 +52,7 @@ export function regionValue(s: GameState, map: WorldMap, id: RegionId): number {
 export function puppetValue(s: GameState, map: WorldMap, id: NationId): number {
   let land = 0
   for (const r of Object.values(s.regions)) if (r.owner === id) land += regionValue(s, map, r.id)
-  return Math.round(Math.max(DIPLOMACY.puppet.minValue, land * DIPLOMACY.puppet.valueShare))
+  return Math.round(Math.min(EMPIRE.puppetCap, Math.max(DIPLOMACY.puppet.minValue, land * DIPLOMACY.puppet.valueShare)))
 }
 
 export function termsCost(s: GameState, map: WorldMap, terms: PeaceTerms, proposer: NationId, target: NationId) {

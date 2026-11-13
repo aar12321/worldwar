@@ -3,7 +3,7 @@ import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, DIPLOMACY, PROP
 import { CITY_RULES, FOCUS } from '../data/cities'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS, TREASURY } from '../data/business'
 import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
-import { EMPIRE, JUSTIFY, STANCES, WAR } from '../data/war'
+import { EMPIRE, JUSTIFY, STANCES } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { tradeValue, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
@@ -12,7 +12,7 @@ import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
 import { investedIn, sectorCap, sectorYield } from './business'
 import { buildingCap, computeEconomy, nationWorkforce, regionWorkforce } from './economy'
-import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, maxWars, totalUnits } from './helpers'
+import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, maxAttacks, maxWars, totalUnits } from './helpers'
 import { trainingSlots } from './training'
 import { MARKET_GOODS, marketValue, tradeRoom } from './trade'
 import type { GameState, Order, UnitType, WorldMap } from './types'
@@ -303,7 +303,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (target.owner === o.nationId) return 'That country is already yours'
       const pendingWar = pending.some((p) => p.type === 'declareWar' && p.target === target.owner)
       if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
-      if (n.military.lastAttackTurn === s.turn && n.military.attacksThisTurn >= WAR.maxAttacksPerTurn) return `Your military has already attacked ${WAR.maxAttacksPerTurn} times this turn`
+      if (n.military.lastAttackTurn === s.turn && n.military.attacksThisTurn >= maxAttacks(s, o.nationId)) return `Your military has already attacked ${maxAttacks(s, o.nationId)} times this turn`
       if (totalUnits(n.military.units) < 0.1) return 'You have no military to attack with'
       if (commitShare(n, o.commit ?? 'main') < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
       if (!canAttackRegion(s, map, o.nationId, o.target).ok) return 'Not on your border. A sea attack needs a port.'
@@ -375,7 +375,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'setGovernor': {
       const r = s.regions[o.regionId]
       if (r?.owner !== o.nationId) return 'You do not control this country'
-      return ['off', 'growth', 'industry', 'farming', 'research'].includes(o.governor) ? null : 'Unknown plan'
+      return ['off', 'growth', 'industry', 'farming', 'research', 'military'].includes(o.governor) ? null : 'Unknown plan'
     }
     case 'buyShares':
     case 'sellShares':

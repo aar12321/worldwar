@@ -103,7 +103,9 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
   if (!old) return
   const remaining = regionsOf(s, oldOwner)
   // A nation whose capital has fallen and whose army is gone has nothing left to fight with. It surrenders whole.
-  if (raze && remaining.length > 0 && old.capital === regionId && totalUnits(old.military.units) < EMPIRE.surrenderUnits) {
+  // A player who crushes an army also wins the war outright: the beaten nation gives up when its army is a fraction of the conqueror's.
+  const crushed = s.nations[newOwner]?.isPlayer && totalUnits(old.military.units) < totalUnits(s.nations[newOwner].military.units) * EMPIRE.surrenderShare
+  if (raze && remaining.length > 0 && old.capital === regionId && (totalUnits(old.military.units) < EMPIRE.surrenderUnits || crushed)) {
     addLog(s, 'war', `${old.name}'s capital has fallen and its army is broken. ${old.name} surrenders to ${s.nations[newOwner]?.name ?? 'its conqueror'}.`, [oldOwner, newOwner])
     for (const id of remaining) seize(s, map, id, newOwner, true)
     killNation(s, oldOwner, newOwner)

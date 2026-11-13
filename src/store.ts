@@ -3,10 +3,10 @@ import { generateAllBotOrders } from './ai/bot'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import type { AdviceTarget } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
-import { totalUnits, turnDate } from './engine/helpers'
+import { maxAttacks, totalUnits, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
 import { MONTH_END_ORDERS, validateOrder } from './engine/orders'
-import { WAR, type Commit, type Stance } from './data/war'
+import type { Commit, Stance } from './data/war'
 import { applyOrderNow, resolveTurn } from './engine/resolveTurn'
 import { BUDGET_KEYS } from './data/government'
 import type { BattleReport, Budget, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
@@ -749,8 +749,8 @@ export const useGame = create<GameStore>((set, get) => ({
     const { map } = getWorld()
     if (session && online?.status === 'playing') {
       const queued = get().orders.filter((o) => o.type === 'attack').length
-      if (queued >= WAR.maxAttacksPerTurn) {
-        get().toast(`Your military can plan ${WAR.maxAttacksPerTurn} attacks a month`, 'error')
+      if (queued >= maxAttacks(game, game.playerId)) {
+        get().toast(`Your military can plan ${maxAttacks(game, game.playerId)} attacks a month`, 'error')
         return false
       }
       const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance })
