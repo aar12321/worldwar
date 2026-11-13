@@ -11,7 +11,7 @@ import { atWar, canUseUnit, clamp, hasCasusBelli, hasPact, isAllied, pairKey, pa
 import { militaryPower } from '../engine/militaryStats'
 import { validateOrder } from '../engine/orders'
 import { createRng, type Rng } from '../engine/rng'
-import { marketPrices, stockOf, type MarketPrices } from '../engine/trade'
+import { MARKET_GOODS, marketPrices, stockOf, tradeRoom, type MarketPrices } from '../engine/trade'
 import type { BuildingType, GameState, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
 import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
 import { canAttackRegion, garrisonStrength } from '../engine/warfare'
@@ -120,7 +120,7 @@ const BRANCH_PRIORITY: Record<'aggressive' | 'builder', TechBranch[]> = {
 }
 
 /** Stock above which a nation considers a resource spare. */
-const SURPLUS: Record<TradeResource, number> = { capital: 80, food: 40, tp: 60, manpower: 180 }
+const SURPLUS: Record<TradeResource, number> = { capital: 80, food: 40, tp: 60, manpower: 180, oil: 30, steel: 40, goods: 50 }
 
 type Agenda = 'peace' | 'allies' | 'research' | 'economy' | 'military' | 'trade' | 'diplomacy' | 'war'
 
@@ -191,6 +191,17 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   tax = clamp(Math.round(tax * 100) / 100, 0.1, 0.4)
   const draft = atWarNow ? (n.warWeariness > 30 ? 0.07 : 0.1) : 0.05
   if (Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft })
+
+  // The world market: sell what piles up when money is short, and the shortfall is bought on its own (auto-buy).
+  if (n.resources.capital < 150) {
+    let room = tradeRoom(s, map, nationId)
+    for (const r of MARKET_GOODS) {
+      const spare = n.resources[r as 'food'] - SURPLUS[r]
+      if (spare < 6 || room < 1) continue
+      const amount = Math.floor(Math.min(spare * 0.6, room))
+      if (amount >= 1 && tryAdd({ type: 'marketSell', nationId, resource: r, amount })) room -= amount
+    }
+  }
 
   if (!n.military.commanderId && n.generals.length > 0) tryAdd({ type: 'assignGeneral', nationId, generalId: n.generals[0].id })
 
@@ -270,6 +281,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       let room = upkeepRoom
       const maxRecruits = clamp(Math.round((income / 30) * diff.production), BOT.minRecruitsPerTurn, BOT.maxRecruitsPerTurn)
       let recruited = 0
+      let steelBought = 0
       for (let i = 0; i < maxRecruits && budget > 10; i++) {
         const roll = rng.next()
         let unit: UnitType = 'infantry'
@@ -280,6 +292,14 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         else if (roll < 0.5 && canUseUnit(n, 'air') && units.fighter >= 0.5) unit = 'air'
         else if (roll < 0.55 && canUseUnit(n, 'naval')) unit = 'naval'
         const spec = UNIT_SPECS[unit]
+        // Steel for tanks, guns, planes and ships comes from the market when the factories fall short.
+        if (spec.steel > n.resources.steel + steelBought && budget > spec.capitalCost + 30) {
+          const need = Math.ceil(spec.steel * 2)
+          if (tryAdd({ type: 'marketBuy', nationId, resource: 'steel', amount: need })) {
+            steelBought += need
+            budget -= need * ctx.prices.steel * 1.1
+          }
+        }
         if (spec.upkeep > room || spec.capitalCost > budget) break
         if (n.foodShortage || n.resources.food <= 0) break
         if (econ.netFood < spec.food && n.resources.food < econ.foodConsumption * 2) break
@@ -532,6 +552,12 @@ function visiblyShort(s: GameState, ctx: TurnContext, id: NationId, r: TradeReso
       return (ctx.enemies.get(id) ?? []).length > 0 && n.militaryPool < 50
     case 'tp':
       return false
+    case 'oil':
+      return n.oilShortage || n.resources.oil < 4
+    case 'steel':
+      return n.resources.steel < 4
+    case 'goods':
+      return n.goodsShortage || n.resources.goods < 6
   }
 }
 

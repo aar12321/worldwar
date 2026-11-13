@@ -11,6 +11,10 @@ export interface UnitSpec {
   manpowerCost: number
   upkeep: number
   food: number
+  /** Steel to build one. */
+  steel: number
+  /** Oil it burns each month. */
+  oil: number
   requiresBuilding: BuildingType
 }
 
@@ -28,12 +32,12 @@ export const TRAIN_MONTHS: Record<UnitType, number> = {
 export const TRAIN_QUEUE_LIMIT = 4
 
 export const UNIT_SPECS: Record<UnitType, UnitSpec> = {
-  infantry: { name: 'Infantry', role: 'Cheap and steady. Best in cities, forests and mountains.', attack: 1, defense: 1.2, capitalCost: 10, manpowerCost: 10, upkeep: 0.6, food: 0.3, requiresBuilding: 'barracks' },
-  armor: { name: 'Tanks', role: 'Hits hardest on plains and desert. Poor in mountains and cities.', attack: 2.4, defense: 1.6, capitalCost: 25, manpowerCost: 5, upkeep: 1.4, food: 0.2, requiresBuilding: 'barracks' },
-  artillery: { name: 'Artillery', role: 'Big guns. Grinds down a Defense Line, best with a Siege. Weak if caught alone.', attack: 2, defense: 0.7, capitalCost: 28, manpowerCost: 4, upkeep: 1.3, food: 0.2, requiresBuilding: 'barracks' },
-  fighter: { name: 'Fighters', role: 'Wins the air. The side with more fighters makes the other side\'s bombers far weaker.', attack: 1.2, defense: 1.4, capitalCost: 26, manpowerCost: 2, upkeep: 1.3, food: 0.1, requiresBuilding: 'factory' },
-  air: { name: 'Bombers', role: 'Strikes first and hard. Useless if the enemy rules the air.', attack: 2.4, defense: 0.5, capitalCost: 32, manpowerCost: 3, upkeep: 1.5, food: 0.1, requiresBuilding: 'factory' },
-  naval: { name: 'Warships', role: 'Fights only on coasts. A port lets you attack across the sea.', attack: 1.6, defense: 1.4, capitalCost: 35, manpowerCost: 4, upkeep: 1.6, food: 0.15, requiresBuilding: 'port' },
+  infantry: { name: 'Infantry', role: 'Cheap and steady. Best in cities, forests and mountains.', attack: 1, defense: 1.2, capitalCost: 10, manpowerCost: 10, upkeep: 0.6, food: 0.3, steel: 0, oil: 0, requiresBuilding: 'barracks' },
+  armor: { name: 'Tanks', role: 'Hits hardest on plains and desert. Poor in mountains and cities.', attack: 2.4, defense: 1.6, capitalCost: 25, manpowerCost: 5, upkeep: 1.4, food: 0.2, steel: 3, oil: 0.15, requiresBuilding: 'barracks' },
+  artillery: { name: 'Artillery', role: 'Big guns. Grinds down a Defense Line, best with a Siege. Weak if caught alone.', attack: 2, defense: 0.7, capitalCost: 28, manpowerCost: 4, upkeep: 1.3, food: 0.2, steel: 2, oil: 0.06, requiresBuilding: 'barracks' },
+  fighter: { name: 'Fighters', role: 'Wins the air. The side with more fighters makes the other side\'s bombers far weaker.', attack: 1.2, defense: 1.4, capitalCost: 26, manpowerCost: 2, upkeep: 1.3, food: 0.1, steel: 2, oil: 0.1, requiresBuilding: 'factory' },
+  air: { name: 'Bombers', role: 'Strikes first and hard. Useless if the enemy rules the air.', attack: 2.4, defense: 0.5, capitalCost: 32, manpowerCost: 3, upkeep: 1.5, food: 0.1, steel: 3, oil: 0.12, requiresBuilding: 'factory' },
+  naval: { name: 'Warships', role: 'Fights only on coasts. A port lets you attack across the sea.', attack: 1.6, defense: 1.4, capitalCost: 35, manpowerCost: 4, upkeep: 1.6, food: 0.15, steel: 5, oil: 0.2, requiresBuilding: 'port' },
 }
 
 export interface BuildingSpec {
@@ -175,6 +179,9 @@ export const MARKET: Record<TradeResource, MarketSpec> = {
   food: { name: 'Food', short: 'Food', base: 1.3, reference: 60 },
   tp: { name: 'Research', short: 'Research', base: 2.2, reference: 40 },
   manpower: { name: 'Soldiers', short: 'Soldiers', base: 0.12, reference: 400 },
+  oil: { name: 'Oil', short: 'Oil', base: 2, reference: 14 },
+  steel: { name: 'Steel', short: 'Steel', base: 1.8, reference: 12 },
+  goods: { name: 'Goods', short: 'Goods', base: 1.1, reference: 20 },
 }
 
 export const TRADE_LIMITS = { maxMonths: 12, maxAmount: 500 }

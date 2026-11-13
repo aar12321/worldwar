@@ -1,10 +1,12 @@
 import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, UNIT_SPECS } from '../data/unitTypes'
+import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { WAR } from '../data/war'
 import { addLog, clamp, enemiesOf, nationModifiers, pairKey } from './helpers'
 import type { Rng } from './rng'
-import type { Buildings, BuildingType, GameState, MapRegion, NationId, RegionState, WorldMap } from './types'
+import { marketPrices, type MarketPrices } from './trade'
+import type { Buildings, BuildingType, GameState, MapRegion, NationId, RegionState, TradeResource, WorldMap } from './types'
 import { BUILDING_TYPES, UNIT_TYPES } from './types'
 
 export const ECON = {
@@ -74,6 +76,15 @@ export interface EconomyReport {
   foodProduction: number
   foodConsumption: number
   netFood: number
+  oilProduction: number
+  oilUse: number
+  netOil: number
+  steelProduction: number
+  goodsProduction: number
+  goodsUse: number
+  netGoods: number
+  /** Units this nation can move through the world market each month. */
+  tradeCapacity: number
   ppGain: number
   tpGain: number
   militaryRegen: number
@@ -97,6 +108,10 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   let population = 0
   let rebelRegions = 0
   let occupied = 0
+  let oilProduction = 0
+  let steelProduction = 0
+  let goodsProduction = 0
+  let portLevels = 0
   for (const r of owned) {
     const mr = map.regions[r.id]
     const eff = integrationFactor(r)
@@ -110,6 +125,10 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     if (r.sabotaged <= 0) activeFactories += r.buildings.factory * eff
     if (r.rebels > 0) rebelRegions++
     if (r.integration < 1) occupied++
+    oilProduction += (OIL_DEPOSITS[r.id] ?? 0) * eff
+    steelProduction += ((STEEL_DEPOSITS[r.id] ?? 0) + r.buildings.factory * MATERIALS.steelPerFactory) * eff
+    goodsProduction += (w * MATERIALS.goodsPerWorkforce + r.buildings.factory * MATERIALS.goodsPerFactory) * eff
+    portLevels += r.buildings.port * eff
   }
   const civilianWorkforce = workforce * (1 - n.draftRate)
   const jobs = (buildings.factory + buildings.farm + buildings.university) * ECON.jobsPerBuilding * (1 - mods.jobsReduction)
@@ -131,11 +150,14 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   let upkeep = 0
   let armyFood = 0
   let divisions = 0
+  let oilUse = 0
   for (const k of UNIT_TYPES) {
     upkeep += n.military.units[k] * UNIT_SPECS[k].upkeep
     armyFood += n.military.units[k] * UNIT_SPECS[k].food
+    oilUse += n.military.units[k] * UNIT_SPECS[k].oil
     divisions += n.military.units[k]
   }
+  const goodsUse = workforce * MATERIALS.goodsUsePerWorkforce
   const warBills: WarBill[] = []
   for (const enemy of enemiesOf(s, nationId)) {
     let enemyWorkforce = 0
@@ -161,6 +183,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
       highTax +
       lowTax -
       (n.foodShortage ? 25 : 0) -
+      (n.goodsShortage ? MATERIALS.noGoodsStability : 0) -
       (n.inDebt ? 15 : 0) -
       n.warWeariness * 0.5 +
       (martial ? 15 : 0) -
@@ -189,6 +212,14 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     foodProduction,
     foodConsumption,
     netFood: foodProduction - foodConsumption,
+    oilProduction,
+    oilUse,
+    netOil: oilProduction - oilUse,
+    steelProduction,
+    goodsProduction,
+    goodsUse,
+    netGoods: goodsProduction - goodsUse,
+    tradeCapacity: MATERIALS.tradeBase + portLevels * MATERIALS.tradePerPort,
     ppGain,
     tpGain,
     militaryRegen: workforce * n.draftRate * ECON.militaryRegenPerWorkforce,
@@ -200,7 +231,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   }
 }
 
-export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rng: Rng) {
+export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rng: Rng, prices?: MarketPrices) {
   const n = s.nations[nationId]
   const e = computeEconomy(s, map, nationId)
   const r = n.resources
@@ -223,6 +254,22 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
     n.foodShortage = false
     r.food = Math.min(r.food, e.workforce * ECON.foodCapPerWorkforce)
   }
+  // Materials: steel only piles up, oil and goods can run out.
+  r.steel += e.steelProduction
+  r.oil += e.netOil
+  r.goods += e.netGoods
+  buyShortfalls(s, nationId, e, prices ?? marketPrices(s))
+  if (r.oil < 0) {
+    if (!n.oilShortage && n.isPlayer) addLog(s, 'economy', `${n.name} is out of oil. Tanks, planes and warships fight at ${Math.round(MATERIALS.noOilStrength * 100)}% strength.`, [nationId])
+    r.oil = 0
+    n.oilShortage = true
+  } else n.oilShortage = false
+  if (r.goods < 0) {
+    if (!n.goodsShortage && n.isPlayer) addLog(s, 'economy', `${n.name} has run out of goods. People are growing restless.`, [nationId])
+    r.goods = 0
+    n.goodsShortage = true
+  } else n.goodsShortage = false
+  n.tradeUsed = 0
   r.pp = Math.min(ECON.ppCap, r.pp + e.ppGain)
   r.tp += e.tpGain
   n.militaryPool = Math.min(e.militaryCap, n.militaryPool + e.militaryRegen)
@@ -263,5 +310,33 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
     }
   }
 }
+
+/**
+ * A country on auto-buy keeps a small reserve of the materials it uses, buying what it is short of at the market price.
+ * It never spends its last money and cannot move more than its trade capacity.
+ */
+function buyShortfalls(s: GameState, nationId: NationId, e: EconomyReport, prices: MarketPrices) {
+  const n = s.nations[nationId]
+  if (!n.autoBuy?.length) return
+  const use: Partial<Record<TradeResource, number>> = { food: e.foodConsumption, oil: e.oilUse, goods: e.goodsUse, steel: 0 }
+  const net: Partial<Record<TradeResource, number>> = { food: e.netFood, oil: e.netOil, goods: e.netGoods, steel: e.steelProduction }
+  for (const r of n.autoBuy) {
+    if (r === 'capital' || r === 'tp' || r === 'manpower') continue
+    const stock = n.resources[r]
+    const want = (use[r] ?? 0) * MATERIALS.autoBuyMonths - stock
+    if (want <= 0 || (net[r] ?? 0) >= 0 && stock >= 0) continue
+    const left = Math.max(0, e.tradeCapacity - n.tradeUsed)
+    const price = prices[r] * (1 + marketSpread(n))
+    const afford = Math.max(0, (n.resources.capital - 15) / price)
+    const amount = Math.min(want, left, afford)
+    if (amount < 0.05) continue
+    n.resources.capital -= amount * price
+    n.resources[r] += amount
+    n.tradeUsed += amount
+  }
+}
+
+/** The market's cut on every trade. Free trade narrows it. */
+export const marketSpread = (n: { laws: string[] }) => (n.laws.includes('free_trade') ? MATERIALS.freeTradeSpread : MATERIALS.spread)
 
 export { militaryPower } from './militaryStats'

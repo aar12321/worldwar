@@ -1,4 +1,5 @@
 import { PLAYER_COLOR, mapColor } from './mapColors'
+import { OIL_DEPOSITS, STEEL_DEPOSITS } from './deposits'
 import { UNIT_SPECS, emptyTraining } from './unitTypes'
 import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
@@ -128,7 +129,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       originalCapital: id,
       isPlayer,
       alive: true,
-      resources: { capital: 30 + w * 6, food: w * 4, pp: 30, tp: 0 },
+      resources: { capital: 30 + w * 6, food: w * 4, pp: 30, tp: 0, oil: 8 + (OIL_DEPOSITS[id] ?? 0) * 6, steel: 6 + (STEEL_DEPOSITS[id] ?? 0) * 4, goods: w * 2 },
       militaryPool: w * 0.05 * ECON.militaryCapPerWorkforce * 0.5,
       taxRate: 0.25,
       draftRate: 0.05,
@@ -138,6 +139,10 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       laws: [],
       generals,
       foodShortage: false,
+      oilShortage: false,
+      goodsShortage: false,
+      tradeUsed: 0,
+      autoBuy: ['food', 'oil', 'goods'],
       inDebt: false,
       debtTurns: 0,
       embargoedUntil: 0,

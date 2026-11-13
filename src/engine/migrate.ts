@@ -15,6 +15,13 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
       n.military.drill[k] ??= 0
       n.military.weapons[k] ??= 0
     }
+    n.resources.oil ??= 6
+    n.resources.steel ??= 6
+    n.resources.goods ??= 10
+    n.oilShortage ??= false
+    n.goodsShortage ??= false
+    n.tradeUsed ??= 0
+    n.autoBuy ??= ['food', 'oil', 'goods']
     n.military.attacksThisTurn ??= 0
     n.military.exposed ??= 0
   }

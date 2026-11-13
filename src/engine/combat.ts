@@ -19,6 +19,8 @@ export interface Combatant {
   damageTaken?: number
   /** Multiplier on bomber strength from the fight for the air. Set by resolveBattle. */
   bomberMult?: number
+  /** Strength of everything but infantry: 1, or less when the nation is out of oil. */
+  vehicleMult?: number
 }
 
 export interface BattleInput {
@@ -91,7 +93,8 @@ export function sidePower(
     const drilled = 1 + (c.drill?.[k] ?? 0) * TRAINING.bonusPerLevel
     const stance = defending ? 1 : (c.boost?.[k] ?? 1)
     const air = k === 'air' ? (c.bomberMult ?? 1) : 1
-    power += c.units[k] * weights[k] * base * tech * drilled * stance * air * terrainMultiplier(terrain, k, c.mods)
+    const fuel = k === 'infantry' ? 1 : (c.vehicleMult ?? 1)
+    power += c.units[k] * weights[k] * base * tech * drilled * stance * air * fuel * terrainMultiplier(terrain, k, c.mods)
   }
   if (hasCombinedArms(c.units)) {
     const bonus = COMBAT.combinedArmsBonus + (c.mods?.combinedArms ?? 0)

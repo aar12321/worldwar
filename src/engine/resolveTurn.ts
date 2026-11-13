@@ -1,5 +1,5 @@
 import { TECH_BY_ID } from '../data/techTree'
-import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
+import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
 import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, propose, respond } from './diplomacy'
 import { applyEconomy } from './economy'
 import { runSpyMission } from './espionage'
@@ -8,6 +8,7 @@ import { addLog, reach, regionsOf } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
 import { research } from './tech'
+import { marketPrices, marketValue } from './trade'
 import { tickTraining, trainMonths } from './training'
 import { UNIT_TYPES, type BattleReport, type GameState, type Order, type WorldMap } from './types'
 import { checkOutcome } from './victory'
@@ -31,6 +32,12 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Drill ${UNIT_SPECS[o.unit].name}`
     case 'upgradeWeapons':
       return `Upgrade ${UNIT_SPECS[o.unit].name} weapons`
+    case 'marketBuy':
+      return `Buy ${Math.round(o.amount)} ${MARKET[o.resource].name.toLowerCase()}`
+    case 'marketSell':
+      return `Sell ${Math.round(o.amount)} ${MARKET[o.resource].name.toLowerCase()}`
+    case 'setAutoBuy':
+      return 'Change what is bought automatically'
     case 'research':
       return `Research ${TECH_BY_ID[o.techId]?.name ?? o.techId}`
     case 'attack':
@@ -72,6 +79,7 @@ const PHASES: Order['type'][][] = [
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'propose'],
   ['cancelTrain'],
+  ['setAutoBuy', 'marketSell', 'marketBuy'],
   ['research', 'build', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['spy'],
@@ -103,6 +111,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
       n.resources.capital -= cost.capital
       n.resources.pp -= cost.pp
       n.militaryPool -= cost.manpower
+      n.resources.steel -= cost.steel
       executeOrder(s, map, o, rng)
     }
   }
@@ -124,7 +133,8 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
     .map((n) => n.id)
     .sort()
   for (const id of alive) if (regionsOf(s, id).length === 0) killNation(s, id, null)
-  for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng)
+  const prices = marketPrices(s)
+  for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng, prices)
   applyDeals(s)
 
   s.turn++
@@ -151,6 +161,7 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
   n.resources.capital -= cost.capital
   n.resources.pp -= cost.pp
   n.militaryPool -= cost.manpower
+  n.resources.steel -= cost.steel
   const rng = createRng(s.seed, s.turn * 31 + s.nextId)
   if (o.type === 'attack') {
     const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance)
@@ -195,6 +206,18 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'research':
       if (research(s, o.nationId, o.techId)) reach(n, 'research')
       break
+    case 'marketBuy':
+      n.resources[o.resource as 'food'] += o.amount
+      n.tradeUsed += o.amount
+      break
+    case 'marketSell':
+      n.resources[o.resource as 'food'] -= o.amount
+      n.resources.capital += marketValue(s, n, o.resource, o.amount, 'sell')
+      n.tradeUsed += o.amount
+      break
+    case 'setAutoBuy':
+      n.autoBuy = [...new Set(o.resources)]
+      break
     case 'build':
       s.regions[o.regionId].buildings[o.building]++
       reach(n, 'build')
@@ -213,6 +236,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       const job = s.trainingQueue[index]
       const spec = UNIT_SPECS[job.unit]
       const refund = job.remaining === job.total ? 1 : 0.5
+      n.resources.steel += spec.steel * refund
       n.resources.capital += spec.capitalCost * refund
       n.militaryPool += spec.manpowerCost * refund
       s.trainingQueue.splice(index, 1)

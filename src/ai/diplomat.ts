@@ -28,6 +28,14 @@ function needFor(s: GameState, id: NationId, r: TradeResource, econ: EconomyRepo
     case 'manpower':
       if (enemiesOf(s, id).length > 0) return 1.4
       return n.militaryPool > econ.militaryCap * 0.8 ? 0.6 : 1
+    case 'oil':
+      if (n.oilShortage) return 1.8
+      return econ.netOil < 0 ? 1.4 : n.resources.oil > econ.oilUse * 6 + 20 ? 0.6 : 1
+    case 'steel':
+      return n.resources.steel < 6 ? 1.4 : n.resources.steel > 60 ? 0.6 : 1
+    case 'goods':
+      if (n.goodsShortage) return 1.7
+      return econ.netGoods < 0 ? 1.3 : n.resources.goods > econ.goodsUse * 6 ? 0.6 : 1
   }
 }
 
@@ -36,7 +44,7 @@ function valueFor(s: GameState, id: NationId, b: ResourceBundle, prices: MarketP
 }
 
 /** Amount of a resource a nation keeps back and will not trade away. */
-export const TRADE_RESERVE: Record<TradeResource, number> = { capital: 25, food: 8, tp: 0, manpower: 30 }
+export const TRADE_RESERVE: Record<TradeResource, number> = { capital: 25, food: 8, tp: 0, manpower: 30, oil: 6, steel: 8, goods: 8 }
 
 export interface Verdict {
   accept: boolean

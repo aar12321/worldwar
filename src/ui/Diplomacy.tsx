@@ -170,7 +170,7 @@ function DealRow({ d }: { d: Deal }) {
   )
 }
 
-const ZERO: Record<TradeResource, number> = { capital: 0, food: 0, tp: 0, manpower: 0 }
+const ZERO: Record<TradeResource, number> = { capital: 0, food: 0, tp: 0, manpower: 0, oil: 0, steel: 0, goods: 0 }
 const compact = (b: Record<TradeResource, number>): ResourceBundle => {
   const out: ResourceBundle = {}
   for (const r of TRADE_RESOURCES) if (b[r] > 0) out[r] = b[r]

@@ -1,6 +1,7 @@
 import { addOpinion, forgetNation } from '../ai/opinion'
 import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
+import { MATERIALS } from '../data/deposits'
 import { COMMITS, STANCES, WAR, type Commit, type Stance } from '../data/war'
 import { lineMax, regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
@@ -120,7 +121,12 @@ function makeCombatant(n: Nation | null, military: Military | null, garrison: Un
     // The garrison is green, so it pulls the drill of its type down.
     drill[k] = army + extra > 0 ? ((military?.drill[k] ?? 0) * army) / (army + extra) : 0
   }
-  return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes }
+  let vehicleMult = 1
+  if (n?.oilShortage) {
+    vehicleMult = MATERIALS.noOilStrength
+    notes.push(`no oil (tanks, planes and ships at ${Math.round(MATERIALS.noOilStrength * 100)}%)`)
+  }
+  return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes, vehicleMult }
 }
 
 /** Share of a nation's military that is free to defend: units committed to attacks this turn fight at half strength. */
@@ -367,7 +373,7 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
   if (existing && !existing.alive) {
     existing.alive = true
     existing.capital = regionId
-    existing.resources = { capital: 20, food: 10, pp: 10, tp: existing.resources.tp }
+    existing.resources = { capital: 20, food: 10, pp: 10, tp: existing.resources.tp, oil: 4, steel: 3, goods: 6 }
     existing.stability = 55
     existing.warWeariness = 0
     existing.military = military
@@ -383,7 +389,7 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
       originalCapital: regionId,
       isPlayer: false,
       alive: true,
-      resources: { capital: 20, food: 10, pp: 10, tp: 0 },
+      resources: { capital: 20, food: 10, pp: 10, tp: 0, oil: 4, steel: 3, goods: 6 },
       militaryPool: 0,
       stability: 55,
       warWeariness: 0,

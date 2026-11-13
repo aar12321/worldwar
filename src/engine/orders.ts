@@ -1,11 +1,12 @@
 import { TECH_BY_ID } from '../data/techTree'
-import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
+import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
 import { MAX_WARS, STANCES, WAR } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { validateProposal } from './diplomacy'
 import { buildingCap, computeEconomy, regionWorkforce } from './economy'
 import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, totalUnits } from './helpers'
 import { trainingSlots } from './training'
+import { MARKET_GOODS, marketValue, tradeRoom } from './trade'
 import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canAttackRegion, commitShare } from './warfare'
 
@@ -28,10 +29,11 @@ export interface OrderCost {
   pp: number
   tp: number
   manpower: number
+  steel: number
 }
 
 export function orderCost(s: GameState, o: Order): OrderCost {
-  const c: OrderCost = { capital: 0, pp: 0, tp: 0, manpower: 0 }
+  const c: OrderCost = { capital: 0, pp: 0, tp: 0, manpower: 0, steel: 0 }
   switch (o.type) {
     case 'build':
       c.capital = buildingCost(o.building, s.regions[o.regionId]?.buildings[o.building] ?? 0)
@@ -39,6 +41,10 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'queueTrain':
       c.capital = UNIT_SPECS[o.unit].capitalCost
       c.manpower = UNIT_SPECS[o.unit].manpowerCost
+      c.steel = UNIT_SPECS[o.unit].steel
+      break
+    case 'marketBuy':
+      c.capital = s.nations[o.nationId] ? marketValue(s, s.nations[o.nationId], o.resource, o.amount, 'buy') : 0
       break
     case 'train':
       c.capital = trainingCost(s.nations[o.nationId]?.military.drill[o.unit] ?? 0)
@@ -77,13 +83,14 @@ export function orderCost(s: GameState, o: Order): OrderCost {
 }
 
 export function committedCost(s: GameState, orders: Order[]): OrderCost {
-  const total: OrderCost = { capital: 0, pp: 0, tp: 0, manpower: 0 }
+  const total: OrderCost = { capital: 0, pp: 0, tp: 0, manpower: 0, steel: 0 }
   for (const o of orders) {
     const c = orderCost(s, o)
     total.capital += c.capital
     total.pp += c.pp
     total.tp += c.tp
     total.manpower += c.manpower
+    total.steel += c.steel
   }
   return total
 }
@@ -100,6 +107,9 @@ export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Or
   if (cost.pp > 0 && n.resources.pp - spent.pp < cost.pp) return `Not enough influence (costs ${cost.pp})`
   if (cost.tp > 0 && n.resources.tp - spent.tp < cost.tp) return `Not enough research (costs ${cost.tp})`
   if (cost.manpower > 0 && n.militaryPool - spent.manpower < cost.manpower) return `Not enough soldiers (needs ${cost.manpower},000)`
+  // Steel bought earlier in the same list counts as already in the store.
+  const bought = pending.reduce((sum, p) => (p.type === 'marketBuy' && p.resource === 'steel' ? sum + p.amount : sum), 0)
+  if (cost.steel > 0 && n.resources.steel + bought - spent.steel < cost.steel) return `Not enough steel (costs ${cost.steel}). Build factories or buy it on the market.`
   return null
 }
 
@@ -144,6 +154,17 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     }
     case 'upgradeWeapons':
       return nextWeaponLevel(s, o.nationId, o.unit).error
+    case 'marketBuy':
+    case 'marketSell': {
+      if (!MARKET_GOODS.includes(o.resource)) return 'That cannot be traded on the market'
+      if (!Number.isFinite(o.amount) || o.amount <= 0) return 'Pick an amount'
+      const room = tradeRoom(s, map, o.nationId)
+      if (o.amount > room + 1e-9) return room < 0.05 ? 'You have used all your trade capacity this month. Ports raise it.' : `You can move ${room.toFixed(1)} more this month. Ports raise it.`
+      if (o.type === 'marketSell' && n.resources[o.resource as 'food'] < o.amount) return `You do not have that much ${MARKET[o.resource].name.toLowerCase()}`
+      return null
+    }
+    case 'setAutoBuy':
+      return o.resources.every((r) => MARKET_GOODS.includes(r)) ? null : 'Only food and materials can be bought automatically'
     case 'research': {
       const t = TECH_BY_ID[o.techId]
       if (!t) return 'Unknown technology'

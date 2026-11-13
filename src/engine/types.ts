@@ -11,14 +11,17 @@ export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marsha
 export type SpyMission = 'sabotage'
 export type Difficulty = 'easy' | 'normal' | 'hard'
 export type Personality = 'expansionist' | 'trader' | 'turtle' | 'opportunist' | 'honorable'
-export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower'
+export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower' | 'oil' | 'steel' | 'goods'
+/** The materials a nation holds beyond money and people. */
+export type Material = 'oil' | 'steel' | 'goods'
 /** First-game goals a player nation has reached. */
 export type Milestone = 'build' | 'train' | 'research' | 'war' | 'win' | 'capture'
 export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms'
 
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'artillery', 'fighter', 'air', 'naval']
 export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic']
-export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower']
+export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower', 'oil', 'steel', 'goods']
+export const MATERIALS_LIST: Material[] = ['oil', 'steel', 'goods']
 
 /** Static geography, never mutated during play. */
 export interface MapRegion {
@@ -99,6 +102,12 @@ export interface Resources {
   food: number
   pp: number
   tp: number
+  /** Fuel for tanks, planes and warships. */
+  oil: number
+  /** What vehicles are built from. */
+  steel: number
+  /** What your people buy. Running out costs stability. */
+  goods: number
 }
 
 export interface Nation {
@@ -120,6 +129,14 @@ export interface Nation {
   laws: LawId[]
   generals: General[]
   foodShortage: boolean
+  /** No oil: vehicles fight at reduced strength. */
+  oilShortage: boolean
+  /** No goods: the people are unhappy. */
+  goodsShortage: boolean
+  /** Units moved through the world market this month. */
+  tradeUsed: number
+  /** Materials the country buys on its own to keep a small reserve. */
+  autoBuy: TradeResource[]
   inDebt: boolean
   /** Consecutive months spent with negative Capital. */
   debtTurns: number
@@ -230,6 +247,9 @@ export type Order =
   | { type: 'train'; nationId: NationId; unit: UnitType }
   | { type: 'upgradeWeapons'; nationId: NationId; unit: UnitType }
   | { type: 'research'; nationId: NationId; techId: string }
+  | { type: 'marketBuy'; nationId: NationId; resource: TradeResource; amount: number }
+  | { type: 'marketSell'; nationId: NationId; resource: TradeResource; amount: number }
+  | { type: 'setAutoBuy'; nationId: NationId; resources: TradeResource[] }
   | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
