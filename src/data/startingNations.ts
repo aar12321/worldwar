@@ -2,6 +2,7 @@ import { PLAYER_COLOR, mapColor } from './mapColors'
 import { OIL_DEPOSITS, STEEL_DEPOSITS } from './deposits'
 import { SECTOR_IDS, SECTORS } from './business'
 import { sectorCap } from '../engine/business'
+import { worldGross } from '../engine/victory'
 import { startingCities } from '../engine/cities'
 import { CORPORATE_TAX, EVEN_BUDGET, GOVERNMENTS } from './government'
 import { UNIT_SPECS, emptyTraining } from './unitTypes'
@@ -83,6 +84,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     log: [],
     nextId: 1,
     outcome: 'playing',
+    worldGross: 0,
   }
 
   map.order.forEach((id, index) => {
@@ -201,6 +203,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     if (nation.resources.food < 8) nation.resources.food = 8
   }
   for (const r of Object.values(state.regions)) r.line = lineMax(state, map, r.id)
+  state.worldGross = worldGross(state, map)
 
   return state
 }

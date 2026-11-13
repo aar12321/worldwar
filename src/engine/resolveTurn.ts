@@ -17,7 +17,7 @@ import { research } from './tech'
 import { marketPrices, marketValue } from './trade'
 import { tickTraining, trainMonths } from './training'
 import { UNIT_TYPES, type BattleReport, type GameState, type Order, type WorldMap } from './types'
-import { checkOutcome } from './victory'
+import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
 
 export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
@@ -179,7 +179,8 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
     s.pendingEvent = scheduleEvent(s, map, s.playerId, rng)
     s.nextEventTurn = s.turn + EVENT_GAP_TURNS
   }
-  s.outcome = checkOutcome(s)
+  s.worldGross = worldGross(s, map)
+  s.outcome = checkOutcome(s, map)
   return s
 }
 
@@ -200,7 +201,7 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
   const rng = createRng(s.seed, s.turn * 31 + s.nextId)
   if (o.type === 'attack') {
     const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance)
-    s.outcome = checkOutcome(s)
+    s.outcome = checkOutcome(s, map)
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
   }
   executeOrder(s, map, o, rng)

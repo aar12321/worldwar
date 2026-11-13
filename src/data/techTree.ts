@@ -1,6 +1,9 @@
 import type { TechBranch, UnitType } from '../engine/types'
+import type { PolicyEffects } from './government'
 
 export interface TechModifiers {
+  /** Changes to how the economy runs: business growth, trade, research, and so on. */
+  policy?: Partial<PolicyEffects>
   unitAttack?: Partial<Record<UnitType, number>>
   unitDefense?: Partial<Record<UnitType, number>>
   combinedArms?: number
@@ -33,6 +36,7 @@ export const BRANCH_LABELS: Record<TechBranch, string> = {
   air: 'Aerospace',
   naval: 'Naval',
   infra: 'Infrastructure',
+  economy: 'Economy',
 }
 
 export const TIER_COSTS = [0, 25, 70, 150, 260, 400, 580]
@@ -62,6 +66,13 @@ export const TECHS: Tech[] = [
   t({ id: 'naval_amphibious', name: 'Amphibious Doctrine', branch: 'naval', tier: 4, requires: ['naval_submarines'], description: 'Landing craft. Sea invasion penalty halved.', modifiers: { amphibiousPenaltyReduction: 0.5 } }),
   t({ id: 'naval_carriers', name: 'Aircraft Carriers', branch: 'naval', tier: 5, requires: ['naval_amphibious'], description: 'Floating airfields. Warships +40%, planes +10%.', modifiers: { unitAttack: { naval: 0.4, air: 0.1, fighter: 0.1 } } }),
   t({ id: 'naval_bluewater', name: 'Blue-Water Navy', branch: 'naval', tier: 6, requires: ['naval_carriers'], description: 'Global power projection. Naval defense +30%, sea landings lose far less strength.', modifiers: { amphibiousPenaltyReduction: 0.25, unitDefense: { naval: 0.3 } } }),
+
+  t({ id: 'eco_banking', name: 'Modern Banking', branch: 'economy', tier: 1, requires: [], description: 'Credit for new firms. Business grows 10% faster.', modifiers: { policy: { growth: 0.1 } } }),
+  t({ id: 'eco_exchanges', name: 'Commodity Exchanges', branch: 'economy', tier: 2, requires: ['eco_banking'], description: 'Organized markets. 25% more room to trade each month.', modifiers: { policy: { trade: 0.25 } } }),
+  t({ id: 'eco_mass_production', name: 'Mass Production', branch: 'economy', tier: 3, requires: ['eco_exchanges'], description: 'Assembly-line standards. Factory output +10%.', modifiers: { policy: { factory: 0.1 } } }),
+  t({ id: 'eco_schools', name: 'Public Schools', branch: 'economy', tier: 4, requires: ['eco_mass_production'], description: 'Educated workers. Research +12% and stability +3.', modifiers: { policy: { research: 0.12, stability: 3 } } }),
+  t({ id: 'eco_central_bank', name: 'Central Banking', branch: 'economy', tier: 5, requires: ['eco_schools'], description: 'Steady money. Business grows 15% faster and income +3%.', modifiers: { policy: { growth: 0.15, money: 0.03 } } }),
+  t({ id: 'eco_global_trade', name: 'Global Trade Networks', branch: 'economy', tier: 6, requires: ['eco_central_bank'], description: 'Shipping lanes everywhere. 50% more room to trade and all output +8%.', modifiers: { policy: { trade: 0.5, output: 0.08 } } }),
 
   t({ id: 'infra_farming', name: 'Mechanized Farming', branch: 'infra', tier: 1, requires: [], description: 'Tractors and fertilizer. Food output +25%.', modifiers: { foodOutput: 0.25 } }),
   t({ id: 'infra_railways', name: 'Railway Networks', branch: 'infra', tier: 2, requires: ['infra_farming'], description: 'Rapid rail logistics. Factory output +10%, food +10%.', modifiers: { factoryOutput: 0.1, foodOutput: 0.1 } }),

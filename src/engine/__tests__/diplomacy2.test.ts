@@ -21,7 +21,7 @@ function base(): GameState {
   return s
 }
 
-const proposal = (s: GameState, p: object & { kind: string }, from = P, to = 'r1'): Proposal => {
+const proposal = (s: GameState, p: Record<string, unknown> & { kind: string }, from = P, to = 'r1'): Proposal => {
   const full = { ...p, id: 'p1', from, to, created: s.turn, expires: s.turn + 6 } as Proposal
   s.proposals.push(full)
   return full
@@ -197,5 +197,48 @@ describe('puppet states', () => {
     expect(applyOrderNow(s, map, { type: 'releasePuppet', nationId: P, target: 'r1' }).error).toBeNull()
     expect(s.nations.r1.overlord).toBeNull()
     expect(validateOrder(s, map, { type: 'releasePuppet', nationId: P, target: 'r1' })).toMatch(/not your puppet/)
+  })
+})
+
+describe('the economic victory and the economy techs', () => {
+  it('a nation with a big enough share of the world output wins', async () => {
+    const { checkOutcome, economicGoal, economicShare, grossIncome, worldGross } = await import('../victory')
+    const s = base()
+    s.worldGross = worldGross(s, map)
+    const share = economicShare(s, map, P)
+    expect(share).toBeGreaterThan(0)
+    expect(share).toBeLessThan(1)
+    expect(checkOutcome(s, map)).toBe('playing')
+    s.settings.victoryShare = 0.4
+    s.worldGross = grossIncome(s, map, P) / (economicGoal(0.4) + 0.01)
+    expect(checkOutcome(s, map)).toBe('victory')
+    s.worldGross = 0
+    expect(economicShare(s, map, P)).toBe(0)
+  })
+
+  it('half a puppet counts toward the share', async () => {
+    const { economicShare, grossIncome, worldGross } = await import('../victory')
+    const s = base()
+    s.worldGross = worldGross(s, map)
+    const alone = economicShare(s, map, P)
+    s.nations.r1.overlord = P
+    expect(economicShare(s, map, P)).toBeCloseTo(alone + (grossIncome(s, map, 'r1') * 0.5) / s.worldGross)
+  })
+
+  it('every economy tech changes the numbers it describes', async () => {
+    const { TECHS } = await import('../../data/techTree')
+    const { policyEffects } = await import('../policy')
+    const eco = TECHS.filter((t) => t.branch === 'economy')
+    expect(eco).toHaveLength(6)
+    const s = base()
+    const none = policyEffects(s.nations[P])
+    for (const tech of eco) {
+      const n = structuredClone(s.nations[P])
+      n.techs = [tech.id]
+      const e = policyEffects(n)
+      const changed = (Object.keys(e) as (keyof typeof e)[]).some((k) => e[k] !== none[k])
+      expect(changed, tech.id).toBe(true)
+    }
+    for (const t of eco.slice(1)) expect(t.requires.length).toBe(1)
   })
 })

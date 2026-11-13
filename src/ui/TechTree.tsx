@@ -7,8 +7,8 @@ import { useGame } from '../store'
 import { fmt, usePlayerView } from './hooks'
 import { speak } from './plain'
 
-const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra']
-const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2' }
+const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy']
+const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2', economy: '#30d158' }
 
 function TechNode({ tech }: { tech: Tech }) {
   const view = usePlayerView()!

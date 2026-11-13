@@ -5,7 +5,7 @@ export type NationId = string
 /** Planes are two types: fighters win the air, bombers (`air`) strike the ground. */
 export type UnitType = 'infantry' | 'armor' | 'artillery' | 'fighter' | 'air' | 'naval'
 export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic'
-export type TechBranch = 'land' | 'air' | 'naval' | 'infra'
+export type TechBranch = 'land' | 'air' | 'naval' | 'infra' | 'economy'
 export type LawId =
   | 'martial_law'
   | 'war_economy'
@@ -433,4 +433,6 @@ export interface GameState {
   log: LogEntry[]
   nextId: number
   outcome: 'playing' | 'victory' | 'defeat'
+  /** Every nation's gross income added together, from the last turn. The base for the economic victory. */
+  worldGross: number
 }

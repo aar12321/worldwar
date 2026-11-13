@@ -115,8 +115,8 @@ function estimateDefense(s: GameState, map: WorldMap, ctx: TurnContext, regionId
 }
 
 const BRANCH_PRIORITY: Record<'aggressive' | 'builder', TechBranch[]> = {
-  aggressive: ['land', 'air', 'infra', 'naval'],
-  builder: ['infra', 'land', 'air', 'naval'],
+  aggressive: ['land', 'air', 'economy', 'infra', 'naval'],
+  builder: ['economy', 'infra', 'land', 'air', 'naval'],
 }
 
 /** Stock above which a nation considers a resource spare. */

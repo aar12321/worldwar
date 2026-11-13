@@ -43,6 +43,7 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     r.attackedTurn ??= -1
     if (!Number.isFinite(r.line)) r.line = lineMax(game, map, r.id)
   }
+  game.worldGross ??= 0
   game.investments ??= []
   game.sanctions ??= []
   game.guarantees ??= []
