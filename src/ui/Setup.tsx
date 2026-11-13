@@ -113,11 +113,17 @@ export function Setup() {
         </div>
         <div>
           <div className="label mb-2">Rivals</div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid gap-1.5" role="radiogroup" aria-label="Rival skill">
             {(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => (
-              <button key={d} onClick={() => setDifficulty(d)} title={DIFFICULTY[d].description} className={`rounded-xl p-2 text-left ${difficulty === d ? 'bg-white/16' : 'bg-white/8 hover:bg-white/12'}`}>
-                <div className="text-[13px] font-semibold">{DIFFICULTY[d].name}</div>
-                <div className="text-[11px] text-white/50 leading-tight">{DIFFICULTY[d].description}</div>
+              <button
+                key={d}
+                role="radio"
+                aria-checked={difficulty === d}
+                onClick={() => setDifficulty(d)}
+                className={`rounded-xl p-2.5 text-left border ${difficulty === d ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/8 hover:bg-white/12'}`}
+              >
+                <div className="text-[14px] font-semibold">{DIFFICULTY[d].name}</div>
+                <div className="text-[12px] text-white/75 leading-snug">{DIFFICULTY[d].description}</div>
               </button>
             ))}
           </div>

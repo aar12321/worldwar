@@ -1,4 +1,5 @@
 import { difficultyOf } from '../data/difficulty'
+import { BUDGET_KEYS } from '../data/government'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { TECHS } from '../data/techTree'
@@ -12,11 +13,12 @@ import { militaryPower } from '../engine/militaryStats'
 import { validateOrder } from '../engine/orders'
 import { createRng, type Rng } from '../engine/rng'
 import { MARKET_GOODS, marketPrices, stockOf, tradeRoom, type MarketPrices } from '../engine/trade'
-import type { BuildingType, GameState, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
+import type { BuildingType, UnitCounts, GameState, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
 import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
 import { canAttackRegion, garrisonStrength } from '../engine/warfare'
-import { MAX_REPARATIONS, netWarScore, regionValue } from '../engine/warscore'
+import { MAX_REPARATIONS, netWarScore, puppetValue, regionValue } from '../engine/warscore'
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
+import { manageCountry, wantedBudget, wantedCorporateTax } from './management'
 import { coalitionActive, opinionOf } from './opinion'
 
 export const BOT = {
@@ -29,7 +31,8 @@ export const BOT = {
   /** At most this many new proposals reach the player each month, and the inbox never holds more than `maxPlayerInbox`. */
   maxPlayerProposalsPerTurn: 1,
   maxPlayerInbox: 3,
-  maxAlliances: 2,
+  /** Chance each month that a skilled bot looks for a friend to ally with, even with no threat in sight. */
+  allyDrive: 0.12,
   /** Months after a bot declares war on the player before its military may attack. */
   reactionTurns: 1,
   /** Chance a bot that could attack this turn actually does, before difficulty scaling. Keeps the world from collapsing in two years. */
@@ -87,7 +90,7 @@ export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
     enemies,
     allies: partnerIndex(s.alliances),
     prices: marketPrices(s),
-    coalition: coalitionActive(s, map),
+    coalition: difficultyOf(s.settings.difficulty).coalitions && coalitionActive(s, map),
     playerProposals: 0,
     playerInbox: s.proposals.filter((p) => p.to === player).length,
     warsOnPlayer: (enemies.get(player) ?? []).filter((e) => !e.startsWith('free-')).length,
@@ -107,6 +110,17 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
     ;[out[i], out[j]] = [out[j], out[i]]
   }
   return out
+}
+
+/** The unit that best answers what an enemy fields most of. */
+function counterUnit(units: UnitCounts | undefined): UnitType | null {
+  if (!units) return null
+  const total = totalUnits(units)
+  if (total < 3) return null
+  if ((units.air + units.fighter) / total > 0.25) return 'fighter'
+  if (units.armor / total > 0.3) return 'artillery'
+  if (units.infantry / total > 0.6) return 'armor'
+  return null
 }
 
 function estimateDefense(s: GameState, map: WorldMap, ctx: TurnContext, regionId: RegionId): number {
@@ -190,7 +204,13 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   else if (tax < 0.23) tax += 0.02
   tax = clamp(Math.round(tax * 100) / 100, 0.1, 0.4)
   const draft = atWarNow ? (n.warWeariness > 30 ? 0.07 : 0.1) : 0.05
-  if (Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft })
+  if (diff.skill >= 1) {
+    // Skilled bots set the budget and business tax as well.
+    const budgetWanted = wantedBudget(n, econ, atWarNow)
+    const corp = wantedCorporateTax(n, econ)
+    const changed = Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6 || Math.abs(corp - n.corporateTax) > 0.02 || BUDGET_KEYS.some((k) => Math.abs(budgetWanted[k] - n.budget[k]) > 0.05)
+    if (changed) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft, corporateTax: corp, budget: budgetWanted })
+  } else if (Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft })
 
   // The world market: sell what piles up when money is short, and the shortfall is bought on its own (auto-buy).
   if (n.resources.capital < 150) {
@@ -212,6 +232,9 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
     const place = owned.reduce((best, id) => (s.regions[id].buildings.farm < s.regions[best].buildings.farm ? id : best), owned[0])
     if (tryAdd({ type: 'build', nationId, regionId: place, building: 'farm' })) budget -= 25
   }
+
+  // Cities, laws, business, bonds and investment, for bots that run their whole country.
+  if (diff.skill >= 1 && owned.length && rng.chance(0.6)) budget -= manageCountry(s, nationId, econ, diff.skill as 1 | 2, rng, tryAdd, budget, myNeighbors)
 
   const agenda: Record<Agenda, () => boolean> = {
     research() {
@@ -282,6 +305,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       const maxRecruits = clamp(Math.round((income / 30) * diff.production), BOT.minRecruitsPerTurn, BOT.maxRecruitsPerTurn)
       let recruited = 0
       let steelBought = 0
+      const foe = diff.skill === 2 ? [...enemies].sort((a, b) => (ctx.power.get(b) ?? 0) - (ctx.power.get(a) ?? 0) || (a < b ? -1 : 1))[0] : undefined
+      const counter = foe ? counterUnit(s.nations[foe]?.military.units) : null
       for (let i = 0; i < maxRecruits && budget > 10; i++) {
         const roll = rng.next()
         let unit: UnitType = 'infantry'
@@ -291,6 +316,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         else if (roll < 0.42 && canUseUnit(n, 'fighter')) unit = 'fighter'
         else if (roll < 0.5 && canUseUnit(n, 'air') && units.fighter >= 0.5) unit = 'air'
         else if (roll < 0.55 && canUseUnit(n, 'naval')) unit = 'naval'
+        // The strongest tier answers what its enemy fields: fighters against bombers, guns and infantry against tanks.
+        if (diff.skill === 2 && counter && rng.chance(0.5) && canUseUnit(n, counter)) unit = counter
         const spec = UNIT_SPECS[unit]
         // Steel for tanks, guns, planes and ships comes from the market when the factories fall short.
         if (spec.steel > n.resources.steel + steelBought && budget > spec.capitalCost + 30) {
@@ -332,7 +359,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         const weary = n.warWeariness > 30
         const satisfied = net >= 25 && n.personality !== 'expansionist' && rng.chance(0.35)
         if (!(weary || losing || satisfied)) continue
-        if (!proposeTo(e, { kind: 'peace', terms: peaceTerms(s, map, nationId, e, net, weary || losing) })) {
+        if (!proposeTo(e, { kind: 'peace', terms: peaceTerms(s, map, nationId, e, net, weary || losing, diff.skill) })) {
           if (!proposeTo(e, { kind: 'peace', terms: { cede: [], reparations: 0 } })) continue
         }
         used = true
@@ -368,7 +395,12 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
           if (opinion(partner) < -30 && rng.chance(0.15) && tryAdd({ type: 'cancelDeal', nationId, dealId: d.id })) return true
         }
 
-      if (allies.length < BOT.maxAlliances) {
+      if (n.personality === 'opportunist' && diff.betrayal > 0 && rng.chance(diff.betrayal)) {
+        const weak = [...allies].sort().find((a) => perceived(a) < myPower * 0.35)
+        if (weak && tryAdd({ type: 'leaveAlliance', nationId, target: weak })) return true
+      }
+
+      if (allies.length < diff.maxAlliances) {
         let threat: NationId | null = null
         let threatPower = 0
         for (const x of [...myNeighbors].sort()) {
@@ -386,6 +418,15 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
             .sort((a, b) => opinion(b) - opinion(a) || (a < b ? -1 : 1))
           for (const y of candidates.slice(0, 3)) if (proposeTo(y, { kind: 'alliance' })) return true
         }
+      }
+
+      // A skilled bot also looks for a strong friend to stand with, so blocs form even in quiet times.
+      if (diff.skill >= 1 && allies.length < diff.maxAlliances && rng.chance(BOT.allyDrive * (diff.skill === 2 ? 1.5 : 1))) {
+        const friend = [...myNeighbors]
+          .sort()
+          .filter((x) => s.nations[x]?.alive && !isAllied(s, nationId, x) && !atWar(s, nationId, x) && x !== playerId && opinion(x) >= 12 && alliesOf(x).length < diff.maxAlliances && !recentlyProposed(s, nationId, x, 'alliance', 10))
+          .sort((a, b) => opinion(b) - opinion(a) || (a < b ? -1 : 1))[0]
+        if (friend && proposeTo(friend, { kind: 'alliance' })) return true
       }
 
       if (rng.chance(persona.pactBias > 0 ? 0.1 : 0.03)) {
@@ -418,6 +459,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         if (hasCasusBelli(s, nationId, id)) ratio *= 1.5
         if (op < -30) ratio *= 1.15
         if (enemiesOf(id).length > 0) ratio *= n.personality === 'opportunist' ? 1.4 : 1.15
+        // The strongest tier presses an enemy of its allies.
+        if (diff.skill === 2 && alliesOf(nationId).some((a) => atWar(s, a, id))) ratio *= 1.25
         if (ctx.coalition && id === playerId) ratio *= 1.2
         if (!best || ratio > best.ratio) best = { id, ratio }
       }
@@ -449,7 +492,9 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       .map((r) => {
         const max = lineMax(s, map, r.id)
         // A cracked line is cheaper to finish, so it counts as weaker.
-        return { id: r.id, def: estimateDefense(s, map, ctx, r.id) * (0.6 + 0.4 * Math.min(1, r.line / max)), started: r.line < max - 0.01 }
+        // The strongest tier joins a front an ally has just hit.
+        const joint = diff.skill === 2 && r.attackedTurn >= s.turn - 1 && r.attackedTurn !== s.turn ? 0.85 : 1
+        return { id: r.id, def: estimateDefense(s, map, ctx, r.id) * (0.6 + 0.4 * Math.min(1, r.line / max)) * joint, started: r.line < max - 0.01 }
       })
       .sort((x, y) => x.def - y.def || (x.id < y.id ? -1 : 1))
     const target = options[0]
@@ -473,7 +518,9 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
 }
 
 /** What a bot asks for at the peace table: land if it is winning, a white peace or payment if it is losing. */
-function peaceTerms(s: GameState, map: WorldMap, me: NationId, enemy: NationId, net: number, desperate: boolean): PeaceTerms {
+export function peaceTerms(s: GameState, map: WorldMap, me: NationId, enemy: NationId, net: number, desperate: boolean, skill = 0): PeaceTerms {
+  // The strongest tier prefers a tributary to a ruin when it is winning big.
+  if (skill === 2 && net >= 40 && !s.nations[enemy].overlord && !s.nations[me].overlord && puppetValue(s, map, enemy) <= net * 0.85) return { cede: [], reparations: 0, puppet: true }
   if (net >= 12) {
     let budget = Math.floor(net * 0.85)
     const enemyNation = s.nations[enemy]

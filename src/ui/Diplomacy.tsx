@@ -4,6 +4,7 @@ import { perceivedPower } from '../ai/diplomat'
 import { coalitionActive, nationNeighbors, opinionLabel, opinionReport, type OpinionReport } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
 import { COSTS, DIPLOMACY, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS } from '../data/unitTypes'
+import { blocOf, blocsOf } from '../engine/blocs'
 import { PACT_TURNS, describeProposal, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
 import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey, regionsOf, turnDate } from '../engine/helpers'
@@ -404,6 +405,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const report = useMemo(() => opinionReport(game, map, id, player.id, { borders, coalition: ctx.coalition }), [game, map, id, player.id, borders, ctx.coalition])
   const power = perceivedPower(game, map, player.id, id)
   const persona = PERSONALITIES[n.personality]
+  const bloc = blocOf(game, id)
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
   const sanctionedByMe = game.sanctions.some((x) => x.from === player.id && x.to === id && x.until >= game.turn)
   const status = n.overlord ? `Puppet of ${game.nations[n.overlord]?.name ?? 'someone'}` : war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
@@ -425,6 +427,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
         <span className="chip" title={persona.description}>
           {persona.name}
         </span>
+        {bloc && <span className="chip chip-blue">{bloc.name}</span>}
         <span>
           {regionsOf(game, id).length === 1 ? '1 country' : `${regionsOf(game, id).length} countries`} · strength {power.toFixed(0)} ({power > ctx.myPower ? 'stronger than you' : 'weaker than you'})
         </span>
@@ -556,6 +559,7 @@ export function DiplomacyPanel() {
   const deals = game.deals.filter((d) => d.from === me || d.to === me)
   const mine = game.dispatches.filter((d) => d.from === me || d.to === me)
   const world = game.dispatches.filter((d) => d.from !== me && d.to !== me)
+  const blocs = blocsOf(game)
 
   const close = new Set<NationId>([...ctx.neighbors, ...enemiesOf(game, me), ...alliesOf(game, me)])
   for (const d of deals) close.add(d.from === me ? d.to : d.from)
@@ -585,6 +589,23 @@ export function DiplomacyPanel() {
           </motion.section>
         )}
       </AnimatePresence>
+      {blocs.length > 0 && (
+        <section className="space-y-2">
+          <div className="label">Alliance blocs in the world</div>
+          {blocs.slice(0, 6).map((b) => {
+            const mineBloc = b.members.includes(me)
+            return (
+              <div key={b.leader} className={`rounded-lg border p-2.5 text-[13px] ${mineBloc ? 'border-cyan-400/50 bg-cyan-400/5' : 'border-slate-700/70 bg-slate-900/40'}`}>
+                <div className="flex justify-between gap-2">
+                  <span className="font-semibold">{b.name}{mineBloc ? ' (yours)' : ''}</span>
+                  <span className="text-white/70 tabular-nums">strength {b.power.toFixed(0)}</span>
+                </div>
+                <div className="text-white/75 mt-0.5">{b.members.map((id) => game.nations[id]?.name).join(', ')}</div>
+              </div>
+            )
+          })}
+        </section>
+      )}
       {mine.length > 0 && (
         <section className="space-y-1.5">
           <div className="label">Last month</div>
