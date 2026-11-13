@@ -134,6 +134,9 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       fighter: techs.includes('air_propeller') ? Math.round(w / 20) : 0,
       air: techs.includes('air_bombers') ? Math.round(w / 20) : 0,
       naval: techs.includes('naval_gunboats') ? Math.round(w / 15) : 0,
+      drone: 0,
+      robot: 0,
+      missile: 0,
     }
     const armyFood = UNIT_TYPES.reduce((sum, k) => sum + units[k] * UNIT_SPECS[k].food, 0)
     region.buildings.farm = Math.max(1, Math.ceil((armyFood + w * 0.12) / ECON.foodPerFarm))
@@ -177,6 +180,9 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       overlord: null,
       agencies: { foreign: { level: dev > 0.75 ? 2 : dev > 0.45 ? 1 : 0, exp: 0 }, domestic: { level: dev > 0.55 ? 1 : 0, exp: 0 } },
       secureUntil: 0,
+      systems: { cyber: 0, shield: 0, ai: 0, quantum: 0, orbital: 0, nano: 0 },
+      lastStrike: -99,
+      lastOrbital: -99,
       sectors: startingSectors(w, dev),
       subsidies: [],
       debt: 0,

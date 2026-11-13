@@ -10,6 +10,35 @@ function Frame({ size = 20, children, title }: { size?: number; children: ReactN
 }
 
 const UNIT_GLYPH: Record<UnitType, ReactNode> = {
+  // A small quadcopter.
+  drone: (
+    <>
+      <rect x="9.5" y="9.5" width="5" height="5" rx="1.5" />
+      <path d="M9.5 9.5L5.5 5.5M14.5 9.5l4-4M9.5 14.5l-4 4M14.5 14.5l4 4" />
+      <circle cx="4.5" cy="4.5" r="2" />
+      <circle cx="19.5" cy="4.5" r="2" />
+      <circle cx="4.5" cy="19.5" r="2" />
+      <circle cx="19.5" cy="19.5" r="2" />
+    </>
+  ),
+  // A robot with a visor.
+  robot: (
+    <>
+      <rect x="6" y="7" width="12" height="10" rx="2.5" />
+      <path d="M12 7V4M10 4h4" />
+      <path d="M9 11.5h6" />
+      <path d="M9.5 20v-3M14.5 20v-3" />
+      <path d="M3.5 10.5V14M20.5 10.5V14" />
+    </>
+  ),
+  // A missile with a flame.
+  missile: (
+    <>
+      <path d="M17.5 3.5c-4.5.4-8 3.6-9.6 8l4.1 4.1c4.4-1.6 7.6-5.1 8-9.6z" />
+      <circle cx="14.6" cy="9.4" r="1.2" />
+      <path d="M7.9 11.6L5 11l-1.5 3.5 4 .6M12.4 16.1l.6 2.9L9.5 20.5l-.6-4" />
+    </>
+  ),
   // A helmet.
   infantry: (
     <>

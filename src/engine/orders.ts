@@ -7,6 +7,7 @@ import { EMPIRE, JUSTIFY, STANCES } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { tradeValue, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
+import { fundSystemCost, strikeCost, validateFundSystem, validateStrike } from './systems'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
@@ -19,7 +20,7 @@ import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canAttackRegion, commitShare, reachProblem } from './warfare'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
 
 /** Influence a war on `target` costs `nationId` right now: little with a reason, a great deal without one. */
 export function warCost(s: GameState, nationId: string, target: string): number {
@@ -117,6 +118,15 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'spy':
       c.capital = COSTS.spy
       break
+    case 'fundSystem':
+      c.capital = fundSystemCost(s, o)
+      break
+    case 'strike': {
+      const k = strikeCost(o)
+      c.capital = k.capital
+      c.pp = k.pp
+      break
+    }
     case 'operation':
     case 'domestic':
     case 'fundAgency': {
@@ -377,6 +387,10 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (r?.owner !== o.nationId) return 'You do not control this country'
       return ['off', 'growth', 'industry', 'farming', 'research', 'military'].includes(o.governor) ? null : 'Unknown plan'
     }
+    case 'fundSystem':
+      return validateFundSystem(s, o, pending)
+    case 'strike':
+      return validateStrike(s, map, o, pending)
     case 'buyShares':
     case 'sellShares':
       return validateTrade(s, o, pending)

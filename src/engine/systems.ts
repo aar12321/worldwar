@@ -1,0 +1,113 @@
+import { FRONTIER, SYSTEM_IDS, SYSTEM_MAX, SYSTEM_SPECS, systemsCost, type SystemId } from '../data/systems'
+import { TECH_BY_ID } from '../data/techTree'
+import { addOpinion } from '../ai/opinion'
+import { interceptFactor } from './combat'
+import { addInfamy, addLog, atWar, distanceKm, hasTech } from './helpers'
+import type { GameState, NationId, Order, RegionId, WorldMap } from './types'
+
+type Fund = Extract<Order, { type: 'fundSystem' }>
+type Strike = Extract<Order, { type: 'strike' }>
+
+/** Money each month for the systems a nation runs. */
+export function systemUpkeep(n: { systems?: Partial<Record<SystemId, number>> }): number {
+  let total = 0
+  for (const id of SYSTEM_IDS) total += (n.systems?.[id] ?? 0) * SYSTEM_SPECS[id].upkeep
+  return total
+}
+
+export function systemLevel(s: GameState, nationId: NationId, id: SystemId): number {
+  return s.nations[nationId]?.systems?.[id] ?? 0
+}
+
+export function validateFundSystem(s: GameState, o: Fund, pending: Order[]): string | null {
+  const n = s.nations[o.nationId]
+  const spec = SYSTEM_SPECS[o.system]
+  if (!spec) return 'Unknown system'
+  if (!hasTech(n, spec.tech)) return `Needs ${TECH_BY_ID[spec.tech]?.name ?? 'a technology'}`
+  const levels = o.levels ?? 1
+  if (!Number.isInteger(levels) || levels < 1) return 'Choose how many levels to buy'
+  const queued = pending.reduce((sum, p) => (p.type === 'fundSystem' && p.system === o.system ? sum + (p.levels ?? 1) : sum), 0)
+  const have = (n.systems?.[o.system] ?? 0) + queued
+  if (have >= SYSTEM_MAX) return 'Already at the highest level'
+  if (have + levels > SYSTEM_MAX) return `Only ${SYSTEM_MAX - have} more level${SYSTEM_MAX - have === 1 ? '' : 's'} to the top (level ${SYSTEM_MAX})`
+  return null
+}
+
+export function fundSystemCost(s: GameState, o: Fund): number {
+  return systemsCost(o.system, s.nations[o.nationId]?.systems?.[o.system] ?? 0, o.levels ?? 1)
+}
+
+export function fundSystem(s: GameState, nationId: NationId, system: SystemId, levels = 1) {
+  const n = s.nations[nationId]
+  n.systems[system] = Math.min(SYSTEM_MAX, (n.systems[system] ?? 0) + levels)
+  if (n.isPlayer) addLog(s, 'info', `${SYSTEM_SPECS[system].name} is now level ${n.systems[system]}.`, [nationId])
+}
+
+/** Strikes from afar: a hypersonic salvo from batteries within range, or an orbital strike once a year. */
+export function strikeCost(o: Strike): { capital: number; pp: number } {
+  return o.weapon === 'orbital' ? { capital: FRONTIER.orbitalMoney, pp: FRONTIER.orbitalPP } : { capital: FRONTIER.strikeMoney, pp: 0 }
+}
+
+/** The country within range of a nation's batteries or satellites that it can hit, and why not. */
+export function validateStrike(s: GameState, map: WorldMap, o: Strike, pending: Order[]): string | null {
+  const n = s.nations[o.nationId]
+  const r = s.regions[o.target]
+  const t = map.regions[o.target]
+  if (!r || !t) return 'Unknown country'
+  if (r.owner === o.nationId || !atWar(s, o.nationId, r.owner)) return 'You can only strike a country you are at war with'
+  if (pending.some((p) => p.type === 'strike' && p.weapon === o.weapon)) return 'Only one strike of that kind a month'
+  if (o.weapon === 'orbital') {
+    if ((n.systems?.orbital ?? 0) < 1) return 'Needs an Orbital Network'
+    if (s.turn - n.lastOrbital < FRONTIER.orbitalCooldown) return `The orbital weapon recharges in ${FRONTIER.orbitalCooldown - (s.turn - n.lastOrbital)} months`
+    return null
+  }
+  if (n.military.units.missile < 1) return 'Needs a hypersonic battery'
+  const near = Object.values(s.regions).some((own) => own.owner === o.nationId && own.buildings.factory > 0 && map.regions[own.id] && distanceKm(map.regions[own.id], t) <= FRONTIER.strikeKm)
+  if (!near) return `Out of range: batteries reach ${FRONTIER.strikeKm} km from a country with a factory`
+  return null
+}
+
+function highestBuilding(s: GameState, id: RegionId) {
+  const b = s.regions[id].buildings
+  let best: keyof typeof b | null = null
+  for (const k of Object.keys(b) as (keyof typeof b)[]) if (b[k] > 0 && (!best || b[k] > b[best])) best = k
+  return best
+}
+
+export function runStrike(s: GameState, map: WorldMap, o: Strike) {
+  const n = s.nations[o.nationId]
+  const region = s.regions[o.target]
+  const victim = s.nations[region.owner]
+  const place = map.regions[o.target].name
+  const stops = interceptFactor(victim.systems?.shield ?? 0)
+  if (o.weapon === 'missile') {
+    const hit = Math.min(FRONTIER.strikeLineMax, n.military.units.missile * FRONTIER.strikeLine) * stops
+    region.line = Math.max(0.5, region.line - hit)
+    region.sabotaged = Math.max(region.sabotaged, FRONTIER.strikeFactoryTurns)
+    n.lastStrike = s.turn
+    addLog(s, 'battle', `Hypersonic missiles from ${n.name} hit ${place}. The Defense Line fell by ${hit.toFixed(1)}${stops < 1 ? ` (the shield stopped ${Math.round((1 - stops) * 100)}%)` : ''} and the factories stopped.`, [o.nationId, region.owner])
+    return
+  }
+  const level = n.systems?.orbital ?? 1
+  const hit = (FRONTIER.orbitalLine + FRONTIER.orbitalLinePerLevel * (level - 1)) * stops
+  region.line = Math.max(0.5, region.line - hit)
+  region.sabotaged = Math.max(region.sabotaged, 2)
+  const building = highestBuilding(s, o.target)
+  if (building && stops > 0.55) region.buildings[building]--
+  n.lastOrbital = s.turn
+  addInfamy(s, o.nationId, FRONTIER.orbitalInfamy)
+  addOpinion(s, region.owner, o.nationId, 'Struck us from orbit', -20, 0.3)
+  addLog(s, 'news', `A strike from orbit hit ${place}. ${n.name} used its Orbital Network on ${victim.name}: the Defense Line fell by ${hit.toFixed(1)}${building && stops > 0.55 ? ` and a ${building} was destroyed` : ''}.`, [o.nationId, region.owner])
+}
+
+/** The month's work of the systems: an Orbital Network keeps watching every enemy. */
+export function runSystems(s: GameState) {
+  for (const n of Object.values(s.nations)) {
+    if (!n.alive || (n.systems?.orbital ?? 0) < 1) continue
+    for (const k of s.wars) {
+      const [a, b] = k.split('|')
+      const enemy = a === n.id ? b : b === n.id ? a : null
+      if (enemy && s.nations[enemy]?.alive) s.intel[`${n.id}|${enemy}`] = Math.max(s.intel[`${n.id}|${enemy}`] ?? 0, s.turn + 1)
+    }
+  }
+}

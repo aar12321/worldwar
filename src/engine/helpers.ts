@@ -1,4 +1,5 @@
 import { TECH_BY_ID, type TechModifiers } from '../data/techTree'
+import { FRONTIER } from '../data/systems'
 import { EMPIRE, MAX_WARS, WAR } from '../data/war'
 import type { GameState, LogKind, Milestone, Nation, NationId, RegionId, UnitCounts, UnitType } from './types'
 
@@ -39,7 +40,8 @@ export function maxWars(s: GameState, id: NationId): number {
 
 /** Attacks a nation's military can launch in one month. A bigger empire has more armies and more fronts. */
 export function maxAttacks(s: GameState, id: NationId): number {
-  return Math.min(EMPIRE.maxAttacksCap, WAR.maxAttacksPerTurn + Math.floor(regionsOf(s, id).length / EMPIRE.attacksPerRegions))
+  // AI Battle Command adds an attack a month for each level.
+  return Math.min(EMPIRE.maxAttacksCap + 3, WAR.maxAttacksPerTurn + Math.floor(regionsOf(s, id).length / EMPIRE.attacksPerRegions) + (s.nations[id]?.systems?.ai ?? 0))
 }
 
 /** Nations that have promised to defend `id`. */
@@ -106,9 +108,9 @@ export function formatDivisions(n: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
-export const emptyUnits = (): UnitCounts => ({ infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0 })
+export const emptyUnits = (): UnitCounts => ({ infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 })
 
-export const totalUnits = (u: UnitCounts) => (u.infantry ?? 0) + (u.armor ?? 0) + (u.artillery ?? 0) + (u.fighter ?? 0) + (u.air ?? 0) + (u.naval ?? 0)
+export const totalUnits = (u: UnitCounts) => (u.infantry ?? 0) + (u.armor ?? 0) + (u.artillery ?? 0) + (u.fighter ?? 0) + (u.air ?? 0) + (u.naval ?? 0) + (u.drone ?? 0) + (u.robot ?? 0) + (u.missile ?? 0)
 
 export function sumUnits(list: UnitCounts[]): UnitCounts {
   const out = emptyUnits()
@@ -171,6 +173,9 @@ export function nationModifiers(n: Nation): AggregatedModifiers {
     m.agencyBonus += mod.agencyBonus ?? 0
     m.seaInvasion ||= !!tech.enablesSeaInvasion
   }
+  // Frontier systems: nano-medicine calms the people, and Cyber Command and Quantum Codebreaking sharpen the agencies.
+  m.stability += FRONTIER.nanoStability * (n.systems?.nano ?? 0)
+  m.agencyBonus += FRONTIER.cyberOps * (n.systems?.cyber ?? 0) + FRONTIER.quantumOps * (n.systems?.quantum ?? 0)
   return m
 }
 
@@ -182,6 +187,9 @@ export function canUseUnit(n: Nation, unit: UnitType): boolean {
     fighter: 'air_propeller',
     air: 'air_bombers',
     naval: 'naval_gunboats',
+    drone: 'frontier_drones',
+    robot: 'frontier_robotics',
+    missile: 'frontier_hypersonic',
   }
   return hasTech(n, required[unit])
 }
@@ -209,4 +217,13 @@ export function turnDate(turn: number): string {
   const m = (turn - 1) % 12
   const y = START_YEAR + Math.floor((turn - 1) / 12)
   return `${MONTHS[m]} ${y}`
+}
+
+/** Great-circle distance between two countries' centers, in kilometers. */
+export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad
+  const dLng = (b.lng - a.lng) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)))
 }

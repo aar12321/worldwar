@@ -9,7 +9,9 @@ import type { GameState, NationId, RegionId } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
+import { FRONTIER } from '../data/systems'
 import { usePlayerView } from './hooks'
+import { OrderButton } from './panel'
 import { UnitIcon } from './icons'
 import { MilitaryCompare } from './MilitaryCompare'
 import { Modal } from './Modal'
@@ -34,6 +36,8 @@ export function WarRoom() {
   const target = useGame((s) => s.warRoom)
   return target ? <WarRoomDialog key={target} target={target} /> : null
 }
+
+const score = (f: ReturnType<typeof forecastAttack>) => (f ? f.winChance * (f.lineDamage + 1) - f.yourLosses * 0.15 : -99)
 
 /** The smallest force that is likely to win, so the screen opens on a sensible plan. */
 function suggestedCommit(game: GameState, nationId: NationId, target: RegionId): Commit {
@@ -67,6 +71,14 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const order = { type: 'attack' as const, nationId: player.id, target, commit, stance }
   const err = validateOrder(game, map, order, view.orders)
   const f = forecasts?.[stance] ?? null
+  const aiLevel = player.systems?.ai ?? 0
+  // AI Battle Command recommends the stance with the best mix of line damage, odds and losses.
+  const bestStance = aiLevel >= 2 && forecasts ? STANCE_KEYS.reduce((best, st) => (score(forecasts[st]) > score(forecasts[best]) ? st : best), STANCE_KEYS[0]) : null
+  const strikeOrders = [
+    { type: 'strike' as const, nationId: player.id, target, weapon: 'missile' as const },
+    { type: 'strike' as const, nationId: player.id, target, weapon: 'orbital' as const },
+  ]
+  const hasStrikeWeapons = player.military.units.missile >= 1 || (player.systems?.orbital ?? 0) > 0
   const bill = computeEconomy(game, map, player.id).warBills.find((b) => b.enemy === owner.id)?.amount ?? 0
   const sent = totalUnits(player.military.units) * (f?.share ?? COMMITS[commit].share)
   const away = Math.min(1, player.military.exposed + (f?.share ?? COMMITS[commit].share))
@@ -151,7 +163,10 @@ function WarRoomDialog({ target }: { target: RegionId }) {
                   className={`rounded-xl p-3 text-left border flex items-start justify-between gap-3 ${stance === st ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/6 hover:bg-white/10'}`}
                 >
                   <span>
-                    <span className="block text-[15px] font-semibold">{STANCES[st].name}</span>
+                    <span className="block text-[15px] font-semibold">
+                      {STANCES[st].name}
+                      {bestStance === st && <span className="ml-2 rounded-full bg-[#30d158]/25 px-2 py-0.5 text-[11px] font-semibold text-[#6eeb8a]">AI recommends</span>}
+                    </span>
                     <span className="block text-[13px] text-white/75">{STANCES[st].blurb}</span>
                   </span>
                   {sf && (
@@ -168,9 +183,20 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </div>
         </section>
 
+        {hasStrikeWeapons && (
+          <section className="space-y-2">
+            <h3 className="text-[15px] font-semibold">Strike from afar</h3>
+            <p className="text-[13px] text-white/70">Weapons that need no army. They resolve when the month ends, and an Interceptor Shield stops part of them.</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <OrderButton order={strikeOrders[0]} label="Hypersonic strike" cost={`${FRONTIER.strikeMoney} money`} effect="Cuts the Defense Line and stops factories for 2 months." />
+              {(player.systems?.orbital ?? 0) > 0 && <OrderButton order={strikeOrders[1]} label="Orbital strike" cost={`${FRONTIER.orbitalMoney} money, ${FRONTIER.orbitalPP} influence`} effect="Once a year. Cuts the line hard, wrecks a building, and shames you." />}
+            </div>
+          </section>
+        )}
+
         {f && (
           <section className="inset-card p-3.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[14px]">
-            <span className="text-white/70">Chance to win</span>
+            <span className="text-white/70">Chance to win{f.exact ? ' (exact)' : ''}</span>
             <span className={`text-right font-semibold ${LABEL_TONE[f.label]}`}>{f.label} ({Math.round(f.winChance * 100)}%)</span>
             <span className="text-white/70">Country falls this attack</span>
             <span className="text-right tabular-nums">{Math.round(f.captureChance * 100)}%</span>

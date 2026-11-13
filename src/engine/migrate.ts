@@ -20,6 +20,9 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     n.overlord ??= null
     n.agencies ??= { foreign: { level: 1, exp: 0 }, domestic: { level: 1, exp: 0 } }
     n.secureUntil ??= 0
+    n.systems ??= { cyber: 0, shield: 0, ai: 0, quantum: 0, orbital: 0, nano: 0 }
+    n.lastStrike ??= -99
+    n.lastOrbital ??= -99
     n.sectors ??= { farming: 2, energy: 1, manufacturing: 2, arms: 0.5, technology: 0.5, finance: 0.5 }
     n.subsidies ??= []
     n.debt ??= 0

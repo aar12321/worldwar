@@ -9,9 +9,9 @@ import { validateOrder } from '../orders'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import { giveRegions, lineMap, setMilitary, startState } from './fixtures'
 
-const even = { infantry: 1, armor: 1, artillery: 1, fighter: 1, air: 1, naval: 1 }
+const even = { infantry: 1, armor: 1, artillery: 1, fighter: 1, air: 1, naval: 1, drone: 1, robot: 1, missile: 1 }
 const side = (units: Partial<Combatant['units']>): Combatant => ({
-  units: { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, ...units },
+  units: { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0, ...units },
   mods: null,
   penalty: 1,
   penaltyNotes: [],
@@ -66,13 +66,13 @@ describe('the six unit types', () => {
   })
 
   it('combined arms counts fighters or bombers', () => {
-    expect(hasCombinedArms({ infantry: 2, armor: 2, artillery: 0, fighter: 1, air: 0, naval: 0 })).toBe(true)
-    expect(hasCombinedArms({ infantry: 2, armor: 2, artillery: 3, fighter: 0, air: 0, naval: 0 })).toBe(false)
+    expect(hasCombinedArms({ infantry: 2, armor: 2, artillery: 0, fighter: 1, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 })).toBe(true)
+    expect(hasCombinedArms({ infantry: 2, armor: 2, artillery: 3, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 })).toBe(false)
   })
 
   it('artillery pushes the Defense Line further, and most in a siege', () => {
-    const none = { infantry: 12, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0 }
-    const guns = { infantry: 8, armor: 0, artillery: 4, fighter: 0, air: 0, naval: 0 }
+    const none = { infantry: 12, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 }
+    const guns = { infantry: 8, armor: 0, artillery: 4, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 }
     expect(gunBonus(none, 'siege')).toBe(1)
     expect(gunBonus(guns, 'assault')).toBeGreaterThan(1)
     expect(gunBonus(guns, 'siege')).toBeGreaterThan(gunBonus(guns, 'assault'))

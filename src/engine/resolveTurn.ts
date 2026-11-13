@@ -7,6 +7,8 @@ import { fundAgency, runDomestic, runOperation } from './agencies'
 import { GOVERNOR_LABELS, governorOrders } from './governors'
 import { COMPANY_BY_ID } from '../data/companies'
 import { buyShares, runStocks, sellShares } from './stocks'
+import { SYSTEM_SPECS } from '../data/systems'
+import { fundSystem, runStrike, runSystems } from './systems'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -102,6 +104,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Buy ${o.shares} shares of ${COMPANY_BY_ID[o.company]?.name ?? o.company}`
     case 'sellShares':
       return `Sell ${o.shares} shares of ${COMPANY_BY_ID[o.company]?.name ?? o.company}`
+    case 'fundSystem':
+      return `Raise ${SYSTEM_SPECS[o.system].name}${(o.levels ?? 1) > 1 ? ` by ${o.levels} levels` : ''}`
+    case 'strike':
+      return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Hypersonic strike on ${region(o.target)}`
     case 'setGovernor':
       return `Governor of ${region(o.regionId)}: ${GOVERNOR_LABELS[o.governor]}`
     case 'fundAgency':
@@ -142,8 +148,8 @@ const PHASES: Order['type'][][] = [
   ['issueBonds', 'repayDebt', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
   ['research', 'build', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
-  ['fundAgency'],
-  ['spy', 'operation', 'domestic'],
+  ['fundAgency', 'fundSystem'],
+  ['spy', 'operation', 'domestic', 'strike'],
 ]
 
 /**
@@ -203,6 +209,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   runJustification(s, map, rng)
   runCrises(s, map, rng)
   runStocks(s, map, rng)
+  runSystems(s)
 
   s.turn++
   expireDiplomacy(s)
@@ -403,6 +410,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'setGovernor':
       s.regions[o.regionId].governor = o.governor
+      break
+    case 'fundSystem':
+      fundSystem(s, o.nationId, o.system, o.levels ?? 1)
+      break
+    case 'strike':
+      runStrike(s, map, o)
       break
     case 'buyShares':
       buyShares(s, o.nationId, o.company, o.shares)

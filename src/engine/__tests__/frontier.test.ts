@@ -28,7 +28,7 @@ describe('frontier technology', () => {
     const base = operationOdds(s, 'r0', 'intel', 'r1').chance
     expect(validateOrder(s, map, { type: 'operation', nationId: 'r0', op: 'cyber', target: 'r1' })).toMatch(/Needs/)
     s.nations.r0.techs.push('frontier_drones', 'cyber_warfare', 'frontier_ai')
-    expect(nationModifiers(s.nations.r0).agencyBonus).toBeCloseTo(0.13)
+    expect(nationModifiers(s.nations.r0).agencyBonus).toBeCloseTo(0.05)
     expect(operationOdds(s, 'r0', 'intel', 'r1').chance).toBeGreaterThan(base)
     expect(validateOrder(s, map, { type: 'operation', nationId: 'r0', op: 'cyber', target: 'r1' })).toBeNull()
   })

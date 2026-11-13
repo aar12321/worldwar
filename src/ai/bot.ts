@@ -1,4 +1,5 @@
 import { levelCost } from '../data/agencies'
+import { systemCost, type SystemId } from '../data/systems'
 import { homeOwner } from '../engine/stocks'
 import { difficultyOf } from '../data/difficulty'
 import { BUDGET_KEYS } from '../data/government'
@@ -259,6 +260,29 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         })
         if (listed.length && tryAdd({ type: 'buyShares', nationId, company: rng.pick(listed), shares: 20 })) return true
       }
+      // Frontier systems: shields against what flies, Cyber Command against what is hacked, then the rest as money allows.
+      if (diff.skill >= 1 && money > 250 && rng.chance(0.25)) {
+        const foes = enemies.map((e) => s.nations[e]).filter((x): x is NonNullable<typeof x> => !!x?.alive)
+        const flies = foes.some((f) => f.military.units.missile + f.military.units.drone >= 1)
+        const robots = foes.some((f) => f.military.units.robot + f.military.units.drone >= 1)
+        const theirCyber = Math.max(0, ...foes.map((f) => f.systems?.cyber ?? 0))
+        const wants: SystemId[] = []
+        if (flies) wants.push('shield')
+        if (robots && (n.systems?.cyber ?? 0) <= theirCyber) wants.push('cyber')
+        wants.push(...(diff.skill === 2 ? (['ai', 'nano', 'shield', 'cyber', 'quantum', 'orbital'] as SystemId[]) : (['ai', 'nano'] as SystemId[])))
+        for (const system of wants) {
+          if ((n.systems?.[system] ?? 0) >= (diff.skill === 2 ? 3 : 2)) continue
+          if (money < systemCost(system, n.systems?.[system] ?? 0) + 150) continue
+          if (tryAdd({ type: 'fundSystem', nationId, system })) return true
+        }
+      }
+      // Hard rivals strike first with missiles and, once a year, from orbit.
+      if (diff.skill === 2 && enemies.length > 0 && rng.chance(0.35)) {
+        const targets = Object.values(s.regions).filter((r) => enemies.includes(r.owner)).sort((a, b) => b.line - a.line || (a.id < b.id ? -1 : 1))
+        for (const weapon of ['orbital', 'missile'] as const) {
+          for (const r of targets.slice(0, 6)) if (tryAdd({ type: 'strike', nationId, target: r.id, weapon })) return true
+        }
+      }
       for (const kind of ['foreign', 'domestic'] as const) {
         if (n.agencies[kind].level < cap && money > levelCost(n.agencies[kind].level) * 3 && rng.chance(0.15) && tryAdd({ type: 'fundAgency', nationId, agency: kind })) return true
       }
@@ -344,6 +368,10 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         else if (roll < 0.42 && canUseUnit(n, 'fighter')) unit = 'fighter'
         else if (roll < 0.5 && canUseUnit(n, 'air') && units.fighter >= 0.5) unit = 'air'
         else if (roll < 0.55 && canUseUnit(n, 'naval')) unit = 'naval'
+        // The Frontier weapons: Medium fields drones and robots, Hard adds hypersonic batteries.
+        else if (diff.skill >= 1 && roll < 0.64 && canUseUnit(n, 'drone')) unit = 'drone'
+        else if (diff.skill >= 1 && roll < 0.72 && canUseUnit(n, 'robot')) unit = 'robot'
+        else if (diff.skill === 2 && roll < 0.78 && canUseUnit(n, 'missile')) unit = 'missile'
         // The strongest tier answers what its enemy fields: fighters against bombers, guns and infantry against tanks.
         if (diff.skill === 2 && counter && rng.chance(0.5) && canUseUnit(n, counter)) unit = counter
         const spec = UNIT_SPECS[unit]

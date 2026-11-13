@@ -10,6 +10,7 @@ import { fmt, usePlayerView } from './hooks'
 import { UnitIcon } from './icons'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import { AgenciesTab } from './AgenciesTab'
+import { SystemsTab } from './SystemsTab'
 import { WarsTab } from './WarsPanel'
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`
@@ -70,7 +71,7 @@ function UnitCard({ line }: { line: UnitStatLine }) {
           order={{ type: 'queueTrain', nationId: player.id, unit: line.unit }}
           label="Train one"
           cost={`${orderCost(game, { type: 'queueTrain', nationId: player.id, unit: line.unit }).capital} money${spec.steel > 0 ? ` · ${spec.steel} steel` : ''}`}
-          effect={`${spec.manpowerCost}k soldiers · ready in ${months} ${months === 1 ? 'turn' : 'turns'}${spec.oil > 0 ? ` · burns ${spec.oil} oil a month` : ''}`}
+          effect={`${spec.manpowerCost > 0 ? `${spec.manpowerCost}k soldiers` : 'no soldiers needed'} · ready in ${months} ${months === 1 ? 'turn' : 'turns'}${spec.oil > 0 ? ` · burns ${spec.oil} oil a month` : ''}`}
           tone="btn-primary"
         />
         <OrderButton
@@ -196,9 +197,9 @@ export function MilitaryPanel() {
       kicker={`One force for the whole nation · ${wars} of ${maxWars(game, player.id)} wars`}
       panel="military"
       wide
-      tabs={<Tabs value={tab} onChange={setTab} options={[MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies']] as const} />}
+      tabs={<Tabs value={tab} onChange={setTab} options={[MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const} />}
     >
-      {tab === 'forces' ? <Forces /> : tab === 'wars' ? <WarsTab /> : <AgenciesTab />}
+      {tab === 'forces' ? <Forces /> : tab === 'wars' ? <WarsTab /> : tab === 'systems' ? <SystemsTab /> : <AgenciesTab />}
     </PanelShell>
   )
 }
