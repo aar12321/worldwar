@@ -10,6 +10,7 @@ import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../
 import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
+import { newStocks } from '../engine/stocks'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
 import type { Difficulty, GameSettings, GovernmentType, SectorId, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
 
@@ -86,6 +87,8 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     reasons: {},
     infamy: {},
     cases: [],
+    intel: {},
+    stocks: newStocks(map),
     crises: [],
     dispatches: [],
     pendingEvent: null,
@@ -172,6 +175,8 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       government,
       budget: { ...EVEN_BUDGET },
       overlord: null,
+      agencies: { foreign: { level: dev > 0.75 ? 2 : dev > 0.45 ? 1 : 0, exp: 0 }, domestic: { level: dev > 0.55 ? 1 : 0, exp: 0 } },
+      secureUntil: 0,
       sectors: startingSectors(w, dev),
       subsidies: [],
       debt: 0,

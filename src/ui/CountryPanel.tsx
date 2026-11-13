@@ -3,7 +3,6 @@ import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, COSTS } from '../data/unitTypes'
 import { integrationFactor, lineMax, regionWorkforce } from '../engine/economy'
-import { spySuccessChance } from '../engine/espionage'
 import { atWar, formatDivisions, hasPact, isAllied, justificationOf } from '../engine/helpers'
 import { warCost } from '../engine/orders'
 import { JUSTIFY } from '../data/war'
@@ -27,6 +26,7 @@ export function CountryPanel() {
   const selected = useGame((s) => s.selectedRegion)
   const selectRegion = useGame((s) => s.selectRegion)
   const openDiplomacy = useGame((s) => s.openDiplomacy)
+  const openAgencies = useGame((s) => s.openAgencies)
   const openEconomy = useGame((s) => s.openEconomy)
   const openMilitary = useGame((s) => s.openMilitary)
   const openWarRoom = useGame((s) => s.openWarRoom)
@@ -193,13 +193,9 @@ export function CountryPanel() {
                   {opinion}).{war ? ` War score ${netWarScore(game, player.id, owner.id)}.` : ''}
                 </p>
                 <MilitaryCompare game={game} mine={player.id} theirs={owner.id} />
-                <OrderButton
-                  order={{ type: 'spy', nationId: player.id, target: selected, mission: 'sabotage' }}
-                  label="Sabotage factories"
-                  cost={`${COSTS.spy} money`}
-                  effect={`${Math.round(spySuccessChance(game, player.id, selected) * 100)}% chance. Stops their factories. If caught, they hold a grievance.`}
-                  tone="btn-magenta"
-                />
+                <button className="btn btn-magenta" onClick={() => openAgencies(owner.id)}>
+                  Send the agency
+                </button>
               </>
             )}
           </div>

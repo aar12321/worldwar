@@ -25,8 +25,8 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 /** The five desks, plus News and Settings which open from the top bar. */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'log' | 'settings'
-export type EconomyTab = 'country' | 'budget' | 'market' | 'business' | 'government' | 'people'
-export type MilitaryTab = 'forces' | 'wars'
+export type EconomyTab = 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'
+export type MilitaryTab = 'forces' | 'wars' | 'agencies'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts'
 
@@ -161,6 +161,11 @@ interface GameStore {
   /** Country shown in the Economy desk's upgrade list. Null means the capital. */
   economyRegion: RegionId | null
   militaryTab: MilitaryTab
+  /** The nation the agencies are looking at. */
+  agencyTarget: NationId | null
+  setAgencyTarget(id: NationId | null): void
+  /** Opens the agencies with a nation already chosen as the target. */
+  openAgencies(target?: NationId): void
   mapMode: MapMode
   diploFocus: NationId | null
   /** Battles waiting to play in the battle window. The first one is showing. */
@@ -317,6 +322,10 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
+  if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)
+  if (order.type === 'operation') return typeof order.target === 'string' && typeof order.op === 'string'
+  if (order.type === 'domestic') return typeof order.op === 'string'
+  if (order.type === 'fundAgency') return order.agency === 'foreign' || order.agency === 'domestic'
   if (order.type === 'crisisAction') return typeof order.crisisId === 'string' && ['aid', 'mediate', 'support'].includes(order.action)
   return false
 }
@@ -529,6 +538,7 @@ export const useGame = create<GameStore>((set, get) => ({
   economyTab: 'country',
   economyRegion: null,
   militaryTab: 'forces',
+  agencyTarget: null,
   mapMode: 'political',
   diploFocus: null,
   fxQueue: [],
@@ -613,6 +623,14 @@ export const useGame = create<GameStore>((set, get) => ({
 
   openEconomy(tab, region) {
     set((st) => ({ panel: 'economy', economyTab: tab, economyRegion: region ?? st.economyRegion, diploFocus: null }))
+  },
+
+  setAgencyTarget(id) {
+    set({ agencyTarget: id })
+  },
+
+  openAgencies(target) {
+    set({ panel: 'military', militaryTab: 'agencies', agencyTarget: target ?? get().agencyTarget, diploFocus: null })
   },
 
   setMilitaryTab(tab) {
@@ -880,3 +898,6 @@ export const useGame = create<GameStore>((set, get) => ({
     save(game, orders)
   },
 }))
+
+// A handle for browser tests, in development only.
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __store: typeof useGame }).__store = useGame

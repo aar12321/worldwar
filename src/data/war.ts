@@ -17,6 +17,10 @@ export const EMPIRE = {
   annexMonths: 6,
   annexCost: 30,
   annexInfamy: 2,
+  /** Share of a fallen nation's treasury its conqueror takes. */
+  spoilsShare: 0.4,
+  /** Money a governor leaves untouched. */
+  governorReserve: 80,
 }
 
 export type Commit = 'probe' | 'main' | 'allin'

@@ -431,7 +431,7 @@ input[type='range'] {
 }
 @media (min-width: 1280px) {
   .tech-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 
@@ -791,7 +791,7 @@ body:has(.drawer) .map-modes {
   /* One row of six numbers, so the HUD leaves room for the desk below it. */
   .hud-resources {
     display: grid !important;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
   .hud-resources > div {
     min-width: 0;

@@ -1,3 +1,4 @@
+import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
@@ -5,7 +6,7 @@ export type NationId = string
 /** Planes are two types: fighters win the air, bombers (`air`) strike the ground. */
 export type UnitType = 'infantry' | 'armor' | 'artillery' | 'fighter' | 'air' | 'naval'
 export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic'
-export type TechBranch = 'land' | 'air' | 'naval' | 'infra' | 'economy'
+export type TechBranch = 'land' | 'air' | 'naval' | 'infra' | 'economy' | 'frontier'
 export type LawId =
   | 'martial_law'
   | 'war_economy'
@@ -25,6 +26,13 @@ export type BudgetKey = 'military' | 'education' | 'health' | 'infrastructure'
 export type Budget = Record<BudgetKey, number>
 export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marshal' | 'stalwart'
 export type SpyMission = 'sabotage'
+
+export interface Agency {
+  level: number
+  /** Experience from successful operations. */
+  exp: number
+}
+
 export type Difficulty = 'easy' | 'normal' | 'hard'
 export type Personality = 'expansionist' | 'trader' | 'turtle' | 'opportunist' | 'honorable'
 export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower' | 'oil' | 'steel' | 'goods'
@@ -84,8 +92,12 @@ export interface City {
   lng?: number
 }
 
+export type Governor = 'off' | 'growth' | 'industry' | 'farming' | 'research'
+
 export interface RegionState {
   id: RegionId
+  /** An official who upgrades this country each month on a plan the player chose. */
+  governor?: Governor
   owner: NationId
   population: number
   buildings: Buildings
@@ -164,6 +176,9 @@ export interface Nation {
   lastReform: number
   /** The nation that rules this one as a puppet, if any. */
   overlord: NationId | null
+  agencies: { foreign: Agency; domestic: Agency }
+  /** The turn until which foreign operations against this nation are harder. */
+  secureUntil: number
   /** The turn it became a puppet, so a master can only annex one that has settled. */
   overlordSince?: number
   /** Size of each private business sector. */
@@ -342,6 +357,12 @@ export type Order =
   | { type: 'cancelDeal'; nationId: NationId; dealId: string }
   | { type: 'leaveAlliance'; nationId: NationId; target: NationId }
   | { type: 'spy'; nationId: NationId; target: RegionId; mission: SpyMission }
+  | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
+  | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
+  | { type: 'fundAgency'; nationId: NationId; agency: AgencyId }
+  | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
+  | { type: 'buyShares'; nationId: NationId; company: string; shares: number }
+  | { type: 'sellShares'; nationId: NationId; company: string; shares: number }
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
@@ -416,6 +437,21 @@ export interface Crisis {
   answered: NationId[]
 }
 
+export interface StockState {
+  /** Share price of each listed company. */
+  price: Record<string, number>
+  /** Last month's price, to show the change. */
+  last: Record<string, number>
+  /** The home sector's size last month, to see whether it grew. */
+  size: Record<string, number>
+  /** Shares each nation holds: nation -> company -> shares. */
+  held: Record<NationId, Record<string, number>>
+  /** The market's mood: a crash or boom that fades. */
+  mood: number
+  /** The whole exchange as one number, starting at 100. */
+  index: number
+}
+
 export interface CaseFile {
   holder: NationId
   target: NationId
@@ -451,6 +487,9 @@ export interface GameState {
   infamy: Record<NationId, number>
   /** Cases being built against a country. When one is ready it becomes a reason for war. */
   cases: CaseFile[]
+  /** "holder|target" -> the turn until which the holder can see the target's real numbers. */
+  intel: Record<string, number>
+  stocks: StockState
   /** Trouble building around the world. News of it comes in stages. */
   crises: Crisis[]
   /** Sorted "a|b" keys of defensive alliances. */

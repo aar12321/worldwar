@@ -2,6 +2,7 @@ import { addOpinion, forgetNation } from '../ai/opinion'
 import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { MATERIALS } from '../data/deposits'
+import { TECH_BY_ID } from '../data/techTree'
 import { COMMITS, EMPIRE, JUSTIFY, STANCES, WAR, type Commit, type Stance } from '../data/war'
 import { cityEffects, razeCities } from './cities'
 import { lineMax, regionWorkforce } from './economy'
@@ -68,6 +69,17 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
   s.deals = s.deals.filter((d) => d.from !== id && d.to !== id)
   forgetNation(s, id)
   const conqueror = by ? s.nations[by] : null
+  // The conqueror takes part of the treasury and learns something the fallen nation knew.
+  if (conqueror?.alive) {
+    const spoils = Math.max(0, n.resources.capital) * EMPIRE.spoilsShare
+    conqueror.resources.capital += spoils
+    n.resources.capital -= spoils
+    const learn = n.techs.filter((t) => !conqueror.techs.includes(t) && TECH_BY_ID[t]?.requires.every((r) => conqueror.techs.includes(r))).sort()[0]
+    if (learn) {
+      conqueror.techs.push(learn)
+      if (conqueror.isPlayer) addLog(s, 'tech', `Your scientists studied the captured labs of ${n.name} and learned ${TECH_BY_ID[learn].name}.`, [by!])
+    }
+  }
   addLog(s, 'war', conqueror ? `${n.name} has fallen to ${conqueror.name}!` : `${n.name} has collapsed.`, by ? [id, by] : [id])
 }
 

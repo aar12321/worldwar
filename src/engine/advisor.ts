@@ -1,3 +1,4 @@
+import { agencyName } from '../data/agencies'
 import { ELECTION } from '../data/government'
 import { SECTORS, SECTOR_IDS } from '../data/business'
 import { TECHS } from '../data/techTree'
@@ -16,8 +17,8 @@ import { netWarScore } from './warscore'
 
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
-  | { desk: 'economy'; tab: 'country' | 'budget' | 'market' | 'business' | 'government' | 'people'; region?: RegionId }
-  | { desk: 'military'; tab: 'forces' | 'wars' }
+  | { desk: 'economy'; tab: 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'; region?: RegionId }
+  | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
   | { desk: 'warRoom'; region: RegionId }
@@ -133,6 +134,11 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       action: 'Read them',
       target: { desk: 'diplomacy', nation: first.from },
     })
+  }
+
+  // Idle agencies
+  if (n.agencies.foreign.level >= 1 && s.turn >= 3 && !pending.some((o) => o.type === 'operation')) {
+    add('idea', 4, { id: 'agencies', title: `${agencyName(n.name, 'foreign')} has teams with nothing to do`, detail: 'Gather intelligence on a rival, build a case for war, or quietly weaken an enemy. Operations show their odds first.', action: 'Open the agencies', target: { desk: 'military', tab: 'agencies' } })
   }
 
   // Trouble in the world that you could answer

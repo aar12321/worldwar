@@ -1,3 +1,5 @@
+import { levelCost } from '../data/agencies'
+import { homeOwner } from '../engine/stocks'
 import { difficultyOf } from '../data/difficulty'
 import { BUDGET_KEYS } from '../data/government'
 import { PERSONALITIES } from '../data/personalities'
@@ -130,14 +132,14 @@ function estimateDefense(s: GameState, map: WorldMap, ctx: TurnContext, regionId
 }
 
 const BRANCH_PRIORITY: Record<'aggressive' | 'builder', TechBranch[]> = {
-  aggressive: ['land', 'air', 'economy', 'infra', 'naval'],
-  builder: ['economy', 'infra', 'land', 'air', 'naval'],
+  aggressive: ['land', 'air', 'frontier', 'economy', 'infra', 'naval'],
+  builder: ['economy', 'infra', 'frontier', 'land', 'air', 'naval'],
 }
 
 /** Stock above which a nation considers a resource spare. */
 const SURPLUS: Record<TradeResource, number> = { capital: 80, food: 40, tp: 60, manpower: 180, oil: 30, steel: 40, goods: 50 }
 
-type Agenda = 'peace' | 'allies' | 'research' | 'economy' | 'military' | 'trade' | 'diplomacy' | 'war'
+type Agenda = 'agency' | 'peace' | 'allies' | 'research' | 'economy' | 'military' | 'trade' | 'diplomacy' | 'war'
 
 export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer = false, context?: TurnContext): Order[] {
   const n = s.nations[nationId]
@@ -238,6 +240,31 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   if (diff.skill >= 1 && owned.length && rng.chance(0.6)) budget -= manageCountry(s, nationId, econ, diff.skill as 1 | 2, rng, tryAdd, budget, myNeighbors)
 
   const agenda: Record<Agenda, () => boolean> = {
+    /** Medium and Hard run their agencies: grow them, calm their own streets, and strike at enemies from the shadows. */
+    agency() {
+      if (diff.skill < 1) return false
+      const cap = diff.skill === 2 ? 4 : 2
+      const money = n.resources.capital
+      if (n.stability < 45 && n.agencies.domestic.level >= 1 && tryAdd({ type: 'domestic', nationId, op: 'calm' })) return true
+      for (const e of enemies) {
+        if (humans.has(e) && !ctx.coalition && diff.skill < 2) continue
+        const ops: Array<'sabotage' | 'rebels'> = ['sabotage', 'rebels']
+        if (rng.chance(0.4) && tryAdd({ type: 'operation', nationId, op: rng.pick(ops), target: e })) return true
+      }
+      // Invest spare money in the companies of friendly countries.
+      if (money > 250 && rng.chance(diff.skill === 2 ? 0.3 : 0.12)) {
+        const listed = Object.keys(s.stocks.price).sort().filter((id) => {
+          const home = homeOwner(s, id)
+          return home && home !== nationId && s.nations[home]?.alive && !atWar(s, nationId, home) && (s.stocks.held[nationId]?.[id] ?? 0) < 200
+        })
+        if (listed.length && tryAdd({ type: 'buyShares', nationId, company: rng.pick(listed), shares: 20 })) return true
+      }
+      for (const kind of ['foreign', 'domestic'] as const) {
+        if (n.agencies[kind].level < cap && money > levelCost(n.agencies[kind].level) * 3 && rng.chance(0.15) && tryAdd({ type: 'fundAgency', nationId, agency: kind })) return true
+      }
+      return false
+    },
+
     research() {
       const priorities = BRANCH_PRIORITY[n.aggression > 0.5 ? 'aggressive' : 'builder']
       const candidates = TECHS.filter((t) => !n.techs.includes(t.id) && t.requires.every((r) => n.techs.includes(r)) && t.cost <= n.resources.tp).sort(
@@ -475,7 +502,11 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       const odds = best.ratio >= diff.warDeclarePowerRatio * 1.2 ? 0.45 : 0.24
       if (!rng.chance(n.aggression * persona.aggression * diff.aggression * odds)) return false
       // The same rule as the player: no reason, no war. A rival first builds a case, and strikes once it is ready.
-      if (!hasCasusBelli(s, nationId, best.id)) return tryAdd({ type: 'buildCase', nationId, target: best.id })
+      if (!hasCasusBelli(s, nationId, best.id)) {
+        // The strongest tier frames its target through its intelligence service, which is quicker than a legal case.
+        if (diff.skill === 2 && tryAdd({ type: 'operation', nationId, op: 'case', target: best.id })) return true
+        return tryAdd({ type: 'buildCase', nationId, target: best.id })
+      }
       if (!tryAdd({ type: 'declareWar', nationId, target: best.id })) return false
       if (humans.has(best.id)) ctx.warsOn.set(best.id, (ctx.warsOn.get(best.id) ?? 0) + 1)
       return true
@@ -483,8 +514,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   }
 
   const plan: Agenda[] = atWarNow
-    ? ['peace', 'military', 'allies', ...shuffle<Agenda>(['research', 'economy', 'trade', 'diplomacy', 'war'], rng)]
-    : shuffle<Agenda>(['research', 'economy', 'military', 'trade', 'diplomacy', 'war'], rng)
+    ? ['peace', 'military', 'allies', ...shuffle<Agenda>(['agency', 'research', 'economy', 'trade', 'diplomacy', 'war'], rng)]
+    : shuffle<Agenda>(['agency', 'research', 'economy', 'military', 'trade', 'diplomacy', 'war'], rng)
   for (const item of plan) {
     if (attention <= 0) break
     if (agenda[item]()) attention--

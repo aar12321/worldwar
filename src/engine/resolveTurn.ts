@@ -2,6 +2,11 @@ import { TECH_BY_ID } from '../data/techTree'
 import { FOCUS } from '../data/cities'
 import { JUSTIFY } from '../data/war'
 import { ACTION_LABELS } from '../data/crises'
+import { DOMESTIC_OPS, FOREIGN_OPS } from '../data/agencies'
+import { fundAgency, runDomestic, runOperation } from './agencies'
+import { GOVERNOR_LABELS, governorOrders } from './governors'
+import { COMPANY_BY_ID } from '../data/companies'
+import { buyShares, runStocks, sellShares } from './stocks'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -89,6 +94,18 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Build a case against ${nation(o.target)}`
     case 'annexPuppet':
       return `Annex ${nation(o.target)}`
+    case 'operation':
+      return `${FOREIGN_OPS[o.op].name}: ${nation(o.target)}`
+    case 'domestic':
+      return DOMESTIC_OPS[o.op].name
+    case 'buyShares':
+      return `Buy ${o.shares} shares of ${COMPANY_BY_ID[o.company]?.name ?? o.company}`
+    case 'sellShares':
+      return `Sell ${o.shares} shares of ${COMPANY_BY_ID[o.company]?.name ?? o.company}`
+    case 'setGovernor':
+      return `Governor of ${region(o.regionId)}: ${GOVERNOR_LABELS[o.governor]}`
+    case 'fundAgency':
+      return `Grow the ${o.agency === 'foreign' ? 'foreign' : 'domestic'} agency`
     case 'crisisAction':
       return `${ACTION_LABELS[o.action]}: ${s.nations[s.crises.find((c) => c.id === o.crisisId)?.nation ?? '']?.name ?? 'a crisis'}`
     case 'propose':
@@ -117,15 +134,16 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 
 const PHASES: Order['type'][][] = [
   ['respond'],
-  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw'],
+  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor'],
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose'],
   ['cancelTrain'],
-  ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy'],
+  ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy', 'sellShares', 'buyShares'],
   ['issueBonds', 'repayDebt', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
   ['research', 'build', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
-  ['spy'],
+  ['fundAgency'],
+  ['spy', 'operation', 'domestic'],
 ]
 
 /**
@@ -139,7 +157,8 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   const rng = createRng(s.seed, s.turn)
   s.battles = []
   s.dispatches = []
-  const live = orders.filter((o) => s.nations[o.nationId]?.alive)
+  // A player's governors add their own upgrades to the month's orders.
+  const live = [...orders, ...governorOrders(s, map)].filter((o) => s.nations[o.nationId]?.alive)
 
   for (const phase of PHASES) {
     for (const o of live) {
@@ -183,6 +202,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   runPolitics(s, map, rng)
   runJustification(s, map, rng)
   runCrises(s, map, rng)
+  runStocks(s, map, rng)
 
   s.turn++
   expireDiplomacy(s)
@@ -371,6 +391,24 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     }
     case 'assignGeneral':
       n.military.commanderId = o.generalId
+      break
+    case 'operation':
+      runOperation(s, map, o.nationId, o.op, o.target, rng)
+      break
+    case 'domestic':
+      runDomestic(s, o.nationId, o.op, o.regionId)
+      break
+    case 'fundAgency':
+      fundAgency(s, o.nationId, o.agency)
+      break
+    case 'setGovernor':
+      s.regions[o.regionId].governor = o.governor
+      break
+    case 'buyShares':
+      buyShares(s, o.nationId, o.company, o.shares)
+      break
+    case 'sellShares':
+      sellShares(s, o.nationId, o.company, o.shares)
       break
     case 'spy':
       runSpyMission(s, map, o.nationId, o.target, o.mission, rng)
