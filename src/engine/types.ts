@@ -332,6 +332,7 @@ export type Order =
   | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
+  | { type: 'buildCase'; nationId: NationId; target: NationId }
   | { type: 'propose'; nationId: NationId; target: NationId; proposal: ProposalDraft }
   | { type: 'respond'; nationId: NationId; proposalId: string; accept: boolean }
   | { type: 'cancelDeal'; nationId: NationId; dealId: string }
@@ -391,6 +392,13 @@ export interface GameSettings {
   difficulty: Difficulty
 }
 
+export interface CaseFile {
+  holder: NationId
+  target: NationId
+  /** The turn the case is ready. */
+  ready: number
+}
+
 export interface GameState {
   turn: number
   seed: number
@@ -413,6 +421,12 @@ export interface GameState {
   pacts: Record<string, number>
   /** "holder|target" -> turn the casus belli expires. */
   casusBelli: Record<string, number>
+  /** "holder|target" -> what the reason for war is, shown to the player. */
+  reasons: Record<string, string>
+  /** How much each nation is distrusted for starting wars, taking land and covert acts. It fades. */
+  infamy: Record<NationId, number>
+  /** Cases being built against a country. When one is ready it becomes a reason for war. */
+  cases: CaseFile[]
   /** Sorted "a|b" keys of defensive alliances. */
   alliances: string[]
   /** Proposals awaiting an answer from the player. */

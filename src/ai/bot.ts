@@ -468,6 +468,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       if (!best || best.ratio <= diff.warDeclarePowerRatio / persona.risk) return false
       const odds = best.ratio >= diff.warDeclarePowerRatio * 1.2 ? 0.45 : 0.24
       if (!rng.chance(n.aggression * persona.aggression * diff.aggression * odds)) return false
+      // The same rule as the player: no reason, no war. A rival first builds a case, and strikes once it is ready.
+      if (!hasCasusBelli(s, nationId, best.id)) return tryAdd({ type: 'buildCase', nationId, target: best.id })
       if (!tryAdd({ type: 'declareWar', nationId, target: best.id })) return false
       if (humans.has(best.id)) ctx.warsOn.set(best.id, (ctx.warsOn.get(best.id) ?? 0) + 1)
       return true

@@ -316,6 +316,7 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'spy') return typeof order.target === 'string' && order.mission === 'sabotage'
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance') return typeof order.target === 'string'
+  if (order.type === 'buildCase') return typeof order.target === 'string'
   return false
 }
 

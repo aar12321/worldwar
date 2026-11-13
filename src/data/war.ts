@@ -86,3 +86,27 @@ export const WAR = {
   wearinessPerMonth: 0.03,
   wearinessPerMonthCap: 1.2,
 }
+
+/** What it takes to start a war, and what starting one costs your standing. */
+export const JUSTIFY = {
+  /** Influence to open a case against a country. */
+  caseCost: 20,
+  /** Months until a case is ready. */
+  caseMonths: 3,
+  /** How long a reason for war stays usable. */
+  reasonTurns: 12,
+  /** Influence for a war with no reason. */
+  noReasonCost: 60,
+  noReasonStability: 10,
+  /** Reputation (infamy) gained. Taking land also adds some. */
+  infamyNoReason: 25,
+  infamyWithReason: 4,
+  infamyCapture: 5,
+  infamyCaught: 10,
+  /** Infamy fades by this share each month, and by this much more. */
+  infamyFade: 0.04,
+  infamyFadeFlat: 0.3,
+  /** Monthly chance of a border incident between two neighbors that dislike each other. */
+  incidentChance: 0.05,
+  incidentOpinion: -15,
+}

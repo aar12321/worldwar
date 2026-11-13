@@ -3,7 +3,7 @@ import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, DIPLOMACY, PROP
 import { CITY_RULES, FOCUS } from '../data/cities'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS, TREASURY } from '../data/business'
 import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
-import { MAX_WARS, STANCES, WAR } from '../data/war'
+import { JUSTIFY, MAX_WARS, STANCES, WAR } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
@@ -16,7 +16,12 @@ import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canAttackRegion, commitShare } from './warfare'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase'])
+
+/** Influence a war on `target` costs `nationId` right now: little with a reason, a great deal without one. */
+export function warCost(s: GameState, nationId: string, target: string): number {
+  return hasCasusBelli(s, nationId, target) ? COSTS.declareWarWithCasusBelli : JUSTIFY.noReasonCost
+}
 
 /** Blocks training that would march a nation into a food shortage. */
 export function foodForTroops(s: GameState, map: WorldMap, nationId: string, unit: UnitType): string | null {
@@ -83,7 +88,10 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.tp = TECH_BY_ID[o.techId]?.cost ?? 0
       break
     case 'declareWar':
-      c.pp = hasCasusBelli(s, o.nationId, o.target) ? COSTS.declareWarWithCasusBelli : COSTS.declareWar
+      c.pp = warCost(s, o.nationId, o.target)
+      break
+    case 'buildCase':
+      c.pp = JUSTIFY.caseCost
       break
     case 'propose':
       c.pp = PROPOSAL_COSTS[o.proposal.kind]
@@ -281,6 +289,17 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'assignGeneral':
       if (o.generalId && !n.generals.some((g) => g.id === o.generalId)) return 'Unknown commander'
       return null
+    case 'buildCase': {
+      const t = s.nations[o.target]
+      if (!t?.alive || o.target === o.nationId) return 'Invalid target'
+      if (atWar(s, o.nationId, o.target)) return 'Already at war'
+      if (hasCasusBelli(s, o.nationId, o.target)) return 'You already have a reason to fight them'
+      if (isAllied(s, o.nationId, o.target)) return 'You are allied'
+      if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
+      if (t.overlord === o.nationId) return 'They are your puppet'
+      if ((s.cases ?? []).some((c) => c.holder === o.nationId && c.target === o.target) || pending.some((p) => p.type === 'buildCase' && p.target === o.target)) return 'You are already building a case against them'
+      return null
+    }
     case 'declareWar': {
       const t = s.nations[o.target]
       if (!t?.alive || o.target === o.nationId) return 'Invalid target'

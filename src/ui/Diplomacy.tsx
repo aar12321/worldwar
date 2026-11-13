@@ -7,7 +7,9 @@ import { COSTS, DIPLOMACY, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS
 import { blocOf, blocsOf } from '../engine/blocs'
 import { PACT_TURNS, describeProposal, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
-import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey, regionsOf, turnDate } from '../engine/helpers'
+import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, regionsOf, turnDate } from '../engine/helpers'
+import { warCost } from '../engine/orders'
+import { JUSTIFY } from '../data/war'
 import { validateOrder } from '../engine/orders'
 import { bundleValue, describeBundle, marketPrices, stockOf } from '../engine/trade'
 import type { Deal, Dispatch, NationId, Proposal, RegionId, ResourceBundle, SectorId, TradeResource } from '../engine/types'
@@ -457,9 +459,17 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
               <OrderButton
                 order={{ type: 'declareWar', nationId: player.id, target: id }}
                 label="Declare war"
-                cost={`${cb ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} influence`}
-                effect="Then attack from the War Room. Every war bills you monthly."
+                cost={`${warCost(game, player.id, id)} influence`}
+                effect={cb ? `Reason: ${justificationOf(game, player.id, id)?.reason}. Then attack from the War Room.` : 'No reason to fight: costs stability and the world will distrust you. Build a case first.'}
                 tone="btn-red"
+              />
+            )}
+            {!allied && !cb && (
+              <OrderButton
+                order={{ type: 'buildCase', nationId: player.id, target: id }}
+                label="Build a case"
+                cost={`${JUSTIFY.caseCost} influence`}
+                effect={`A reason for war, ready in ${JUSTIFY.caseMonths} months.`}
               />
             )}
             {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label="Leave alliance" cost={`${COSTS.leaveAlliance} influence`} tone="btn-quiet" />}

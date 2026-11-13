@@ -3,7 +3,7 @@ import { EVENT_BY_ID, EVENTS, type GameEventDef } from '../data/events'
 import { TECH_BY_ID, TECHS } from '../data/techTree'
 import { BUILDING_SPECS } from '../data/unitTypes'
 import { computeEconomy, ECON } from './economy'
-import { addLog, clamp, regionsOf } from './helpers'
+import { addLog, clamp, grantJustification, regionsOf } from './helpers'
 import { createRng, type Rng } from './rng'
 import type { EventEffect, GameState, NationId, PendingEvent, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -157,7 +157,7 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         break
       }
       case 'casusBelliForRival':
-        if (ev.rivalId) s.casusBelli[`${ev.rivalId}|${nationId}`] = s.turn + e.turns
+        if (ev.rivalId) grantJustification(s, ev.rivalId, nationId, 'Provocation', e.turns)
         break
       case 'spawnRebels':
         if (region && region.owner === nationId) region.rebels += e.strength
@@ -186,7 +186,10 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         break
       }
       case 'clearCasusBelli':
-        if (ev.rivalId) delete s.casusBelli[`${ev.rivalId}|${nationId}`]
+        if (ev.rivalId) {
+          delete s.casusBelli[`${ev.rivalId}|${nationId}`]
+          delete s.reasons[`${ev.rivalId}|${nationId}`]
+        }
         break
       case 'embargo':
         n.embargoedUntil = Math.max(n.embargoedUntil ?? 0, s.turn + e.turns - 1)

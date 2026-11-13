@@ -114,6 +114,8 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   if (hasCasusBelli(s, holder, target)) push('Grievance', -15)
   const coalition = ctx.coalition ?? coalitionActive(s)
   if (coalition && s.humans.includes(target) && borders) push('Fears your power', -20)
+  // A reputation for aggression: the world is uneasy about a nation that starts wars and takes land, until it fades.
+  push('Uneasy about its wars', -Math.min(30, (s.infamy?.[target] ?? 0) * 0.5))
   for (const m of storedOpinion(s, holder, target)) push(m.label, m.value)
   const total = Math.round(clamp(parts.reduce((sum, p) => sum + p.value, 0), -100, 100))
   return { total, parts }

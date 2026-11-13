@@ -32,9 +32,9 @@ describe('tech tree', () => {
 describe('diplomacy', () => {
   const map = lineMap(3)
 
-  it('declaring war costs PP and is cheaper with a casus belli', () => {
+  it('declaring war costs PP and is far cheaper with a reason', () => {
     const s = startState(map)
-    s.nations.r0.resources.pp = 30
+    s.nations.r0.resources.pp = 80
     const next = resolveTurn(s, map, [{ type: 'declareWar', nationId: 'r0', target: 'r1' }])
     expect(next.wars).toContain('r0|r1')
     const s2 = startState(map)

@@ -1,5 +1,6 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { FOCUS } from '../data/cities'
+import { JUSTIFY } from '../data/war'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -10,6 +11,7 @@ import { applyEconomy, nationWorkforce } from './economy'
 import { runSpyMission } from './espionage'
 import { EVENT_GAP_TURNS, scheduleEvent } from './events'
 import { addLog, reach, regionsOf } from './helpers'
+import { runJustification } from './justification'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
 import { runPolitics } from './politics'
@@ -81,6 +83,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     }
     case 'declareWar':
       return `Declare war on ${nation(o.target)}`
+    case 'buildCase':
+      return `Build a case against ${nation(o.target)}`
     case 'propose':
       return o.proposal.kind === 'callToArms'
         ? `Call ${nation(o.target)} to arms against ${nation(o.proposal.enemy)}`
@@ -109,7 +113,7 @@ const PHASES: Order['type'][][] = [
   ['respond'],
   ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw'],
   ['cancelDeal', 'leaveAlliance'],
-  ['declareWar', 'propose'],
+  ['declareWar', 'buildCase', 'propose'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy'],
   ['issueBonds', 'repayDebt', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
@@ -171,6 +175,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng, prices)
   applyDeals(s)
   runPolitics(s, map, rng)
+  runJustification(s, map, rng)
 
   s.turn++
   expireDiplomacy(s)
@@ -288,6 +293,10 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'declareWar':
       declareWar(s, map, o.nationId, o.target, rng)
       reach(n, 'war')
+      break
+    case 'buildCase':
+      s.cases.push({ holder: o.nationId, target: o.target, ready: s.turn + JUSTIFY.caseMonths })
+      if (n.isPlayer) addLog(s, 'diplomacy', `Your diplomats and lawyers begin building a case against ${s.nations[o.target].name}. It will be ready in ${JUSTIFY.caseMonths} months.`, [o.nationId])
       break
     case 'propose':
       propose(s, map, o.nationId, o.target, o.proposal, rng)

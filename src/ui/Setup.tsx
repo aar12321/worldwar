@@ -43,7 +43,7 @@ export function Setup() {
     <>
     <div className="absolute inset-0 z-30 pointer-events-none">
       <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="setup-title absolute top-8 left-1/2 -translate-x-1/2 text-center w-[min(640px,90vw)]">
-        <p className="text-[13px] font-medium text-white/50">January 1936</p>
+        <p className="text-[13px] font-medium text-white/50">January 2026</p>
         <h1 className="text-[40px] font-semibold tracking-tight text-white mt-1">Worlds of Others</h1>
         <p className="setup-blurb mt-2 text-[15px] text-white/65">Pick a nation. You and the other nations take turns, one month at a time. Win by taking countries, or by leading enough of the world’s people.</p>
       </motion.div>

@@ -2,13 +2,13 @@ import { addOpinion, forgetNation } from '../ai/opinion'
 import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { MATERIALS } from '../data/deposits'
-import { COMMITS, STANCES, WAR, type Commit, type Stance } from '../data/war'
+import { COMMITS, JUSTIFY, STANCES, WAR, type Commit, type Stance } from '../data/war'
 import { cityEffects, razeCities } from './cities'
 import { lineMax, regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
 import { createRng } from './rng'
 import { recordBattle } from './warscore'
-import { addLog, atWar, emptyUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
+import { addInfamy, addLog, atWar, emptyUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
 import type { Rng } from './rng'
 import type { BattleReport, GameState, Military, Nation, NationId, RegionId, UnitCounts, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -317,7 +317,10 @@ export function resolveAttack(
   if (captured) reach(attackerNation, 'capture')
   if (captured) transferRegion(s, map, target, nationId)
   recordBattle(s, report, captured && wasCapital)
-  if (captured) addOpinion(s, defenderId, nationId, 'Seized our land', -8, 0.2)
+  if (captured) {
+    addOpinion(s, defenderId, nationId, 'Seized our land', -8, 0.2)
+    addInfamy(s, nationId, JUSTIFY.infamyCapture)
+  }
   const verb = captured ? 'captured' : outcome.winner === 'attacker' ? 'pushed back the defense of' : 'was repulsed attacking'
   addLog(s, 'battle', `${attackerNation.name} ${verb} ${mr.name} (held by ${defenderNation.name}).`, [nationId, defenderId])
   return { report }
