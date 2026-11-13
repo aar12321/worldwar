@@ -203,7 +203,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const credit = creditReport(s, n, gross, enemiesOf(s, nationId).length > 0, cityCredit)
   const interest = n.debt * credit.rate
   const policyMoney = pol.money * gross
-  const land = { capital: cityMoney, food: cityFood, pp: buildings.civic * 0.6, tp: buildings.civic * 0.3 + cityResearch }
+  const land = { capital: cityMoney, food: cityFood, pp: buildings.civic * 0.6 + owned.length * EMPIRE.influencePerRegion, tp: buildings.civic * 0.3 + cityResearch }
 
   let upkeep = 0
   let armyFood = 0

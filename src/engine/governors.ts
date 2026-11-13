@@ -9,6 +9,7 @@ export const GOVERNOR_BUILDS: Record<Exclude<Governor, 'off'>, BuildingType[]> =
   industry: ['factory', 'port'],
   farming: ['farm'],
   research: ['university', 'civic'],
+  military: ['barracks', 'port', 'factory'],
 }
 
 export const GOVERNOR_LABELS: Record<Governor, string> = {
@@ -17,6 +18,7 @@ export const GOVERNOR_LABELS: Record<Governor, string> = {
   industry: 'Industry',
   farming: 'Farming',
   research: 'Research',
+  military: 'Barracks and arms',
 }
 
 /**

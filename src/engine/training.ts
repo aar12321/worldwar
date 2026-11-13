@@ -1,12 +1,19 @@
 import { BASE_TRAIN_SLOTS, TRAIN_MONTHS, UNIT_SPECS } from '../data/unitTypes'
+import { EMPIRE } from '../data/war'
 import { addLog } from './helpers'
 import type { GameState, NationId, TrainingJob, UnitType } from './types'
 
 /** Units that can train at once: a base number plus one per barracks level. */
 export function trainingSlots(s: GameState, nationId: NationId): number {
   let barracks = 0
-  for (const r of Object.values(s.regions)) if (r.owner === nationId) barracks += r.buildings.barracks
-  return BASE_TRAIN_SLOTS + barracks
+  let owned = 0
+  for (const r of Object.values(s.regions)) {
+    if (r.owner !== nationId) continue
+    owned++
+    barracks += r.buildings.barracks
+  }
+  // Every few countries add a recruiting district of their own, so a big empire can raise armies in proportion.
+  return BASE_TRAIN_SLOTS + barracks + Math.floor(owned / EMPIRE.slotsPerRegions)
 }
 
 /** Puts one trained unit into the nation's military. A new recruit is green, so it pulls the drill of that type down. */
