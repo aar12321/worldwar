@@ -16,10 +16,10 @@ import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, maxAtta
 import { trainingSlots } from './training'
 import { MARKET_GOODS, marketValue, tradeRoom } from './trade'
 import type { GameState, Order, UnitType, WorldMap } from './types'
-import { canAttackRegion, commitShare } from './warfare'
+import { canAttackRegion, commitShare, reachProblem } from './warfare'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'fundAgency'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic'])
 
 /** Influence a war on `target` costs `nationId` right now: little with a reason, a great deal without one. */
 export function warCost(s: GameState, nationId: string, target: string): number {
@@ -306,7 +306,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (n.military.lastAttackTurn === s.turn && n.military.attacksThisTurn >= maxAttacks(s, o.nationId)) return `Your military has already attacked ${maxAttacks(s, o.nationId)} times this turn`
       if (totalUnits(n.military.units) < 0.1) return 'You have no military to attack with'
       if (commitShare(n, o.commit ?? 'main') < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
-      if (!canAttackRegion(s, map, o.nationId, o.target).ok) return 'Not on your border. A sea attack needs a port.'
+      if (!canAttackRegion(s, map, o.nationId, o.target).ok) return reachProblem(s, map, o.nationId, o.target)
       return null
     }
     case 'assignGeneral':

@@ -118,6 +118,17 @@ export const WAR = {
   wearinessPerMonthCap: 1.2,
 }
 
+/** How far an army can be carried without a border or a short sea lane. */
+export const REACH = {
+  /** Warships needed (in divisions) to carry an assault across open ocean, from a port, to any coast within the range. */
+  navalUnits: 0.5,
+  /** Warships and a port reach any coast on Earth. */
+  seaKm: 25000,
+  /** Fighters and strike aircraft needed to cover an airlift, from a country with a factory to use as an airbase. */
+  airUnits: 0.5,
+  airKm: 7000,
+}
+
 /** What it takes to start a war, and what starting one costs your standing. */
 export const JUSTIFY = {
   /** Influence to open a case against a country. */

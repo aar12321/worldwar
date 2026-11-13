@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { AGENCY, AGENCY_ROLE, DOMESTIC_OPS, FOREIGN_OPS, agencyName, levelCost, type AgencyId, type DomesticOp, type ForeignOp } from '../data/agencies'
+import { AGENCY, AGENCY_ROLE, DOMESTIC_OPS, FOREIGN_OPS, agencyName, levelsCost, type AgencyId, type DomesticOp, type ForeignOp } from '../data/agencies'
 import { operationOdds } from '../engine/agencies'
 import { atWar } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
@@ -16,7 +16,6 @@ function AgencyCard({ id }: { id: AgencyId }) {
   const view = usePlayerView()!
   const { game, player } = view
   const a = player.agencies[id]
-  const queued = view.orders.filter((o) => o.type === 'fundAgency' && o.agency === id).length
   const used = view.orders.filter((o) => (id === 'foreign' ? o.type === 'operation' : o.type === 'domestic')).length
   void game
   return (
@@ -37,8 +36,20 @@ function AgencyCard({ id }: { id: AgencyId }) {
       <div className="text-[13px] text-white/75">
         Teams this month: {Math.max(0, a.level - used)} of {a.level} · Experience {a.exp} · Costs {fmt(a.level * AGENCY.upkeepPerLevel, 1)} money a month
       </div>
-      {a.level + queued < AGENCY.maxLevel && (
-        <OrderButton order={{ type: 'fundAgency', nationId: player.id, agency: id }} label={`Fund ${agencyName(player.name, id)}`} cost={`${levelCost(a.level)} money`} effect={`Level ${a.level + 1}: one more team, better odds, more operations.`} />
+      {a.level < AGENCY.maxLevel && (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-2 gap-2">
+            {Array.from({ length: Math.min(4, AGENCY.maxLevel - a.level) }, (_, i) => i + 1).map((levels) => (
+              <OrderButton
+                key={levels}
+                order={{ type: 'fundAgency', nationId: player.id, agency: id, levels }}
+                label={levels === 1 ? `Raise to level ${a.level + 1}` : `Raise to level ${a.level + levels}`}
+                cost={`${levelsCost(a.level, levels)} money`}
+                effect={levels === 1 ? 'One more team, better odds, more operations. Takes effect at once.' : `${levels} levels at once.`}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )

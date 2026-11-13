@@ -105,7 +105,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'setGovernor':
       return `Governor of ${region(o.regionId)}: ${GOVERNOR_LABELS[o.governor]}`
     case 'fundAgency':
-      return `Grow the ${o.agency === 'foreign' ? 'foreign' : 'domestic'} agency`
+      return `Grow the ${o.agency === 'foreign' ? 'foreign' : 'domestic'} agency${(o.levels ?? 1) > 1 ? ` by ${o.levels} levels` : ''}`
     case 'crisisAction':
       return `${ACTION_LABELS[o.action]}: ${s.nations[s.crises.find((c) => c.id === o.crisisId)?.nation ?? '']?.name ?? 'a crisis'}`
     case 'propose':
@@ -399,7 +399,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       runDomestic(s, o.nationId, o.op, o.regionId)
       break
     case 'fundAgency':
-      fundAgency(s, o.nationId, o.agency)
+      fundAgency(s, o.nationId, o.agency, o.levels ?? 1)
       break
     case 'setGovernor':
       s.regions[o.regionId].governor = o.governor

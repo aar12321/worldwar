@@ -61,7 +61,7 @@ describe('food and sea landings', () => {
     map.regions.r1.seaLanes = ['r0']
     const s = startState(map)
     s.regions.r0.buildings.port = 1
-    expect(canAttackRegion(s, map, 'r0', 'r1')).toEqual({ ok: true, bySea: true })
+    expect(canAttackRegion(s, map, 'r0', 'r1')).toMatchObject({ ok: true, bySea: true, via: 'lane' })
     s.regions.r0.buildings.port = 0
     expect(canAttackRegion(s, map, 'r0', 'r1').ok).toBe(false)
   })

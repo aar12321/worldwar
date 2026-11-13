@@ -1,5 +1,5 @@
 import { addOpinion } from '../ai/opinion'
-import { AGENCY, DOMESTIC_OPS, FOREIGN_OPS, levelCost, agencyName, type AgencyId, type DomesticOp, type ForeignOp, type OpSpec } from '../data/agencies'
+import { AGENCY, DOMESTIC_OPS, FOREIGN_OPS, levelsCost, agencyName, type AgencyId, type DomesticOp, type ForeignOp, type OpSpec } from '../data/agencies'
 import { TECH_BY_ID } from '../data/techTree'
 import { JUSTIFY } from '../data/war'
 import { SPY } from './espionage'
@@ -89,15 +89,18 @@ export function validateDomestic(s: GameState, o: Extract<Order, { type: 'domest
 export function validateFund(s: GameState, o: Extract<Order, { type: 'fundAgency' }>, pending: Order[]): string | null {
   const a = s.nations[o.nationId]?.agencies[o.agency]
   if (!a) return 'Unknown agency'
-  const queued = pending.filter((p) => p.type === 'fundAgency' && p.agency === o.agency).length
+  const levels = o.levels ?? 1
+  if (!Number.isInteger(levels) || levels < 1) return 'Choose how many levels to buy'
+  const queued = pending.reduce((sum, p) => (p.type === 'fundAgency' && p.agency === o.agency ? sum + (p.levels ?? 1) : sum), 0)
   if (a.level + queued >= AGENCY.maxLevel) return 'Already at the highest level'
+  if (a.level + queued + levels > AGENCY.maxLevel) return `Only ${AGENCY.maxLevel - a.level - queued} more level${AGENCY.maxLevel - a.level - queued === 1 ? '' : 's'} to the top (level ${AGENCY.maxLevel})`
   return null
 }
 
 export function opCost(o: Extract<Order, { type: 'operation' | 'domestic' | 'fundAgency' }>, s: GameState): { capital: number; pp: number } {
   if (o.type === 'operation') return { capital: FOREIGN_OPS[o.op].money, pp: FOREIGN_OPS[o.op].pp }
   if (o.type === 'domestic') return { capital: DOMESTIC_OPS[o.op].money, pp: DOMESTIC_OPS[o.op].pp }
-  return { capital: levelCost(s.nations[o.nationId].agencies[o.agency].level), pp: 0 }
+  return { capital: levelsCost(s.nations[o.nationId].agencies[o.agency].level, o.levels ?? 1), pp: 0 }
 }
 
 /** Technologies the target has that the nation could learn now. */
@@ -106,9 +109,9 @@ function stealable(s: GameState, nationId: NationId, target: NationId): string[]
   return s.nations[target].techs.filter((id) => !n.techs.includes(id) && TECH_BY_ID[id]?.requires.every((r) => n.techs.includes(r))).sort()
 }
 
-export function fundAgency(s: GameState, nationId: NationId, agency: AgencyId) {
+export function fundAgency(s: GameState, nationId: NationId, agency: AgencyId, levels = 1) {
   const n = s.nations[nationId]
-  n.agencies[agency].level++
+  n.agencies[agency].level = Math.min(AGENCY.maxLevel, n.agencies[agency].level + levels)
   if (n.isPlayer) addLog(s, 'info', `${agencyName(n.name, agency)} grew to level ${n.agencies[agency].level}.`, [nationId])
 }
 
