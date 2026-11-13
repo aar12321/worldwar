@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { turnDate } from '../engine/helpers'
 import { describeOrder } from '../engine/resolveTurn'
-import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
+import { conquestGoal, countriesTaken, economicGoal, economicShare, populationShare } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { useGame, type Panel, type ReportDelta } from '../store'
 import { AdviceList } from './Briefing'
@@ -207,28 +207,38 @@ export function GameOver() {
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const quit = useGame((s) => s.quitToMenu)
   const abandon = useGame((s) => s.abandonGame)
+  const online = useGame((s) => !!s.online)
   if (!game || game.outcome === 'playing' || fxBusy) return null
   const win = game.outcome === 'victory'
-  const p = game.nations[game.playerId]
-  const taken = countriesTaken(game)
+  // Who won. Single-player saves from before this was recorded have no winner, so the player is it.
+  const champion = game.nations[game.winner ?? game.playerId]
+  const youWon = win && champion.id === game.playerId
+  const p = youWon || !win ? game.nations[game.playerId] : champion
+  const taken = countriesTaken(game, p.id)
   const reason = win
     ? taken >= conquestGoal(game.settings.victoryShare)
       ? `${p.name} holds ${taken} countries beyond its first borders, as of ${turnDate(game.turn)}.`
-      : `${p.name} leads ${(populationShare(game, p.id) * 100).toFixed(1)}% of the world's people, as of ${turnDate(game.turn)}.`
-    : `${p.name} fell in ${turnDate(game.turn)}. The nation is gone, so the game is lost.`
+      : economicShare(game, getWorld().map, p.id) >= economicGoal(game.settings.victoryShare)
+        ? `${p.name} makes ${(economicShare(game, getWorld().map, p.id) * 100).toFixed(1)}% of the world's output, as of ${turnDate(game.turn)}.`
+        : `${p.name} leads ${(populationShare(game, p.id) * 100).toFixed(1)}% of the world's people, as of ${turnDate(game.turn)}.`
+    : game.humans.length > 1 || online
+      ? `Every player's nation has fallen, as of ${turnDate(game.turn)}.`
+      : `${p.name} fell in ${turnDate(game.turn)}. The nation is gone, so the game is lost.`
   return (
     <Modal
-      title={win ? 'You won' : 'Your nation has fallen'}
-      kicker={win ? 'Victory' : 'Defeat'}
-      tone={win ? '#30d158' : '#ff453a'}
+      title={youWon ? 'You won' : win ? `${champion.name} won` : game.humans.length > 1 || online ? 'Every nation has fallen' : 'Your nation has fallen'}
+      kicker={youWon ? 'Victory' : win ? 'Game over' : 'Defeat'}
+      tone={youWon ? '#30d158' : '#ff453a'}
       footer={
         <>
           <button className="btn px-5 py-2.5 text-[15px]" onClick={quit}>
-            Back to the menu
+            {online ? 'Leave the room' : 'Back to the menu'}
           </button>
-          <button className="btn btn-primary px-5 py-2.5 text-[15px]" data-autofocus onClick={abandon}>
-            New game
-          </button>
+          {!online && (
+            <button className="btn btn-primary px-5 py-2.5 text-[15px]" data-autofocus onClick={abandon}>
+              New game
+            </button>
+          )}
         </>
       }
     >

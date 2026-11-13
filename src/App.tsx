@@ -5,6 +5,7 @@ import { useGame, type Panel } from './store'
 import { BattleFX } from './ui/BattleFX'
 import { Briefing } from './ui/Briefing'
 import { GameOver, NavRail, OrdersTray, Toasts, TurnSummary } from './ui/Chrome'
+import { Lobby } from './ui/Online'
 import { CountryPanel } from './ui/CountryPanel'
 import { DiplomacyPanel } from './ui/Diplomacy'
 import { EventModal } from './ui/EventModal'
@@ -94,6 +95,7 @@ function useFlushOnExit() {
 
 export default function App() {
   const inGame = useGame((s) => !!s.game)
+  const online = useGame((s) => !!s.online)
   const panel = useGame((s) => s.panel)
   useShortcuts()
   useFlushOnExit()
@@ -104,7 +106,8 @@ export default function App() {
       <ShakeLayer>
         <WorldGlobe />
       </ShakeLayer>
-      {!inGame && <Setup />}
+      {!inGame && !online && <Setup />}
+      {!inGame && online && <Lobby />}
       {inGame && (
         <>
           <HUD />

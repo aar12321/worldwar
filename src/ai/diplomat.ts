@@ -107,7 +107,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       for (const x of myNeighbors) {
         if (x === p.from || !s.nations[x]?.alive) continue
         if (!(theirNeighbors.has(x) || atWar(s, p.from, x))) continue
-        const px = perceivedPower(s, map, botId, x) * (coalition && x === s.playerId ? 1.4 : 1)
+        const px = perceivedPower(s, map, botId, x) * (coalition && s.humans.includes(x) ? 1.4 : 1)
         if (px > myP * 1.3 && opinionOf(s, map, botId, x, { borders: true, coalition }) < 10) {
           threat = x
           break

@@ -31,6 +31,8 @@ function nationColor(index: number): string {
 
 export interface NewGameOptions {
   playerRegionId: string
+  /** Every nation a person plays, for an online game. Defaults to just the player's. */
+  humans?: string[]
   seed: number
   victoryShare: number
   difficulty?: Difficulty
@@ -61,6 +63,9 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     seed: opts.seed,
     settings,
     playerId: opts.playerRegionId,
+    humans: [...new Set([opts.playerRegionId, ...(opts.humans ?? [])])],
+    winner: null,
+    eliminated: [],
     nations: {},
     regions: {},
     trainingQueue: [],
@@ -139,7 +144,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     // Rich countries are mostly democracies; the rest are a mix.
     const govRoll = rng.next()
     const government: GovernmentType = dev >= 0.7 ? (govRoll < 0.75 ? 'democracy' : govRoll < 0.88 ? 'monarchy' : 'one_party') : dev >= 0.4 ? (govRoll < 0.4 ? 'democracy' : govRoll < 0.65 ? 'monarchy' : govRoll < 0.85 ? 'one_party' : 'junta') : govRoll < 0.2 ? 'democracy' : govRoll < 0.5 ? 'monarchy' : govRoll < 0.7 ? 'one_party' : 'junta'
-    const isPlayer = id === opts.playerRegionId
+    const isPlayer = state.humans.includes(id)
     const aggression = isPlayer ? 0 : rng.range(0.15, 0.9)
     const personality = isPlayer ? 'honorable' : pickPersonality(aggression, rng)
     const nation: Nation = {

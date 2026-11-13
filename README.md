@@ -1,6 +1,6 @@
 # Worlds of Others
 
-A browser-based, turn-based grand strategy game of total global hegemony. You command one of 175 nations; every other nation is run by an AI rival. One turn is one month, starting January 1936.
+A browser-based, turn-based grand strategy game of total global hegemony. You command one of 175 nations; every other nation is run by an AI rival, or by a friend: one to four people can play the same world online. One turn is one month, starting January 1936.
 
 ## Quick start
 
@@ -30,6 +30,33 @@ The game is turn based. One turn is one month, starting January 1936. Nothing mo
 4. **Next turn** runs the rivals, training, research, income, diplomacy, rebels and any attacks on you, replays the battles you were in, then shows a **monthly report**: what changed, the news, and what the advisor would do next.
 5. The **map control** (bottom left) switches the globe between Nations, Relations (allies, pacts, enemies) and Fronts (how much Defense Line is left).
 
+## Play with friends (1 to 4 players)
+
+On the main menu press **Play with friends online**, type a name, and **Create a room**. You get a five-letter code. Friends press the same button, choose **Join a room** and type it. In the lobby everyone picks a nation, and the host sets the rules: rival skill (Easy, Medium, Hard), how you win, and how long each month lasts (no timer, 1, 1.5, 2 or 3 minutes). Nations nobody picks are run by the AI, and AI nations still ally, trade and fight each other.
+
+- **Everyone plans the same month at once.** Press **Ready** when you are done. The month moves on when every player is ready, or when the timer ends. Press the button again to keep planning. Players who are away are skipped, and their nation is run by the AI until they return.
+- **Attacks wait for the end of the month online.** In a one-player game an attack plays out the moment you order it. Online, it joins your plan and is resolved at month end in a seeded order, so nobody wins by clicking faster. Builds, trades and training still happen at once.
+- **No random events online**, since one player's choice would stall the others.
+- The first player to reach the goal wins. A player whose nation falls keeps watching; the game ends when someone wins or every player has fallen.
+- Open **Players and chat** under the Ready button to see who is ready and to talk. If your tab closes, press **Rejoin** on the same menu to take your seat back. If the host leaves, the next player takes over the game.
+
+### Connecting players
+
+The room code is shared through [Supabase Realtime](https://supabase.com/docs/guides/realtime) broadcast. No tables or accounts are needed, only a project's URL and public ("anon") key, which the browser reads at build time:
+
+1. Create a free project at supabase.com. Realtime broadcast is on by default.
+2. Copy **Project URL** and the **anon public** key from *Project Settings, API*.
+3. For local use put them in `.env.local` (see `.env.example`). For a deployed site set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` where the site is built, then build again: Vite bakes them in.
+
+```bash
+cp .env.example .env.local   # then edit the two values
+npm run dev
+```
+
+Without them the game still runs, and **Play with friends** works in a practice mode between tabs of the same browser (open the page twice). It cannot connect different computers.
+
+How it works: the host's browser runs the same pure engine as a one-player game and is the referee. Other players send their plan for the month to the host, who checks every order against that player's own nation, resolves the month, and sends the new game back (compressed, in pieces under 50 KB). Everyone's game is therefore identical. The room is a trust-your-friends design: the host's browser holds the truth, and there is no server-side anti-cheat. Messages are not encrypted beyond what Supabase provides, so do not share the room code with strangers.
+
 Shortcuts: `Enter` next turn, `B` briefing, `E` economy, `M` military, `W` wars, `D` diplomacy, `R` research, `N` news, `A` War Room for the selected country, `?` help, `Esc` close.
 
 ## Architecture
@@ -44,14 +71,15 @@ src/
     arms.ts / training.ts   weapon levels, training slots and queue
     economy.ts / diplomacy.ts / espionage.ts / tech.ts / victory.ts
   data/        Tech tree, units, buildings, terrain, events, country stats, starting nations
-  ai/bot.ts    Rule-based orders for every non-player nation (same rules as the player)
+  ai/          Rule-based orders for every nation no human plays (same rules as the player): bot, diplomat, management, opinion, blocs
+  net/         Online play: protocol (messages, room codes, compressed snapshots), transport (Supabase Realtime, same-browser fallback), session (lobby, host, ready, timer, host handover)
   map/world.ts Natural Earth 110m countries -> regions, adjacency, coastlines, sea lanes
   ui/          React: globe, HUD, drawers, Modal, battle window, diplomacy, tech tree
   store.ts     Zustand store: orders, turn flow, battle queue, autosave (localStorage)
 ```
 
-The engine is seeded and side-effect free, so the same seed and orders always produce the same world. That makes it straightforward to move turn resolution to an authoritative server for real multiplayer later.
+The engine is seeded and side-effect free, so the same seed and orders always produce the same world. `GameState.humans` lists the nations people play (one in a one-player game), so a multiplayer game and a single-player game run the same code. Online, the host resolves each month and everyone else receives the result.
 
 ## Tech stack
 
-Vite, React 19, TypeScript, Zustand, Framer Motion, Tailwind CSS v4, three.js via `react-globe.gl`, `world-atlas` + `topojson-client` + `d3-geo` for map data, Vitest.
+Vite, React 19, TypeScript, Zustand, Framer Motion, Tailwind CSS v4, three.js via `react-globe.gl`, `world-atlas` + `topojson-client` + `d3-geo` for map data, Vitest, and `@supabase/supabase-js` for online rooms.

@@ -33,6 +33,7 @@ export function Help() {
   const open = useGame((s) => s.helpOpen)
   const setHelp = useGame((s) => s.setHelp)
   const game = useGame((s) => s.game)
+  const online = useGame((s) => s.online?.status === 'playing')
   if (!open || !game) return null
   const goal = game.settings.victoryShare
   return (
@@ -61,6 +62,11 @@ export function Help() {
           </li>
         ))}
       </ol>
+      {online && (
+        <p className="mt-3 text-[14px] text-white/80 rounded-xl bg-[#0a84ff]/15 border border-[#0a84ff]/40 px-3 py-2.5">
+          <strong>Playing with friends.</strong> Everyone plans the same month at once. Press <strong>Ready</strong> when you are done (press it again to keep planning). The month moves on when everyone is ready or the timer ends. Attacks are planned now and play out at month end, so nobody wins by clicking faster.
+        </p>
+      )}
       <h3 className="text-[16px] font-semibold mt-5 mb-2">Words you will see</h3>
       <dl className="space-y-2">
         {TERMS.map(([term, meaning]) => (

@@ -47,7 +47,7 @@ export function GovernmentTab() {
         </div>
       </Card>
 
-      <Card title="Where tax money goes" hint="Four shares that always add up to 100%. Leaning one way means you lean away from the others. It changes when you press Next turn.">
+      <Card title="Where tax money goes" hint="Four shares that always add up to 100%. Leaning one way means you lean away from the others. It changes when the month ends.">
         {BUDGET_KEYS.map((k) => (
           <SliderRow
             key={k}

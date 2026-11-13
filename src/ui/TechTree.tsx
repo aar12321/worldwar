@@ -62,7 +62,7 @@ export function TechTree() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-none">
         <div>
           <h2 className="text-[28px] font-semibold tracking-tight">Research</h2>
-          <p className="text-[13px] text-white/55 mt-0.5">Click a technology to queue it. It finishes when you press Next turn.</p>
+          <p className="text-[13px] text-white/55 mt-0.5">Click a technology to queue it. It finishes when the month ends.</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">

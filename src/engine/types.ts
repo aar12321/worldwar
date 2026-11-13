@@ -395,7 +395,14 @@ export interface GameState {
   turn: number
   seed: number
   settings: GameSettings
+  /** The nation of the player at this screen. In online games each screen sets its own. */
   playerId: NationId
+  /** Every nation a person plays. One in a single-player game, two to four online. */
+  humans: NationId[]
+  /** The human who won, once the game is won. */
+  winner: NationId | null
+  /** Humans knocked out of an online game. Their nations carry on under the AI. */
+  eliminated: NationId[]
   nations: Record<NationId, Nation>
   regions: Record<RegionId, RegionState>
   /** Units in production. The front jobs advance each month, up to the nation's training slots. */

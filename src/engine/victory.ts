@@ -21,9 +21,9 @@ export function conquestGoal(victoryShare: number): number {
 }
 
 /** Countries the player holds that were not the country they started as. */
-export function countriesTaken(s: GameState): number {
+export function countriesTaken(s: GameState, id: NationId = s.playerId): number {
   // A puppet counts as half a country.
-  return regionsOf(s, s.playerId).filter((id) => id !== s.playerId).length + Math.floor(puppetsOf(s, s.playerId).length / 2)
+  return regionsOf(s, id).filter((r) => r !== id).length + Math.floor(puppetsOf(s, id).length / 2)
 }
 
 /** Share of the world's output needed to win by economy: well under the conquest goals, but only big economies get there. */
@@ -52,15 +52,38 @@ export function worldGross(s: GameState, map: WorldMap): number {
   return total
 }
 
-export function checkOutcome(s: GameState, map?: WorldMap): GameState['outcome'] {
-  const p = s.nations[s.playerId]
-  if (!p.alive || regionsOf(s, p.id).length === 0) return 'defeat'
-  const capitalLost = s.regions[p.originalCapital].owner !== p.id
+/** Where one human stands: still in it, won, or out. */
+export function humanStatus(s: GameState, id: NationId, map?: WorldMap): 'playing' | 'won' | 'lost' {
+  const p = s.nations[id]
+  if (!p?.alive || regionsOf(s, id).length === 0) return 'lost'
+  const capitalLost = s.regions[p.originalCapital].owner !== id
   // Losing the capital only ends the game once there is nothing left to fight back with.
-  const canRebuild = (s.trainingQueue ?? []).some((job) => job.nationId === p.id) || p.resources.capital >= UNIT_SPECS.infantry.capitalCost
-  if (capitalLost && totalUnits(p.military.units) < 0.1 && !canRebuild) return 'defeat'
-  if (countriesTaken(s) >= conquestGoal(s.settings.victoryShare)) return 'victory'
-  if (populationShare(s, p.id) >= s.settings.victoryShare) return 'victory'
-  if (map && economicShare(s, map, p.id) >= economicGoal(s.settings.victoryShare)) return 'victory'
+  const canRebuild = (s.trainingQueue ?? []).some((job) => job.nationId === id) || p.resources.capital >= UNIT_SPECS.infantry.capitalCost
+  if (capitalLost && totalUnits(p.military.units) < 0.1 && !canRebuild) return 'lost'
+  if (countriesTaken(s, id) >= conquestGoal(s.settings.victoryShare)) return 'won'
+  if (populationShare(s, id) >= s.settings.victoryShare) return 'won'
+  if (map && economicShare(s, map, id) >= economicGoal(s.settings.victoryShare)) return 'won'
+  return 'playing'
+}
+
+/**
+ * The game's outcome. Anyone who wins ends it. A human who is knocked out of an online game drops out and the AI takes
+ * over their nation; when no humans are left, the game is lost.
+ */
+export function checkOutcome(s: GameState, map?: WorldMap): GameState['outcome'] {
+  const humans = s.humans?.length ? s.humans : [s.playerId]
+  for (const id of humans) {
+    if (humanStatus(s, id, map) === 'won') {
+      s.winner = id
+      return 'victory'
+    }
+  }
+  const out = humans.filter((id) => humanStatus(s, id, map) === 'lost')
+  if (out.length === humans.length) return 'defeat'
+  for (const id of out) {
+    s.humans = s.humans.filter((h) => h !== id)
+    s.eliminated = [...(s.eliminated ?? []), id]
+    if (s.nations[id]) s.nations[id].isPlayer = false
+  }
   return 'playing'
 }

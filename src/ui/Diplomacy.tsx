@@ -245,7 +245,7 @@ function TradeComposer({ target }: { target: NationId }) {
         Market value: you give <span className="text-white">{gv.toFixed(0)}</span>, you get <span className="text-white">{rv.toFixed(0)}</span> money.{' '}
         {rv > 0 && gv / rv < 1 && 'They will want more for it, unless they are short of what you offer.'}
       </div>
-      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label="Offer deal" cost={`${PROPOSAL_COSTS.trade} influence`} effect="They answer when you press Next turn" tone="btn-primary" />
+      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label="Offer deal" cost={`${PROPOSAL_COSTS.trade} influence`} effect="They answer when the month ends" tone="btn-primary" />
     </div>
   )
 }
@@ -328,7 +328,7 @@ function PeaceComposer({ target }: { target: NationId }) {
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
         label={live.length === 0 && reparations === 0 && !puppet ? 'Offer peace with no terms' : 'Send terms'}
         cost={`${PROPOSAL_COSTS.peace} influence`}
-        effect="They answer when you press Next turn"
+        effect="They answer when the month ends"
         tone="btn-primary"
       />
     </div>
@@ -571,7 +571,7 @@ export function DiplomacyPanel() {
     .slice(0, 6)
 
   return (
-    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. Offers are answered when you press Next turn.`} panel="diplomacy">
+    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. Offers are answered when the month ends.`} panel="diplomacy">
       {ctx.coalition && (
         <div className="rounded-lg border border-rose-500/50 bg-rose-500/10 p-3 text-xs text-rose-200">
           Your growing power alarms the world. Neighbors now distrust you and are quicker to band together against you.

@@ -16,7 +16,7 @@ export const PROPOSAL_TURNS = 3
 
 /** Rejections and lapsed offers between two bots are not news; everything involving the player is. */
 function pushDispatch(s: GameState, d: Dispatch) {
-  const involvesPlayer = d.from === s.playerId || d.to === s.playerId
+  const involvesPlayer = s.humans.includes(d.from) || s.humans.includes(d.to)
   if (!involvesPlayer && (d.kind === 'rejected' || d.kind === 'expired')) return
   s.dispatches.push(d)
   addLog(s, 'diplomacy', d.text, [d.from, d.to])

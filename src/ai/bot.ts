@@ -50,9 +50,11 @@ export interface TurnContext {
   allies: Map<NationId, NationId[]>
   prices: MarketPrices
   coalition: boolean
-  playerProposals: number
-  playerInbox: number
-  warsOnPlayer: number
+  /** New offers sent to, and offers waiting for, each human this turn. */
+  proposalsTo: Map<NationId, number>
+  inbox: Map<NationId, number>
+  /** Wars already declared on each human. */
+  warsOn: Map<NationId, number>
 }
 
 export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
@@ -81,7 +83,6 @@ export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
     if (!n.alive) continue
     power.set(n.id, militaryPower(s, n.id))
   }
-  const player = s.playerId
   const enemies = partnerIndex(s.wars)
   return {
     power,
@@ -91,9 +92,9 @@ export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
     allies: partnerIndex(s.alliances),
     prices: marketPrices(s),
     coalition: difficultyOf(s.settings.difficulty).coalitions && coalitionActive(s, map),
-    playerProposals: 0,
-    playerInbox: s.proposals.filter((p) => p.to === player).length,
-    warsOnPlayer: (enemies.get(player) ?? []).filter((e) => !e.startsWith('free-')).length,
+    proposalsTo: new Map(s.humans.map((h) => [h, 0])),
+    inbox: new Map(s.humans.map((h) => [h, s.proposals.filter((p) => p.to === h).length])),
+    warsOn: new Map(s.humans.map((h) => [h, (enemies.get(h) ?? []).filter((e) => !e.startsWith('free-')).length])),
   }
 }
 
@@ -147,7 +148,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   const rng: Rng = createRng(s.seed, s.turn * 100003 + hashString(nationId))
   const econ = computeEconomy(s, map, nationId)
   const myNeighbors = ctx.neighbors.get(nationId) ?? new Set<NationId>()
-  const playerId = s.playerId
+  const humans = new Set(s.humans)
   const orders: Order[] = []
   const tryAdd = (o: Order) => {
     if (validateOrder(s, map, o, orders) === null) {
@@ -171,13 +172,13 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   }
   /** The player's inbox is rate limited so bots feel like busy rivals, not spam. */
   const canAsk = (target: NationId) =>
-    target !== playerId || (ctx.playerProposals < BOT.maxPlayerProposalsPerTurn && ctx.playerInbox < BOT.maxPlayerInbox)
+    !humans.has(target) || ((ctx.proposalsTo.get(target) ?? 0) < BOT.maxPlayerProposalsPerTurn && (ctx.inbox.get(target) ?? 0) < BOT.maxPlayerInbox)
   const proposeTo = (target: NationId, proposal: ProposalDraft) => {
     if (!canAsk(target)) return false
     if (!tryAdd({ type: 'propose', nationId, target, proposal })) return false
-    if (target === playerId) {
-      ctx.playerProposals++
-      ctx.playerInbox++
+    if (humans.has(target)) {
+      ctx.proposalsTo.set(target, (ctx.proposalsTo.get(target) ?? 0) + 1)
+      ctx.inbox.set(target, (ctx.inbox.get(target) ?? 0) + 1)
     }
     return true
   }
@@ -405,7 +406,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         let threatPower = 0
         for (const x of [...myNeighbors].sort()) {
           if (!s.nations[x]?.alive || isAllied(s, nationId, x)) continue
-          const px = perceived(x) * (ctx.coalition && x === playerId ? 1.4 : 1)
+          const px = perceived(x) * (ctx.coalition && humans.has(x) ? 1.4 : 1)
           if (px > myPower * 1.35 && opinion(x) < 5 && px > threatPower) {
             threat = x
             threatPower = px
@@ -424,7 +425,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       if (diff.skill >= 1 && allies.length < diff.maxAlliances && rng.chance(BOT.allyDrive * (diff.skill === 2 ? 1.5 : 1))) {
         const friend = [...myNeighbors]
           .sort()
-          .filter((x) => s.nations[x]?.alive && !isAllied(s, nationId, x) && !atWar(s, nationId, x) && x !== playerId && opinion(x) >= 12 && alliesOf(x).length < diff.maxAlliances && !recentlyProposed(s, nationId, x, 'alliance', 10))
+          .filter((x) => s.nations[x]?.alive && !isAllied(s, nationId, x) && !atWar(s, nationId, x) && !humans.has(x) && opinion(x) >= 12 && alliesOf(x).length < diff.maxAlliances && !recentlyProposed(s, nationId, x, 'alliance', 10))
           .sort((a, b) => opinion(b) - opinion(a) || (a < b ? -1 : 1))[0]
         if (friend && proposeTo(friend, { kind: 'alliance' })) return true
       }
@@ -447,7 +448,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       for (const id of [...myNeighbors].sort()) {
         const t = s.nations[id]
         if (!t?.alive || atWar(s, nationId, id) || hasPact(s, nationId, id) || isAllied(s, nationId, id)) continue
-        if (id === playerId && (s.turn < diff.playerGracePeriod || ctx.warsOnPlayer >= playerCap)) continue
+        if (humans.has(id) && (s.turn < diff.playerGracePeriod || (ctx.warsOn.get(id) ?? 0) >= playerCap)) continue
         const op = opinion(id)
         const muchWeaker = perceived(id) < myPower * 0.55
         const bully = muchWeaker && n.personality !== 'honorable' && n.personality !== 'turtle'
@@ -461,14 +462,14 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         if (enemiesOf(id).length > 0) ratio *= n.personality === 'opportunist' ? 1.4 : 1.15
         // The strongest tier presses an enemy of its allies.
         if (diff.skill === 2 && alliesOf(nationId).some((a) => atWar(s, a, id))) ratio *= 1.25
-        if (ctx.coalition && id === playerId) ratio *= 1.2
+        if (ctx.coalition && humans.has(id)) ratio *= 1.2
         if (!best || ratio > best.ratio) best = { id, ratio }
       }
       if (!best || best.ratio <= diff.warDeclarePowerRatio / persona.risk) return false
       const odds = best.ratio >= diff.warDeclarePowerRatio * 1.2 ? 0.45 : 0.24
       if (!rng.chance(n.aggression * persona.aggression * diff.aggression * odds)) return false
       if (!tryAdd({ type: 'declareWar', nationId, target: best.id })) return false
-      if (best.id === playerId) ctx.warsOnPlayer++
+      if (humans.has(best.id)) ctx.warsOn.set(best.id, (ctx.warsOn.get(best.id) ?? 0) + 1)
       return true
     },
   }
@@ -483,8 +484,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
 
   const attackRatio = (diff.attackRatio / persona.risk) * (mistake === 'overconfident' ? 0.75 : 1)
   // A war declared on the player gives them a couple of months to raise a military before the first blow.
-  const warTargets = new Set(enemies.filter((e) => e !== playerId || s.turn - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
-  for (const o of orders) if (o.type === 'declareWar' && o.target !== playerId) warTargets.add(o.target)
+  const warTargets = new Set(enemies.filter((e) => !humans.has(e) || s.turn - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
+  for (const o of orders) if (o.type === 'declareWar' && !humans.has(o.target)) warTargets.add(o.target)
   // One attack a turn. A bot starts a campaign only now and then, but keeps pressing a front it has already cracked.
   if (mistake !== 'idle' && s.turn - n.military.lastAttackTurn >= BOT.attackRestTurns && n.military.exposed < 0.05) {
     const options = Object.values(s.regions)

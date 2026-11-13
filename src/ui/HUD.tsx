@@ -6,6 +6,7 @@ import { conquestGoal, countriesTaken, populationShare } from '../engine/victory
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
+import { OnlinePeople, OnlineStatus } from './Online'
 
 /** Eases a displayed number toward `value` instead of snapping. */
 function useTweenedNumber(value: number, ms = 520): number {
@@ -128,6 +129,8 @@ export function HUD() {
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const reduced = useGame((s) => s.settings.reducedMotion)
   const endTurn = useGame((s) => s.endTurn)
+  const setReady = useGame((s) => s.setReady)
+  const online = useGame((s) => (s.online?.status === 'playing' ? s.online : null))
   const setPanel = useGame((s) => s.setPanel)
   const setHelp = useGame((s) => s.setHelp)
   const panel = useGame((s) => s.panel)
@@ -138,8 +141,10 @@ export function HUD() {
   const goal = game.settings.victoryShare
   const taken = countriesTaken(game)
   const lands = conquestGoal(goal)
-  const blocked = !!game.pendingEvent || fxBusy || game.outcome !== 'playing'
-  const label = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle playing' : 'Next turn'
+  const watching = !!online && game.eliminated.includes(game.playerId)
+  const waiting = !!online && online.ready.includes(game.playerId)
+  const blocked = !!game.pendingEvent || fxBusy || game.outcome !== 'playing' || watching
+  const label = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle playing' : watching ? 'Watching' : online ? (waiting ? 'Waiting for others' : 'Ready') : 'Next turn'
   const civic = econ.buildings.civic
 
   return (
@@ -219,7 +224,7 @@ export function HUD() {
           </Resource>
           <Resource label="Research" amount={player.resources.tp - committed.tp} delta={signed(econ.tpGain)}>
             <Row k="University levels" v={`${econ.buildings.university}`} />
-            <p className="text-[13px] text-white/65">Spend it in Research. A technology you pick arrives when you press Next turn.</p>
+            <p className="text-[13px] text-white/65">Spend it in Research. A technology you pick arrives when the month ends.</p>
           </Resource>
           <Resource label="Oil" amount={player.resources.oil} delta={signed(econ.netOil)} warn={player.oilShortage || econ.netOil < 0}>
             <Row k="Pumped" v={signed(econ.oilProduction)} />
@@ -244,10 +249,16 @@ export function HUD() {
         </div>
 
         <div className="hud-next glass rounded-2xl p-2 pointer-events-auto flex flex-col gap-1 min-w-[168px]">
-          <button className={`btn btn-primary px-4 py-3 text-[15px] ${blocked ? '' : 'pulse-cta'}`} disabled={blocked} onClick={endTurn} title="Resolve the month (Enter)">
+          <button
+            className={`btn btn-primary px-4 py-3 text-[15px] ${blocked || waiting ? '' : 'pulse-cta'}`}
+            disabled={blocked}
+            onClick={online && waiting ? () => setReady(false) : endTurn}
+            title={online ? (waiting ? 'Press to keep planning' : 'Done planning (Enter)') : 'Resolve the month (Enter)'}
+          >
             {label}
           </button>
-          <div className="px-1 text-center text-[12px] text-white/70">{orders.length > 0 ? `${orders.length} order${orders.length === 1 ? '' : 's'} waiting` : 'Enter'}</div>
+          <div className="px-1 text-center text-[12px] text-white/70">{online ? <OnlineStatus /> : orders.length > 0 ? `${orders.length} order${orders.length === 1 ? '' : 's'} waiting` : 'Enter'}</div>
+          {online && <OnlinePeople />}
         </div>
       </div>
       {top && top.urgency === 'now' && panel === 'none' && (

@@ -877,3 +877,70 @@ body:has(.drawer) .map-modes {
     align-items: stretch;
   }
 }
+
+/* Players and chat, opened from under the Ready button. */
+.online-pop {
+  position: fixed;
+  z-index: 60;
+  right: 12px;
+  top: calc(var(--hud-h) + 12px);
+  width: min(340px, calc(100vw - 24px));
+  border-radius: 16px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+}
+@media (max-width: 720px) {
+  .online-pop {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 136px;
+    width: auto;
+  }
+}
+
+/* The lobby shares the menu's layout rules, and gives its players list the whole card to scroll in on a phone. */
+@media (max-width: 1100px) {
+  .lobby-list {
+    left: 8px !important;
+    width: min(300px, 38vw) !important;
+    top: 130px !important;
+    bottom: 8px !important;
+  }
+  .lobby-card {
+    right: 8px !important;
+    width: min(320px, 42vw) !important;
+    max-height: min(62vh, 520px);
+    overflow: auto;
+  }
+}
+@media (max-width: 640px) {
+  .lobby-title {
+    top: 6px !important;
+  }
+  .lobby-code {
+    font-size: 30px !important;
+  }
+  .lobby-sub {
+    display: none;
+  }
+  .lobby-list {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    top: 84px !important;
+    bottom: auto !important;
+    height: 36vh !important;
+    overflow-y: auto !important;
+    display: block !important;
+  }
+  .lobby-nations {
+    overflow: visible !important;
+  }
+  .lobby-card {
+    left: 8px !important;
+    right: 8px !important;
+    bottom: 8px !important;
+    width: auto !important;
+    max-height: 50vh !important;
+  }
+}
