@@ -25,7 +25,15 @@ const TERMS: [string, string][] = [
   ['Business', 'Six private sectors grow on their own. Lower business tax, calm people and new technology make them grow faster.'],
   ['Bonds and credit', 'Borrow with bonds and pay interest. A nation in the red for 3 months with debt defaults, and nobody lends to it for two years.'],
   ['Budget', 'Four shares of tax money: Military, Education, Health, Infrastructure. Leaning one way means leaning away from the rest.'],
-  ['Puppet state', 'Win a war big enough and you can make the loser a puppet: it keeps its land, pays you 12% of its income, and counts as half a country.'],
+  ['Puppet state', 'Win a war big enough and you can make the loser a puppet: it keeps its land, pays you 12% of its income, and counts as one of your countries for the goal. After three months you can annex it.'],
+  ['Reason for war', 'A war needs a reason: a border incident, an attack on your ally, a spy caught, sanctions, or a case you build in three months. Without one it costs far more, hurts stability and makes the world distrust you.'],
+  ['Reputation', 'Starting wars and taking land make other nations uneasy about you. It fades over a couple of years.'],
+  ['Reach', 'You attack across a border or a short sea lane. A port plus warships reaches any coast in the world, and fighters or strike aircraft with a factory as a base reach anything within 7000 km. Overseas attacks fight with a penalty.'],
+  ['Agencies', 'An intelligence service works abroad (intelligence, cases for war, sabotage, rebels, coups, theft) and a security service works at home. Each level adds a team. Odds are shown first.'],
+  ['Frontier weapons', 'Drone Swarms take the first losses and shred tanks. Robot Infantry need no soldiers and never tire your people. Hypersonic Batteries strike first and crack the Defense Line. Each has a counter: shields, fighters, and Cyber Command.'],
+  ['Systems', 'Cyber Command, Interceptor Shield, AI Battle Command, Quantum Codebreaking, Orbital Network and Nano-armor are programs you buy in three levels. They cost upkeep and each has a weakness.'],
+  ['Stocks', 'Made-up companies whose prices follow their home country. They pay dividends, and shares in a country you go to war with are seized.'],
+  ['Empire and governors', 'Every country you hold is listed together in Economy. A governor upgrades a country each month on a plan you pick.'],
 ]
 
 export function Help() {

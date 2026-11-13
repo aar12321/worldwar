@@ -322,6 +322,7 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
+  if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital')
   if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)
   if (order.type === 'operation') return typeof order.target === 'string' && typeof order.op === 'string'
   if (order.type === 'domestic') return typeof order.op === 'string'
