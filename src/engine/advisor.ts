@@ -2,11 +2,10 @@ import { ELECTION } from '../data/government'
 import { SECTORS, SECTOR_IDS } from '../data/business'
 import { TECHS } from '../data/techTree'
 import { BUILDING_SPECS, UNIT_SPECS, buildingCost, weaponCost } from '../data/unitTypes'
-import { MAX_WARS } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
-import { enemiesOf, hasPact, isAllied, totalUnits } from './helpers'
+import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
 import { militaryPower, militarySheet } from './militaryStats'
 import { validateOrder } from './orders'
 import { monthsToElection } from './politics'
@@ -133,6 +132,20 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       detail: 'Offers expire if you ignore them, and the sender remembers.',
       action: 'Read them',
       target: { desk: 'diplomacy', nation: first.from },
+    })
+  }
+
+  // Trouble in the world that you could answer
+  const answeredCrises = new Set(pending.filter((o) => o.type === 'crisisAction').map((o) => (o as { crisisId: string }).crisisId))
+  const open = s.crises.find((c) => c.stage >= 1 && c.nation !== nationId && c.rival !== nationId && !c.answered.includes(nationId) && !answeredCrises.has(c.id))
+  if (open) {
+    const who = s.nations[open.nation]?.name ?? 'A nation'
+    add('soon', 20, {
+      id: 'crisis',
+      title: open.kind === 'unrest' ? `Unrest in ${who}` : `${s.nations[open.rival ?? '']?.name ?? 'A neighbor'} threatens ${who}`,
+      detail: open.stage >= 2 ? 'It is on the brink. Help now, or watch it boil over. Taking a side is remembered.' : 'Trouble is building in the news. A friendly hand now may stop it.',
+      action: 'See the crisis',
+      target: { desk: 'diplomacy', nation: open.nation },
     })
   }
 
@@ -273,8 +286,8 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       add('idea', 10, { id: 'grow', title: 'No neighbor is weak enough yet', detail: 'Build factories for income, then train a larger military before you pick a fight.', action: 'Open Military', target: { desk: 'military', tab: 'forces' } })
     }
   }
-  if (enemies.length >= MAX_WARS) {
-    add('soon', 5, { id: 'maxwars', title: `You are fighting ${MAX_WARS} wars`, detail: 'That is the most a country can fight at once. Each one bills you monthly.', action: 'See your wars', target: { desk: 'military', tab: 'wars' } })
+  if (enemies.length >= maxWars(s, nationId)) {
+    add('soon', 5, { id: 'maxwars', title: `You are fighting ${enemies.length} wars`, detail: 'That is the most a country can fight at once. Each one bills you monthly.', action: 'See your wars', target: { desk: 'military', tab: 'wars' } })
   }
 
   out.sort((a, b) => b.weight - a.weight || (a.id < b.id ? -1 : 1))

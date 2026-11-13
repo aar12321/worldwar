@@ -51,6 +51,8 @@ export function coalitionActive(s: GameState, map?: WorldMap): boolean {
   return s.humans.some((id) => {
     const p = s.nations[id]
     if (!p?.alive) return false
+    // Trying to hold the whole world alarms everyone long before it is done.
+    if (s.settings.goal === 'world') return populationShare(s, id) >= 0.12 || countriesTaken(s, id) >= 6
     if (populationShare(s, id) >= s.settings.victoryShare * COALITION_THRESHOLD) return true
     return !!map && countriesTaken(s, id) >= Math.ceil(conquestGoal(s.settings.victoryShare) / 2)
   })

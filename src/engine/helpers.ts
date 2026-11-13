@@ -1,4 +1,5 @@
 import { TECH_BY_ID, type TechModifiers } from '../data/techTree'
+import { EMPIRE, MAX_WARS } from '../data/war'
 import type { GameState, LogKind, Milestone, Nation, NationId, RegionId, UnitCounts, UnitType } from './types'
 
 export const pairKey = (a: NationId, b: NationId) => (a < b ? `${a}|${b}` : `${b}|${a}`)
@@ -29,6 +30,11 @@ export function justificationOf(s: GameState, holder: NationId, target: NationId
 
 export function addInfamy(s: GameState, id: NationId, amount: number) {
   s.infamy[id] = Math.min(100, Math.max(0, (s.infamy[id] ?? 0) + amount))
+}
+
+/** Wars a nation can fight at once. It grows with the size of its empire. */
+export function maxWars(s: GameState, id: NationId): number {
+  return Math.min(EMPIRE.maxWarsCap, MAX_WARS + Math.floor(regionsOf(s, id).length / EMPIRE.warsPerRegions))
 }
 
 /** Nations that have promised to defend `id`. */

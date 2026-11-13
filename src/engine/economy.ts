@@ -2,7 +2,7 @@ import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, DIPLOMACY, UNIT_SPECS } from '../data/unitTypes'
 import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
-import { WAR } from '../data/war'
+import { EMPIRE, WAR } from '../data/war'
 import { addLog, clamp, enemiesOf, nationModifiers, pairKey, sanctionersOf } from './helpers'
 import type { Rng } from './rng'
 import { checkDefault, type CreditReport, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
@@ -240,7 +240,8 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
       pol.stability +
       mods.stability -
       rebelRegions * 3 -
-      Math.max(0, occupied - WAR.overextendFree) * WAR.overextendPenalty,
+      // A big, settled empire has the officials to hold more new land at once.
+      Math.max(0, occupied - WAR.overextendFree - Math.floor((owned.length - occupied) / EMPIRE.settleRegions)) * WAR.overextendPenalty,
     0,
     100,
   )

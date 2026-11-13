@@ -9,12 +9,6 @@ import { globeBridge } from './globeBridge'
 import { nationScore, nationTier, rankNations } from './nationList'
 import { OnlineEntry } from './Online'
 
-const VICTORY_OPTIONS = [
-  { share: 0.25, label: 'Short', sub: 'Take 3 countries, lead 25% of people, or 11% of output' },
-  { share: 0.4, label: 'Full', sub: 'Take 6 countries, lead 40% of people, or 18% of output' },
-  { share: 0.6, label: 'Long', sub: 'Take 12 countries, lead 60% of people, or 27% of output' },
-]
-
 export function Setup() {
   const { map } = getWorld()
   const selected = useGame((s) => s.selectedRegion)
@@ -23,7 +17,6 @@ export function Setup() {
   const loadGame = useGame((s) => s.loadGame)
   const hasSave = useGame((s) => s.hasSave)
   const [query, setQuery] = useState('')
-  const [share, setShare] = useState(0.4)
   const [difficulty, setDifficulty] = useState<Difficulty>('normal')
   const saved = useMemo(() => (hasSave ? peekSave() : null), [hasSave])
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6))
@@ -99,15 +92,8 @@ export function Setup() {
           <p className="text-white/55 text-[14px]">Pick a nation from the list, or click any country on the globe.</p>
         )}
         <div>
-          <div className="label mb-2">How you win</div>
-          <div className="grid grid-cols-3 gap-2">
-            {VICTORY_OPTIONS.map((v) => (
-              <button key={v.share} onClick={() => setShare(v.share)} className={`rounded-xl p-2 text-left ${share === v.share ? 'bg-[#0a84ff] text-white' : 'bg-white/8 hover:bg-white/12'}`}>
-                <div className="text-xs font-semibold">{v.label}</div>
-                <div className={`text-[11px] leading-tight mt-0.5 ${share === v.share ? 'text-white/80' : 'text-white/50'}`}>{v.sub}</div>
-              </button>
-            ))}
-          </div>
+          <div className="label mb-1.5">How you win</div>
+          <p className="text-[13px] text-white/75 leading-snug">Hold the whole world: every country yours, or a puppet of yours. It takes a long time. Wars need a reason, so you work through spies, allies and the news.</p>
         </div>
         <div>
           <div className="label mb-2">Rivals</div>
@@ -145,7 +131,7 @@ export function Setup() {
           <button className="btn btn-primary flex-[2] py-3 text-[15px]" disabled={!pick} onClick={() => {
               if (!pick) return
               if (hasSave && !window.confirm(`Starting a new game replaces your saved game${saved ? ` (${saved.nation}, ${saved.date})` : ''}. Start anyway?`)) return
-              newGame({ playerRegionId: pick.id, seed, victoryShare: share, difficulty })
+              newGame({ playerRegionId: pick.id, seed, difficulty })
             }}
           >
             Start game

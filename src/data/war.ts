@@ -1,7 +1,23 @@
 import type { UnitType } from '../engine/types'
 
 /** A country can be in at most this many wars at once. */
+/** Wars a small country can fight at once. Larger empires can fight more: see maxWars. */
 export const MAX_WARS = 3
+
+/** What it takes to hold the world. */
+export const EMPIRE = {
+  /** One more war allowed for every this many countries you control, up to the cap. */
+  warsPerRegions: 12,
+  maxWarsCap: 8,
+  /** Unsettled countries you can hold before stability suffers, plus one for every this many you control. */
+  settleRegions: 6,
+  /** A defeated nation whose capital has fallen gives up entirely when its army is under this many divisions. */
+  surrenderUnits: 3,
+  /** Months a puppet must serve before it can be annexed, and the influence that costs per country. */
+  annexMonths: 6,
+  annexCost: 30,
+  annexInfamy: 2,
+}
 
 export type Commit = 'probe' | 'main' | 'allin'
 export type Stance = 'assault' | 'blitz' | 'siege'

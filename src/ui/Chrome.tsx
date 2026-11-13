@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { turnDate } from '../engine/helpers'
 import { describeOrder } from '../engine/resolveTurn'
-import { conquestGoal, countriesTaken, economicGoal, economicShare, populationShare } from '../engine/victory'
+import { controlled, countriesTaken, populationShare } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { useGame, type Panel, type ReportDelta } from '../store'
 import { AdviceList } from './Briefing'
@@ -216,11 +216,7 @@ export function GameOver() {
   const p = youWon || !win ? game.nations[game.playerId] : champion
   const taken = countriesTaken(game, p.id)
   const reason = win
-    ? taken >= conquestGoal(game.settings.victoryShare)
-      ? `${p.name} holds ${taken} countries beyond its first borders, as of ${turnDate(game.turn)}.`
-      : economicShare(game, getWorld().map, p.id) >= economicGoal(game.settings.victoryShare)
-        ? `${p.name} makes ${(economicShare(game, getWorld().map, p.id) * 100).toFixed(1)}% of the world's output, as of ${turnDate(game.turn)}.`
-        : `${p.name} leads ${(populationShare(game, p.id) * 100).toFixed(1)}% of the world's people, as of ${turnDate(game.turn)}.`
+    ? `${p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${turnDate(game.turn)}.`
     : game.humans.length > 1 || online
       ? `Every player's nation has fallen, as of ${turnDate(game.turn)}.`
       : `${p.name} fell in ${turnDate(game.turn)}. The nation is gone, so the game is lost.`

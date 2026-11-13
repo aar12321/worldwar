@@ -445,6 +445,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       if (n.warWeariness > 25) return false
       const playerCap = diff.maxWarsOnPlayer + (ctx.coalition ? 1 : 0)
       let best: { id: NationId; ratio: number } | null = null
+      // A target it already has a reason to fight is always preferred to one it would have to build a case against.
+      let bestJust: { id: NationId; ratio: number } | null = null
       for (const id of [...myNeighbors].sort()) {
         const t = s.nations[id]
         if (!t?.alive || atWar(s, nationId, id) || hasPact(s, nationId, id) || isAllied(s, nationId, id)) continue
@@ -464,8 +466,12 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         if (diff.skill === 2 && alliesOf(nationId).some((a) => atWar(s, a, id))) ratio *= 1.25
         if (ctx.coalition && humans.has(id)) ratio *= 1.2
         if (!best || ratio > best.ratio) best = { id, ratio }
+        if (hasCasusBelli(s, nationId, id) && (!bestJust || ratio > bestJust.ratio)) bestJust = { id, ratio }
       }
-      if (!best || best.ratio <= diff.warDeclarePowerRatio / persona.risk) return false
+      const needed = diff.warDeclarePowerRatio / persona.risk
+      const chosen: { id: NationId; ratio: number } | null = bestJust && bestJust.ratio > needed ? bestJust : best
+      if (!chosen || chosen.ratio <= needed) return false
+      best = chosen
       const odds = best.ratio >= diff.warDeclarePowerRatio * 1.2 ? 0.45 : 0.24
       if (!rng.chance(n.aggression * persona.aggression * diff.aggression * odds)) return false
       // The same rule as the player: no reason, no war. A rival first builds a case, and strikes once it is ready.

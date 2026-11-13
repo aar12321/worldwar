@@ -1,16 +1,18 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { FOCUS } from '../data/cities'
 import { JUSTIFY } from '../data/war'
+import { ACTION_LABELS } from '../data/crises'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { applyDeals, cancelDeal, declareWar, expireDiplomacy, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
+import { annexPuppet, applyDeals, cancelDeal, declareWar, expireDiplomacy, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
 import { addToSector, cleanInvestments, makeInvestment } from './business'
 import { applyEconomy, nationWorkforce } from './economy'
 import { runSpyMission } from './espionage'
 import { EVENT_GAP_TURNS, scheduleEvent } from './events'
 import { addLog, reach, regionsOf } from './helpers'
+import { answerCrisis, runCrises } from './crises'
 import { runJustification } from './justification'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
@@ -85,6 +87,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Declare war on ${nation(o.target)}`
     case 'buildCase':
       return `Build a case against ${nation(o.target)}`
+    case 'annexPuppet':
+      return `Annex ${nation(o.target)}`
+    case 'crisisAction':
+      return `${ACTION_LABELS[o.action]}: ${s.nations[s.crises.find((c) => c.id === o.crisisId)?.nation ?? '']?.name ?? 'a crisis'}`
     case 'propose':
       return o.proposal.kind === 'callToArms'
         ? `Call ${nation(o.target)} to arms against ${nation(o.proposal.enemy)}`
@@ -113,7 +119,7 @@ const PHASES: Order['type'][][] = [
   ['respond'],
   ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw'],
   ['cancelDeal', 'leaveAlliance'],
-  ['declareWar', 'buildCase', 'propose'],
+  ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy'],
   ['issueBonds', 'repayDebt', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
@@ -176,6 +182,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   applyDeals(s)
   runPolitics(s, map, rng)
   runJustification(s, map, rng)
+  runCrises(s, map, rng)
 
   s.turn++
   expireDiplomacy(s)
@@ -293,6 +300,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'declareWar':
       declareWar(s, map, o.nationId, o.target, rng)
       reach(n, 'war')
+      break
+    case 'annexPuppet':
+      annexPuppet(s, map, o.nationId, o.target)
+      break
+    case 'crisisAction':
+      answerCrisis(s, o.nationId, o.crisisId, o.action)
       break
     case 'buildCase':
       s.cases.push({ holder: o.nationId, target: o.target, ready: s.turn + JUSTIFY.caseMonths })

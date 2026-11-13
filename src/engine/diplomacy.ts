@@ -1,8 +1,8 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
-import { JUSTIFY, MAX_WARS } from '../data/war'
-import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, newId, pairKey } from './helpers'
+import { EMPIRE, JUSTIFY } from '../data/war'
+import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, maxWars, newId, pairKey } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
 import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, WorldMap } from './types'
@@ -44,6 +44,13 @@ export function liftSanctions(s: GameState, from: NationId, to: NationId) {
   addLog(s, 'diplomacy', `${name(s, from)} lifted its sanctions on ${name(s, to)}.`, [from, to])
 }
 
+/** A master absorbs a puppet that has served long enough. Its land joins the empire at once, half settled. */
+export function annexPuppet(s: GameState, map: WorldMap, master: NationId, puppet: NationId) {
+  addLog(s, 'diplomacy', `${name(s, master)} has annexed its puppet ${name(s, puppet)}.`, [master, puppet])
+  for (const id of Object.keys(s.regions).sort()) if (s.regions[id].owner === puppet) transferRegion(s, map, id, master, false)
+  addInfamy(s, master, EMPIRE.annexInfamy)
+}
+
 /** A master lets its puppet go. */
 export function releasePuppet(s: GameState, master: NationId, puppet: NationId) {
   s.nations[puppet].overlord = null
@@ -55,7 +62,7 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   const key = pairKey(a, b)
   if (s.wars.includes(key)) return
   // Nobody fights more than MAX_WARS wars at once. Allies who are already stretched stay out.
-  if (!callAllies && (enemiesOf(s, a).length >= MAX_WARS || enemiesOf(s, b).length >= MAX_WARS)) return
+  if (!callAllies && (enemiesOf(s, a).length >= maxWars(s, a) || enemiesOf(s, b).length >= maxWars(s, b))) return
   // A war with a reason is a legitimate act. A war without one is aggression, and the world remembers it.
   const justified = !callAllies || hasCasusBelli(s, a, b)
   s.wars.push(key)
@@ -217,6 +224,7 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
       }
       if (p.terms.puppet) {
         s.nations[p.to].overlord = p.from
+        s.nations[p.to].overlordSince = s.turn
         addOpinion(s, p.to, p.from, 'Our overlord', -10, 0.1)
         addLog(s, 'war', `${name(s, p.to)} is now a puppet state of ${name(s, p.from)}.`, [p.from, p.to])
       }

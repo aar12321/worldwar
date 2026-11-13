@@ -26,7 +26,7 @@ export function lineMap(n: number, terrain: Partial<Record<number, Terrain>> = {
 
 export function startState(map: WorldMap, player = 'r0', seed = 1): GameState {
   // Above 1 so a one-nation test map is not an instant population victory.
-  const s = createInitialState(map, { playerRegionId: player, seed, victoryShare: 2 })
+  const s = createInitialState(map, { playerRegionId: player, seed, victoryShare: 2, goal: 'classic' })
   s.nextEventTurn = 9999
   return s
 }

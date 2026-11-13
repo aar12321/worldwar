@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { turnDate } from '../engine/helpers'
-import { MAX_WARS } from '../data/war'
-import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
+import { maxWars, turnDate } from '../engine/helpers'
+import { worldTension } from '../engine/crises'
+import { controlled } from '../engine/victory'
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
@@ -137,10 +137,11 @@ export function HUD() {
   const top = useAdvice(1)[0]
   if (!view) return null
   const { game, player, econ, committed, orders } = view
-  const share = populationShare(game, player.id)
-  const goal = game.settings.victoryShare
-  const taken = countriesTaken(game)
-  const lands = conquestGoal(goal)
+  const held = controlled(game, player.id)
+  const lands = Object.keys(game.regions).length
+  const tension = worldTension(game)
+  const standing = Math.round(game.infamy[player.id] ?? 0)
+  const warLimit = maxWars(game, player.id)
   const watching = !!online && game.eliminated.includes(game.playerId)
   const waiting = !!online && online.ready.includes(game.playerId)
   const blocked = !!game.pendingEvent || fxBusy || game.outcome !== 'playing' || watching
@@ -180,13 +181,13 @@ export function HUD() {
                 </motion.div>
               </AnimatePresence>
             </div>
-            <div className="mt-1.5 space-y-1" title={`Win by taking ${lands} countries, or by leading ${(goal * 100).toFixed(0)}% of the world's people. You lose if ${player.name} is wiped out.`}>
+            <div className="mt-1.5 space-y-1" title={`Win by holding all ${lands} countries, yours or puppets of yours. World tension ${tension}: wars, crises and aggression raise it. Your reputation for aggression is ${standing}; it fades with time. You lose if ${player.name} is wiped out.`}>
               <div className="flex items-center justify-between gap-3 text-[12px] text-white/70 tabular-nums">
-                <span>Countries {taken}/{lands} · Wars {econ.warBills.length}/{MAX_WARS}</span>
-                <span>People {(share * 100).toFixed(1)}%/{(goal * 100).toFixed(0)}%</span>
+                <span>World {held}/{lands} · Wars {econ.warBills.length}/{warLimit}</span>
+                <span className={tension >= 50 ? 'text-[#ff8a84]' : ''}>Tension {tension}</span>
               </div>
               <div className="h-1 w-full min-w-24 rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full bg-[#0a84ff] transition-[width] duration-700 ease-out" style={{ width: `${Math.min(100, (taken / lands) * 100)}%` }} />
+                <div className="h-full bg-[#0a84ff] transition-[width] duration-700 ease-out" style={{ width: `${Math.min(100, (held / lands) * 100)}%` }} />
               </div>
             </div>
           </div>
@@ -208,7 +209,7 @@ export function HUD() {
             <Row k="Upkeep" v={signed(-econ.upkeep)} warn />
             {econ.corporateIncome !== 0 && <Row k="Business tax and banks" v={signed(econ.corporateIncome)} />}
             {econ.interest > 0 && <Row k="Interest on bonds" v={signed(-econ.interest)} warn />}
-            {econ.warBills.length > 0 && <Row k={`War bills (${econ.warBills.length} of ${MAX_WARS})`} v={signed(-econ.warBillTotal)} warn />}
+            {econ.warBills.length > 0 && <Row k={`War bills (${econ.warBills.length} of ${warLimit})`} v={signed(-econ.warBillTotal)} warn />}
             <Row k="Waiting for next turn" v={fmt(-committed.capital)} />
             {player.inDebt && <p className="text-[13px] text-[#ff6961]">In debt. Stability is falling.</p>}
           </Resource>

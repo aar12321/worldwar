@@ -1,4 +1,3 @@
-import { economicGoal } from '../engine/victory'
 import { useGame } from '../store'
 import { Modal } from './Modal'
 import { SHORTCUTS } from './SidePanels'
@@ -35,7 +34,7 @@ export function Help() {
   const game = useGame((s) => s.game)
   const online = useGame((s) => s.online?.status === 'playing')
   if (!open || !game) return null
-  const goal = game.settings.victoryShare
+  const total = Object.keys(game.regions).length
   return (
     <Modal
       title="How the game works"
@@ -48,7 +47,7 @@ export function Help() {
       }
     >
       <p className="text-[15px] text-white/85">
-        You run a country, one month at a time. <strong>To win</strong>, take {goal <= 0.25 ? 3 : goal >= 0.6 ? 12 : 6} countries beyond your own, lead {Math.round(goal * 100)}% of the world's people, or produce {(economicGoal(goal) * 100).toFixed(0)}% of the world's output. You lose if your nation is wiped out.
+        You run a country, one month at a time. <strong>To win</strong>, hold the whole world: all {total} countries yours or puppets of yours. It is a long game. A war needs a reason, so build a case, use your agencies and answer the crises in the news. You lose if your nation is wiped out.
       </p>
       <h3 className="text-[16px] font-semibold mt-5 mb-2">A turn</h3>
       <ol className="space-y-3">

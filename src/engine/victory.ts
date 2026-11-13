@@ -52,6 +52,25 @@ export function worldGross(s: GameState, map: WorldMap): number {
   return total
 }
 
+/** Every country the nation holds itself or through puppets, the way the World Conquest goal counts. */
+export function controlled(s: GameState, id: NationId): number {
+  let total = regionsOf(s, id).length
+  for (const p of puppetsOf(s, id)) total += regionsOf(s, p).length
+  return total
+}
+
+/** True when every country still on the map is the nation's own or a puppet of it, however many steps down. */
+export function holdsTheWorld(s: GameState, id: NationId): boolean {
+  const lord = (n: string): string | null => s.nations[n]?.overlord ?? null
+  for (const n of Object.values(s.nations)) {
+    if (!n.alive || n.id === id) continue
+    let at: string | null = n.id
+    for (let hops = 0; at && at !== id && hops < 12; hops++) at = lord(at)
+    if (at !== id) return false
+  }
+  return true
+}
+
 /** Where one human stands: still in it, won, or out. */
 export function humanStatus(s: GameState, id: NationId, map?: WorldMap): 'playing' | 'won' | 'lost' {
   const p = s.nations[id]
@@ -60,6 +79,7 @@ export function humanStatus(s: GameState, id: NationId, map?: WorldMap): 'playin
   // Losing the capital only ends the game once there is nothing left to fight back with.
   const canRebuild = (s.trainingQueue ?? []).some((job) => job.nationId === id) || p.resources.capital >= UNIT_SPECS.infantry.capitalCost
   if (capitalLost && totalUnits(p.military.units) < 0.1 && !canRebuild) return 'lost'
+  if (s.settings.goal === 'world') return holdsTheWorld(s, id) ? 'won' : 'playing'
   if (countriesTaken(s, id) >= conquestGoal(s.settings.victoryShare)) return 'won'
   if (populationShare(s, id) >= s.settings.victoryShare) return 'won'
   if (map && economicShare(s, map, id) >= economicGoal(s.settings.victoryShare)) return 'won'

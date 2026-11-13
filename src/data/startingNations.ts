@@ -34,7 +34,8 @@ export interface NewGameOptions {
   /** Every nation a person plays, for an online game. Defaults to just the player's. */
   humans?: string[]
   seed: number
-  victoryShare: number
+  victoryShare?: number
+  goal?: 'world' | 'classic'
   difficulty?: Difficulty
 }
 
@@ -57,7 +58,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
   const rng = createRng(opts.seed, 9999)
   // The old early-surprise roll stays so a seed still builds the same generals and personalities.
   void rng.int(0, 2)
-  const settings: GameSettings = { victoryShare: opts.victoryShare, seed: opts.seed, difficulty: opts.difficulty ?? 'normal' }
+  const settings: GameSettings = { victoryShare: opts.victoryShare ?? 0.4, goal: opts.goal ?? 'world', seed: opts.seed, difficulty: opts.difficulty ?? 'normal' }
   const state: GameState = {
     turn: 1,
     seed: opts.seed,
@@ -85,6 +86,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     reasons: {},
     infamy: {},
     cases: [],
+    crises: [],
     dispatches: [],
     pendingEvent: null,
     nextEventTurn: FIRST_EVENT_TURN,

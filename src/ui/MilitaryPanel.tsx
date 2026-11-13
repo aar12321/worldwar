@@ -1,7 +1,6 @@
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingCost, trainingRank, weaponCost } from '../data/unitTypes'
-import { MAX_WARS } from '../data/war'
 import { nextWeaponLevel } from '../engine/arms'
-import { enemiesOf, formatDivisions } from '../engine/helpers'
+import { enemiesOf, formatDivisions, maxWars } from '../engine/helpers'
 import { orderCost } from '../engine/orders'
 import { militarySheet, type UnitStatLine } from '../engine/militaryStats'
 import { trainMonths } from '../engine/training'
@@ -193,7 +192,7 @@ export function MilitaryPanel() {
   return (
     <PanelShell
       title="Military"
-      kicker={`One force for the whole nation · ${wars} of ${MAX_WARS} wars`}
+      kicker={`One force for the whole nation · ${wars} of ${maxWars(game, player.id)} wars`}
       panel="military"
       wide
       tabs={<Tabs value={tab} onChange={setTab} options={[MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars']] as const} />}
