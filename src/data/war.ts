@@ -34,7 +34,7 @@ export const STANCES: Record<Stance, StanceSpec> = {
     advance: 1.4,
     ownLosses: 1.3,
     cost: 8,
-    boost: { armor: 1.3, air: 1.3 },
+    boost: { armor: 1.3, air: 1.3, fighter: 1.15 },
     siegeTurns: 0,
     blurb: 'Tanks and planes lead. Breaks the line faster, costs more units and money.',
   },
@@ -43,13 +43,17 @@ export const STANCES: Record<Stance, StanceSpec> = {
     advance: 0.7,
     ownLosses: 0.7,
     cost: 0,
-    boost: { infantry: 1.15, naval: 1.15 },
+    boost: { infantry: 1.15, naval: 1.15, artillery: 1.25 },
     siegeTurns: 2,
     blurb: 'Infantry and warships grind it out. Slow, cheap in lives, and their factories stop for 2 months.',
   },
 }
 
 export const WAR = {
+  /** Artillery: the share of the attacking force that counts, and how much each share adds to the push. */
+  artilleryCap: 0.35,
+  artilleryAssault: 1.2,
+  artillerySiege: 2.4,
   /** Defense Line points: base + workforce + barracks + capital. */
   lineBase: 2,
   linePerWorkforce: 0.45,

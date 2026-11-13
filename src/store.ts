@@ -3,7 +3,7 @@ import { generateAllBotOrders } from './ai/bot'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import type { AdviceTarget } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
-import { turnDate } from './engine/helpers'
+import { totalUnits, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
 import { MONTH_END_ORDERS, validateOrder } from './engine/orders'
 import type { Commit, Stance } from './data/war'
@@ -253,7 +253,7 @@ function scenesFor(settings: Settings, player: NationId, battles: BattleReport[]
 
 const sumUnits = (game: GameState, id: NationId) => {
   const u = game.nations[id]?.military.units
-  return u ? u.infantry + u.armor + u.air + u.naval : 0
+  return u ? totalUnits(u) : 0
 }
 
 /** One line for a battle the player was in, and whether it went their way. */

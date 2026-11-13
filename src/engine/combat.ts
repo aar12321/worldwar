@@ -17,6 +17,8 @@ export interface Combatant {
   boost?: Partial<Record<UnitType, number>>
   /** Multiplier on the damage this side takes. */
   damageTaken?: number
+  /** Multiplier on bomber strength from the fight for the air. Set by resolveBattle. */
+  bomberMult?: number
 }
 
 export interface BattleInput {
@@ -45,13 +47,26 @@ export const COMBAT = {
 }
 
 const ROUNDS: { name: string; weights: Record<UnitType, number> }[] = [
-  { name: 'Air Strike & Bombardment', weights: { infantry: 0.15, armor: 0, air: 1, naval: 0.7 } },
-  { name: 'Infantry Envelopment', weights: { infantry: 1, armor: 0.3, air: 0.2, naval: 0.1 } },
-  { name: 'Armored Push', weights: { infantry: 0.5, armor: 1, air: 0.3, naval: 0.2 } },
+  { name: 'Air War & Bombardment', weights: { infantry: 0.1, armor: 0, artillery: 0.7, fighter: 1, air: 1, naval: 0.7 } },
+  { name: 'Infantry Envelopment', weights: { infantry: 1, armor: 0.3, artillery: 0.6, fighter: 0.15, air: 0.2, naval: 0.1 } },
+  { name: 'Armored Push', weights: { infantry: 0.5, armor: 1, artillery: 0.5, fighter: 0.15, air: 0.3, naval: 0.2 } },
 ]
 
+/**
+ * Who rules the air, from 0 to 1: this side's fighter power against the other's. Level means 0.5.
+ * Bombers fight at 0.4 to 1.6 of their strength depending on it, so a side with no fighters loses its bombers' punch.
+ */
+export function airSuperiority(own: Combatant, other: Combatant): number {
+  const f = (c: Combatant) => c.units.fighter * UNIT_SPECS.fighter.attack * (1 + (c.mods?.unitAttack.fighter ?? 0)) * (1 + (c.drill?.fighter ?? 0) * TRAINING.bonusPerLevel)
+  const a = f(own)
+  const b = f(other)
+  return a + b <= 0 ? 0.5 : a / (a + b)
+}
+
+const bomberFactor = (superiority: number) => Math.max(0.4, Math.min(1.6, 0.4 + 1.2 * superiority))
+
 export function hasCombinedArms(u: UnitCounts): boolean {
-  return u.infantry >= COMBAT.minPresence && u.armor >= COMBAT.minPresence && u.air >= COMBAT.minPresence
+  return u.infantry >= COMBAT.minPresence && u.armor >= COMBAT.minPresence && u.air + u.fighter >= COMBAT.minPresence
 }
 
 function terrainMultiplier(terrain: Terrain, unit: UnitType, mods: AggregatedModifiers | null): number {
@@ -75,7 +90,8 @@ export function sidePower(
     const tech = 1 + (defending ? (c.mods?.unitDefense[k] ?? 0) : (c.mods?.unitAttack[k] ?? 0))
     const drilled = 1 + (c.drill?.[k] ?? 0) * TRAINING.bonusPerLevel
     const stance = defending ? 1 : (c.boost?.[k] ?? 1)
-    power += c.units[k] * weights[k] * base * tech * drilled * stance * terrainMultiplier(terrain, k, c.mods)
+    const air = k === 'air' ? (c.bomberMult ?? 1) : 1
+    power += c.units[k] * weights[k] * base * tech * drilled * stance * air * terrainMultiplier(terrain, k, c.mods)
   }
   if (hasCombinedArms(c.units)) {
     const bonus = COMBAT.combinedArmsBonus + (c.mods?.combinedArms ?? 0)
@@ -102,12 +118,14 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
   const { terrain, coastal } = input
   const att = { ...input.attacker, units: { ...input.attacker.units } }
   const def = { ...input.defender, units: { ...input.defender.units } }
+  att.bomberMult = bomberFactor(airSuperiority(att, def))
+  def.bomberMult = bomberFactor(airSuperiority(def, att))
   const attackerLosses = emptyUnits()
   const defenderLosses = emptyUnits()
   const startAtt = totalUnits(att.units)
   const startDef = totalUnits(def.units)
   const rounds: BattleRound[] = []
-  const even = { infantry: 1, armor: 1, air: 1, naval: 1 }
+  const even = { infantry: 1, armor: 1, artillery: 1, fighter: 1, air: 1, naval: 1 }
   const attackerPower = sidePower(att, even, terrain, coastal, false)
   const defenderPower = sidePower(def, even, terrain, coastal, true)
 
@@ -124,7 +142,7 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
     if (totalUnits(def.units) < 0.1 || totalUnits(att.units) < 0.1) break
   }
 
-  const evenWeights = { infantry: 1, armor: 1, air: 1, naval: 1 }
+  const evenWeights = even
   const attLeft = sidePower(att, evenWeights, terrain, coastal, false)
   const defLeft = sidePower(def, evenWeights, terrain, coastal, true)
   const attLossFrac = startAtt > 0 ? totalUnits(attackerLosses) / startAtt : 1
@@ -134,6 +152,8 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
     (totalUnits(def.units) < 0.1 || (attLeft >= defLeft * 1.1 && defLossFrac >= attLossFrac))
 
   const modifiers: string[] = [`Terrain: ${TERRAIN[terrain].name} (defense x${TERRAIN[terrain].defense})`]
+  if (att.bomberMult !== 1 && input.attacker.units.air > 0) modifiers.push(att.bomberMult! > 1 ? 'Attacker rules the air: bombers hit harder' : 'Enemy fighters cripple the attacker\'s bombers')
+  if (def.bomberMult !== 1 && input.defender.units.air > 0) modifiers.push(def.bomberMult! > 1 ? 'Defender rules the air: bombers hit harder' : 'Attacker fighters cripple the defender\'s bombers')
   if (hasCombinedArms(input.attacker.units)) modifiers.push('Attacker combined arms bonus')
   if (hasCombinedArms(input.defender.units)) modifiers.push('Defender combined arms bonus')
   if (input.attacker.units.armor > 0 && TERRAIN[terrain].unit.armor < 1) modifiers.push(`Tanks struggle in ${TERRAIN[terrain].name.toLowerCase()}`)

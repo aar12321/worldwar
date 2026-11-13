@@ -18,6 +18,8 @@ export interface UnitSpec {
 export const TRAIN_MONTHS: Record<UnitType, number> = {
   infantry: 1,
   armor: 2,
+  artillery: 2,
+  fighter: 2,
   air: 2,
   naval: 3,
 }
@@ -28,7 +30,9 @@ export const TRAIN_QUEUE_LIMIT = 4
 export const UNIT_SPECS: Record<UnitType, UnitSpec> = {
   infantry: { name: 'Infantry', role: 'Cheap and steady. Best in cities, forests and mountains.', attack: 1, defense: 1.2, capitalCost: 10, manpowerCost: 10, upkeep: 0.6, food: 0.3, requiresBuilding: 'barracks' },
   armor: { name: 'Tanks', role: 'Hits hardest on plains and desert. Poor in mountains and cities.', attack: 2.4, defense: 1.6, capitalCost: 25, manpowerCost: 5, upkeep: 1.4, food: 0.2, requiresBuilding: 'barracks' },
-  air: { name: 'Planes', role: 'Strikes first in every battle. Fragile when it has to defend.', attack: 2.2, defense: 0.8, capitalCost: 30, manpowerCost: 3, upkeep: 1.5, food: 0.1, requiresBuilding: 'factory' },
+  artillery: { name: 'Artillery', role: 'Big guns. Grinds down a Defense Line, best with a Siege. Weak if caught alone.', attack: 2, defense: 0.7, capitalCost: 28, manpowerCost: 4, upkeep: 1.3, food: 0.2, requiresBuilding: 'barracks' },
+  fighter: { name: 'Fighters', role: 'Wins the air. The side with more fighters makes the other side\'s bombers far weaker.', attack: 1.2, defense: 1.4, capitalCost: 26, manpowerCost: 2, upkeep: 1.3, food: 0.1, requiresBuilding: 'factory' },
+  air: { name: 'Bombers', role: 'Strikes first and hard. Useless if the enemy rules the air.', attack: 2.4, defense: 0.5, capitalCost: 32, manpowerCost: 3, upkeep: 1.5, food: 0.1, requiresBuilding: 'factory' },
   naval: { name: 'Warships', role: 'Fights only on coasts. A port lets you attack across the sea.', attack: 1.6, defense: 1.4, capitalCost: 35, manpowerCost: 4, upkeep: 1.6, food: 0.15, requiresBuilding: 'port' },
 }
 
@@ -118,7 +122,7 @@ export function trainingRank(level: number): string {
 export type UnitTraining = Record<UnitType, number>
 
 export function emptyTraining(): UnitTraining {
-  return { infantry: 0, armor: 0, air: 0, naval: 0 }
+  return { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0 }
 }
 
 export function clampTraining(level: number): number {

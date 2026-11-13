@@ -1,5 +1,5 @@
 import { createInitialState } from '../../data/startingNations'
-import type { GameState, MapRegion, Terrain, WorldMap } from '../types'
+import type { GameState, MapRegion, Terrain, UnitType, WorldMap } from '../types'
 
 /** A straight chain of regions r0 - r1 - ... - r{n-1}, all plains unless overridden. */
 export function lineMap(n: number, terrain: Partial<Record<number, Terrain>> = {}): WorldMap {
@@ -45,6 +45,6 @@ export function giveRegions(s: GameState, owner: string, ids: string[]) {
 }
 
 /** Sets a nation's whole military. */
-export function setMilitary(s: GameState, nationId: string, units: Partial<Record<'infantry' | 'armor' | 'air' | 'naval', number>>) {
-  s.nations[nationId].military.units = { infantry: 0, armor: 0, air: 0, naval: 0, ...units }
+export function setMilitary(s: GameState, nationId: string, units: Partial<Record<UnitType, number>>) {
+  s.nations[nationId].military.units = { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, ...units }
 }

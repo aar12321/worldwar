@@ -1,10 +1,10 @@
 import { PLAYER_COLOR, mapColor } from './mapColors'
-import { emptyTraining } from './unitTypes'
+import { UNIT_SPECS, emptyTraining } from './unitTypes'
 import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
-import { BUILDING_TYPES } from '../engine/types'
+import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
 import type { Difficulty, GameSettings, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
 
 const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dmitri', 'Saoirse', 'Tariq', 'Mei', 'Lucien', 'Zofia', 'Kwame', 'Elena', 'Hugo', 'Anika', 'Mateo', 'Yara', 'Bogdan', 'Ines']
@@ -90,17 +90,20 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     region.buildings.port = mr.coastal ? 1 + Math.floor((w / 20) * dev) : 0
 
     const techs = ['land_rifles']
-    if (dev >= 0.5) techs.push('land_light_tanks', 'air_propeller')
+    if (dev >= 0.5) techs.push('land_light_tanks', 'air_propeller', 'land_artillery')
+    if (dev >= 0.7) techs.push('air_bombers')
     if (dev >= 0.5 && mr.coastal) techs.push('naval_gunboats')
     if (dev >= 0.8) techs.push('infra_farming')
 
     const units = {
       infantry: Math.max(1, Math.round(1 + Math.sqrt(w) * 1.2)),
       armor: techs.includes('land_light_tanks') ? Math.round(w / 10) : 0,
-      air: techs.includes('air_propeller') ? Math.round(w / 12) : 0,
+      artillery: techs.includes('land_artillery') ? Math.round(w / 16) : 0,
+      fighter: techs.includes('air_propeller') ? Math.round(w / 20) : 0,
+      air: techs.includes('air_bombers') ? Math.round(w / 20) : 0,
       naval: techs.includes('naval_gunboats') ? Math.round(w / 15) : 0,
     }
-    const armyFood = units.infantry * 0.3 + units.armor * 0.2 + units.air * 0.1 + units.naval * 0.15
+    const armyFood = UNIT_TYPES.reduce((sum, k) => sum + units[k] * UNIT_SPECS[k].food, 0)
     region.buildings.farm = Math.max(1, Math.ceil((armyFood + w * 0.12) / ECON.foodPerFarm))
     for (const b of BUILDING_TYPES) region.buildings[b] = Math.min(region.buildings[b], buildingCap(w, b))
 

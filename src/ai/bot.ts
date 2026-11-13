@@ -273,9 +273,12 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       for (let i = 0; i < maxRecruits && budget > 10; i++) {
         const roll = rng.next()
         let unit: UnitType = 'infantry'
-        if (roll < 0.3 && canUseUnit(n, 'armor')) unit = 'armor'
-        else if (roll < 0.45 && canUseUnit(n, 'air')) unit = 'air'
-        else if (roll < 0.5 && canUseUnit(n, 'naval')) unit = 'naval'
+        // Keep the mix balanced: fighters before bombers, and artillery for big fronts.
+        if (roll < 0.22 && canUseUnit(n, 'armor')) unit = 'armor'
+        else if (roll < 0.34 && canUseUnit(n, 'artillery')) unit = 'artillery'
+        else if (roll < 0.42 && canUseUnit(n, 'fighter')) unit = 'fighter'
+        else if (roll < 0.5 && canUseUnit(n, 'air') && units.fighter >= 0.5) unit = 'air'
+        else if (roll < 0.55 && canUseUnit(n, 'naval')) unit = 'naval'
         const spec = UNIT_SPECS[unit]
         if (spec.upkeep > room || spec.capitalCost > budget) break
         if (n.foodShortage || n.resources.food <= 0) break
@@ -436,7 +439,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       const threatened = enemies.some((e) => e !== s.regions[target.id].owner && (ctx.power.get(e) ?? 0) > myPower * 0.6)
       const commit = needed <= COMMITS.probe.share ? 'probe' : needed <= COMMITS.main.share ? 'main' : !threatened || needed > 1 ? 'allin' : 'main'
       if (needed <= 1) {
-        const armored = n.military.units.armor + n.military.units.air
+        const armored = n.military.units.armor + n.military.units.air + n.military.units.fighter
         const total = totalUnits(n.military.units)
         const bigLine = lineMax(s, map, target.id) > 6
         const stance: Stance = total > 0 && armored / total > 0.45 && econ.netCapital > -10 ? 'blitz' : bigLine ? 'siege' : 'assault'

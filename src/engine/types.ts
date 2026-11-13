@@ -2,7 +2,8 @@ import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
 export type NationId = string
-export type UnitType = 'infantry' | 'armor' | 'air' | 'naval'
+/** Planes are two types: fighters win the air, bombers (`air`) strike the ground. */
+export type UnitType = 'infantry' | 'armor' | 'artillery' | 'fighter' | 'air' | 'naval'
 export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic'
 export type TechBranch = 'land' | 'air' | 'naval' | 'infra'
 export type LawId = 'martial_law' | 'war_economy' | 'conscription_act'
@@ -15,7 +16,7 @@ export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower'
 export type Milestone = 'build' | 'train' | 'research' | 'war' | 'win' | 'capture'
 export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms'
 
-export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'air', 'naval']
+export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'artillery', 'fighter', 'air', 'naval']
 export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic']
 export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower']
 

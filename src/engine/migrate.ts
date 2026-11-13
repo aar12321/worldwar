@@ -1,5 +1,6 @@
 import { EVENT_BY_ID } from '../data/events'
 import { lineMax } from './economy'
+import { UNIT_TYPES } from './types'
 import { EVENT_GAP_TURNS, FIRST_EVENT_TURN } from './events'
 import type { GameState, WorldMap } from './types'
 
@@ -9,6 +10,11 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   for (const n of Object.values(game.nations)) if (!n.military) throw new Error('Save is from an older version')
   // Games saved before campaigns have no Defense Lines yet.
   for (const n of Object.values(game.nations)) {
+    for (const k of UNIT_TYPES) {
+      n.military.units[k] ??= 0
+      n.military.drill[k] ??= 0
+      n.military.weapons[k] ??= 0
+    }
     n.military.attacksThisTurn ??= 0
     n.military.exposed ??= 0
   }
