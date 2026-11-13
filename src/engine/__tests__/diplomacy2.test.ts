@@ -242,3 +242,28 @@ describe('the economic victory and the economy techs', () => {
     for (const t of eco.slice(1)) expect(t.requires.length).toBe(1)
   })
 })
+
+describe('older saves', () => {
+  it('load with every new field filled in and keep playing', async () => {
+    const { normalizeGame } = await import('../migrate')
+    const s = base()
+    const old = structuredClone(s) as unknown as Record<string, unknown> & { nations: Record<string, Record<string, unknown>>; regions: Record<string, Record<string, unknown>> }
+    for (const n of Object.values(old.nations)) {
+      for (const k of ['government', 'budget', 'corporateTax', 'nextElection', 'lastReform', 'sectors', 'subsidies', 'debt', 'redMonths', 'defaultedUntil', 'overlord', 'oilShortage', 'goodsShortage', 'tradeUsed', 'autoBuy']) delete n[k]
+      const res = n.resources as Record<string, number>
+      delete res.oil
+      delete res.steel
+      delete res.goods
+    }
+    for (const r of Object.values(old.regions)) delete r.cities
+    for (const k of ['investments', 'sanctions', 'guarantees', 'worldGross']) delete old[k]
+    const loaded = normalizeGame(old as unknown as GameState, map)
+    expect(loaded.nations[P].government).toBeTruthy()
+    expect(loaded.regions[P].cities.length).toBeGreaterThan(0)
+    expect(loaded.investments).toEqual([])
+    const next = resolveTurn(loaded, map, [])
+    expect(Number.isFinite(next.nations[P].resources.capital)).toBe(true)
+    expect(Number.isFinite(next.nations[P].resources.oil)).toBe(true)
+    expect(next.turn).toBe(loaded.turn + 1)
+  })
+})
