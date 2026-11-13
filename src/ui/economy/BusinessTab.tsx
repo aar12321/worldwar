@@ -27,7 +27,7 @@ export function BusinessTab() {
   return (
     <section className="econ-grid">
       <Card title="Business climate" hint="Private firms grow by themselves. Low business tax, calm people, schools and new technology help them. They pay you a tax on their profit.">
-        <SliderRow label="Business tax" value={corp} min={CORPORATE_TAX.min} max={CORPORATE_TAX.max} onChange={(v) => setPolicy({ corporateTax: v })} hint={`${Math.round(BUSINESS.neutralTax * 100)}% is neutral. Higher raises money now and slows growth.`} />
+        <SliderRow label="Business tax" value={corp} min={CORPORATE_TAX.min} max={CORPORATE_TAX.max} onChange={(v) => setPolicy({ corporateTax: v })} neutral={BUSINESS.neutralTax} hint={`${Math.round(BUSINESS.neutralTax * 100)}% is neutral. Higher raises money now and slows growth.`} />
         <div className="grid grid-cols-3 gap-2 text-center">
           <Mini label="Growth" value={climate >= 1.15 ? 'Booming' : climate >= 0.85 ? 'Steady' : 'Slow'} warn={climate < 0.85} />
           <Mini label="Tax income" value={signed(econ.corporateIncome)} />

@@ -1,4 +1,5 @@
 import { TECH_BY_ID, type TechModifiers } from '../data/techTree'
+import { EMPIRE, MAX_WARS } from '../data/war'
 import type { GameState, LogKind, Milestone, Nation, NationId, RegionId, UnitCounts, UnitType } from './types'
 
 export const pairKey = (a: NationId, b: NationId) => (a < b ? `${a}|${b}` : `${b}|${a}`)
@@ -9,6 +10,32 @@ export const hasPact = (s: GameState, a: NationId, b: NationId) => (s.pacts[pair
 
 export const hasCasusBelli = (s: GameState, holder: NationId, target: NationId) =>
   (s.casusBelli[`${holder}|${target}`] ?? -1) >= s.turn
+
+/** Gives `holder` a reason to fight `target` for a while. A longer reason is never cut short. */
+export function grantJustification(s: GameState, holder: NationId, target: NationId, reason: string, turns: number) {
+  const key = `${holder}|${target}`
+  const until = s.turn + turns
+  if ((s.casusBelli[key] ?? -1) >= until) return
+  s.casusBelli[key] = until
+  s.reasons[key] = reason
+}
+
+/** The reason `holder` has to fight `target`, if any. */
+export function justificationOf(s: GameState, holder: NationId, target: NationId): { reason: string; until: number } | null {
+  const key = `${holder}|${target}`
+  const until = s.casusBelli[key]
+  if (until === undefined || until < s.turn) return null
+  return { reason: s.reasons[key] ?? 'A grievance', until }
+}
+
+export function addInfamy(s: GameState, id: NationId, amount: number) {
+  s.infamy[id] = Math.min(100, Math.max(0, (s.infamy[id] ?? 0) + amount))
+}
+
+/** Wars a nation can fight at once. It grows with the size of its empire. */
+export function maxWars(s: GameState, id: NationId): number {
+  return Math.min(EMPIRE.maxWarsCap, MAX_WARS + Math.floor(regionsOf(s, id).length / EMPIRE.warsPerRegions))
+}
 
 /** Nations that have promised to defend `id`. */
 export const guarantorsOf = (s: GameState, id: NationId): NationId[] => (s.guarantees ?? []).filter((g) => g.to === id && g.until >= s.turn).map((g) => g.from)
@@ -168,7 +195,7 @@ export const newId = (s: GameState, prefix: string) => `${prefix}${s.nextId++}`
 export const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-export const START_YEAR = 1936
+export const START_YEAR = 2026
 
 export function turnDate(turn: number): string {
   const m = (turn - 1) % 12

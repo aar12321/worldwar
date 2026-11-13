@@ -1,8 +1,8 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
-import { MAX_WARS } from '../data/war'
-import { addLog, alliesOf, atWar, enemiesOf, guarantorsOf, hasPact, isAllied, newId, pairKey } from './helpers'
+import { EMPIRE, JUSTIFY } from '../data/war'
+import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, maxWars, newId, pairKey } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
 import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, WorldMap } from './types'
@@ -32,6 +32,8 @@ export const loanPayment = (amount: number, months: number) => (amount * (1 + DI
 /** Imposes trade sanctions: the target loses part of its market access and its port trade for a year. */
 export function imposeSanctions(s: GameState, from: NationId, to: NationId) {
   s.sanctions.push({ from, to, until: s.turn + DIPLOMACY.sanctions.months })
+  grantJustification(s, to, from, 'Sanctioned us', JUSTIFY.reasonTurns)
+  addInfamy(s, from, 3)
   addOpinion(s, to, from, 'Imposed sanctions on us', -25, 0.2)
   addLog(s, 'diplomacy', `${name(s, from)} has imposed trade sanctions on ${name(s, to)}.`, [from, to])
 }
@@ -40,6 +42,13 @@ export function liftSanctions(s: GameState, from: NationId, to: NationId) {
   s.sanctions = s.sanctions.filter((x) => !(x.from === from && x.to === to))
   addOpinion(s, to, from, 'Lifted sanctions', 12, 0.3)
   addLog(s, 'diplomacy', `${name(s, from)} lifted its sanctions on ${name(s, to)}.`, [from, to])
+}
+
+/** A master absorbs a puppet that has served long enough. Its land joins the empire at once, half settled. */
+export function annexPuppet(s: GameState, map: WorldMap, master: NationId, puppet: NationId) {
+  addLog(s, 'diplomacy', `${name(s, master)} has annexed its puppet ${name(s, puppet)}.`, [master, puppet])
+  for (const id of Object.keys(s.regions).sort()) if (s.regions[id].owner === puppet) transferRegion(s, map, id, master, false)
+  addInfamy(s, master, EMPIRE.annexInfamy)
 }
 
 /** A master lets its puppet go. */
@@ -53,12 +62,27 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   const key = pairKey(a, b)
   if (s.wars.includes(key)) return
   // Nobody fights more than MAX_WARS wars at once. Allies who are already stretched stay out.
-  if (!callAllies && (enemiesOf(s, a).length >= MAX_WARS || enemiesOf(s, b).length >= MAX_WARS)) return
+  if (!callAllies && (enemiesOf(s, a).length >= maxWars(s, a) || enemiesOf(s, b).length >= maxWars(s, b))) return
+  // A war with a reason is a legitimate act. A war without one is aggression, and the world remembers it.
+  const justified = !callAllies || hasCasusBelli(s, a, b)
   s.wars.push(key)
   s.wars.sort()
   s.warStarted[key] = s.turn
   clearWarScore(s, a, b)
   delete s.casusBelli[`${a}|${b}`]
+  delete s.reasons[`${a}|${b}`]
+  s.cases = s.cases.filter((c) => !(c.holder === a && c.target === b))
+  if (callAllies) {
+    addInfamy(s, a, justified ? JUSTIFY.infamyWithReason : JUSTIFY.infamyNoReason)
+    if (!justified) {
+      s.nations[a].stability = Math.max(0, s.nations[a].stability - JUSTIFY.noReasonStability)
+      for (const other of Object.keys(s.nations).sort()) {
+        if (other === a || other === b || !s.nations[other].alive) continue
+        addOpinion(s, other, a, 'Attacked without cause', isAllied(s, other, a) ? -15 : -10, 0.3)
+      }
+      addLog(s, 'war', `${name(s, a)} attacked ${name(s, b)} with no justification. The world condemns the aggression.`, [a, b])
+    }
+  }
   delete s.pacts[key]
   s.nations[b].warWeariness = Math.max(0, s.nations[b].warWeariness - 5)
   s.proposals = s.proposals.filter((p) => !((p.from === a && p.to === b) || (p.from === b && p.to === a)) || p.kind === 'peace')
@@ -69,6 +93,7 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
     const n = s.nations[ally]
     if (!n?.alive || ally === a || atWar(s, ally, a) || isAllied(s, ally, a)) continue
     addOpinion(s, ally, a, alliesOf(s, b).includes(ally) ? 'Attacked our ally' : 'Attacked a nation we guarantee', -15, 0.4)
+    grantJustification(s, ally, a, alliesOf(s, b).includes(ally) ? 'Attacked our ally' : 'Attacked a nation we guarantee', JUSTIFY.reasonTurns)
     if (hasPact(s, ally, a)) {
       addLog(s, 'diplomacy', `${n.name} is bound by a pact with ${name(s, a)} and cannot defend ${name(s, b)}.`, [ally, a, b])
       continue
@@ -199,6 +224,7 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
       }
       if (p.terms.puppet) {
         s.nations[p.to].overlord = p.from
+        s.nations[p.to].overlordSince = s.turn
         addOpinion(s, p.to, p.from, 'Our overlord', -10, 0.1)
         addLog(s, 'war', `${name(s, p.to)} is now a puppet state of ${name(s, p.from)}.`, [p.from, p.to])
       }

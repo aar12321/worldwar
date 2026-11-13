@@ -1,5 +1,6 @@
 import { addOpinion } from '../ai/opinion'
-import { addLog, hasTech } from './helpers'
+import { JUSTIFY } from '../data/war'
+import { addInfamy, addLog, grantJustification, hasTech } from './helpers'
 import type { Rng } from './rng'
 import type { GameState, NationId, RegionId, SpyMission, WorldMap } from './types'
 
@@ -30,7 +31,8 @@ export function runSpyMission(s: GameState, map: WorldMap, nationId: NationId, t
     region.sabotaged = SPY.sabotageTurns
     addLog(s, 'spy', `${n.name}'s agents sabotaged the factories of ${name}. Output halted for ${SPY.sabotageTurns} months.`, [nationId, ownerId])
   } else {
-    s.casusBelli[`${ownerId}|${nationId}`] = s.turn + SPY.failureCasusBelliTurns
+    grantJustification(s, ownerId, nationId, 'Caught spying', SPY.failureCasusBelliTurns)
+    addInfamy(s, nationId, JUSTIFY.infamyCaught)
     addOpinion(s, ownerId, nationId, CAUGHT_SPYING, -25, 0.5)
     addLog(s, 'spy', `${owner.name} caught ${n.name}'s spies in ${name}. ${owner.name} can now declare war more cheaply.`, [nationId, ownerId])
   }

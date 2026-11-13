@@ -39,7 +39,7 @@ export function BudgetTab() {
       </Card>
 
       <Card title="Taxes and the draft" hint="They change when the month ends.">
-        <SliderRow label="Income tax" value={tax} min={TAX_LIMITS.min} max={TAX_LIMITS.max} onChange={(v) => setPolicy({ taxRate: v })} hint="More tax is more money. Above 20% people start to resent it." />
+        <SliderRow label="Income tax" value={tax} min={TAX_LIMITS.min} max={TAX_LIMITS.max} onChange={(v) => setPolicy({ taxRate: v })} neutral={0.2} hint="20% is neutral. Higher raises money but people resent it; lower pleases them but earns less." />
         <SliderRow label="Draft" value={draft} min={DRAFT_LIMITS.min} max={maxDraft} onChange={(v) => setPolicy({ draftRate: v })} hint="Turns workers into soldiers you can train. Fewer workers means less money and food." />
         <div className="text-[14px] space-y-1">
           <Line k="Food each month" v={signed(econ.netFood)} warn={econ.netFood < 0} />

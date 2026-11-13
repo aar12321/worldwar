@@ -51,6 +51,8 @@ export function coalitionActive(s: GameState, map?: WorldMap): boolean {
   return s.humans.some((id) => {
     const p = s.nations[id]
     if (!p?.alive) return false
+    // Trying to hold the whole world alarms everyone long before it is done.
+    if (s.settings.goal === 'world') return populationShare(s, id) >= 0.12 || countriesTaken(s, id) >= 6
     if (populationShare(s, id) >= s.settings.victoryShare * COALITION_THRESHOLD) return true
     return !!map && countriesTaken(s, id) >= Math.ceil(conquestGoal(s.settings.victoryShare) / 2)
   })
@@ -114,6 +116,8 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   if (hasCasusBelli(s, holder, target)) push('Grievance', -15)
   const coalition = ctx.coalition ?? coalitionActive(s)
   if (coalition && s.humans.includes(target) && borders) push('Fears your power', -20)
+  // A reputation for aggression: the world is uneasy about a nation that starts wars and takes land, until it fades.
+  push('Uneasy about its wars', -Math.min(30, (s.infamy?.[target] ?? 0) * 0.5))
   for (const m of storedOpinion(s, holder, target)) push(m.label, m.value)
   const total = Math.round(clamp(parts.reduce((sum, p) => sum + p.value, 0), -100, 100))
   return { total, parts }

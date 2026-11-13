@@ -48,6 +48,11 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   game.eliminated ??= []
   game.worldGross ??= 0
   game.investments ??= []
+  game.settings.goal ??= 'classic'
+  game.reasons ??= {}
+  game.infamy ??= {}
+  game.cases ??= []
+  game.crises ??= []
   game.sanctions ??= []
   game.guarantees ??= []
   game.trainingQueue = Array.isArray(game.trainingQueue) ? game.trainingQueue.filter((job) => job && game.nations[job.nationId] && job.remaining > 0 && job.total > 0) : []

@@ -7,10 +7,13 @@ import { COSTS, DIPLOMACY, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS
 import { blocOf, blocsOf } from '../engine/blocs'
 import { PACT_TURNS, describeProposal, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
-import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey, regionsOf, turnDate } from '../engine/helpers'
+import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, regionsOf, turnDate } from '../engine/helpers'
+import { warCost } from '../engine/orders'
+import { CRISIS } from '../data/crises'
+import { EMPIRE, JUSTIFY } from '../data/war'
 import { validateOrder } from '../engine/orders'
 import { bundleValue, describeBundle, marketPrices, stockOf } from '../engine/trade'
-import type { Deal, Dispatch, NationId, Proposal, RegionId, ResourceBundle, SectorId, TradeResource } from '../engine/types'
+import type { Deal, Dispatch, GameState, NationId, Proposal, RegionId, ResourceBundle, SectorId, TradeResource } from '../engine/types'
 import { INVEST, SECTORS, SECTOR_IDS } from '../data/business'
 import { TRADE_RESOURCES } from '../engine/types'
 import { MAX_REPARATIONS, netWarScore, puppetValue, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
@@ -457,9 +460,20 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
               <OrderButton
                 order={{ type: 'declareWar', nationId: player.id, target: id }}
                 label="Declare war"
-                cost={`${cb ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} influence`}
-                effect="Then attack from the War Room. Every war bills you monthly."
+                cost={`${warCost(game, player.id, id)} influence`}
+                effect={cb ? `Reason: ${justificationOf(game, player.id, id)?.reason}. Then attack from the War Room.` : 'No reason to fight: costs stability and the world will distrust you. Build a case first.'}
                 tone="btn-red"
+              />
+            )}
+            {n.overlord === player.id && (
+              <OrderButton order={{ type: 'annexPuppet', nationId: player.id, target: id }} label="Annex" cost={`${EMPIRE.annexCost} influence`} effect="Its land joins your empire at once. A puppet must serve six months first." />
+            )}
+            {!allied && !cb && (
+              <OrderButton
+                order={{ type: 'buildCase', nationId: player.id, target: id }}
+                label="Build a case"
+                cost={`${JUSTIFY.caseCost} influence`}
+                effect={`A reason for war, ready in ${JUSTIFY.caseMonths} months.`}
               />
             )}
             {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label="Leave alliance" cost={`${COSTS.leaveAlliance} influence`} tone="btn-quiet" />}
@@ -543,6 +557,40 @@ const DISPATCH_COLOR: Record<Dispatch['kind'], string> = {
   expired: 'text-slate-400',
 }
 
+const CRISIS_STAGE = ['Rumor', 'Disturbance', 'On the brink']
+
+/** Trouble brewing around the world, and what you can do about it. */
+function CrisisCards({ game, me }: { game: GameState; me: NationId }) {
+  const list = game.crises.filter((c) => c.stage >= 1)
+  if (list.length === 0) return null
+  return (
+    <section className="space-y-2">
+      <div className="label text-amber-300">The world is watching</div>
+      {list.map((c) => {
+        const nation = game.nations[c.nation]?.name
+        const rival = c.rival ? game.nations[c.rival]?.name : null
+        const mine = c.nation === me || c.rival === me
+        return (
+          <div key={c.id} className="inset-card p-3 space-y-2" style={{ borderLeft: '3px solid #ffd60a' }}>
+            <div>
+              <div className="label">{CRISIS_STAGE[c.stage]} · {c.area}</div>
+              <div className="text-[15px] font-semibold">{c.kind === 'unrest' ? `Unrest in ${nation}` : `${rival} threatens ${nation}`}</div>
+              <p className="text-[13px] text-white/70">{c.kind === 'unrest' ? 'It could end in uprisings. Friends can help.' : 'It could end in war. You can calm it, or take a side.'}</p>
+            </div>
+            {!mine && (
+              <div className="flex flex-wrap gap-1.5">
+                <OrderButton order={{ type: 'crisisAction', nationId: me, crisisId: c.id, action: 'aid' }} label="Send aid" cost={`${CRISIS.aidMoney} money, ${CRISIS.aidInfluence} influence`} effect={`Makes trouble less likely. ${nation} remembers it.`} />
+                {c.kind === 'dispute' && <OrderButton order={{ type: 'crisisAction', nationId: me, crisisId: c.id, action: 'mediate' }} label="Mediate" cost={`${CRISIS.mediateInfluence} influence`} effect="Both sides listen. War is less likely." />}
+                {c.kind === 'dispute' && <OrderButton order={{ type: 'crisisAction', nationId: me, crisisId: c.id, action: 'support' }} label={`Back ${nation}`} cost={`${CRISIS.supportInfluence} influence`} effect={`Gives you a reason to fight ${rival}. They resent it, and others are uneasy for a while.`} />}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
 export function DiplomacyPanel() {
   const view = usePlayerView()
   const focus = useGame((s) => s.diploFocus)
@@ -577,6 +625,7 @@ export function DiplomacyPanel() {
           Your growing power alarms the world. Neighbors now distrust you and are quicker to band together against you.
         </div>
       )}
+      <CrisisCards game={game} me={me} />
       <AnimatePresence initial={false}>
         {inbox.length > 0 && (
           <motion.section key="inbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">

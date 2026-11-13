@@ -9,6 +9,7 @@ import { PanelShell } from './panel'
 export const SHORTCUTS = 'Enter: next turn. Esc: close. B briefing, E economy, M military, W wars, D diplomacy, R research, N news, A War Room for the selected country, ? help.'
 
 const KIND_COLOR: Record<LogKind, string> = {
+  news: 'text-amber-200',
   info: 'text-slate-300',
   war: 'text-rose-300',
   battle: 'text-amber-200',

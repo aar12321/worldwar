@@ -11,12 +11,6 @@ import { Modal } from './Modal'
 import { clock, useCountdown } from './clock'
 import { nationTier, rankNations } from './nationList'
 
-const VICTORY = [
-  { share: 0.25, label: 'Short' },
-  { share: 0.4, label: 'Full' },
-  { share: 0.6, label: 'Long' },
-]
-
 const TIMERS: { value: RoomSettings['timer']; label: string }[] = [
   { value: 0, label: 'No timer' },
   { value: 60, label: '1 min' },
@@ -241,7 +235,6 @@ export function Lobby() {
           options={(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => ({ value: d, label: DIFFICULTY[d].name }))}
           onChange={(difficulty) => change({ difficulty })}
         />
-        <SettingRow<number> label="How you win" value={settings.victoryShare} disabled={!isHost} options={VICTORY.map((v) => ({ value: v.share, label: v.label }))} onChange={(victoryShare) => change({ victoryShare })} />
         <SettingRow<number> label="Time to plan each month" value={settings.timer} disabled={!isHost} options={TIMERS} onChange={(timer) => change({ timer: timer as RoomSettings['timer'] })} />
         <p className="text-[13px] text-white/65 leading-snug">Everyone plans at once. The month moves on when every player is Ready, or when the timer ends. Nations nobody picks are run by the AI.</p>
         <div className="flex gap-2">

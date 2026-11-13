@@ -17,8 +17,8 @@ import { openTransport } from './net/transport'
 import { globeBridge, useFx } from './ui/globeBridge'
 import { speak } from './ui/plain'
 
-const SAVE_KEY = 'worlds-of-others-save-v3'
-const ORDERS_KEY = 'worlds-of-others-orders-v3'
+const SAVE_KEY = 'worlds-of-others-save-v4'
+const ORDERS_KEY = 'worlds-of-others-orders-v4'
 const SETTINGS_KEY = 'worlds-of-others-settings-v2'
 /** Everything a crashed game may have left behind. */
 export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
@@ -316,6 +316,8 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'spy') return typeof order.target === 'string' && order.mission === 'sabotage'
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance') return typeof order.target === 'string'
+  if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
+  if (order.type === 'crisisAction') return typeof order.crisisId === 'string' && ['aid', 'mediate', 'support'].includes(order.action)
   return false
 }
 
@@ -372,7 +374,7 @@ function buildReport(before: GameState, after: GameState, player: NationId, batt
   const b = after.nations[player]
   const month = after.turn - 1
   const mine = after.log.filter((e) => e.turn === month && e.nations.includes(player) && e.kind !== 'battle').map((e) => e.text)
-  const world = after.log.filter((e) => e.turn === month && !e.nations.includes(player) && e.kind === 'war').map((e) => e.text)
+  const world = after.log.filter((e) => e.turn === month && !e.nations.includes(player) && (e.kind === 'war' || e.kind === 'news')).map((e) => e.text)
   return {
     turn: month,
     deltas: [

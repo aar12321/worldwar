@@ -95,11 +95,19 @@ const ROWS: Row[] = [
   },
   {
     name: 'declareWar',
+    setup: (s) => {
+      s.casusBelli[`${P}|r1`] = 20
+    },
     order: () => ({ type: 'declareWar', nationId: P, target: 'r1' }),
     check: (n) => {
       expect(atWar(n, P, 'r1')).toBe(true)
       expect(storedOpinion(n, 'r1', P).some((m) => m.label === 'Declared war on us')).toBe(true)
     },
+  },
+  {
+    name: 'buildCase',
+    order: () => ({ type: 'buildCase', nationId: P, target: 'r1' }),
+    check: (n) => expect(n.cases.some((c) => c.holder === P && c.target === 'r1')).toBe(true),
   },
   {
     name: 'propose pact',
@@ -213,7 +221,7 @@ const ROWS: Row[] = [
   },
 ]
 
-const COVERED: Order['type'][] = ['setPolicy', 'build', 'queueTrain', 'train', 'upgradeWeapons', 'research', 'attack', 'assignGeneral', 'declareWar', 'propose', 'respond', 'cancelDeal', 'leaveAlliance', 'spy', 'enactLaw', 'repealLaw', 'suppressRebels']
+const COVERED: Order['type'][] = ['setPolicy', 'build', 'queueTrain', 'train', 'upgradeWeapons', 'research', 'attack', 'assignGeneral', 'declareWar', 'buildCase', 'propose', 'respond', 'cancelDeal', 'leaveAlliance', 'spy', 'enactLaw', 'repealLaw', 'suppressRebels']
 
 describe('every order type', () => {
   it('has at least one row', () => {
@@ -404,7 +412,7 @@ describe('every event choice', () => {
         n.warWeariness = 30
         n.resources.food = 100
         s.regions.r1.buildings.factory = 2
-        s.casusBelli['r2|r0'] = 50
+        s.casusBelli['r2|r0'] = 5
         s.nations.r2.resources.capital = 100
         s.nations.r2.resources.food = 100
         s.pendingEvent = { eventId: def.id, turn: s.turn, rivalId: 'r2', regionId: 'r1' }

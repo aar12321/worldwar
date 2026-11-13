@@ -1,6 +1,5 @@
-import { MAX_WARS } from '../data/war'
 import { computeEconomy } from '../engine/economy'
-import { enemiesOf, pairKey } from '../engine/helpers'
+import { enemiesOf, maxWars, pairKey } from '../engine/helpers'
 import { attackableRegions, canAttackRegion } from '../engine/warfare'
 import { lineMax } from '../engine/economy'
 import { netWarScore } from '../engine/warscore'
@@ -20,7 +19,7 @@ export function WarsTab() {
   const { game, player, econ } = view
   const enemies = enemiesOf(game, player.id).sort()
   const reachable = new Set(attackableRegions(game, map, player.id))
-  const slots = Array.from({ length: MAX_WARS }, (_, i) => enemies[i] ?? null)
+  const slots = Array.from({ length: Math.max(maxWars(game, player.id), enemies.length) }, (_, i) => enemies[i] ?? null)
   const bills = new Map(computeEconomy(game, map, player.id).warBills.map((b) => [b.enemy, b.amount]))
 
   return (

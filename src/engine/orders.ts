@@ -3,20 +3,26 @@ import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, DIPLOMACY, PROP
 import { CITY_RULES, FOCUS } from '../data/cities'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS, TREASURY } from '../data/business'
 import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
-import { MAX_WARS, STANCES, WAR } from '../data/war'
+import { EMPIRE, JUSTIFY, STANCES, WAR } from '../data/war'
 import { nextWeaponLevel } from './arms'
+import { crisisCost, validateCrisisAction } from './crises'
 import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
 import { investedIn, sectorCap, sectorYield } from './business'
 import { buildingCap, computeEconomy, nationWorkforce, regionWorkforce } from './economy'
-import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, totalUnits } from './helpers'
+import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, maxWars, totalUnits } from './helpers'
 import { trainingSlots } from './training'
 import { MARKET_GOODS, marketValue, tradeRoom } from './trade'
 import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canAttackRegion, commitShare } from './warfare'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet'])
+
+/** Influence a war on `target` costs `nationId` right now: little with a reason, a great deal without one. */
+export function warCost(s: GameState, nationId: string, target: string): number {
+  return hasCasusBelli(s, nationId, target) ? COSTS.declareWarWithCasusBelli : JUSTIFY.noReasonCost
+}
 
 /** Blocks training that would march a nation into a food shortage. */
 export function foodForTroops(s: GameState, map: WorldMap, nationId: string, unit: UnitType): string | null {
@@ -83,8 +89,20 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.tp = TECH_BY_ID[o.techId]?.cost ?? 0
       break
     case 'declareWar':
-      c.pp = hasCasusBelli(s, o.nationId, o.target) ? COSTS.declareWarWithCasusBelli : COSTS.declareWar
+      c.pp = warCost(s, o.nationId, o.target)
       break
+    case 'buildCase':
+      c.pp = JUSTIFY.caseCost
+      break
+    case 'annexPuppet':
+      c.pp = EMPIRE.annexCost
+      break
+    case 'crisisAction': {
+      const k = crisisCost(o.action)
+      c.capital = k.capital
+      c.pp = k.pp
+      break
+    }
     case 'propose':
       c.pp = PROPOSAL_COSTS[o.proposal.kind]
       break
@@ -281,6 +299,29 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'assignGeneral':
       if (o.generalId && !n.generals.some((g) => g.id === o.generalId)) return 'Unknown commander'
       return null
+    case 'annexPuppet': {
+      const t = s.nations[o.target]
+      if (!t?.alive || t.overlord !== o.nationId) return 'They are not your puppet'
+      const served = s.turn - (t.overlordSince ?? 0)
+      if (served < EMPIRE.annexMonths) return `A puppet must serve ${EMPIRE.annexMonths} months first (${EMPIRE.annexMonths - served} to go)`
+      if (atWar(s, o.target, o.nationId)) return 'They are at war with you'
+      if (pending.some((p) => p.type === 'annexPuppet' && p.target === o.target)) return 'Already ordered'
+      return null
+    }
+    case 'crisisAction':
+      if (pending.some((p) => p.type === 'crisisAction' && p.crisisId === o.crisisId)) return 'You have already answered this'
+      return validateCrisisAction(s, o.nationId, o.crisisId, o.action)
+    case 'buildCase': {
+      const t = s.nations[o.target]
+      if (!t?.alive || o.target === o.nationId) return 'Invalid target'
+      if (atWar(s, o.nationId, o.target)) return 'Already at war'
+      if (hasCasusBelli(s, o.nationId, o.target)) return 'You already have a reason to fight them'
+      if (isAllied(s, o.nationId, o.target)) return 'You are allied'
+      if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
+      if (t.overlord === o.nationId) return 'They are your puppet'
+      if ((s.cases ?? []).some((c) => c.holder === o.nationId && c.target === o.target) || pending.some((p) => p.type === 'buildCase' && p.target === o.target)) return 'You are already building a case against them'
+      return null
+    }
     case 'declareWar': {
       const t = s.nations[o.target]
       if (!t?.alive || o.target === o.nationId) return 'Invalid target'
@@ -290,8 +331,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (isAllied(s, o.nationId, o.target)) return 'You are allied'
       if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
       const pendingWars = pending.filter((p) => p.type === 'declareWar').length
-      if (enemiesOf(s, o.nationId).length + pendingWars >= MAX_WARS) return `You are already fighting ${MAX_WARS} wars. End one first.`
-      if (enemiesOf(s, o.target).length >= MAX_WARS) return `${t.name} is already fighting ${MAX_WARS} wars`
+      if (enemiesOf(s, o.nationId).length + pendingWars >= maxWars(s, o.nationId)) return `You are already fighting ${maxWars(s, o.nationId)} wars. End one first.`
+      if (enemiesOf(s, o.target).length >= maxWars(s, o.target)) return `${t.name} is already fighting ${maxWars(s, o.target)} wars`
       return null
     }
     case 'propose': {
@@ -307,7 +348,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const p = s.proposals.find((x) => x.id === o.proposalId && x.to === o.nationId)
       if (!p) return 'No such proposal'
       if (pending.some((x) => x.type === 'respond' && x.proposalId === o.proposalId)) return 'Already answered'
-      if (o.accept && p.kind === 'callToArms' && enemiesOf(s, o.nationId).length >= MAX_WARS) return `You are already fighting ${MAX_WARS} wars`
+      if (o.accept && p.kind === 'callToArms' && enemiesOf(s, o.nationId).length >= maxWars(s, o.nationId)) return `You are already fighting ${maxWars(s, o.nationId)} wars`
       return o.accept ? validateProposal(s, map, p.from, p.to, p, true) : null
     }
     case 'cancelDeal': {

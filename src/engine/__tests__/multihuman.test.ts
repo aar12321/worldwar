@@ -9,7 +9,7 @@ import { lineMap, startState } from './fixtures'
 /** A small world where r0 and r3 are played by people and the rest are AI. */
 function twoHumans(seed = 1) {
   const map = lineMap(6)
-  const s = createInitialState(map, { playerRegionId: 'r0', humans: ['r0', 'r3'], seed, victoryShare: 2 })
+  const s = createInitialState(map, { playerRegionId: 'r0', humans: ['r0', 'r3'], seed, victoryShare: 2, goal: 'classic' })
   s.nextEventTurn = 9999
   return { map, s }
 }

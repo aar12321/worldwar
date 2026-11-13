@@ -164,6 +164,8 @@ export interface Nation {
   lastReform: number
   /** The nation that rules this one as a puppet, if any. */
   overlord: NationId | null
+  /** The turn it became a puppet, so a master can only annex one that has settled. */
+  overlordSince?: number
   /** Size of each private business sector. */
   sectors: Record<SectorId, number>
   /** Sectors the state subsidizes: they cost money and grow faster. */
@@ -332,6 +334,9 @@ export type Order =
   | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
+  | { type: 'buildCase'; nationId: NationId; target: NationId }
+  | { type: 'annexPuppet'; nationId: NationId; target: NationId }
+  | { type: 'crisisAction'; nationId: NationId; crisisId: string; action: 'aid' | 'mediate' | 'support' }
   | { type: 'propose'; nationId: NationId; target: NationId; proposal: ProposalDraft }
   | { type: 'respond'; nationId: NationId; proposalId: string; accept: boolean }
   | { type: 'cancelDeal'; nationId: NationId; dealId: string }
@@ -376,7 +381,7 @@ export interface BattleReport {
   lineMax?: number
 }
 
-export type LogKind = 'info' | 'war' | 'battle' | 'tech' | 'economy' | 'event' | 'spy' | 'diplomacy'
+export type LogKind = 'news' | 'info' | 'war' | 'battle' | 'tech' | 'economy' | 'event' | 'spy' | 'diplomacy'
 
 export interface LogEntry {
   turn: number
@@ -387,8 +392,35 @@ export interface LogEntry {
 
 export interface GameSettings {
   victoryShare: number
+  /** 'world': the game ends when one player controls every country. 'classic': the older short goals, kept for tests and tools. */
+  goal: 'world' | 'classic'
   seed: number
   difficulty: Difficulty
+}
+
+export interface Crisis {
+  id: string
+  kind: 'unrest' | 'dispute'
+  /** The nation in trouble: the one in unrest, or the one threatened. */
+  nation: NationId
+  /** The nation threatening it, for a dispute. */
+  rival: NationId | null
+  area: string
+  /** 0 rumor, 1 disturbance, 2 crisis. After that it ends one way or the other. */
+  stage: number
+  /** The turn the next thing happens. */
+  next: number
+  /** Chance that it boils over at the end. Help lowers it. */
+  boil: number
+  /** Nations that have answered it, so nobody pays twice. */
+  answered: NationId[]
+}
+
+export interface CaseFile {
+  holder: NationId
+  target: NationId
+  /** The turn the case is ready. */
+  ready: number
 }
 
 export interface GameState {
@@ -413,6 +445,14 @@ export interface GameState {
   pacts: Record<string, number>
   /** "holder|target" -> turn the casus belli expires. */
   casusBelli: Record<string, number>
+  /** "holder|target" -> what the reason for war is, shown to the player. */
+  reasons: Record<string, string>
+  /** How much each nation is distrusted for starting wars, taking land and covert acts. It fades. */
+  infamy: Record<NationId, number>
+  /** Cases being built against a country. When one is ready it becomes a reason for war. */
+  cases: CaseFile[]
+  /** Trouble building around the world. News of it comes in stages. */
+  crises: Crisis[]
   /** Sorted "a|b" keys of defensive alliances. */
   alliances: string[]
   /** Proposals awaiting an answer from the player. */

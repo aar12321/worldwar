@@ -1,7 +1,23 @@
 import type { UnitType } from '../engine/types'
 
 /** A country can be in at most this many wars at once. */
+/** Wars a small country can fight at once. Larger empires can fight more: see maxWars. */
 export const MAX_WARS = 3
+
+/** What it takes to hold the world. */
+export const EMPIRE = {
+  /** One more war allowed for every this many countries you control, up to the cap. */
+  warsPerRegions: 12,
+  maxWarsCap: 8,
+  /** Unsettled countries you can hold before stability suffers, plus one for every this many you control. */
+  settleRegions: 6,
+  /** A defeated nation whose capital has fallen gives up entirely when its army is under this many divisions. */
+  surrenderUnits: 3,
+  /** Months a puppet must serve before it can be annexed, and the influence that costs per country. */
+  annexMonths: 6,
+  annexCost: 30,
+  annexInfamy: 2,
+}
 
 export type Commit = 'probe' | 'main' | 'allin'
 export type Stance = 'assault' | 'blitz' | 'siege'
@@ -85,4 +101,28 @@ export const WAR = {
   weariness: 0.4,
   wearinessPerMonth: 0.03,
   wearinessPerMonthCap: 1.2,
+}
+
+/** What it takes to start a war, and what starting one costs your standing. */
+export const JUSTIFY = {
+  /** Influence to open a case against a country. */
+  caseCost: 20,
+  /** Months until a case is ready. */
+  caseMonths: 3,
+  /** How long a reason for war stays usable. */
+  reasonTurns: 12,
+  /** Influence for a war with no reason. */
+  noReasonCost: 60,
+  noReasonStability: 10,
+  /** Reputation (infamy) gained. Taking land also adds some. */
+  infamyNoReason: 25,
+  infamyWithReason: 4,
+  infamyCapture: 5,
+  infamyCaught: 10,
+  /** Infamy fades by this share each month, and by this much more. */
+  infamyFade: 0.04,
+  infamyFadeFlat: 0.3,
+  /** Monthly chance of a border incident between two neighbors that dislike each other. */
+  incidentChance: 0.05,
+  incidentOpinion: -15,
 }

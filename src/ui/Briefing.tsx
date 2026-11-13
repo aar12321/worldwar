@@ -1,6 +1,5 @@
 import { OBJECTIVES, type Advice } from '../engine/advisor'
-import { conquestGoal, countriesTaken, economicGoal, economicShare, populationShare } from '../engine/victory'
-import { getWorld } from '../map/world'
+import { controlled } from '../engine/victory'
 import { useGame } from '../store'
 import { useAdvice, usePlayerView } from './hooks'
 import { PanelShell } from './panel'
@@ -59,11 +58,9 @@ export function Briefing() {
   const update = useGame((s) => s.updateSettings)
   if (!view) return null
   const { game, player, orders } = view
-  const goal = game.settings.victoryShare
-  const lands = conquestGoal(goal)
-  const taken = countriesTaken(game)
-  const share = populationShare(game, player.id)
-  const econShare = economicShare(game, getWorld().map, player.id)
+  const lands = Object.keys(game.regions).length
+  const held = controlled(game, player.id)
+  const puppets = Object.values(game.nations).filter((n) => n.alive && n.overlord === player.id).length
   const reached = new Set(player.milestones ?? [])
   if (orders.some((o) => o.type === 'research')) reached.add('research')
   const left = OBJECTIVES.filter((o) => !reached.has(o.id))
@@ -73,10 +70,8 @@ export function Briefing() {
     <PanelShell title="Briefing" kicker={`${player.name} · what needs you this month`} panel="briefing">
       <section className="inset-card p-4 space-y-3">
         <div className="text-[16px] font-semibold tracking-tight">How you win</div>
-        <Progress label={`Take ${lands} countries`} value={taken} goal={lands} text={`${taken} of ${lands}`} />
-        <Progress label={`Or lead ${Math.round(goal * 100)}% of the world's people`} value={share} goal={goal} text={`${(share * 100).toFixed(1)}%`} />
-        <Progress label={`Or produce ${(economicGoal(goal) * 100).toFixed(0)}% of the world's output`} value={econShare} goal={economicGoal(goal)} text={`${(econShare * 100).toFixed(1)}%`} />
-        <p className="text-[13px] text-white/70">You lose if {player.name} is wiped out.</p>
+        <Progress label="Hold the whole world" value={held} goal={lands} text={`${held} of ${lands} countries`} />
+        <p className="text-[13px] text-white/70">Every country must be yours or a puppet of yours{puppets > 0 ? ` (${puppets} puppet${puppets === 1 ? '' : 's'} so far)` : ''}. It takes a long time: work through allies, spies and patience. You lose if {player.name} is wiped out.</p>
       </section>
 
       {showGuide && left.length > 0 && (

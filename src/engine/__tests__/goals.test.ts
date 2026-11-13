@@ -91,9 +91,10 @@ describe('food and sea landings', () => {
 })
 
 describe('rivals pick on the weak', () => {
-  it('a strong expansionist declares war on a weak neighbor', () => {
+  it('a strong expansionist opens a case against a weak neighbor, and declares war once it has one', () => {
     const map = lineMap(2)
     let wars = 0
+    let cases = 0
     for (let seed = 1; seed <= 24; seed++) {
       const s = startState(map, 'r0', seed)
       s.turn = 22 + (seed % 4)
@@ -103,8 +104,13 @@ describe('rivals pick on the weak', () => {
       setMilitary(s, 'r1', { infantry: 30 })
       setMilitary(s, 'r0', { infantry: 1 })
       const orders = generateBotOrders(s, map, 'r1')
-      if (orders.some((o) => o.type === 'declareWar' && o.target === 'r0')) wars++
+      // With no reason to fight, it builds a case first.
+      expect(orders.some((o) => o.type === 'declareWar')).toBe(false)
+      if (orders.some((o) => o.type === 'buildCase' && o.target === 'r0')) cases++
+      s.casusBelli['r1|r0'] = s.turn + 5
+      if (generateBotOrders(s, map, 'r1').some((o) => o.type === 'declareWar' && o.target === 'r0')) wars++
     }
+    expect(cases).toBeGreaterThan(0)
     expect(wars).toBeGreaterThan(0)
   })
 

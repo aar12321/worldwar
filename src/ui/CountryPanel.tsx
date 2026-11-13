@@ -4,7 +4,9 @@ import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, COSTS } from '../data/unitTypes'
 import { integrationFactor, lineMax, regionWorkforce } from '../engine/economy'
 import { spySuccessChance } from '../engine/espionage'
-import { atWar, formatDivisions, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
+import { atWar, formatDivisions, hasPact, isAllied, justificationOf } from '../engine/helpers'
+import { warCost } from '../engine/orders'
+import { JUSTIFY } from '../data/war'
 import { militaryPower } from '../engine/militaryStats'
 import { validateOrder } from '../engine/orders'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
@@ -145,9 +147,17 @@ export function CountryPanel() {
               <OrderButton
                 order={{ type: 'declareWar', nationId: player.id, target: owner.id }}
                 label="Declare war"
-                cost={`${hasCasusBelli(game, player.id, owner.id) ? COSTS.declareWarWithCasusBelli : COSTS.declareWar} influence`}
-                effect="Then plan attacks here. Every war bills you monthly."
+                cost={`${warCost(game, player.id, owner.id)} influence`}
+                effect={justificationOf(game, player.id, owner.id) ? `Reason: ${justificationOf(game, player.id, owner.id)!.reason}. Then plan attacks here.` : 'No reason to fight: costs stability and the world will distrust you. Build a case first.'}
                 tone="btn-red"
+              />
+            )}
+            {!allied && !justificationOf(game, player.id, owner.id) && (
+              <OrderButton
+                order={{ type: 'buildCase', nationId: player.id, target: owner.id }}
+                label="Build a case"
+                cost={`${JUSTIFY.caseCost} influence`}
+                effect={`A reason for war, ready in ${JUSTIFY.caseMonths} months. Then war costs only ${COSTS.declareWarWithCasusBelli} influence.`}
               />
             )}
             <button className="btn btn-primary self-start" onClick={() => openDiplomacy(owner.id)}>

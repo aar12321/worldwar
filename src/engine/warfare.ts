@@ -2,13 +2,13 @@ import { addOpinion, forgetNation } from '../ai/opinion'
 import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { MATERIALS } from '../data/deposits'
-import { COMMITS, STANCES, WAR, type Commit, type Stance } from '../data/war'
+import { COMMITS, EMPIRE, JUSTIFY, STANCES, WAR, type Commit, type Stance } from '../data/war'
 import { cityEffects, razeCities } from './cities'
 import { lineMax, regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
 import { createRng } from './rng'
 import { recordBattle } from './warscore'
-import { addLog, atWar, emptyUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
+import { addInfamy, addLog, atWar, emptyUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
 import type { Rng } from './rng'
 import type { BattleReport, GameState, Military, Nation, NationId, RegionId, UnitCounts, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -71,10 +71,8 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
   addLog(s, 'war', conqueror ? `${n.name} has fallen to ${conqueror.name}!` : `${n.name} has collapsed.`, by ? [id, by] : [id])
 }
 
-/** Hands a country to a new owner. Conquest razes the barracks; a negotiated cession keeps them. */
-export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, newOwner: NationId, raze = true) {
+function seize(s: GameState, map: WorldMap, regionId: RegionId, newOwner: NationId, raze: boolean) {
   const region = s.regions[regionId]
-  const oldOwner = region.owner
   region.owner = newOwner
   region.rebels = 0
   if (raze) region.buildings.barracks = 0
@@ -83,9 +81,22 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
   // Conquered land starts restless and half-productive. A negotiated cession is gentler.
   region.integration = raze ? 0 : 0.5
   region.line = raze ? lineMax(s, map, regionId) * WAR.capturedLine : lineMax(s, map, regionId)
+}
+
+/** Hands a country to a new owner. Conquest razes the barracks; a negotiated cession keeps them. */
+export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, newOwner: NationId, raze = true) {
+  const oldOwner = s.regions[regionId].owner
+  seize(s, map, regionId, newOwner, raze)
   const old = s.nations[oldOwner]
   if (!old) return
   const remaining = regionsOf(s, oldOwner)
+  // A nation whose capital has fallen and whose army is gone has nothing left to fight with. It surrenders whole.
+  if (raze && remaining.length > 0 && old.capital === regionId && totalUnits(old.military.units) < EMPIRE.surrenderUnits) {
+    addLog(s, 'war', `${old.name}'s capital has fallen and its army is broken. ${old.name} surrenders to ${s.nations[newOwner]?.name ?? 'its conqueror'}.`, [oldOwner, newOwner])
+    for (const id of remaining) seize(s, map, id, newOwner, true)
+    killNation(s, oldOwner, newOwner)
+    return
+  }
   if (remaining.length === 0) {
     killNation(s, oldOwner, newOwner)
     return
@@ -317,7 +328,10 @@ export function resolveAttack(
   if (captured) reach(attackerNation, 'capture')
   if (captured) transferRegion(s, map, target, nationId)
   recordBattle(s, report, captured && wasCapital)
-  if (captured) addOpinion(s, defenderId, nationId, 'Seized our land', -8, 0.2)
+  if (captured) {
+    addOpinion(s, defenderId, nationId, 'Seized our land', -8, 0.2)
+    addInfamy(s, nationId, JUSTIFY.infamyCapture)
+  }
   const verb = captured ? 'captured' : outcome.winner === 'attacker' ? 'pushed back the defense of' : 'was repulsed attacking'
   addLog(s, 'battle', `${attackerNation.name} ${verb} ${mr.name} (held by ${defenderNation.name}).`, [nationId, defenderId])
   return { report }

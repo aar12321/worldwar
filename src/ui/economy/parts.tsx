@@ -35,6 +35,7 @@ export function SliderRow({
   step = 0.01,
   onChange,
   hint,
+  neutral,
   format = (v) => `${Math.round(v * 100)}%`,
 }: {
   label: string
@@ -44,15 +45,23 @@ export function SliderRow({
   step?: number
   onChange: (v: number) => void
   hint?: string
+  /** A value that has no effect either way. It is marked on the slider and named beside the value. */
+  neutral?: number
   format?: (v: number) => string
 }) {
   return (
     <div>
       <div className="flex justify-between text-[15px]">
         <span>{label}</span>
-        <span className="font-semibold tabular-nums">{format(value)}</span>
+        <span className="font-semibold tabular-nums">
+          {format(value)}
+          {neutral !== undefined && Math.abs(value - neutral) < step / 2 && <span className="ml-1.5 text-[12px] font-medium text-[#6eeb8a]">neutral</span>}
+        </span>
       </div>
-      <input type="range" className="w-full" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => onChange(+e.target.value)} />
+      <div className="relative">
+        <input type="range" className="w-full" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => onChange(+e.target.value)} />
+        {neutral !== undefined && <span aria-hidden className="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded bg-[#6eeb8a]" style={{ left: `calc(${((neutral - min) / (max - min)) * 100}% + ${8 - ((neutral - min) / (max - min)) * 16}px)` }} />}
+      </div>
       {hint && <div className="text-[13px] text-white/65">{hint}</div>}
     </div>
   )
