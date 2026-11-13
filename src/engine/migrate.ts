@@ -17,6 +17,8 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
       n.military.weapons[k] ??= 0
     }
     n.overlord ??= null
+    n.agencies ??= { foreign: { level: 1, exp: 0 }, domestic: { level: 1, exp: 0 } }
+    n.secureUntil ??= 0
     n.sectors ??= { farming: 2, energy: 1, manufacturing: 2, arms: 0.5, technology: 0.5, finance: 0.5 }
     n.subsidies ??= []
     n.debt ??= 0
@@ -52,6 +54,7 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   game.reasons ??= {}
   game.infamy ??= {}
   game.cases ??= []
+  game.intel ??= {}
   game.crises ??= []
   game.sanctions ??= []
   game.guarantees ??= []

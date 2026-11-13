@@ -3,6 +3,7 @@ import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, DIPLOMACY, UNIT_SPECS } from '../data/unitTypes'
 import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { EMPIRE, WAR } from '../data/war'
+import { agencyUpkeep } from './agencies'
 import { addLog, clamp, enemiesOf, nationModifiers, pairKey, sanctionersOf } from './helpers'
 import type { Rng } from './rng'
 import { checkDefault, type CreditReport, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
@@ -218,6 +219,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const warBillTotal = warBills.reduce((sum, b) => sum + b.amount, 0)
   const totalBuildings = BUILDING_TYPES.reduce((sum, b) => sum + buildings[b], 0)
   upkeep += totalBuildings * ECON.buildingUpkeep
+  upkeep += agencyUpkeep(n)
   upkeep *= Math.max(0.3, 1 + pol.upkeep)
 
   const foodProduction = sy.food + baseFood + owned.length * ECON.subsistencePerRegion + workingFarms * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food

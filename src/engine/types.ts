@@ -1,3 +1,4 @@
+import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
@@ -25,6 +26,13 @@ export type BudgetKey = 'military' | 'education' | 'health' | 'infrastructure'
 export type Budget = Record<BudgetKey, number>
 export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marshal' | 'stalwart'
 export type SpyMission = 'sabotage'
+
+export interface Agency {
+  level: number
+  /** Experience from successful operations. */
+  exp: number
+}
+
 export type Difficulty = 'easy' | 'normal' | 'hard'
 export type Personality = 'expansionist' | 'trader' | 'turtle' | 'opportunist' | 'honorable'
 export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower' | 'oil' | 'steel' | 'goods'
@@ -164,6 +172,9 @@ export interface Nation {
   lastReform: number
   /** The nation that rules this one as a puppet, if any. */
   overlord: NationId | null
+  agencies: { foreign: Agency; domestic: Agency }
+  /** The turn until which foreign operations against this nation are harder. */
+  secureUntil: number
   /** The turn it became a puppet, so a master can only annex one that has settled. */
   overlordSince?: number
   /** Size of each private business sector. */
@@ -342,6 +353,9 @@ export type Order =
   | { type: 'cancelDeal'; nationId: NationId; dealId: string }
   | { type: 'leaveAlliance'; nationId: NationId; target: NationId }
   | { type: 'spy'; nationId: NationId; target: RegionId; mission: SpyMission }
+  | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
+  | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
+  | { type: 'fundAgency'; nationId: NationId; agency: AgencyId }
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
@@ -451,6 +465,8 @@ export interface GameState {
   infamy: Record<NationId, number>
   /** Cases being built against a country. When one is ready it becomes a reason for war. */
   cases: CaseFile[]
+  /** "holder|target" -> the turn until which the holder can see the target's real numbers. */
+  intel: Record<string, number>
   /** Trouble building around the world. News of it comes in stages. */
   crises: Crisis[]
   /** Sorted "a|b" keys of defensive alliances. */

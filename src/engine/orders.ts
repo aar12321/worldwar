@@ -6,6 +6,7 @@ import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDi
 import { EMPIRE, JUSTIFY, STANCES, WAR } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { crisisCost, validateCrisisAction } from './crises'
+import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
 import { investedIn, sectorCap, sectorYield } from './business'
@@ -17,7 +18,7 @@ import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canAttackRegion, commitShare } from './warfare'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'fundAgency'])
 
 /** Influence a war on `target` costs `nationId` right now: little with a reason, a great deal without one. */
 export function warCost(s: GameState, nationId: string, target: string): number {
@@ -112,6 +113,14 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'spy':
       c.capital = COSTS.spy
       break
+    case 'operation':
+    case 'domestic':
+    case 'fundAgency': {
+      const k = opCost(o, s)
+      c.capital = k.capital
+      c.pp = k.pp
+      break
+    }
     case 'enactLaw':
       c.pp = LAW_SPECS[o.law].cost
       break
@@ -359,6 +368,12 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     }
     case 'leaveAlliance':
       return isAllied(s, o.nationId, o.target) ? null : 'Not allied'
+    case 'operation':
+      return validateOperation(s, o, pending)
+    case 'domestic':
+      return validateDomestic(s, o, pending)
+    case 'fundAgency':
+      return validateFund(s, o, pending)
     case 'spy': {
       const r = s.regions[o.target]
       if (!r || r.owner === o.nationId) return 'Choose a foreign region'

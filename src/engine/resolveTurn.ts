@@ -2,6 +2,8 @@ import { TECH_BY_ID } from '../data/techTree'
 import { FOCUS } from '../data/cities'
 import { JUSTIFY } from '../data/war'
 import { ACTION_LABELS } from '../data/crises'
+import { DOMESTIC_OPS, FOREIGN_OPS } from '../data/agencies'
+import { fundAgency, runDomestic, runOperation } from './agencies'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -89,6 +91,12 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Build a case against ${nation(o.target)}`
     case 'annexPuppet':
       return `Annex ${nation(o.target)}`
+    case 'operation':
+      return `${FOREIGN_OPS[o.op].name}: ${nation(o.target)}`
+    case 'domestic':
+      return DOMESTIC_OPS[o.op].name
+    case 'fundAgency':
+      return `Grow the ${o.agency === 'foreign' ? 'foreign' : 'domestic'} agency`
     case 'crisisAction':
       return `${ACTION_LABELS[o.action]}: ${s.nations[s.crises.find((c) => c.id === o.crisisId)?.nation ?? '']?.name ?? 'a crisis'}`
     case 'propose':
@@ -125,7 +133,8 @@ const PHASES: Order['type'][][] = [
   ['issueBonds', 'repayDebt', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
   ['research', 'build', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
-  ['spy'],
+  ['fundAgency'],
+  ['spy', 'operation', 'domestic'],
 ]
 
 /**
@@ -371,6 +380,15 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     }
     case 'assignGeneral':
       n.military.commanderId = o.generalId
+      break
+    case 'operation':
+      runOperation(s, map, o.nationId, o.op, o.target, rng)
+      break
+    case 'domestic':
+      runDomestic(s, o.nationId, o.op, o.regionId)
+      break
+    case 'fundAgency':
+      fundAgency(s, o.nationId, o.agency)
       break
     case 'spy':
       runSpyMission(s, map, o.nationId, o.target, o.mission, rng)

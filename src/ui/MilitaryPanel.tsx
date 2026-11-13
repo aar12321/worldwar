@@ -9,6 +9,7 @@ import { Pips } from './bits'
 import { fmt, usePlayerView } from './hooks'
 import { UnitIcon } from './icons'
 import { OrderButton, PanelShell, Tabs } from './panel'
+import { AgenciesTab } from './AgenciesTab'
 import { WarsTab } from './WarsPanel'
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`
@@ -195,9 +196,9 @@ export function MilitaryPanel() {
       kicker={`One force for the whole nation · ${wars} of ${maxWars(game, player.id)} wars`}
       panel="military"
       wide
-      tabs={<Tabs value={tab} onChange={setTab} options={[MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars']] as const} />}
+      tabs={<Tabs value={tab} onChange={setTab} options={[MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies']] as const} />}
     >
-      {tab === 'forces' ? <Forces /> : <WarsTab />}
+      {tab === 'forces' ? <Forces /> : tab === 'wars' ? <WarsTab /> : <AgenciesTab />}
     </PanelShell>
   )
 }
