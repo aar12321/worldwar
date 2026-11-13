@@ -1,3 +1,4 @@
+import { DIPLOMACY } from '../data/unitTypes'
 import { regionWorkforce } from './economy'
 import { clamp, totalUnits } from './helpers'
 import type { BattleReport, GameState, NationId, PeaceTerms, RegionId, WorldMap } from './types'
@@ -46,6 +47,13 @@ export function regionValue(s: GameState, map: WorldMap, id: RegionId): number {
   return Math.round(clamp(6 + regionWorkforce(r, map.regions[id]) * 1.6, 6, 45))
 }
 
+/** War score needed to make a nation a puppet: a share of what its land is worth. */
+export function puppetValue(s: GameState, map: WorldMap, id: NationId): number {
+  let land = 0
+  for (const r of Object.values(s.regions)) if (r.owner === id) land += regionValue(s, map, r.id)
+  return Math.round(Math.max(DIPLOMACY.puppet.minValue, land * DIPLOMACY.puppet.valueShare))
+}
+
 export function termsCost(s: GameState, map: WorldMap, terms: PeaceTerms, proposer: NationId, target: NationId) {
   let demand = 0
   let concession = 0
@@ -54,12 +62,17 @@ export function termsCost(s: GameState, map: WorldMap, terms: PeaceTerms, propos
     if (owner === target) demand += regionValue(s, map, id)
     else if (owner === proposer) concession += regionValue(s, map, id)
   }
+  if (terms.puppet) demand += puppetValue(s, map, target)
   if (terms.reparations > 0) demand += terms.reparations * 1.2
   else concession += -terms.reparations * 1.2
   return { demand: Math.round(demand), concession: Math.round(concession) }
 }
 
 export function validatePeaceTerms(s: GameState, map: WorldMap, terms: PeaceTerms, proposer: NationId, target: NationId, checkBudget = true): string | null {
+  if (terms.puppet) {
+    if (s.nations[target].overlord) return `${s.nations[target].name} is already a puppet`
+    if (s.nations[proposer].overlord) return 'A puppet cannot make puppets'
+  }
   const seen = new Set<RegionId>()
   for (const id of terms.cede) {
     const r = s.regions[id]

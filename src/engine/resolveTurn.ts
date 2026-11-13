@@ -4,7 +4,7 @@ import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, propose, respond } from './diplomacy'
+import { applyDeals, cancelDeal, declareWar, expireDiplomacy, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
 import { addToSector, cleanInvestments, makeInvestment } from './business'
 import { applyEconomy, nationWorkforce } from './economy'
 import { runSpyMission } from './espionage'
@@ -34,6 +34,12 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       const city = s.regions[o.regionId]?.cities.find((c) => c.id === o.cityId)
       return `Make ${city?.name ?? 'a city'} a ${FOCUS[o.focus].name.toLowerCase()} city`
     }
+    case 'imposeSanctions':
+      return `Sanction ${nation(o.target)}`
+    case 'liftSanctions':
+      return `Lift sanctions on ${nation(o.target)}`
+    case 'releasePuppet':
+      return `Set ${nation(o.target)} free`
     case 'fundSector':
       return `Fund ${SECTORS[o.sector].name.toLowerCase()} with ${Math.round(o.amount)}`
     case 'setSubsidies':
@@ -106,7 +112,7 @@ const PHASES: Order['type'][][] = [
   ['declareWar', 'propose'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy'],
-  ['issueBonds', 'repayDebt', 'fundSector', 'invest', 'developCity', 'setCityFocus'],
+  ['issueBonds', 'repayDebt', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
   ['research', 'build', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['spy'],
@@ -164,7 +170,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   const prices = marketPrices(s)
   for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng, prices)
   applyDeals(s)
-  runPolitics(s, rng)
+  runPolitics(s, map, rng)
 
   s.turn++
   expireDiplomacy(s)
@@ -232,6 +238,15 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       if (city) city.focus = o.focus
       break
     }
+    case 'imposeSanctions':
+      imposeSanctions(s, o.nationId, o.target)
+      break
+    case 'liftSanctions':
+      liftSanctions(s, o.nationId, o.target)
+      break
+    case 'releasePuppet':
+      releasePuppet(s, o.nationId, o.target)
+      break
     case 'fundSector':
       addToSector(n, o.sector, o.amount, nationWorkforce(s, map, o.nationId))
       break

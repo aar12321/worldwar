@@ -1,5 +1,5 @@
 import { TECH_BY_ID } from '../data/techTree'
-import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
+import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, DIPLOMACY, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
 import { CITY_RULES, FOCUS } from '../data/cities'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS, TREASURY } from '../data/business'
 import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
@@ -45,6 +45,9 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     case 'setGovernment':
       c.pp = REFORM.cost
+      break
+    case 'imposeSanctions':
+      c.pp = DIPLOMACY.sanctions.cost
       break
     case 'developCity': {
       const city = s.regions[o.regionId]?.cities.find((x) => x.id === o.cityId)
@@ -195,6 +198,17 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (investedIn(s, o.target, o.sector) + o.amount > Math.max(1, t.sectors[o.sector] ?? 0) * INVEST.maxPerSize) return `${t.name}'s ${SECTORS[o.sector].name.toLowerCase()} cannot take that much outside money`
       return null
     }
+    case 'imposeSanctions': {
+      const t = s.nations[o.target]
+      if (!t?.alive || o.target === o.nationId) return 'Choose another nation'
+      if (isAllied(s, o.nationId, o.target)) return 'You are allied'
+      if (s.sanctions.some((x) => x.from === o.nationId && x.to === o.target && x.until >= s.turn)) return 'Already sanctioned'
+      return null
+    }
+    case 'liftSanctions':
+      return s.sanctions.some((x) => x.from === o.nationId && x.to === o.target) ? null : 'You are not sanctioning them'
+    case 'releasePuppet':
+      return s.nations[o.target]?.overlord === o.nationId ? null : 'They are not your puppet'
     case 'setGovernment': {
       if (n.government === o.government) return 'You already have that government'
       if (s.turn - n.lastReform < REFORM.cooldown && n.lastReform > 0) return `The government can change again in ${REFORM.cooldown - (s.turn - n.lastReform)} months`
@@ -271,6 +285,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const t = s.nations[o.target]
       if (!t?.alive || o.target === o.nationId) return 'Invalid target'
       if (atWar(s, o.nationId, o.target)) return 'Already at war'
+      if (n.overlord) return `As ${s.nations[n.overlord]?.name ?? 'your overlord'}'s puppet you cannot declare war`
+      if (t.overlord === o.nationId) return 'They are your puppet. Set them free first.'
       if (isAllied(s, o.nationId, o.target)) return 'You are allied'
       if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
       const pendingWars = pending.filter((p) => p.type === 'declareWar').length

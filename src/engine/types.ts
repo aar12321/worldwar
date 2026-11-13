@@ -32,7 +32,7 @@ export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower' | 'oil' | 'st
 export type Material = 'oil' | 'steel' | 'goods'
 /** First-game goals a player nation has reached. */
 export type Milestone = 'build' | 'train' | 'research' | 'war' | 'win' | 'capture'
-export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms'
+export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms' | 'loan' | 'guarantee'
 
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'artillery', 'fighter', 'air', 'naval']
 export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic']
@@ -162,6 +162,8 @@ export interface Nation {
   nextElection: number
   /** Turn the form of government last changed. */
   lastReform: number
+  /** The nation that rules this one as a puppet, if any. */
+  overlord: NationId | null
   /** Size of each private business sector. */
   sectors: Record<SectorId, number>
   /** Sectors the state subsidizes: they cost money and grow faster. */
@@ -201,6 +203,8 @@ export type ResourceBundle = Partial<Record<TradeResource, number>>
 export interface PeaceTerms {
   /** Regions that change hands; each goes to the side that does not currently own it. */
   cede: RegionId[]
+  /** The loser becomes a puppet of the proposer instead of losing land. */
+  puppet?: boolean
   /** Capital per month for REPARATION_MONTHS. Positive: the target pays the proposer. Negative: the proposer pays. */
   reparations: number
 }
@@ -220,6 +224,8 @@ export type ProposalDraft =
   | { kind: 'alliance' }
   | { kind: 'trade'; terms: TradeTerms }
   | { kind: 'callToArms'; enemy: NationId }
+  | { kind: 'loan'; amount: number; months: number }
+  | { kind: 'guarantee' }
 
 export type Proposal = ProposalDraft & {
   id: string
@@ -228,6 +234,12 @@ export type Proposal = ProposalDraft & {
   created: number
   /** Last turn on which the proposal can still be answered. */
   expires: number
+}
+
+export interface Pledge {
+  from: NationId
+  to: NationId
+  until: number
 }
 
 /** Money one nation has put into another's business sector. It pays dividends until war or collapse. */
@@ -241,7 +253,7 @@ export interface Investment {
 
 export interface Deal {
   id: string
-  kind: 'trade' | 'reparations'
+  kind: 'trade' | 'reparations' | 'loan'
   from: NationId
   to: NationId
   /** Paid by `from` to `to` every month. */
@@ -298,6 +310,9 @@ export interface PendingEvent {
 export type Order =
   | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number; corporateTax?: number; budget?: Budget }
   | { type: 'setGovernment'; nationId: NationId; government: GovernmentType }
+  | { type: 'imposeSanctions'; nationId: NationId; target: NationId }
+  | { type: 'liftSanctions'; nationId: NationId; target: NationId }
+  | { type: 'releasePuppet'; nationId: NationId; target: NationId }
   | { type: 'developCity'; nationId: NationId; regionId: RegionId; cityId: string }
   | { type: 'setCityFocus'; nationId: NationId; regionId: RegionId; cityId: string; focus: CityFocus }
   | { type: 'fundSector'; nationId: NationId; sector: SectorId; amount: number }
@@ -397,6 +412,10 @@ export interface GameState {
   proposals: Proposal[]
   deals: Deal[]
   investments: Investment[]
+  /** Trade sanctions: `from` is cutting off `to` until the turn given. */
+  sanctions: Pledge[]
+  /** Promises to defend a nation: `from` guards `to` until the turn given. */
+  guarantees: Pledge[]
   /** "a>b" -> war score a has earned against b (0..100). */
   warScore: Record<string, number>
   /** Sorted "a|b" -> turn the war started. */

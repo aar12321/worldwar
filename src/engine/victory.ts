@@ -1,5 +1,5 @@
 import { UNIT_SPECS } from '../data/unitTypes'
-import { regionsOf, totalUnits } from './helpers'
+import { puppetsOf, regionsOf, totalUnits } from './helpers'
 import type { GameState, NationId } from './types'
 
 export function populationShare(s: GameState, nationId: NationId): number {
@@ -21,7 +21,8 @@ export function conquestGoal(victoryShare: number): number {
 
 /** Countries the player holds that were not the country they started as. */
 export function countriesTaken(s: GameState): number {
-  return regionsOf(s, s.playerId).filter((id) => id !== s.playerId).length
+  // A puppet counts as half a country.
+  return regionsOf(s, s.playerId).filter((id) => id !== s.playerId).length + Math.floor(puppetsOf(s, s.playerId).length / 2)
 }
 
 export function checkOutcome(s: GameState): GameState['outcome'] {

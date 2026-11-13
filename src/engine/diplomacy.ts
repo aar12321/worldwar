@@ -1,8 +1,8 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
-import { PROPOSAL_LABELS } from '../data/unitTypes'
+import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
 import { MAX_WARS } from '../data/war'
-import { addLog, alliesOf, atWar, enemiesOf, hasPact, isAllied, newId, pairKey } from './helpers'
+import { addLog, alliesOf, atWar, enemiesOf, guarantorsOf, hasPact, isAllied, newId, pairKey } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
 import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, WorldMap } from './types'
@@ -24,6 +24,31 @@ function pushDispatch(s: GameState, d: Dispatch) {
 
 const name = (s: GameState, id: NationId) => s.nations[id]?.name ?? id
 
+const dealLabel = (kind: Deal['kind']) => (kind === 'reparations' ? 'reparations' : kind === 'loan' ? 'loan' : 'trade deal')
+
+/** What a borrower pays each month on a loan, with interest. */
+export const loanPayment = (amount: number, months: number) => (amount * (1 + DIPLOMACY.loan.interest * months)) / months
+
+/** Imposes trade sanctions: the target loses part of its market access and its port trade for a year. */
+export function imposeSanctions(s: GameState, from: NationId, to: NationId) {
+  s.sanctions.push({ from, to, until: s.turn + DIPLOMACY.sanctions.months })
+  addOpinion(s, to, from, 'Imposed sanctions on us', -25, 0.2)
+  addLog(s, 'diplomacy', `${name(s, from)} has imposed trade sanctions on ${name(s, to)}.`, [from, to])
+}
+
+export function liftSanctions(s: GameState, from: NationId, to: NationId) {
+  s.sanctions = s.sanctions.filter((x) => !(x.from === from && x.to === to))
+  addOpinion(s, to, from, 'Lifted sanctions', 12, 0.3)
+  addLog(s, 'diplomacy', `${name(s, from)} lifted its sanctions on ${name(s, to)}.`, [from, to])
+}
+
+/** A master lets its puppet go. */
+export function releasePuppet(s: GameState, master: NationId, puppet: NationId) {
+  s.nations[puppet].overlord = null
+  addOpinion(s, puppet, master, 'Set us free', 25, 0.2)
+  addLog(s, 'diplomacy', `${name(s, master)} set ${name(s, puppet)} free.`, [master, puppet])
+}
+
 export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId, rng: Rng, callAllies = true) {
   const key = pairKey(a, b)
   if (s.wars.includes(key)) return
@@ -40,10 +65,10 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   addOpinion(s, b, a, 'Declared war on us', -40, 0.4)
   addLog(s, 'war', `${name(s, a)} has declared war on ${name(s, b)}!`, [a, b])
   if (!callAllies) return
-  for (const ally of alliesOf(s, b).sort()) {
+  for (const ally of [...new Set([...alliesOf(s, b), ...guarantorsOf(s, b)])].sort()) {
     const n = s.nations[ally]
     if (!n?.alive || ally === a || atWar(s, ally, a) || isAllied(s, ally, a)) continue
-    addOpinion(s, ally, a, 'Attacked our ally', -15, 0.4)
+    addOpinion(s, ally, a, alliesOf(s, b).includes(ally) ? 'Attacked our ally' : 'Attacked a nation we guarantee', -15, 0.4)
     if (hasPact(s, ally, a)) {
       addLog(s, 'diplomacy', `${n.name} is bound by a pact with ${name(s, a)} and cannot defend ${name(s, b)}.`, [ally, a, b])
       continue
@@ -97,9 +122,22 @@ export function validateProposal(s: GameState, map: WorldMap, from: NationId, to
     case 'trade':
       if (atWar(s, from, to)) return 'Cannot trade with an enemy'
       return validateTradeTerms(s, d.terms, from, to)
+    case 'loan': {
+      const L = DIPLOMACY.loan
+      if (atWar(s, from, to)) return 'You cannot lend to an enemy'
+      if (!Number.isFinite(d.amount) || d.amount < L.min || d.amount > L.max) return `Loans run from ${L.min} to ${L.max} money`
+      if (!Number.isInteger(d.months) || d.months < L.minMonths || d.months > L.maxMonths) return `Loans run ${L.minMonths} to ${L.maxMonths} months`
+      if (s.nations[from].resources.capital < d.amount) return 'You do not have that much money to lend'
+      return null
+    }
+    case 'guarantee':
+      if (atWar(s, from, to)) return 'You cannot guarantee a nation you are at war with'
+      if (isAllied(s, from, to)) return 'Allies already defend each other'
+      if ((s.guarantees ?? []).some((g) => g.from === from && g.to === to && g.until >= s.turn)) return 'You already guarantee them'
+      return null
     case 'callToArms': {
       const enemy = s.nations[d.enemy]
-      if (!isAllied(s, from, to)) return 'Only allies can be called to arms'
+      if (!isAllied(s, from, to) && !guarantorsOf(s, from).includes(to)) return 'Only allies and guarantors can be called to arms'
       if (!enemy?.alive || !atWar(s, from, d.enemy)) return 'Not at war with that nation'
       if (atWar(s, to, d.enemy)) return 'Already fighting them'
       if (hasPact(s, to, d.enemy) || isAllied(s, to, d.enemy)) return `${t.name} has a treaty with ${enemy.name}`
@@ -118,6 +156,7 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
       if (toTarget.length) parts.push(`${name(s, p.from)} cedes ${toTarget.join(', ')}`)
       if (p.terms.reparations > 0) parts.push(`${name(s, p.to)} pays ${p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
       if (p.terms.reparations < 0) parts.push(`${name(s, p.from)} pays ${-p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
+      if (p.terms.puppet) parts.unshift(`${name(s, p.to)} becomes a puppet of ${name(s, p.from)} and pays ${Math.round(DIPLOMACY.puppet.tribute * 100)}% of its income`)
       return parts.length ? parts.join('; ') : 'White peace: no territory or payments change hands'
     }
     case 'pact':
@@ -133,6 +172,12 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
     }
     case 'callToArms':
       return `Declare war on ${name(s, p.enemy)} at ${name(s, p.from)}'s side`
+    case 'loan': {
+      const pay = loanPayment(p.amount, p.months)
+      return `${name(s, p.from)} lends ${Math.round(p.amount)} money, repaid at ${pay.toFixed(1)} a month for ${p.months} months`
+    }
+    case 'guarantee':
+      return `${name(s, p.from)} promises to defend ${name(s, p.to)} for ${DIPLOMACY.guarantee.months} months`
   }
 }
 
@@ -151,6 +196,11 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
         const owner = s.regions[id].owner
         const receiver = owner === p.to ? p.from : p.to
         if (s.nations[owner].capital !== id) transferRegion(s, map, id, receiver, false)
+      }
+      if (p.terms.puppet) {
+        s.nations[p.to].overlord = p.from
+        addOpinion(s, p.to, p.from, 'Our overlord', -10, 0.1)
+        addLog(s, 'war', `${name(s, p.to)} is now a puppet state of ${name(s, p.from)}.`, [p.from, p.to])
       }
       if (p.terms.reparations !== 0) {
         const payer = p.terms.reparations > 0 ? p.to : p.from
@@ -186,6 +236,19 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
     case 'callToArms':
       declareWar(s, map, p.to, p.enemy, rng, false)
       addOpinion(s, p.from, p.to, 'Answered our call to arms', 20, 0.3)
+      return null
+    case 'loan': {
+      const lender = s.nations[p.from]
+      const borrower = s.nations[p.to]
+      lender.resources.capital -= p.amount
+      borrower.resources.capital += p.amount
+      startDeal(s, { kind: 'loan', from: p.to, to: p.from, give: { capital: loanPayment(p.amount, p.months) }, receive: {}, until: s.turn + p.months - 1 })
+      addOpinion(s, p.to, p.from, 'Lent us money', 12, 0.3)
+      return null
+    }
+    case 'guarantee':
+      s.guarantees.push({ from: p.from, to: p.to, until: s.turn + DIPLOMACY.guarantee.months })
+      addOpinion(s, p.to, p.from, 'Guaranteed our independence', 25, 0.15)
       return null
   }
 }
@@ -245,6 +308,11 @@ export function cancelDeal(s: GameState, nationId: NationId, dealId: string) {
     pushDispatch(s, { kind: 'completed', from: nationId, to: partner, proposalKind: 'deal', text: `${name(s, nationId)} forgave ${name(s, partner)}'s war reparations.` })
     return
   }
+  if (d.kind === 'loan' && d.to === nationId) {
+    addOpinion(s, partner, nationId, 'Forgave our loan', 18, 0.3)
+    pushDispatch(s, { kind: 'completed', from: nationId, to: partner, proposalKind: 'deal', text: `${name(s, nationId)} forgave the rest of ${name(s, partner)}'s loan.` })
+    return
+  }
   addOpinion(s, partner, nationId, 'Broke a trade deal', -35, 0.4)
   pushDispatch(s, { kind: 'broken', from: nationId, to: partner, proposalKind: 'deal', text: `${name(s, nationId)} tore up its trade deal with ${name(s, partner)}.` })
 }
@@ -266,17 +334,17 @@ export function applyDeals(s: GameState) {
     if (defaulter) {
       const victim = defaulter === d.from ? d.to : d.from
       addOpinion(s, victim, defaulter, 'Defaulted on a deal', -30, 0.4)
-      pushDispatch(s, { kind: 'broken', from: defaulter, to: victim, proposalKind: 'deal', text: `${name(s, defaulter)} could not pay and defaulted on its ${d.kind === 'reparations' ? 'reparations' : 'trade deal'} with ${name(s, victim)}.` })
+      pushDispatch(s, { kind: 'broken', from: defaulter, to: victim, proposalKind: 'deal', text: `${name(s, defaulter)} could not pay and defaulted on its ${dealLabel(d.kind)} with ${name(s, victim)}.` })
       continue
     }
     transferBundle(s, d.from, d.to, d.give)
     transferBundle(s, d.to, d.from, d.receive)
     if (s.turn >= d.until) {
-      if (d.kind === 'trade') {
+      if (d.kind === 'trade' || d.kind === 'loan') {
         addOpinion(s, d.from, d.to, 'Honored our deal', 10, 0.3)
         addOpinion(s, d.to, d.from, 'Honored our deal', 10, 0.3)
       }
-      pushDispatch(s, { kind: 'completed', from: d.from, to: d.to, proposalKind: 'deal', text: `The ${d.kind === 'reparations' ? 'reparations' : 'trade deal'} between ${from.name} and ${to.name} has been fulfilled.` })
+      pushDispatch(s, { kind: 'completed', from: d.from, to: d.to, proposalKind: 'deal', text: `The ${dealLabel(d.kind)} between ${from.name} and ${to.name} has been fulfilled.` })
       continue
     }
     kept.push(d)
@@ -290,19 +358,24 @@ function stillRelevant(s: GameState, p: Proposal): boolean {
     case 'peace':
       return atWar(s, p.from, p.to)
     case 'callToArms':
-      return atWar(s, p.from, p.enemy) && !atWar(s, p.to, p.enemy) && isAllied(s, p.from, p.to)
+      return atWar(s, p.from, p.enemy) && !atWar(s, p.to, p.enemy) && (isAllied(s, p.from, p.to) || guarantorsOf(s, p.from).includes(p.to))
     case 'alliance':
       return !isAllied(s, p.from, p.to) && !atWar(s, p.from, p.to)
     case 'pact':
       return !hasPact(s, p.from, p.to) && !atWar(s, p.from, p.to)
     case 'trade':
+    case 'loan':
       return !atWar(s, p.from, p.to)
+    case 'guarantee':
+      return !atWar(s, p.from, p.to) && !isAllied(s, p.from, p.to)
   }
 }
 
 export function expireDiplomacy(s: GameState) {
   for (const [k, until] of Object.entries(s.pacts)) if (until < s.turn) delete s.pacts[k]
   for (const [k, until] of Object.entries(s.casusBelli)) if (until < s.turn) delete s.casusBelli[k]
+  s.sanctions = (s.sanctions ?? []).filter((x) => x.until >= s.turn)
+  s.guarantees = (s.guarantees ?? []).filter((x) => x.until >= s.turn)
   const kept: Proposal[] = []
   for (const p of s.proposals) {
     if (!stillRelevant(s, p)) continue

@@ -16,6 +16,7 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
       n.military.drill[k] ??= 0
       n.military.weapons[k] ??= 0
     }
+    n.overlord ??= null
     n.sectors ??= { farming: 2, energy: 1, manufacturing: 2, arms: 0.5, technology: 0.5, finance: 0.5 }
     n.subsidies ??= []
     n.debt ??= 0
@@ -43,6 +44,8 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     if (!Number.isFinite(r.line)) r.line = lineMax(game, map, r.id)
   }
   game.investments ??= []
+  game.sanctions ??= []
+  game.guarantees ??= []
   game.trainingQueue = Array.isArray(game.trainingQueue) ? game.trainingQueue.filter((job) => job && game.nations[job.nationId] && job.remaining > 0 && job.total > 0) : []
 
   if (game.turn < FIRST_EVENT_TURN) {

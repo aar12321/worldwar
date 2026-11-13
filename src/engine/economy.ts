@@ -1,9 +1,9 @@
 import { difficultyOf } from '../data/difficulty'
 import { TERRAIN } from '../data/terrain'
-import { BUILDING_SPECS, UNIT_SPECS } from '../data/unitTypes'
+import { BUILDING_SPECS, DIPLOMACY, UNIT_SPECS } from '../data/unitTypes'
 import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { WAR } from '../data/war'
-import { addLog, clamp, enemiesOf, nationModifiers, pairKey } from './helpers'
+import { addLog, clamp, enemiesOf, nationModifiers, pairKey, sanctionersOf } from './helpers'
 import type { Rng } from './rng'
 import { checkDefault, type CreditReport, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
 import { cityEffects, cityWorkforceBonus } from './cities'
@@ -185,7 +185,8 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const taxIncome = n.taxRate * civilianWorkforce * ECON.taxPerWorkforce * outputMult * (1 + botBonus)
   const factoryIncome =
     activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + pol.factory + cityFactory) * outputMult * (1 + botBonus)
-  const tradeIncome = buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1)
+  const sanctionMult = Math.max(DIPLOMACY.sanctions.minFloor, 1 - DIPLOMACY.sanctions.tradeCut * sanctionersOf(s, nationId).length)
+  const tradeIncome = buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1) * sanctionMult
   const biz = sy
   const corporateIncome = (n.corporateTax ?? 0) * biz.profit * outputMult + biz.money
   const dividends = dividendsFor(s, nationId)
@@ -275,7 +276,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     goodsProduction,
     goodsUse,
     netGoods: goodsProduction - goodsUse,
-    tradeCapacity: (MATERIALS.tradeBase + portLevels * MATERIALS.tradePerPort + cityTrade) * Math.max(0.3, 1 + pol.trade),
+    tradeCapacity: (MATERIALS.tradeBase + portLevels * MATERIALS.tradePerPort + cityTrade) * Math.max(0.3, 1 + pol.trade) * sanctionMult,
     ppGain,
     tpGain,
     militaryRegen: workforce * n.draftRate * ECON.militaryRegenPerWorkforce,

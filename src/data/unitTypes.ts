@@ -91,6 +91,13 @@ export const LAW_SPECS: Record<LawId, LawSpec> = {
   research_grants: { name: 'Research Grants', cost: 25, description: 'Research +20%. Costs 5% of your income.', effects: { research: 0.2, money: -0.05 } },
 }
 
+export const DIPLOMACY = {
+  loan: { min: 30, max: 400, minMonths: 3, maxMonths: 24, interest: 0.007 },
+  sanctions: { cost: 15, months: 12, tradeCut: 0.2, minFloor: 0.2 },
+  guarantee: { months: 36 },
+  puppet: { tribute: 0.12, breakChance: 0.05, valueShare: 0.6, minValue: 20 },
+}
+
 export const COSTS = {
   declareWar: 25,
   declareWarWithCasusBelli: 10,
@@ -105,6 +112,8 @@ export const PROPOSAL_COSTS: Record<ProposalKind, number> = {
   alliance: 25,
   trade: 5,
   callToArms: 10,
+  loan: 5,
+  guarantee: 10,
 }
 
 export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
@@ -113,6 +122,8 @@ export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
   alliance: 'Defensive alliance',
   trade: 'Trade deal',
   callToArms: 'Call to arms',
+  loan: 'Loan',
+  guarantee: 'Guarantee of independence',
 }
 
 /** Repeatable drilling. Rank 0 is Green; rank 5 is Guard. */

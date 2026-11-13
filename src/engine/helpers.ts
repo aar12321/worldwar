@@ -10,6 +10,18 @@ export const hasPact = (s: GameState, a: NationId, b: NationId) => (s.pacts[pair
 export const hasCasusBelli = (s: GameState, holder: NationId, target: NationId) =>
   (s.casusBelli[`${holder}|${target}`] ?? -1) >= s.turn
 
+/** Nations that have promised to defend `id`. */
+export const guarantorsOf = (s: GameState, id: NationId): NationId[] => (s.guarantees ?? []).filter((g) => g.to === id && g.until >= s.turn).map((g) => g.from)
+
+/** Nations currently cutting off trade with `id`. */
+export const sanctionersOf = (s: GameState, id: NationId): NationId[] => (s.sanctions ?? []).filter((x) => x.to === id && x.until >= s.turn && s.nations[x.from]?.alive).map((x) => x.from)
+
+/** Nations that are puppets of `id`. */
+export const puppetsOf = (s: GameState, id: NationId): NationId[] =>
+  Object.values(s.nations)
+    .filter((n) => n.alive && n.overlord === id)
+    .map((n) => n.id)
+
 export const isAllied = (s: GameState, a: NationId, b: NationId) => a !== b && s.alliances.includes(pairKey(a, b))
 
 function partnersIn(keys: string[], id: NationId): NationId[] {

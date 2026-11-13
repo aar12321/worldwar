@@ -140,7 +140,7 @@ describe('elections and coups', () => {
     win.turn = 20
     win.nations[P].nextElection = 20
     win.nations[P].stability = ELECTION.needed + 10
-    runPolitics(win, createRng(1, 1))
+    runPolitics(win, map, createRng(1, 1))
     expect(win.nations[P].stability).toBe(ELECTION.needed + 10 + ELECTION.win.stability)
     expect(win.nations[P].nextElection).toBe(20 + GOVERNMENTS.democracy.election)
 
@@ -149,7 +149,7 @@ describe('elections and coups', () => {
     lose.nations[P].nextElection = 20
     lose.nations[P].stability = ELECTION.needed - 10
     lose.nations[P].taxRate = 0.45
-    runPolitics(lose, createRng(1, 1))
+    runPolitics(lose, map, createRng(1, 1))
     expect(lose.nations[P].stability).toBe(ELECTION.needed - 10 + ELECTION.lose.stability)
     expect(lose.nations[P].taxRate).toBe(ELECTION.lose.tax)
     expect(lose.nations[P].resources.pp).toBe(100)
@@ -169,13 +169,13 @@ describe('elections and coups', () => {
       const s = base('junta')
       s.nations[P].stability = 5
       s.nations[P].laws = ['rationing']
-      runPolitics(s, createRng(seed, 2))
+      runPolitics(s, map, createRng(seed, 2))
       if (s.nations[P].laws.length === 0) coups++
     }
     expect(coups).toBeGreaterThan(10)
     const calm = base('junta')
     calm.nations[P].laws = ['rationing']
-    runPolitics(calm, createRng(1, 2))
+    runPolitics(calm, map, createRng(1, 2))
     expect(calm.nations[P].laws).toEqual(['rationing'])
   })
 })
