@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { AGENCY, AGENCY_ROLE, DOMESTIC_OPS, FOREIGN_OPS, agencyName, levelsCost, type AgencyId, type DomesticOp, type ForeignOp } from '../data/agencies'
 import { operationOdds } from '../engine/agencies'
-import { atWar } from '../engine/helpers'
+import { atWar, nationModifiers } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { getWorld } from '../map/world'
 import { nationNeighbors } from '../ai/opinion'
@@ -72,6 +72,7 @@ export function AgenciesTab() {
   }, [game, me, map])
   if (!view || !game || !me) return null
   const { player } = view
+  const bonus = nationModifiers(player).agencyBonus
   const chosen = target && game.nations[target]?.alive && target !== me ? target : list[0]?.id
   const t = chosen ? game.nations[chosen] : null
   const seen = chosen ? (game.intel[`${me}|${chosen}`] ?? -1) >= game.turn : false
@@ -82,6 +83,7 @@ export function AgenciesTab() {
       <p className="text-[14px] text-white/80">
         A great power does not just attack. It watches, builds a case, and works in the shadows. Each agency sends one team per level each month, and results arrive when the month ends.
       </p>
+      {bonus > 0 && <p className="text-[14px] text-[#6eeb8a]">Your technology adds {Math.round(bonus * 100)}% to the odds of every operation.</p>}
       <div className="grid gap-3 md:grid-cols-2">
         <AgencyCard id="foreign" />
         <AgencyCard id="domestic" />

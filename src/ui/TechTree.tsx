@@ -5,6 +5,7 @@ import type { TechBranch } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { fmt, usePlayerView } from './hooks'
+import { techBonuses } from '../engine/techBonuses'
 import { speak } from './plain'
 
 const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy', 'frontier']
@@ -53,6 +54,39 @@ function TechNode({ tech }: { tech: Tech }) {
   )
 }
 
+/** What the technologies you own give you, grouped, with where each bonus comes from. */
+function Bonuses() {
+  const view = usePlayerView()!
+  const groups = techBonuses(view.player)
+  return (
+    <details className="inset-card p-4 mb-6" open>
+      <summary className="cursor-pointer text-[16px] font-semibold tracking-tight">What your technology gives you</summary>
+      {groups.length === 0 ? (
+        <p className="text-[14px] text-white/70 mt-2">Nothing yet. Research a technology and its bonuses will be listed here.</p>
+      ) : (
+        <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {groups.map((g) => (
+            <section key={g.title} className="space-y-1.5">
+              <h3 className="label">{g.title}</h3>
+              <ul className="space-y-1.5 text-[14px]">
+                {g.lines.map((l) => (
+                  <li key={`${g.title}-${l.label}`}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span>{l.label}</span>
+                      {l.value && <span className="font-semibold tabular-nums text-[#6eeb8a] text-right">{l.value}</span>}
+                    </div>
+                    {l.from.length > 0 && <div className="text-[12px] text-white/55">{l.from.join(', ')}</div>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+    </details>
+  )
+}
+
 export function TechTree() {
   const view = usePlayerView()
   const setPanel = useGame((s) => s.setPanel)
@@ -76,6 +110,7 @@ export function TechTree() {
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-auto scroll-thin p-6">
+        <Bonuses />
         <div className="tech-grid">
           {BRANCHES.map((b) => (
             <div key={b} className="space-y-3">
