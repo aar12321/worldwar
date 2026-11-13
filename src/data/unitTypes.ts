@@ -3,6 +3,8 @@ import { UNIT_TYPES } from '../engine/types'
 
 export interface UnitSpec {
   name: string
+  /** What the unit is for, in one line. */
+  role: string
   attack: number
   defense: number
   capitalCost: number
@@ -24,10 +26,10 @@ export const TRAIN_MONTHS: Record<UnitType, number> = {
 export const TRAIN_QUEUE_LIMIT = 4
 
 export const UNIT_SPECS: Record<UnitType, UnitSpec> = {
-  infantry: { name: 'Infantry', attack: 1, defense: 1.2, capitalCost: 10, manpowerCost: 10, upkeep: 0.6, food: 0.3, requiresBuilding: 'barracks' },
-  armor: { name: 'Armor', attack: 2.4, defense: 1.6, capitalCost: 25, manpowerCost: 5, upkeep: 1.4, food: 0.2, requiresBuilding: 'barracks' },
-  air: { name: 'Air Wing', attack: 2.2, defense: 0.8, capitalCost: 30, manpowerCost: 3, upkeep: 1.5, food: 0.1, requiresBuilding: 'factory' },
-  naval: { name: 'Fleet', attack: 1.6, defense: 1.4, capitalCost: 35, manpowerCost: 4, upkeep: 1.6, food: 0.15, requiresBuilding: 'port' },
+  infantry: { name: 'Infantry', role: 'Cheap and steady. Best in cities, forests and mountains.', attack: 1, defense: 1.2, capitalCost: 10, manpowerCost: 10, upkeep: 0.6, food: 0.3, requiresBuilding: 'barracks' },
+  armor: { name: 'Tanks', role: 'Hits hardest on plains and desert. Poor in mountains and cities.', attack: 2.4, defense: 1.6, capitalCost: 25, manpowerCost: 5, upkeep: 1.4, food: 0.2, requiresBuilding: 'barracks' },
+  air: { name: 'Planes', role: 'Strikes first in every battle. Fragile when it has to defend.', attack: 2.2, defense: 0.8, capitalCost: 30, manpowerCost: 3, upkeep: 1.5, food: 0.1, requiresBuilding: 'factory' },
+  naval: { name: 'Warships', role: 'Fights only on coasts. A port lets you attack across the sea.', attack: 1.6, defense: 1.4, capitalCost: 35, manpowerCost: 4, upkeep: 1.6, food: 0.15, requiresBuilding: 'port' },
 }
 
 export interface BuildingSpec {
@@ -43,11 +45,11 @@ export interface BuildingSpec {
 }
 
 export const BUILDING_SPECS: Record<BuildingType, BuildingSpec> = {
-  factory: { name: 'Factory', cost: 40, max: 5, effect: '+6 money a month per level. Level N lets you buy weapon level N.', description: 'Heavy industry. It pays for the war, and air wings need one.' },
+  factory: { name: 'Factory', cost: 40, max: 5, effect: '+6 money a month per level. Level N lets you buy weapon level N.', description: 'Heavy industry. It pays for everything else, and planes need one.' },
   farm: { name: 'Farm', cost: 25, max: 5, effect: '+3 food a month per level.', description: 'Feeds your people and your soldiers.' },
   university: { name: 'University', cost: 45, max: 5, effect: '+2.5 research a month per level.', description: 'Turns money into new technology.' },
-  barracks: { name: 'Barracks', cost: 30, max: 5, effect: '+1 training slot and +0.75 defenders per level.', description: 'Trains infantry and armor, and holds the border.' },
-  port: { name: 'Port', cost: 35, max: 3, effect: '+3 money from trade per level. Fleets and sea attacks need one.', description: 'Trade, fleets, and invasions by sea. Coastal countries only.', requiresCoast: true },
+  barracks: { name: 'Barracks', cost: 30, max: 5, effect: '+1 training slot and +0.75 defenders per level.', description: 'Trains infantry and tanks, and holds the border.' },
+  port: { name: 'Port', cost: 35, max: 3, effect: '+3 money from trade per level. Warships and sea attacks need one.', description: 'Trade, warships, and attacks across the sea. Coastal countries only.', requiresCoast: true },
   civic: { name: 'Civic Hall', cost: 30, max: 3, effect: '+0.6 influence and +0.3 research a month per level.', description: 'Offices and schools.' },
 }
 

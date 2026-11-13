@@ -618,9 +618,176 @@ body:has(.drawer) .country-card {
   pointer-events: none;
 }
 
+/* Desks, report and map controls. */
+.unit-badge {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 132, 255, 0.18);
+  color: #9ecbff;
+}
+.unit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 12px;
+}
+.unit-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.unit-actions .btn {
+  width: 100%;
+}
+/* A button that issues an order: what it does and costs on top, the effect (or why it is blocked) below. */
+.order-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  text-align: left;
+  height: auto;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+.order-btn-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+}
+.order-btn-cost {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0.92;
+}
+.order-btn-detail {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.3;
+  opacity: 0.82;
+  white-space: normal;
+}
+.order-btn-why {
+  opacity: 1;
+}
+.btn:disabled.order-btn {
+  opacity: 0.72;
+}
+.report-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.map-modes {
+  position: absolute;
+  z-index: 18;
+  left: 16px;
+  bottom: 16px;
+  width: 268px;
+  padding: 6px;
+  border-radius: 14px;
+}
+/* A desk covers the corner the map control sits in. */
+body:has(.drawer) .map-modes {
+  display: none;
+}
+.hud-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(245, 245, 247, 0.78);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.hud-icon:hover,
+.hud-icon[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.advice-pill {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(var(--hud-h) + 8px);
+  max-width: min(560px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(21, 23, 28, 0.92);
+  border: 1px solid var(--line);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.advice-pill:hover {
+  background: #23262d;
+}
+.details-card {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.details-card > summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.details-card > summary:hover {
+  color: #fff;
+}
+
 @media (max-width: 900px) {
   :root {
-    --hud-h: 276px;
+    --hud-h: 200px;
+  }
+  .report-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .unit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .map-modes {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    bottom: 136px;
+  }
+  body:has(.country-card) .map-modes {
+    display: none;
+  }
+  /* One row of six numbers, so the HUD leaves room for the desk below it. */
+  .hud-resources {
+    flex-wrap: nowrap !important;
+  }
+  .hud-resources > div {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .hud-resources [role='button'] {
+    min-width: 0;
+    padding: 4px 3px;
+    align-items: center;
+  }
+  .hud-resources .label {
+    font-size: 10.5px;
+    letter-spacing: -0.02em;
+  }
+  .advice-pill {
+    top: calc(var(--hud-h) + 4px);
   }
   .hud-row {
     flex-direction: column;

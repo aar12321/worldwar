@@ -4,7 +4,7 @@ import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, pro
 import { applyEconomy } from './economy'
 import { runSpyMission } from './espionage'
 import { EVENT_GAP_TURNS, scheduleEvent } from './events'
-import { addLog, regionsOf } from './helpers'
+import { addLog, reach, regionsOf } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
 import { research } from './tech'
@@ -187,21 +187,24 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'declareWar':
       declareWar(s, map, o.nationId, o.target, rng)
+      reach(n, 'war')
       break
     case 'propose':
       propose(s, map, o.nationId, o.target, o.proposal, rng)
       break
     case 'research':
-      research(s, o.nationId, o.techId)
+      if (research(s, o.nationId, o.techId)) reach(n, 'research')
       break
     case 'build':
       s.regions[o.regionId].buildings[o.building]++
+      reach(n, 'build')
       if (n.isPlayer) addLog(s, 'economy', `${BUILDING_SPECS[o.building].name} upgraded to level ${s.regions[o.regionId].buildings[o.building]} in ${map.regions[o.regionId].name}.`, [o.nationId])
       break
     case 'queueTrain': {
       const total = trainMonths(o.unit)
       s.trainingQueue ??= []
       s.trainingQueue.push({ id: `q${s.nextId++}`, nationId: o.nationId, unit: o.unit, remaining: total, total })
+      reach(n, 'train')
       break
     }
     case 'cancelTrain': {

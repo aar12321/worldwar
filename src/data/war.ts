@@ -36,7 +36,7 @@ export const STANCES: Record<Stance, StanceSpec> = {
     cost: 8,
     boost: { armor: 1.3, air: 1.3 },
     siegeTurns: 0,
-    blurb: 'Armor and air lead. Breaks the line faster, costs more units and money.',
+    blurb: 'Tanks and planes lead. Breaks the line faster, costs more units and money.',
   },
   siege: {
     name: 'Siege',
@@ -45,7 +45,7 @@ export const STANCES: Record<Stance, StanceSpec> = {
     cost: 0,
     boost: { infantry: 1.15, naval: 1.15 },
     siegeTurns: 2,
-    blurb: 'Slow and cheap in lives. Their factories stop for 2 months.',
+    blurb: 'Infantry and warships grind it out. Slow, cheap in lives, and their factories stop for 2 months.',
   },
 }
 

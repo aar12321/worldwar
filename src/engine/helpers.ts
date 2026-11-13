@@ -1,5 +1,5 @@
 import { TECH_BY_ID, type TechModifiers } from '../data/techTree'
-import type { GameState, LogKind, Nation, NationId, RegionId, UnitCounts, UnitType } from './types'
+import type { GameState, LogKind, Milestone, Nation, NationId, RegionId, UnitCounts, UnitType } from './types'
 
 export const pairKey = (a: NationId, b: NationId) => (a < b ? `${a}|${b}` : `${b}|${a}`)
 
@@ -140,6 +140,13 @@ export function canUseUnit(n: Nation, unit: UnitType): boolean {
 export function addLog(s: GameState, kind: LogKind, text: string, nations: NationId[]) {
   s.log.push({ turn: s.turn, kind, text, nations })
   if (s.log.length > 300) s.log.splice(0, s.log.length - 300)
+}
+
+/** Ticks off a first-game goal for a player nation. */
+export function reach(n: Nation | undefined, m: Milestone) {
+  if (!n?.isPlayer) return
+  n.milestones ??= []
+  if (!n.milestones.includes(m)) n.milestones.push(m)
 }
 
 export const newId = (s: GameState, prefix: string) => `${prefix}${s.nextId++}`

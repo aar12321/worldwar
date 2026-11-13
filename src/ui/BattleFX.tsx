@@ -9,6 +9,7 @@ import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { NEON } from './colors'
 import { globeBridge, useFx } from './globeBridge'
+import { UnitIcon } from './icons'
 import { Modal } from './Modal'
 import { LineBar } from './WarRoom'
 
@@ -42,7 +43,7 @@ function LossChips({ losses }: { losses: UnitCounts }) {
     <span className="flex flex-wrap gap-1">
       {hit.map((k) => (
         <motion.span key={k} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="chip chip-red">
-          −{formatDivisions(losses[k])} {UNIT_SPECS[k].name}
+          <UnitIcon unit={k} size={14} />−{formatDivisions(losses[k])} {UNIT_SPECS[k].name}
         </motion.span>
       ))}
     </span>
@@ -199,6 +200,7 @@ export function BattleFX() {
             <div className="flex flex-wrap gap-1.5 text-[13px] text-white/75">
               {UNIT_TYPES.filter((k) => col.units[k] >= 0.05).map((k) => (
                 <span key={k} className="chip">
+                  <UnitIcon unit={k} size={14} />
                   {UNIT_SPECS[k].name} {formatDivisions(col.units[k])}
                 </span>
               ))}

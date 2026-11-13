@@ -11,6 +11,8 @@ export type SpyMission = 'sabotage'
 export type Difficulty = 'easy' | 'normal' | 'hard'
 export type Personality = 'expansionist' | 'trader' | 'turtle' | 'opportunist' | 'honorable'
 export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower'
+/** First-game goals a player nation has reached. */
+export type Milestone = 'build' | 'train' | 'research' | 'war' | 'win' | 'capture'
 export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms'
 
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'air', 'naval']
@@ -125,6 +127,8 @@ export interface Nation {
   aggression: number
   personality: Personality
   military: Military
+  /** Goals of the guided first game this nation has reached. Only kept for players. */
+  milestones?: Milestone[]
 }
 
 export type ResourceBundle = Partial<Record<TradeResource, number>>

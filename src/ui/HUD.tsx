@@ -1,12 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { enemiesOf, turnDate } from '../engine/helpers'
+import { turnDate } from '../engine/helpers'
 import { MAX_WARS } from '../data/war'
 import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
-import { garrisonStrength } from '../engine/warfare'
-import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { fmt, signed, usePlayerView } from './hooks'
+import { fmt, signed, useAdvice, usePlayerView } from './hooks'
+import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
 
 /** Eases a displayed number toward `value` instead of snapping. */
 function useTweenedNumber(value: number, ms = 520): number {
@@ -124,46 +123,21 @@ const Row = ({ k, v, warn }: { k: string; v: string; warn?: boolean }) => (
   </div>
 )
 
-function attention(view: NonNullable<ReturnType<typeof usePlayerView>>): string | null {
-  const { player, econ } = view
-  if (player.foodShortage) return 'Food shortage. Armies fight weaker until you grow or buy more food.'
-  if (player.inDebt) return 'Out of money. The country grows less stable until income covers spending.'
-  if (player.stability < 35) return 'Stability is low. Rebels can rise. Lower taxes, or crack down in a troubled country.'
-  if (econ.netFood < 0) return 'You are eating more food than you grow. Build farms before stocks run out.'
-  if (player.resources.capital > 500 && econ.netCapital > 60 && enemiesOf(view.game, player.id).length === 0)
-    return 'Money is piling up. Upgrade your country and military, then take a neighbor. The treasury itself does not win.'
-  return firstWarHint(view)
-}
-
-/** Until the first war, point at the weakest country next door so a new player knows what to do. */
-function firstWarHint({ game, player }: NonNullable<ReturnType<typeof usePlayerView>>): string | null {
-  if (game.turn > 12 || enemiesOf(game, player.id).length > 0 || countriesTaken(game) > 0) return null
-  const { map } = getWorld()
-  let weakest: { name: string; def: number } | null = null
-  for (const r of Object.values(game.regions)) {
-    if (r.owner !== player.id) continue
-    for (const nb of map.regions[r.id].neighbors) {
-      const o = game.regions[nb]
-      if (!o || o.owner === player.id || !game.nations[o.owner]?.alive) continue
-      const def = garrisonStrength(game, map, nb)
-      if (!weakest || def < weakest.def) weakest = { name: map.regions[nb].name, def }
-    }
-  }
-  return weakest ? `Tip: ${weakest.name} is your weakest neighbor. Train troops, open its panel, declare war, then plan the attack in the War Room.` : null
-}
-
 export function HUD() {
   const view = usePlayerView()
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const reduced = useGame((s) => s.settings.reducedMotion)
   const endTurn = useGame((s) => s.endTurn)
+  const setPanel = useGame((s) => s.setPanel)
+  const setHelp = useGame((s) => s.setHelp)
+  const panel = useGame((s) => s.panel)
+  const top = useAdvice(1)[0]
   if (!view) return null
   const { game, player, econ, committed, orders } = view
   const share = populationShare(game, player.id)
   const goal = game.settings.victoryShare
   const taken = countriesTaken(game)
   const lands = conquestGoal(goal)
-  const note = attention(view)
   const blocked = !!game.pendingEvent || fxBusy || game.outcome !== 'playing'
   const label = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle playing' : 'Next turn'
   const civic = econ.buildings.civic
@@ -173,8 +147,21 @@ export function HUD() {
       <div className="hud-row">
         <div className="glass rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-3 min-w-56">
           <div className="w-1.5 self-stretch rounded-full" style={{ background: player.color }} />
-          <div>
-            <div className="text-[15px] font-semibold tracking-tight">{player.name}</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[15px] font-semibold tracking-tight truncate">{player.name}</div>
+              <div className="flex items-center gap-0.5 -mr-1.5">
+                <button className="hud-icon" aria-label="News (N)" title="News (N)" aria-pressed={panel === 'log'} onClick={() => setPanel('log')}>
+                  <NewsIcon />
+                </button>
+                <button className="hud-icon" aria-label="How the game works (?)" title="How the game works (?)" onClick={() => setHelp(true)}>
+                  <HelpIcon />
+                </button>
+                <button className="hud-icon" aria-label="Settings" title="Settings" aria-pressed={panel === 'settings'} onClick={() => setPanel('settings')}>
+                  <SettingsIcon />
+                </button>
+              </div>
+            </div>
             <div className="text-[13px] text-white/70 h-5 overflow-hidden">
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
@@ -230,7 +217,7 @@ export function HUD() {
           </Resource>
           <Resource label="Research" amount={player.resources.tp - committed.tp} delta={signed(econ.tpGain)}>
             <Row k="University levels" v={`${econ.buildings.university}`} />
-            <p className="text-[13px] text-white/65">Open Research to pick technologies. They finish when you press Next turn.</p>
+            <p className="text-[13px] text-white/65">Spend it in Research. A technology you pick arrives when you press Next turn.</p>
           </Resource>
           <Resource label="Stability" amount={player.stability} format={(v) => Math.round(v).toString()} suffix="%" warn={player.stability < 35}>
             <Row k="Heading toward" v={`${Math.round(econ.stabilityTarget)}%`} />
@@ -247,7 +234,13 @@ export function HUD() {
           <div className="px-1 text-center text-[12px] text-white/70">{orders.length > 0 ? `${orders.length} order${orders.length === 1 ? '' : 's'} waiting` : 'Enter'}</div>
         </div>
       </div>
-      {note && <div className="absolute left-1/2 -translate-x-1/2 top-[100px] max-w-xl rounded-full bg-black/70 border border-white/10 px-4 py-1.5 text-[14px] text-[#ffd60a] pointer-events-none">{note}</div>}
+      {top && top.urgency === 'now' && panel === 'none' && (
+        <button className="advice-pill pointer-events-auto" onClick={() => setPanel('briefing')} title="Open the Briefing (B)">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#ff453a' }} />
+          <span className="truncate">{top.title}</span>
+          <span className="text-white/65 shrink-0">Briefing ›</span>
+        </button>
+      )}
     </div>
   )
 }

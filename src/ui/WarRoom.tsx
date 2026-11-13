@@ -6,9 +6,11 @@ import { formatDivisions, totalUnits } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { forecastAttack } from '../engine/warfare'
 import type { GameState, NationId, RegionId } from '../engine/types'
+import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { usePlayerView } from './hooks'
+import { UnitIcon } from './icons'
 import { MilitaryCompare } from './MilitaryCompare'
 import { Modal } from './Modal'
 import { speak } from './plain'
@@ -118,6 +120,14 @@ function WarRoomDialog({ target }: { target: RegionId }) {
                 >
                   <div className="text-[14px] font-semibold">{COMMITS[c].name}</div>
                   <div className="text-[12px] text-white/75 tabular-nums">{formatDivisions(totalUnits(player.military.units) * share)} divisions</div>
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[12px] text-white/80 tabular-nums">
+                    {UNIT_TYPES.filter((u) => player.military.units[u] * share >= 0.05).map((u) => (
+                      <span key={u} className="inline-flex items-center gap-1">
+                        <UnitIcon unit={u} size={13} />
+                        {formatDivisions(player.military.units[u] * share)}
+                      </span>
+                    ))}
+                  </div>
                 </button>
               )
             })}

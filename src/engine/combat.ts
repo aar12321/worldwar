@@ -136,7 +136,7 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
   const modifiers: string[] = [`Terrain: ${TERRAIN[terrain].name} (defense x${TERRAIN[terrain].defense})`]
   if (hasCombinedArms(input.attacker.units)) modifiers.push('Attacker combined arms bonus')
   if (hasCombinedArms(input.defender.units)) modifiers.push('Defender combined arms bonus')
-  if (input.attacker.units.armor > 0 && TERRAIN[terrain].unit.armor < 1) modifiers.push(`Armor struggles in ${TERRAIN[terrain].name.toLowerCase()}`)
+  if (input.attacker.units.armor > 0 && TERRAIN[terrain].unit.armor < 1) modifiers.push(`Tanks struggle in ${TERRAIN[terrain].name.toLowerCase()}`)
   for (const note of input.attacker.penaltyNotes) modifiers.push(`Attacker: ${note}`)
   for (const note of input.defender.penaltyNotes) modifiers.push(`Defender: ${note}`)
 

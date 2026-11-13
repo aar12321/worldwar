@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS, buildingCost } from '../data/unitTypes'
-import { buildingCap, regionWorkforce } from '../engine/economy'
+import { buildingCap, integrationFactor, regionWorkforce } from '../engine/economy'
 import { enemiesOf, regionsOf, turnDate } from '../engine/helpers'
 import { BUILDING_TYPES } from '../engine/types'
 import type { LawId, LogKind } from '../engine/types'
@@ -8,50 +8,53 @@ import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { Pips } from './bits'
 import { signed, usePlayerView } from './hooks'
-import { OrderButton, PanelShell } from './panel'
+import { OrderButton, PanelShell, Tabs } from './panel'
 
-export function CountryDrawer() {
+const ECONOMY_TABS = [
+  ['build', 'Upgrades'],
+  ['budget', 'Budget'],
+  ['people', 'People'],
+  ['laws', 'Laws'],
+] as const
+
+function Line({ k, v, warn, strong }: { k: string; v: string; warn?: boolean; strong?: boolean }) {
+  return (
+    <div className={`flex justify-between gap-4 ${strong ? 'font-semibold border-t border-white/10 pt-1.5 mt-1' : ''}`}>
+      <span className={strong ? '' : 'text-white/70'}>{k}</span>
+      <span className={`tabular-nums ${warn ? 'text-[#ff8a84]' : ''}`}>{v}</span>
+    </div>
+  )
+}
+
+/** The Economy desk: upgrade the country, set the budget, look after the people, pass laws. */
+export function EconomyDesk() {
   const view = usePlayerView()
   const setPolicy = useGame((s) => s.setPolicy)
-  const tab = useGame((s) => s.countryTab)
-  const setTab = useGame((s) => s.setCountryTab)
-  const [tax, setTax] = useState(view?.pendingPolicy.taxRate ?? 0.25)
-  const [draft, setDraft] = useState(view?.pendingPolicy.draftRate ?? 0.05)
-  const [picked, setPicked] = useState<string | null>(null)
-  const pTax = view?.pendingPolicy.taxRate
-  const pDraft = view?.pendingPolicy.draftRate
-  useEffect(() => {
-    if (pTax !== undefined && pDraft !== undefined) {
-      setTax(pTax)
-      setDraft(pDraft)
-    }
-  }, [pTax, pDraft])
+  const tab = useGame((s) => s.economyTab)
+  const setTab = useGame((s) => s.setEconomyTab)
+  const picked = useGame((s) => s.economyRegion)
+  const setPicked = useGame((s) => s.setEconomyRegion)
   if (!view) return null
   const { game, player, econ } = view
   const { map } = getWorld()
+  // The sliders show the policy that is queued, so they need no state of their own.
+  const tax = view.pendingPolicy.taxRate
+  const draft = view.pendingPolicy.draftRate
   const maxDraft = player.laws.includes('conscription_act') ? DRAFT_LIMITS.maxWithConscription : DRAFT_LIMITS.max
   const owned = regionsOf(game, player.id)
   const regionId = picked && owned.includes(picked) ? picked : owned.includes(player.capital) ? player.capital : owned[0]
   const region = game.regions[regionId]
 
   return (
-    <PanelShell title="Your country" kicker={`${player.name} · ${owned.length === 1 ? '1 country' : `${owned.length} countries`}`} panel="country">
-      <div className="segmented">
-        {([
-          ['build', 'Upgrades'],
-          ['economy', 'Economy'],
-          ['people', 'People'],
-          ['laws', 'Laws'],
-        ] as const).map(([id, label]) => (
-          <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>
-            {label}
-          </button>
-        ))}
-      </div>
-
+    <PanelShell
+      title="Economy"
+      kicker={`${player.name} · ${signed(econ.netCapital)} money and ${signed(econ.netFood)} food a month`}
+      panel="economy"
+      tabs={<Tabs value={tab} onChange={setTab} options={ECONOMY_TABS} />}
+    >
       {tab === 'build' && region && (
         <section className="space-y-3">
-          <p className="text-[14px] text-white/70">Each upgrade takes effect the moment you buy it. Bigger countries can reach higher levels.</p>
+          <p className="text-[14px] text-white/70">Upgrades work the moment you buy them. Bigger countries can reach higher levels.</p>
           {owned.length > 1 && (
             <label className="block text-[14px]">
               <span className="label block mb-1">Country</span>
@@ -59,6 +62,7 @@ export function CountryDrawer() {
                 {owned.map((id) => (
                   <option key={id} value={id}>
                     {map.regions[id].name}
+                    {game.regions[id].integration < 1 ? ` (settling, ${Math.round(integrationFactor(game.regions[id]) * 100)}% output)` : ''}
                   </option>
                 ))}
               </select>
@@ -74,11 +78,11 @@ export function CountryDrawer() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-[16px] font-semibold tracking-tight">{spec.name}</div>
-                    <div className="text-[13px] text-white/70 mt-0.5">{spec.effect}</div>
+                    <div className="text-[13px] text-white/70 mt-0.5">{spec.description}</div>
                   </div>
                   <span className="text-[14px] font-semibold tabular-nums shrink-0">
-                    {level}
-                    <span className="text-white/60">/{cap}</span>
+                    Level {level}
+                    <span className="text-white/60"> of {cap}</span>
                   </span>
                 </div>
                 <div className="mt-2.5 flex items-center justify-between gap-3">
@@ -86,7 +90,7 @@ export function CountryDrawer() {
                   {level >= cap ? (
                     <span className="chip chip-green">Highest level</span>
                   ) : (
-                    <OrderButton order={{ type: 'build', nationId: player.id, regionId, building: b }} label={`Upgrade · ${buildingCost(b, level)} money`} tone="btn-primary" />
+                    <OrderButton order={{ type: 'build', nationId: player.id, regionId, building: b }} label="Upgrade" cost={`${buildingCost(b, level)} money`} effect={spec.effect} tone="btn-primary" />
                   )}
                 </div>
               </div>
@@ -95,9 +99,20 @@ export function CountryDrawer() {
         </section>
       )}
 
-      {tab === 'economy' && (
+      {tab === 'budget' && (
         <section className="space-y-4">
-          <p className="text-[14px] text-white/70">Taxes and the draft take effect when you press Next turn.</p>
+          <div className="inset-card p-3.5 text-[14px] space-y-1">
+            <div className="text-[15px] font-semibold mb-1">Money each month</div>
+            <Line k="Taxes" v={signed(econ.taxIncome)} />
+            <Line k="Factories" v={signed(econ.factoryIncome)} />
+            <Line k="Trade through ports" v={signed(econ.tradeIncome)} />
+            <Line k="Upkeep of units and buildings" v={signed(-econ.upkeep)} warn />
+            {econ.warBills.map((b) => (
+              <Line key={b.enemy} k={`War with ${game.nations[b.enemy]?.name ?? b.enemy}`} v={signed(-b.amount)} warn />
+            ))}
+            <Line k="Left over" v={signed(econ.netCapital)} warn={econ.netCapital < 0} strong />
+          </div>
+          <p className="text-[14px] text-white/70">Taxes and the draft change when you press Next turn.</p>
           <div>
             <div className="flex justify-between text-[15px]">
               <span>Tax rate</span>
@@ -106,17 +121,16 @@ export function CountryDrawer() {
             <input
               type="range"
               className="w-full"
+              aria-label="Tax rate"
               min={TAX_LIMITS.min}
               max={TAX_LIMITS.max}
               step={0.01}
               value={tax}
               onChange={(e) => {
-                const next = +e.target.value
-                setTax(next)
-                setPolicy(next, draft)
+                setPolicy(+e.target.value, draft)
               }}
             />
-            <div className="text-[13px] text-white/65">Higher taxes bring in more money, and unsettle the country once they pass 20%.</div>
+            <div className="text-[13px] text-white/65">More tax is more money. Above 20% people start to resent it.</div>
           </div>
           <div>
             <div className="flex justify-between text-[15px]">
@@ -126,29 +140,22 @@ export function CountryDrawer() {
             <input
               type="range"
               className="w-full"
+              aria-label="Draft rate"
               min={DRAFT_LIMITS.min}
               max={maxDraft}
               step={0.01}
               value={draft}
               onChange={(e) => {
-                const next = +e.target.value
-                setDraft(next)
-                setPolicy(tax, next)
+                setPolicy(tax, +e.target.value)
               }}
             />
-            <div className="text-[13px] text-white/65">Moves civilians into the military. Fewer workers means less money, food, and factory output.</div>
+            <div className="text-[13px] text-white/65">Turns workers into soldiers you can train. Fewer workers means less money and food.</div>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-[14px] inset-card p-3.5">
-            <span className="text-white/70">Money / turn</span>
-            <span className="text-right">{signed(econ.netCapital)}</span>
-            <span className="text-white/70">Food / turn</span>
-            <span className={`text-right ${econ.netFood < 0 ? 'text-[#ff6961]' : ''}`}>{signed(econ.netFood)}</span>
-            <span className="text-white/70">Soldiers / turn</span>
-            <span className="text-right">{signed(econ.militaryRegen, 0)}k</span>
-            <span className="text-white/70">Stability heading to</span>
-            <span className="text-right">{Math.round(econ.stabilityTarget)}%</span>
-            <span className="text-white/70">People at work</span>
-            <span className="text-right">{Math.round(econ.laborRatio * 100)}%</span>
+          <div className="inset-card p-3.5 text-[14px] space-y-1">
+            <Line k="Food each month" v={signed(econ.netFood)} warn={econ.netFood < 0} />
+            <Line k="New soldiers each month" v={`${signed(econ.militaryRegen, 0)}k`} />
+            <Line k="Jobs filled" v={`${Math.round(econ.laborRatio * 100)}%`} warn={econ.laborRatio < 0.9} />
+            <Line k="Stability is heading to" v={`${Math.round(econ.stabilityTarget)}%`} warn={econ.stabilityTarget < 40} />
           </div>
         </section>
       )}
@@ -214,7 +221,7 @@ export function CountryDrawer() {
                   {active ? (
                     <OrderButton order={{ type: 'repealLaw', nationId: player.id, law }} label="Repeal" />
                   ) : (
-                    <OrderButton order={{ type: 'enactLaw', nationId: player.id, law }} label={`Pass · ${LAW_SPECS[law].cost} influence`} tone="btn-primary" />
+                    <OrderButton order={{ type: 'enactLaw', nationId: player.id, law }} label="Pass" cost={`${LAW_SPECS[law].cost} influence`} tone="btn-primary" />
                   )}
                 </div>
                 <p className="text-[13px] text-white/70 mt-1.5">
@@ -229,6 +236,9 @@ export function CountryDrawer() {
     </PanelShell>
   )
 }
+
+/** One list of shortcuts, shown in Settings and in the help window. */
+export const SHORTCUTS = 'Enter: next turn. Esc: close. B briefing, E economy, M military, W wars, D diplomacy, R research, N news, A War Room for the selected country, ? help.'
 
 const KIND_COLOR: Record<LogKind, string> = {
   info: 'text-slate-300',
@@ -293,17 +303,25 @@ export function SettingsPanel() {
         </select>
       </label>
       <label className="flex items-center justify-between text-[15px]">
+        <span>Monthly report after each turn</span>
+        <input type="checkbox" checked={settings.monthlyReport} onChange={(e) => update({ monthlyReport: e.target.checked })} />
+      </label>
+      <label className="flex items-center justify-between text-[15px]">
+        <span>First-steps checklist in the Briefing</span>
+        <input type="checkbox" checked={settings.showGuide} onChange={(e) => update({ showGuide: e.target.checked })} />
+      </label>
+      <label className="flex items-center justify-between text-[15px]">
         <span>Reduce motion</span>
         <input type="checkbox" checked={settings.reducedMotion} onChange={(e) => update({ reducedMotion: e.target.checked })} />
       </label>
       <button className="btn w-full py-2.5 text-[14px]" onClick={() => setHelp(true)}>
-        How to play
+        How the game works
       </button>
       <button className="btn btn-red w-full py-2.5 text-[14px]" onClick={quit}>
         Leave game
       </button>
       <div className="label pt-2">Shortcuts</div>
-      <p className="text-[14px] text-white/70">Enter: next turn. Esc: close. C country, M military, T research, D diplomacy, L news. ?: how to play.</p>
+      <p className="text-[14px] text-white/70">{SHORTCUTS}</p>
     </PanelShell>
   )
 }

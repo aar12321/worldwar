@@ -6,7 +6,7 @@ import { lineMax, regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
 import { createRng } from './rng'
 import { recordBattle } from './warscore'
-import { addLog, atWar, emptyUnits, nationModifiers, newId, pairKey, regionsOf, totalUnits } from './helpers'
+import { addLog, atWar, emptyUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
 import type { Rng } from './rng'
 import type { BattleReport, GameState, Military, Nation, NationId, RegionId, UnitCounts, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -298,6 +298,8 @@ export function resolveAttack(
     lineMax: max,
   }
   s.battles.push(report)
+  if (outcome.winner === 'attacker') reach(attackerNation, 'win')
+  if (captured) reach(attackerNation, 'capture')
   if (captured) transferRegion(s, map, target, nationId)
   recordBattle(s, report, captured && wasCapital)
   if (captured) addOpinion(s, defenderId, nationId, 'Seized our land', -8, 0.2)

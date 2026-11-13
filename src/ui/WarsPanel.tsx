@@ -7,11 +7,10 @@ import { netWarScore } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { usePlayerView } from './hooks'
-import { PanelShell } from './panel'
 import { LineBar } from './WarRoom'
 
 /** Every war you are in (up to three): what it costs, how it is going, and where the front is. */
-export function WarsPanel() {
+export function WarsTab() {
   const view = usePlayerView()
   const openWarRoom = useGame((s) => s.openWarRoom)
   const openDiplomacy = useGame((s) => s.openDiplomacy)
@@ -25,7 +24,8 @@ export function WarsPanel() {
   const bills = new Map(computeEconomy(game, map, player.id).warBills.map((b) => [b.enemy, b.amount]))
 
   return (
-    <PanelShell title="Wars" kicker={`${enemies.length} of ${MAX_WARS} wars. Each costs money every month and tires your people.`} panel="wars">
+    <div className="space-y-4 max-w-3xl">
+      <p className="text-[14px] text-white/70">Each war costs money every month and tires your people. Win battles to push a country's Defense Line to zero and it is yours.</p>
       <div className="inset-card p-3.5 grid grid-cols-3 gap-2 text-center">
         <div>
           <div className="label">War bills</div>
@@ -89,7 +89,7 @@ export function WarsPanel() {
                           line {Math.min(r.line, max).toFixed(1)} / {max.toFixed(1)}
                         </span>
                         <button className="btn btn-red" disabled={!reachable.has(r.id)} onClick={() => openWarRoom(r.id)}>
-                          War Room
+                          Plan an attack
                         </button>
                       </div>
                       <LineBar now={Math.min(r.line, max)} max={max} />
@@ -101,6 +101,6 @@ export function WarsPanel() {
           </div>
         )
       })}
-    </PanelShell>
+    </div>
   )
 }
