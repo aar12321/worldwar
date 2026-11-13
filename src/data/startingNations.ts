@@ -1,5 +1,7 @@
 import { PLAYER_COLOR, mapColor } from './mapColors'
 import { OIL_DEPOSITS, STEEL_DEPOSITS } from './deposits'
+import { SECTOR_IDS, SECTORS } from './business'
+import { sectorCap } from '../engine/business'
 import { CORPORATE_TAX, EVEN_BUDGET, GOVERNMENTS } from './government'
 import { UNIT_SPECS, emptyTraining } from './unitTypes'
 import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
@@ -7,7 +9,7 @@ import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
-import type { Difficulty, GameSettings, GovernmentType, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
+import type { Difficulty, GameSettings, GovernmentType, SectorId, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
 
 const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dmitri', 'Saoirse', 'Tariq', 'Mei', 'Lucien', 'Zofia', 'Kwame', 'Elena', 'Hugo', 'Anika', 'Mateo', 'Yara', 'Bogdan', 'Ines']
 const GENERAL_LAST = ['Varga', 'Okafor', 'Takeda', 'Brandt', 'Montoya', 'Haddad', 'Volkov', 'Byrne', 'Rahman', 'Lin', 'Moreau', 'Nowak', 'Mensah', 'Petrova', 'Lindqvist', 'Sato', 'Reyes', 'Kader', 'Horvat', 'Silva']
@@ -39,6 +41,14 @@ function pickPersonality(aggression: number, rng: Rng): Personality {
   return roll < 0.3 ? 'trader' : roll < 0.55 ? 'opportunist' : roll < 0.8 ? 'honorable' : roll < 0.9 ? 'turtle' : 'expansionist'
 }
 
+/** Early business: bigger and more varied in richer countries. */
+function startingSectors(workforce: number, dev: number): Record<SectorId, number> {
+  const cap = sectorCap(workforce)
+  const out = {} as Record<SectorId, number>
+  for (const id of SECTOR_IDS) out[id] = Math.round(cap * dev * SECTORS[id].startShare * 1.2 * 100) / 100
+  return out
+}
+
 export function createInitialState(map: WorldMap, opts: NewGameOptions): GameState {
   const rng = createRng(opts.seed, 9999)
   // The old early-surprise roll stays so a seed still builds the same generals and personalities.
@@ -58,6 +68,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     alliances: [],
     proposals: [],
     deals: [],
+    investments: [],
     warScore: {},
     warStarted: {},
     opinions: {},
@@ -144,6 +155,11 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       generals,
       government,
       budget: { ...EVEN_BUDGET },
+      sectors: startingSectors(w, dev),
+      subsidies: [],
+      debt: 0,
+      redMonths: 0,
+      defaultedUntil: 0,
       corporateTax: CORPORATE_TAX.default,
       nextElection: GOVERNMENTS[government].election > 0 ? 12 + rng.int(0, 24) : 0,
       lastReform: 0,

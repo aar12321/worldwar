@@ -17,6 +17,7 @@ export type LawId =
   | 'press_control'
   | 'austerity'
   | 'research_grants'
+export type SectorId = 'farming' | 'energy' | 'manufacturing' | 'arms' | 'technology' | 'finance'
 export type GovernmentType = 'democracy' | 'monarchy' | 'junta' | 'one_party'
 /** Where tax money goes. Each share is 0 to 1 and the four add up to 1. */
 export type BudgetKey = 'military' | 'education' | 'health' | 'infrastructure'
@@ -147,6 +148,16 @@ export interface Nation {
   nextElection: number
   /** Turn the form of government last changed. */
   lastReform: number
+  /** Size of each private business sector. */
+  sectors: Record<SectorId, number>
+  /** Sectors the state subsidizes: they cost money and grow faster. */
+  subsidies: SectorId[]
+  /** Bonds the state owes. Interest is paid every month. */
+  debt: number
+  /** Months in a row the treasury has been in the red with debt outstanding. */
+  redMonths: number
+  /** Turn until which no one will lend to this nation after a default. */
+  defaultedUntil: number
   techs: string[]
   laws: LawId[]
   generals: General[]
@@ -203,6 +214,15 @@ export type Proposal = ProposalDraft & {
   created: number
   /** Last turn on which the proposal can still be answered. */
   expires: number
+}
+
+/** Money one nation has put into another's business sector. It pays dividends until war or collapse. */
+export interface Investment {
+  id: string
+  investor: NationId
+  target: NationId
+  sector: SectorId
+  amount: number
 }
 
 export interface Deal {
@@ -264,6 +284,11 @@ export interface PendingEvent {
 export type Order =
   | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number; corporateTax?: number; budget?: Budget }
   | { type: 'setGovernment'; nationId: NationId; government: GovernmentType }
+  | { type: 'fundSector'; nationId: NationId; sector: SectorId; amount: number }
+  | { type: 'setSubsidies'; nationId: NationId; sectors: SectorId[] }
+  | { type: 'issueBonds'; nationId: NationId; amount: number }
+  | { type: 'repayDebt'; nationId: NationId; amount: number }
+  | { type: 'invest'; nationId: NationId; target: NationId; sector: SectorId; amount: number }
   | { type: 'build'; nationId: NationId; regionId: RegionId; building: BuildingType }
   | { type: 'queueTrain'; nationId: NationId; unit: UnitType }
   | { type: 'cancelTrain'; nationId: NationId; jobId: string }
@@ -355,6 +380,7 @@ export interface GameState {
   /** Proposals awaiting an answer from the player. */
   proposals: Proposal[]
   deals: Deal[]
+  investments: Investment[]
   /** "a>b" -> war score a has earned against b (0..100). */
   warScore: Record<string, number>
   /** Sorted "a|b" -> turn the war started. */

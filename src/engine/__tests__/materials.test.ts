@@ -25,6 +25,7 @@ afterEach(() => {
 describe('materials', () => {
   it('oil comes from deposits and steel from deposits plus factories', () => {
     const s = base()
+    s.nations[P].sectors.energy = 0
     const before = computeEconomy(s, map, P)
     expect(before.oilProduction).toBe(0)
     OIL_DEPOSITS.r0 = 5

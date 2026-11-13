@@ -5,6 +5,7 @@ import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { WAR } from '../data/war'
 import { addLog, clamp, enemiesOf, nationModifiers, pairKey } from './helpers'
 import type { Rng } from './rng'
+import { checkDefault, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
 import { policyEffects } from './policy'
 import { marketPrices, type MarketPrices } from './trade'
 import type { Buildings, BuildingType, GameState, MapRegion, NationId, RegionState, TradeResource, WorldMap } from './types'
@@ -32,6 +33,13 @@ export const ECON = {
   desertionPerMonth: 0.05,
   maxDesertion: 0.2,
   embargoTradeMult: 0.4,
+}
+
+/** The whole nation's workforce, counting conquered land at the share that has settled. */
+export function nationWorkforce(s: GameState, map: WorldMap, nationId: NationId): number {
+  let total = 0
+  for (const r of Object.values(s.regions)) if (r.owner === nationId) total += regionWorkforce(r, map.regions[r.id]) * integrationFactor(r)
+  return total
 }
 
 export function regionWorkforce(region: RegionState, mapRegion: MapRegion): number {
@@ -70,6 +78,16 @@ export interface EconomyReport {
   tradeIncome: number
   upkeep: number
   netCapital: number
+  /** What private businesses produce each month. */
+  business: ReturnType<typeof sectorYield>
+  /** Tax on business profit. */
+  corporateIncome: number
+  /** Dividends from investments abroad. */
+  dividends: number
+  /** Interest on bonds. */
+  interest: number
+  /** Cost of the subsidies the state pays. */
+  subsidies: number
   /** Income gained or spent each month on laws, such as healthcare or austerity. */
   policyMoney: number
   warBills: WarBill[]
@@ -133,6 +151,10 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     goodsProduction += (w * MATERIALS.goodsPerWorkforce + r.buildings.factory * MATERIALS.goodsPerFactory) * eff
     portLevels += r.buildings.port * eff
   }
+  const sy = sectorYield(n)
+  oilProduction += sy.oil
+  steelProduction += sy.steel
+  goodsProduction += sy.goods
   const civilianWorkforce = workforce * (1 - n.draftRate)
   const jobs = (buildings.factory + buildings.farm + buildings.university) * ECON.jobsPerBuilding * (1 - mods.jobsReduction)
   const laborRatio = jobs > 0 ? Math.min(1, civilianWorkforce / jobs) : 1
@@ -147,7 +169,14 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const factoryIncome =
     activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + pol.factory) * outputMult * (1 + botBonus)
   const tradeIncome = buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1)
-  const policyMoney = pol.money * (taxIncome + factoryIncome + tradeIncome)
+  const biz = sy
+  const corporateIncome = (n.corporateTax ?? 0) * biz.profit * outputMult + biz.money
+  const dividends = dividendsFor(s, nationId)
+  const subsidies = subsidyBill(n)
+  const gross = taxIncome + factoryIncome + tradeIncome + corporateIncome
+  const credit = creditReport(s, n, gross, enemiesOf(s, nationId).length > 0)
+  const interest = n.debt * credit.rate
+  const policyMoney = pol.money * gross
   const land = { capital: 0, food: 0, pp: buildings.civic * 0.6, tp: buildings.civic * 0.3 }
 
   let upkeep = 0
@@ -173,12 +202,12 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   upkeep += totalBuildings * ECON.buildingUpkeep
   upkeep *= Math.max(0.3, 1 + pol.upkeep)
 
-  const foodProduction = baseFood + owned.length * ECON.subsistencePerRegion + workingFarms * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food
+  const foodProduction = sy.food + baseFood + owned.length * ECON.subsistencePerRegion + workingFarms * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food
   const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce * (1 + pol.foodUse) + armyFood
 
   const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn + pol.influence + land.pp
   const tpGain =
-    0.5 + workforce * 0.04 + workingUniversities * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput + pol.research) * outputMult + land.tp
+    0.5 + workforce * 0.04 + sy.research * outputMult + workingUniversities * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput + pol.research) * outputMult + land.tp
 
   const highTax = Math.max(0, n.taxRate - 0.2) * 150 * Math.max(0.2, 1 + pol.taxSensitivity)
   const lowTax = Math.max(0, 0.2 - n.taxRate) * 50
@@ -208,7 +237,12 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     factoryIncome,
     tradeIncome,
     upkeep,
-    netCapital: taxIncome + factoryIncome + tradeIncome + land.capital - upkeep - warBillTotal + policyMoney,
+    netCapital: taxIncome + factoryIncome + tradeIncome + corporateIncome + dividends + land.capital - upkeep - warBillTotal - interest - subsidies + policyMoney,
+    business: biz,
+    corporateIncome,
+    dividends,
+    interest,
+    subsidies,
     policyMoney,
     warBills,
     warBillTotal,
@@ -242,6 +276,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
 
   r.capital += e.netCapital
   n.inDebt = r.capital < 0
+  checkDefault(s, n)
   n.debtTurns = n.inDebt ? (n.debtTurns ?? 0) + 1 : 0
   if (n.debtTurns >= ECON.desertionAfter) {
     const loss = Math.min(ECON.maxDesertion, ECON.desertionPerMonth * (n.debtTurns - ECON.desertionAfter + 1))
@@ -259,6 +294,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
     r.food = Math.min(r.food, e.workforce * ECON.foodCapPerWorkforce)
   }
   // Materials: steel only piles up, oil and goods can run out.
+  growSectors(n, e.workforce, policyEffects(n), enemiesOf(s, nationId).length > 0)
   r.steel += e.steelProduction
   r.oil += e.netOil
   r.goods += e.netGoods

@@ -1,10 +1,12 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
+import { BUSINESS, INVEST, SECTORS, SECTOR_IDS, TREASURY } from '../data/business'
 import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
 import { MAX_WARS, STANCES, WAR } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { validateProposal } from './diplomacy'
-import { buildingCap, computeEconomy, regionWorkforce } from './economy'
+import { creditReport, investedIn, sectorCap, sectorYield } from './business'
+import { buildingCap, computeEconomy, nationWorkforce, regionWorkforce } from './economy'
 import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, totalUnits } from './helpers'
 import { trainingSlots } from './training'
 import { MARKET_GOODS, marketValue, tradeRoom } from './trade'
@@ -42,8 +44,13 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'setGovernment':
       c.pp = REFORM.cost
       break
+    case 'fundSector':
+    case 'repayDebt':
+    case 'invest':
+      c.capital = o.amount
+      break
     case 'queueTrain':
-      c.capital = UNIT_SPECS[o.unit].capitalCost
+      c.capital = Math.round(UNIT_SPECS[o.unit].capitalCost * (1 - (s.nations[o.nationId] ? sectorYield(s.nations[o.nationId]).armsDiscount : 0)))
       c.manpower = UNIT_SPECS[o.unit].manpowerCost
       c.steel = UNIT_SPECS[o.unit].steel
       break
@@ -117,6 +124,12 @@ export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Or
   return null
 }
 
+/** Gross monthly income, which lenders judge a nation by. */
+function economyGross(s: GameState, map: WorldMap, nationId: string): number {
+  const e = computeEconomy(s, map, nationId)
+  return e.taxIncome + e.factoryIncome + e.tradeIncome + e.corporateIncome
+}
+
 function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
   switch (o.type) {
@@ -130,6 +143,36 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
         if (shares.some((v) => !Number.isFinite(v) || v < BUDGET_LIMITS.min - 1e-9 || v > BUDGET_LIMITS.max + 1e-9)) return `Each part of the budget must be between ${Math.round(BUDGET_LIMITS.min * 100)}% and ${Math.round(BUDGET_LIMITS.max * 100)}%`
         if (Math.abs(shares.reduce((a, b) => a + b, 0) - 1) > 0.011) return 'The budget must add up to 100%'
       }
+      return null
+    }
+    case 'fundSector': {
+      const at = n.sectors[o.sector] ?? 0
+      if (!Number.isFinite(o.amount) || o.amount < BUSINESS.minFunding) return `A grant must be at least ${BUSINESS.minFunding} money`
+      const cap = sectorCap(nationWorkforce(s, map, o.nationId)) * 1.5
+      if (at >= cap - 0.05) return `${SECTORS[o.sector].name} cannot grow any bigger in your country`
+      return null
+    }
+    case 'setSubsidies':
+      return o.sectors.every((x) => SECTOR_IDS.includes(x)) ? null : 'Unknown sector'
+    case 'issueBonds': {
+      if (!Number.isFinite(o.amount) || o.amount < TREASURY.min) return `Bonds start at ${TREASURY.min} money`
+      const gross = economyGross(s, map, o.nationId)
+      const credit = creditReport(s, n, gross, enemiesOf(s, o.nationId).length > 0)
+      if (credit.locked) return 'Nobody will lend to you after your default'
+      if (o.amount > credit.room + 1e-6) return `Lenders will give you at most ${Math.floor(credit.room)} more (rating ${credit.rating})`
+      return null
+    }
+    case 'repayDebt':
+      if (n.debt <= 0) return 'You owe nothing'
+      if (!Number.isFinite(o.amount) || o.amount <= 0) return 'Pick an amount'
+      if (o.amount > n.debt + 1e-6) return `You only owe ${Math.ceil(n.debt)}`
+      return null
+    case 'invest': {
+      const t = s.nations[o.target]
+      if (!t?.alive || o.target === o.nationId) return 'Choose another nation'
+      if (atWar(s, o.nationId, o.target)) return 'You cannot invest in a nation you are at war with'
+      if (!Number.isFinite(o.amount) || o.amount < INVEST.min) return `Investments start at ${INVEST.min} money`
+      if (investedIn(s, o.target, o.sector) + o.amount > Math.max(1, t.sectors[o.sector] ?? 0) * INVEST.maxPerSize) return `${t.name}'s ${SECTORS[o.sector].name.toLowerCase()} cannot take that much outside money`
       return null
     }
     case 'setGovernment': {

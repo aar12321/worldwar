@@ -1,8 +1,11 @@
 import { TECH_BY_ID } from '../data/techTree'
+import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
+import { addOpinion } from '../ai/opinion'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
 import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, propose, respond } from './diplomacy'
-import { applyEconomy } from './economy'
+import { addToSector, cleanInvestments, makeInvestment } from './business'
+import { applyEconomy, nationWorkforce } from './economy'
 import { runSpyMission } from './espionage'
 import { EVENT_GAP_TURNS, scheduleEvent } from './events'
 import { addLog, reach, regionsOf } from './helpers'
@@ -22,6 +25,16 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
   switch (o.type) {
     case 'setPolicy':
       return `Set taxes ${Math.round(o.taxRate * 100)}% / draft ${Math.round(o.draftRate * 100)}%${o.corporateTax !== undefined ? ` / business tax ${Math.round(o.corporateTax * 100)}%` : ''}${o.budget ? ' / new budget' : ''}`
+    case 'fundSector':
+      return `Fund ${SECTORS[o.sector].name.toLowerCase()} with ${Math.round(o.amount)}`
+    case 'setSubsidies':
+      return 'Change the subsidies'
+    case 'issueBonds':
+      return `Issue ${Math.round(o.amount)} in bonds`
+    case 'repayDebt':
+      return `Repay ${Math.round(o.amount)} of debt`
+    case 'invest':
+      return `Invest ${Math.round(o.amount)} in ${nation(o.target)}'s ${SECTORS[o.sector].name.toLowerCase()}`
     case 'setGovernment':
       return `Change the government to ${GOVERNMENTS[o.government].name}`
     case 'build':
@@ -83,7 +96,8 @@ const PHASES: Order['type'][][] = [
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'propose'],
   ['cancelTrain'],
-  ['setAutoBuy', 'marketSell', 'marketBuy'],
+  ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy'],
+  ['issueBonds', 'repayDebt', 'fundSector', 'invest'],
   ['research', 'build', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['spy'],
@@ -137,6 +151,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
     .map((n) => n.id)
     .sort()
   for (const id of alive) if (regionsOf(s, id).length === 0) killNation(s, id, null)
+  cleanInvestments(s)
   const prices = marketPrices(s)
   for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng, prices)
   applyDeals(s)
@@ -195,6 +210,27 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       if (o.corporateTax !== undefined) n.corporateTax = o.corporateTax
       if (o.budget) n.budget = { ...o.budget }
       break
+    case 'fundSector':
+      addToSector(n, o.sector, o.amount, nationWorkforce(s, map, o.nationId))
+      break
+    case 'setSubsidies':
+      n.subsidies = [...new Set(o.sectors)]
+      break
+    case 'issueBonds':
+      n.resources.capital += o.amount
+      n.debt += o.amount
+      break
+    case 'repayDebt':
+      n.debt = Math.max(0, n.debt - o.amount)
+      break
+    case 'invest': {
+      const target = s.nations[o.target]
+      addToSector(target, o.sector, o.amount, nationWorkforce(s, map, o.target), INVEST.efficiency)
+      makeInvestment(s, o.nationId, o.target, o.sector, o.amount)
+      addOpinion(s, o.target, o.nationId, 'Invested in our businesses', 12, 0.2)
+      if (n.isPlayer) addLog(s, 'economy', `You invested ${Math.round(o.amount)} in ${target.name}'s ${SECTORS[o.sector].name.toLowerCase()}. It pays dividends while you stay at peace.`, [o.nationId, o.target])
+      break
+    }
     case 'setGovernment':
       n.government = o.government
       n.stability = Math.max(0, n.stability - REFORM.turmoil)
