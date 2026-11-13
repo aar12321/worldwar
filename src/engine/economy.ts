@@ -5,6 +5,7 @@ import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { WAR } from '../data/war'
 import { addLog, clamp, enemiesOf, nationModifiers, pairKey } from './helpers'
 import type { Rng } from './rng'
+import { policyEffects } from './policy'
 import { marketPrices, type MarketPrices } from './trade'
 import type { Buildings, BuildingType, GameState, MapRegion, NationId, RegionState, TradeResource, WorldMap } from './types'
 import { BUILDING_TYPES, UNIT_TYPES } from './types'
@@ -69,6 +70,8 @@ export interface EconomyReport {
   tradeIncome: number
   upkeep: number
   netCapital: number
+  /** Income gained or spent each month on laws, such as healthcare or austerity. */
+  policyMoney: number
   warBills: WarBill[]
   warBillTotal: number
   /** Conquered countries not yet fully integrated. */
@@ -134,17 +137,17 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const jobs = (buildings.factory + buildings.farm + buildings.university) * ECON.jobsPerBuilding * (1 - mods.jobsReduction)
   const laborRatio = jobs > 0 ? Math.min(1, civilianWorkforce / jobs) : 1
   const stabilityFactor = 0.6 + (0.4 * n.stability) / 100
-  const martial = n.laws.includes('martial_law')
-  const warEconomy = n.laws.includes('war_economy')
-  const outputMult = stabilityFactor * (1 + mods.allOutput) * (martial ? 0.85 : 1)
+  const pol = policyEffects(n)
+  const outputMult = stabilityFactor * (1 + mods.allOutput + pol.output)
   const atWarCount = enemiesOf(s, nationId).length
   const botBonus = n.isPlayer ? 0 : difficultyOf(s.settings.difficulty).botIncomeBonus
   const embargoed = (n.embargoedUntil ?? 0) >= s.turn
 
   const taxIncome = n.taxRate * civilianWorkforce * ECON.taxPerWorkforce * outputMult * (1 + botBonus)
   const factoryIncome =
-    activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + (warEconomy ? 0.25 : 0)) * outputMult * (1 + botBonus)
+    activeFactories * ECON.factoryOutput * laborRatio * (1 + mods.factoryOutput + pol.factory) * outputMult * (1 + botBonus)
   const tradeIncome = buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1)
+  const policyMoney = pol.money * (taxIncome + factoryIncome + tradeIncome)
   const land = { capital: 0, food: 0, pp: buildings.civic * 0.6, tp: buildings.civic * 0.3 }
 
   let upkeep = 0
@@ -157,7 +160,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     oilUse += n.military.units[k] * UNIT_SPECS[k].oil
     divisions += n.military.units[k]
   }
-  const goodsUse = workforce * MATERIALS.goodsUsePerWorkforce
+  const goodsUse = workforce * MATERIALS.goodsUsePerWorkforce * (1 + pol.goodsUse)
   const warBills: WarBill[] = []
   for (const enemy of enemiesOf(s, nationId)) {
     let enemyWorkforce = 0
@@ -168,15 +171,16 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const warBillTotal = warBills.reduce((sum, b) => sum + b.amount, 0)
   const totalBuildings = BUILDING_TYPES.reduce((sum, b) => sum + buildings[b], 0)
   upkeep += totalBuildings * ECON.buildingUpkeep
+  upkeep *= Math.max(0.3, 1 + pol.upkeep)
 
   const foodProduction = baseFood + owned.length * ECON.subsistencePerRegion + workingFarms * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food
-  const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce + armyFood
+  const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce * (1 + pol.foodUse) + armyFood
 
-  const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn + land.pp
+  const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn + pol.influence + land.pp
   const tpGain =
-    0.5 + workforce * 0.04 + workingUniversities * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput) * outputMult + land.tp
+    0.5 + workforce * 0.04 + workingUniversities * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput + pol.research) * outputMult + land.tp
 
-  const highTax = Math.max(0, n.taxRate - 0.2) * 150
+  const highTax = Math.max(0, n.taxRate - 0.2) * 150 * Math.max(0.2, 1 + pol.taxSensitivity)
   const lowTax = Math.max(0, 0.2 - n.taxRate) * 50
   const stabilityTarget = clamp(
     ECON.stabilityBase -
@@ -185,9 +189,8 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
       (n.foodShortage ? 25 : 0) -
       (n.goodsShortage ? MATERIALS.noGoodsStability : 0) -
       (n.inDebt ? 15 : 0) -
-      n.warWeariness * 0.5 +
-      (martial ? 15 : 0) -
-      (warEconomy ? 10 : 0) +
+      n.warWeariness * 0.5 * Math.max(0.2, 1 + pol.weariness) +
+      pol.stability +
       mods.stability -
       rebelRegions * 3 -
       Math.max(0, occupied - WAR.overextendFree) * WAR.overextendPenalty,
@@ -205,7 +208,8 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     factoryIncome,
     tradeIncome,
     upkeep,
-    netCapital: taxIncome + factoryIncome + tradeIncome + land.capital - upkeep - warBillTotal,
+    netCapital: taxIncome + factoryIncome + tradeIncome + land.capital - upkeep - warBillTotal + policyMoney,
+    policyMoney,
     warBills,
     warBillTotal,
     occupied,
@@ -219,7 +223,7 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
     goodsProduction,
     goodsUse,
     netGoods: goodsProduction - goodsUse,
-    tradeCapacity: MATERIALS.tradeBase + portLevels * MATERIALS.tradePerPort,
+    tradeCapacity: (MATERIALS.tradeBase + portLevels * MATERIALS.tradePerPort) * Math.max(0.3, 1 + pol.trade),
     ppGain,
     tpGain,
     militaryRegen: workforce * n.draftRate * ECON.militaryRegenPerWorkforce,

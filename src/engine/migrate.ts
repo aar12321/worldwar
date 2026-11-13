@@ -15,6 +15,11 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
       n.military.drill[k] ??= 0
       n.military.weapons[k] ??= 0
     }
+    n.government ??= 'monarchy'
+    n.budget ??= { military: 0.25, education: 0.25, health: 0.25, infrastructure: 0.25 }
+    n.corporateTax ??= 0.15
+    n.nextElection ??= 0
+    n.lastReform ??= 0
     n.resources.oil ??= 6
     n.resources.steel ??= 6
     n.resources.goods ??= 10

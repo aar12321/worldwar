@@ -1,12 +1,13 @@
 import { PLAYER_COLOR, mapColor } from './mapColors'
 import { OIL_DEPOSITS, STEEL_DEPOSITS } from './deposits'
+import { CORPORATE_TAX, EVEN_BUDGET, GOVERNMENTS } from './government'
 import { UNIT_SPECS, emptyTraining } from './unitTypes'
 import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
-import type { Difficulty, GameSettings, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
+import type { Difficulty, GameSettings, GovernmentType, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
 
 const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dmitri', 'Saoirse', 'Tariq', 'Mei', 'Lucien', 'Zofia', 'Kwame', 'Elena', 'Hugo', 'Anika', 'Mateo', 'Yara', 'Bogdan', 'Ines']
 const GENERAL_LAST = ['Varga', 'Okafor', 'Takeda', 'Brandt', 'Montoya', 'Haddad', 'Volkov', 'Byrne', 'Rahman', 'Lin', 'Moreau', 'Nowak', 'Mensah', 'Petrova', 'Lindqvist', 'Sato', 'Reyes', 'Kader', 'Horvat', 'Silva']
@@ -118,6 +119,9 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       })
     }
 
+    // Rich countries are mostly democracies; the rest are a mix.
+    const govRoll = rng.next()
+    const government: GovernmentType = dev >= 0.7 ? (govRoll < 0.75 ? 'democracy' : govRoll < 0.88 ? 'monarchy' : 'one_party') : dev >= 0.4 ? (govRoll < 0.4 ? 'democracy' : govRoll < 0.65 ? 'monarchy' : govRoll < 0.85 ? 'one_party' : 'junta') : govRoll < 0.2 ? 'democracy' : govRoll < 0.5 ? 'monarchy' : govRoll < 0.7 ? 'one_party' : 'junta'
     const isPlayer = id === opts.playerRegionId
     const aggression = isPlayer ? 0 : rng.range(0.15, 0.9)
     const personality = isPlayer ? 'honorable' : pickPersonality(aggression, rng)
@@ -138,6 +142,11 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       techs,
       laws: [],
       generals,
+      government,
+      budget: { ...EVEN_BUDGET },
+      corporateTax: CORPORATE_TAX.default,
+      nextElection: GOVERNMENTS[government].election > 0 ? 12 + rng.int(0, 24) : 0,
+      lastReform: 0,
       foodShortage: false,
       oilShortage: false,
       goodsShortage: false,

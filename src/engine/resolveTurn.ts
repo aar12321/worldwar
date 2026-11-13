@@ -1,4 +1,5 @@
 import { TECH_BY_ID } from '../data/techTree'
+import { GOVERNMENTS, REFORM } from '../data/government'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
 import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, propose, respond } from './diplomacy'
 import { applyEconomy } from './economy'
@@ -7,6 +8,7 @@ import { EVENT_GAP_TURNS, scheduleEvent } from './events'
 import { addLog, reach, regionsOf } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
+import { runPolitics } from './politics'
 import { research } from './tech'
 import { marketPrices, marketValue } from './trade'
 import { tickTraining, trainMonths } from './training'
@@ -19,7 +21,9 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
   const nation = (id: string) => s.nations[id]?.name ?? id
   switch (o.type) {
     case 'setPolicy':
-      return `Set taxes ${Math.round(o.taxRate * 100)}% / draft ${Math.round(o.draftRate * 100)}%`
+      return `Set taxes ${Math.round(o.taxRate * 100)}% / draft ${Math.round(o.draftRate * 100)}%${o.corporateTax !== undefined ? ` / business tax ${Math.round(o.corporateTax * 100)}%` : ''}${o.budget ? ' / new budget' : ''}`
+    case 'setGovernment':
+      return `Change the government to ${GOVERNMENTS[o.government].name}`
     case 'build':
       return `Upgrade ${BUILDING_SPECS[o.building].name} in ${region(o.regionId)}`
     case 'queueTrain':
@@ -75,7 +79,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 
 const PHASES: Order['type'][][] = [
   ['respond'],
-  ['setPolicy', 'enactLaw', 'repealLaw'],
+  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw'],
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'propose'],
   ['cancelTrain'],
@@ -136,6 +140,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   const prices = marketPrices(s)
   for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng, prices)
   applyDeals(s)
+  runPolitics(s, rng)
 
   s.turn++
   expireDiplomacy(s)
@@ -187,6 +192,15 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'setPolicy':
       n.taxRate = o.taxRate
       n.draftRate = o.draftRate
+      if (o.corporateTax !== undefined) n.corporateTax = o.corporateTax
+      if (o.budget) n.budget = { ...o.budget }
+      break
+    case 'setGovernment':
+      n.government = o.government
+      n.stability = Math.max(0, n.stability - REFORM.turmoil)
+      n.lastReform = s.turn
+      n.nextElection = GOVERNMENTS[o.government].election > 0 ? s.turn + GOVERNMENTS[o.government].election : 0
+      addLog(s, 'event', `${n.name} is now a ${GOVERNMENTS[o.government].name.toLowerCase()}.`, [o.nationId])
       break
     case 'enactLaw':
       n.laws.push(o.law)

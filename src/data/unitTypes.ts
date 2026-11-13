@@ -1,3 +1,4 @@
+import type { PolicyEffects } from './government'
 import type { BuildingType, LawId, ProposalKind, TradeResource, UnitCounts, UnitType } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 
@@ -74,12 +75,20 @@ export interface LawSpec {
   name: string
   cost: number
   description: string
+  effects: Partial<PolicyEffects>
 }
 
 export const LAW_SPECS: Record<LawId, LawSpec> = {
-  martial_law: { name: 'Martial Law', cost: 20, description: 'Stability +15, but all economic output -15%.' },
-  war_economy: { name: 'War Economy', cost: 25, description: 'Factory output +25%, stability -10.' },
-  conscription_act: { name: 'Conscription Act', cost: 20, description: 'Raises the maximum draft rate from 20% to 35%.' },
+  martial_law: { name: 'Martial Law', cost: 20, description: 'Stability +15, but all economic output -15%.', effects: { stability: 15, output: -0.15 } },
+  war_economy: { name: 'War Economy', cost: 25, description: 'Factory output +25%, stability -10.', effects: { factory: 0.25, stability: -10 } },
+  conscription_act: { name: 'Conscription Act', cost: 20, description: 'Raises the maximum draft rate from 20% to 35%.', effects: {} },
+  free_trade: { name: 'Free Trade', cost: 25, description: 'The market keeps 3% instead of 8%, ports move 25% more, and businesses grow faster. Stability -2.', effects: { trade: 0.25, growth: 0.15, stability: -2 } },
+  rationing: { name: 'Rationing', cost: 15, description: 'People eat 15% less and use 20% fewer goods. Stability -6.', effects: { foodUse: -0.15, goodsUse: -0.2, stability: -6 } },
+  universal_healthcare: { name: 'Universal Healthcare', cost: 30, description: 'Stability +8. Costs 6% of your income.', effects: { stability: 8, money: -0.06 } },
+  industrial_policy: { name: 'Industrial Policy', cost: 25, description: 'Factory output +12% and businesses grow faster. Costs 4% of your income.', effects: { factory: 0.12, growth: 0.1, money: -0.04 } },
+  press_control: { name: 'Press Control', cost: 20, description: 'Influence +0.8 a month and stability +4, but research -8%.', effects: { influence: 0.8, stability: 4, research: -0.08 } },
+  austerity: { name: 'Austerity', cost: 20, description: 'Upkeep -12% and 4% more income. Stability -8.', effects: { upkeep: -0.12, money: 0.04, stability: -8 } },
+  research_grants: { name: 'Research Grants', cost: 25, description: 'Research +20%. Costs 5% of your income.', effects: { research: 0.2, money: -0.05 } },
 }
 
 export const COSTS = {

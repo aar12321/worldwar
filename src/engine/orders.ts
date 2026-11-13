@@ -1,5 +1,6 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
+import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
 import { MAX_WARS, STANCES, WAR } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { validateProposal } from './diplomacy'
@@ -36,7 +37,10 @@ export function orderCost(s: GameState, o: Order): OrderCost {
   const c: OrderCost = { capital: 0, pp: 0, tp: 0, manpower: 0, steel: 0 }
   switch (o.type) {
     case 'build':
-      c.capital = buildingCost(o.building, s.regions[o.regionId]?.buildings[o.building] ?? 0)
+      c.capital = Math.round(buildingCost(o.building, s.regions[o.regionId]?.buildings[o.building] ?? 0) * (1 + buildDiscount(s.nations[o.nationId]?.budget ?? EVEN_BUDGET)))
+      break
+    case 'setGovernment':
+      c.pp = REFORM.cost
       break
     case 'queueTrain':
       c.capital = UNIT_SPECS[o.unit].capitalCost
@@ -120,6 +124,17 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const maxDraft = n.laws.includes('conscription_act') ? DRAFT_LIMITS.maxWithConscription : DRAFT_LIMITS.max
       if (o.taxRate < TAX_LIMITS.min || o.taxRate > TAX_LIMITS.max) return 'Tax rate out of range'
       if (o.draftRate < DRAFT_LIMITS.min || o.draftRate > maxDraft + 1e-9) return 'Draft rate out of range'
+      if (o.corporateTax !== undefined && (!Number.isFinite(o.corporateTax) || o.corporateTax < CORPORATE_TAX.min || o.corporateTax > CORPORATE_TAX.max + 1e-9)) return 'Business tax out of range'
+      if (o.budget) {
+        const shares = BUDGET_KEYS.map((k) => o.budget![k])
+        if (shares.some((v) => !Number.isFinite(v) || v < BUDGET_LIMITS.min - 1e-9 || v > BUDGET_LIMITS.max + 1e-9)) return `Each part of the budget must be between ${Math.round(BUDGET_LIMITS.min * 100)}% and ${Math.round(BUDGET_LIMITS.max * 100)}%`
+        if (Math.abs(shares.reduce((a, b) => a + b, 0) - 1) > 0.011) return 'The budget must add up to 100%'
+      }
+      return null
+    }
+    case 'setGovernment': {
+      if (n.government === o.government) return 'You already have that government'
+      if (s.turn - n.lastReform < REFORM.cooldown && n.lastReform > 0) return `The government can change again in ${REFORM.cooldown - (s.turn - n.lastReform)} months`
       return null
     }
     case 'build': {

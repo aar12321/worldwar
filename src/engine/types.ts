@@ -6,7 +6,21 @@ export type NationId = string
 export type UnitType = 'infantry' | 'armor' | 'artillery' | 'fighter' | 'air' | 'naval'
 export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic'
 export type TechBranch = 'land' | 'air' | 'naval' | 'infra'
-export type LawId = 'martial_law' | 'war_economy' | 'conscription_act'
+export type LawId =
+  | 'martial_law'
+  | 'war_economy'
+  | 'conscription_act'
+  | 'free_trade'
+  | 'rationing'
+  | 'universal_healthcare'
+  | 'industrial_policy'
+  | 'press_control'
+  | 'austerity'
+  | 'research_grants'
+export type GovernmentType = 'democracy' | 'monarchy' | 'junta' | 'one_party'
+/** Where tax money goes. Each share is 0 to 1 and the four add up to 1. */
+export type BudgetKey = 'military' | 'education' | 'health' | 'infrastructure'
+export type Budget = Record<BudgetKey, number>
 export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marshal' | 'stalwart'
 export type SpyMission = 'sabotage'
 export type Difficulty = 'easy' | 'normal' | 'hard'
@@ -125,6 +139,14 @@ export interface Nation {
   draftRate: number
   stability: number
   warWeariness: number
+  government: GovernmentType
+  budget: Budget
+  /** Tax on private businesses, 0 to 0.4. */
+  corporateTax: number
+  /** Turn of the next election, or 0 when the government holds none. */
+  nextElection: number
+  /** Turn the form of government last changed. */
+  lastReform: number
   techs: string[]
   laws: LawId[]
   generals: General[]
@@ -240,7 +262,8 @@ export interface PendingEvent {
 }
 
 export type Order =
-  | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number }
+  | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number; corporateTax?: number; budget?: Budget }
+  | { type: 'setGovernment'; nationId: NationId; government: GovernmentType }
   | { type: 'build'; nationId: NationId; regionId: RegionId; building: BuildingType }
   | { type: 'queueTrain'; nationId: NationId; unit: UnitType }
   | { type: 'cancelTrain'; nationId: NationId; jobId: string }
