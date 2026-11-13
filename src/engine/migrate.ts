@@ -57,6 +57,9 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   game.cases ??= []
   game.intel ??= {}
   game.stocks ??= newStocks(map)
+  // Prices from before shares were made affordable are scaled down to the new range.
+  for (const [id, p] of Object.entries(game.stocks.price)) if (p > 100) game.stocks.price[id] = Math.max(0.2, (p * 5) / 100)
+  for (const id of Object.keys(game.stocks.last)) if (game.stocks.last[id] > 100) game.stocks.last[id] = game.stocks.price[id] ?? 5
   game.crises ??= []
   game.sanctions ??= []
   game.guarantees ??= []

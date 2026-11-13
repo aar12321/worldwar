@@ -9,6 +9,6 @@ export function research(s: GameState, nationId: NationId, techId: string): bool
   if (n.resources.tp < t.cost) return false
   n.resources.tp -= t.cost
   n.techs.push(techId)
-  if (n.isPlayer || t.tier >= 5) addLog(s, 'tech', `${n.name} has developed ${t.name}.`, [nationId])
+  if (n.isPlayer || t.tier >= 5) addLog(s, 'tech', `${n.name} has developed ${t.name}.${n.isPlayer ? ` ${t.description}${t.unlocks?.length ? ` New: ${t.unlocks.join(', ')}.` : ''}` : ''}`, [nationId])
   return true
 }

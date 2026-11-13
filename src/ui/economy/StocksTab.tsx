@@ -69,7 +69,7 @@ export function StocksTab() {
                   </div>
                 </div>
                 <div className="text-right tabular-nums">
-                  <div className="text-[16px] font-semibold">{fmt(price, 1)}</div>
+                  <div className="text-[16px] font-semibold">{fmt(price, 2)}</div>
                   <div className={`text-[12px] ${change >= 0 ? 'text-[#6eeb8a]' : 'text-[#ff6961]'}`}>
                     {change >= 0 ? '+' : ''}
                     {change.toFixed(1)}%
@@ -77,8 +77,10 @@ export function StocksTab() {
                 </div>
                 {alive && (
                   <div className="flex gap-1.5">
-                    <OrderButton order={{ type: 'buyShares', nationId: player.id, company: c.id, shares: 10 }} label="Buy 10" cost={`${Math.round(price * 10 * (1 + STOCKS.fee))}`} />
-                    <OrderButton order={{ type: 'sellShares', nationId: player.id, company: c.id, shares: 10 }} label="Sell 10" cost={held >= 10 ? `${Math.round(price * 10 * (1 - STOCKS.fee))}` : undefined} tone="btn-quiet" />
+                    {[10, 50, 200].map((n) => (
+                      <OrderButton key={`b${n}`} order={{ type: 'buyShares', nationId: player.id, company: c.id, shares: n }} label={`Buy ${n}`} cost={`${fmt(price * n * (1 + STOCKS.fee), 0)}`} />
+                    ))}
+                    {held > 0 && <OrderButton order={{ type: 'sellShares', nationId: player.id, company: c.id, shares: held }} label={`Sell all ${held}`} cost={`+${fmt(price * held * (1 - STOCKS.fee), 0)}`} tone="btn-quiet" />}
                   </div>
                 )}
               </li>

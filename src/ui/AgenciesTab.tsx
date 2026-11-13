@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
-import { AGENCY, AGENCY_ROLE, DOMESTIC_OPS, FOREIGN_OPS, agencyName, levelCost, type AgencyId, type DomesticOp, type ForeignOp } from '../data/agencies'
+import { AGENCY, AGENCY_ROLE, DOMESTIC_OPS, FOREIGN_OPS, agencyName, levelsCost, type AgencyId, type DomesticOp, type ForeignOp } from '../data/agencies'
 import { operationOdds } from '../engine/agencies'
-import { atWar } from '../engine/helpers'
+import { atWar, nationModifiers } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { getWorld } from '../map/world'
 import { nationNeighbors } from '../ai/opinion'
@@ -16,7 +16,6 @@ function AgencyCard({ id }: { id: AgencyId }) {
   const view = usePlayerView()!
   const { game, player } = view
   const a = player.agencies[id]
-  const queued = view.orders.filter((o) => o.type === 'fundAgency' && o.agency === id).length
   const used = view.orders.filter((o) => (id === 'foreign' ? o.type === 'operation' : o.type === 'domestic')).length
   void game
   return (
@@ -37,8 +36,20 @@ function AgencyCard({ id }: { id: AgencyId }) {
       <div className="text-[13px] text-white/75">
         Teams this month: {Math.max(0, a.level - used)} of {a.level} · Experience {a.exp} · Costs {fmt(a.level * AGENCY.upkeepPerLevel, 1)} money a month
       </div>
-      {a.level + queued < AGENCY.maxLevel && (
-        <OrderButton order={{ type: 'fundAgency', nationId: player.id, agency: id }} label={`Fund ${agencyName(player.name, id)}`} cost={`${levelCost(a.level)} money`} effect={`Level ${a.level + 1}: one more team, better odds, more operations.`} />
+      {a.level < AGENCY.maxLevel && (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-2 gap-2">
+            {Array.from({ length: Math.min(4, AGENCY.maxLevel - a.level) }, (_, i) => i + 1).map((levels) => (
+              <OrderButton
+                key={levels}
+                order={{ type: 'fundAgency', nationId: player.id, agency: id, levels }}
+                label={levels === 1 ? `Raise to level ${a.level + 1}` : `Raise to level ${a.level + levels}`}
+                cost={`${levelsCost(a.level, levels)} money`}
+                effect={levels === 1 ? 'One more team, better odds, more operations. Takes effect at once.' : `${levels} levels at once.`}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
@@ -61,6 +72,7 @@ export function AgenciesTab() {
   }, [game, me, map])
   if (!view || !game || !me) return null
   const { player } = view
+  const bonus = nationModifiers(player).agencyBonus
   const chosen = target && game.nations[target]?.alive && target !== me ? target : list[0]?.id
   const t = chosen ? game.nations[chosen] : null
   const seen = chosen ? (game.intel[`${me}|${chosen}`] ?? -1) >= game.turn : false
@@ -71,6 +83,7 @@ export function AgenciesTab() {
       <p className="text-[14px] text-white/80">
         A great power does not just attack. It watches, builds a case, and works in the shadows. Each agency sends one team per level each month, and results arrive when the month ends.
       </p>
+      {bonus > 0 && <p className="text-[14px] text-[#6eeb8a]">Your technology adds {Math.round(bonus * 100)}% to the odds of every operation.</p>}
       <div className="grid gap-3 md:grid-cols-2">
         <AgencyCard id="foreign" />
         <AgencyCard id="domestic" />

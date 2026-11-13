@@ -75,3 +75,10 @@ export const AGENCY_ROLE: Record<AgencyId, string> = {
 export function levelCost(level: number): number {
   return AGENCY.levelCost * (level + 1)
 }
+
+/** Money to raise an agency by several levels at once, starting from `level`. */
+export function levelsCost(level: number, levels: number): number {
+  let total = 0
+  for (let i = 0; i < levels; i++) total += levelCost(level + i)
+  return total
+}

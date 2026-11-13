@@ -54,7 +54,10 @@ export const COMPANIES: Company[] = [
 export const COMPANY_BY_ID: Record<string, Company> = Object.fromEntries(COMPANIES.map((x) => [x.id, x]))
 
 export const STOCKS = {
-  startPrice: 100,
+  startPrice: 5,
+  /** Prices never fall below or rise above these. */
+  minPrice: 0.2,
+  maxPrice: 100,
   /** Shares of each company that exist. */
   float: 1000,
   /** Most a nation may own of one company. */
@@ -62,7 +65,7 @@ export const STOCKS = {
   /** Share of a trade's value paid as a fee. */
   fee: 0.01,
   /** Dividend each month, as a share of the value held. */
-  dividend: 0.004,
+  dividend: 0.006,
   /** Opinion gained by a nation whose companies you own, per share of them you hold, up to the cap. */
   opinionPerTenth: 4,
   opinionCap: 20,

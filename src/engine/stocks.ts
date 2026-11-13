@@ -56,9 +56,8 @@ export function tradeValue(s: GameState, company: string, shares: number, side: 
   return side === 'buy' ? v * (1 + STOCKS.fee) : v * (1 - STOCKS.fee)
 }
 
+/** Adds the shares. The money was already taken when the order was paid for, so it is not charged twice. */
 export function buyShares(s: GameState, nationId: NationId, company: string, shares: number) {
-  const n = s.nations[nationId]
-  n.resources.capital -= tradeValue(s, company, shares, 'buy')
   const book = (s.stocks.held[nationId] ??= {})
   book[company] = (book[company] ?? 0) + shares
 }
@@ -107,7 +106,7 @@ export function runStocks(s: GameState, _map: WorldMap, rng: Rng) {
     const owner = ownerId ? s.nations[ownerId] : null
     st.last[co.id] = price
     if (!owner?.alive) {
-      st.price[co.id] = Math.max(1, price * 0.8)
+      st.price[co.id] = Math.max(STOCKS.minPrice, price * 0.8)
       continue
     }
     const size = owner.sectors[co.sector] ?? 0
@@ -124,7 +123,7 @@ export function runStocks(s: GameState, _map: WorldMap, rng: Rng) {
     const noise = (rng.next() - 0.5) * 2 * (0.015 + tension / 3000)
     // Prices drift back toward 100 over the long run, so no company runs away forever.
     const pull = (STOCKS.startPrice * 1.5 - price) / (STOCKS.startPrice * 1.5) * 0.004
-    st.price[co.id] = clamp(price * (1 + r + noise + pull), 1, 2000)
+    st.price[co.id] = clamp(price * (1 + r + noise + pull), STOCKS.minPrice, STOCKS.maxPrice)
     sum += st.price[co.id] / STOCKS.startPrice
     count++
   }

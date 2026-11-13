@@ -3,7 +3,7 @@ import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { MATERIALS } from '../data/deposits'
 import { TECH_BY_ID } from '../data/techTree'
-import { COMMITS, EMPIRE, JUSTIFY, STANCES, WAR, type Commit, type Stance } from '../data/war'
+import { COMMITS, EMPIRE, JUSTIFY, REACH, STANCES, WAR, type Commit, type Stance } from '../data/war'
 import { cityEffects, razeCities } from './cities'
 import { lineMax, regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
@@ -16,19 +16,61 @@ import { UNIT_TYPES } from './types'
 
 export interface Reach {
   ok: boolean
+  /** Whether the attack crosses water or air and so fights with the amphibious penalty. */
   bySea: boolean
+  via?: 'land' | 'lane' | 'fleet' | 'air'
 }
 
-/** Whether a nation can attack `target` from the land it holds: a land border, or a sea lane from a port. */
+/** Great-circle distance between two countries' centers, in kilometers. */
+export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad
+  const dLng = (b.lng - a.lng) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+/**
+ * Whether a nation can attack `target`. By land across a border; across a short sea lane from a port; across the open
+ * ocean with a fleet, from a port to any coast in range; or with an air force, from a country with a factory to use as
+ * an airbase. Reach over water or air fights with the amphibious penalty.
+ */
 export function canAttackRegion(s: GameState, map: WorldMap, nationId: NationId, target: RegionId): Reach {
   const t = map.regions[target]
   if (!t) return { ok: false, bySea: false }
-  for (const id of t.neighbors) if (s.regions[id]?.owner === nationId) return { ok: true, bySea: false }
+  for (const id of t.neighbors) if (s.regions[id]?.owner === nationId) return { ok: true, bySea: false, via: 'land' }
   for (const id of t.seaLanes) {
     const r = s.regions[id]
-    if (r?.owner === nationId && r.buildings.port > 0) return { ok: true, bySea: true }
+    if (r?.owner === nationId && r.buildings.port > 0) return { ok: true, bySea: true, via: 'lane' }
   }
-  return { ok: false, bySea: false }
+  const n = s.nations[nationId]
+  if (!n) return { ok: false, bySea: false }
+  const u = n.military.units
+  const fleet = t.coastal && u.naval >= REACH.navalUnits
+  const air = u.fighter + u.air >= REACH.airUnits
+  if (!fleet && !air) return { ok: false, bySea: false }
+  let by: Reach['via'] | null = null
+  for (const r of Object.values(s.regions)) {
+    if (r.owner !== nationId) continue
+    const from = map.regions[r.id]
+    if (!from) continue
+    const km = distanceKm(from, t)
+    if (fleet && r.buildings.port > 0 && km <= REACH.seaKm) return { ok: true, bySea: true, via: 'fleet' }
+    if (air && r.buildings.factory > 0 && km <= REACH.airKm) by = 'air'
+  }
+  return by ? { ok: true, bySea: true, via: by } : { ok: false, bySea: false }
+}
+
+/** Why a nation cannot reach a country, in words a player can act on. */
+export function reachProblem(s: GameState, map: WorldMap, nationId: NationId, target: RegionId): string {
+  const t = map.regions[target]
+  const u = s.nations[nationId]?.military.units
+  const hasPort = Object.values(s.regions).some((r) => r.owner === nationId && r.buildings.port > 0)
+  const navy = u && u.naval >= REACH.navalUnits
+  const air = u && u.fighter + u.air >= REACH.airUnits
+  const sea = !t?.coastal ? 'ships cannot reach an inland country' : hasPort ? (navy ? '' : 'train warships to sail from your port') : navy ? 'build a port for your warships' : 'build a port and train warships'
+  const sky = air ? 'it is beyond your air range, and you need a factory close enough to use as an airbase' : 'or train fighters or strike aircraft and keep a factory as an airbase'
+  return `Out of reach: it is not on your border. To reach it, ${[sea, sky].filter(Boolean).join('; ')}.`
 }
 
 /** Enemy countries the nation could attack this turn. */
