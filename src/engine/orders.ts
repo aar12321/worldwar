@@ -5,6 +5,7 @@ import { BUSINESS, INVEST, SECTORS, SECTOR_IDS, TREASURY } from '../data/busines
 import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
 import { EMPIRE, JUSTIFY, STANCES, WAR } from '../data/war'
 import { nextWeaponLevel } from './arms'
+import { tradeValue, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
@@ -94,6 +95,9 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     case 'buildCase':
       c.pp = JUSTIFY.caseCost
+      break
+    case 'buyShares':
+      c.capital = Math.round(tradeValue(s, o.company, o.shares, 'buy'))
       break
     case 'annexPuppet':
       c.pp = EMPIRE.annexCost
@@ -373,6 +377,9 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (r?.owner !== o.nationId) return 'You do not control this country'
       return ['off', 'growth', 'industry', 'farming', 'research'].includes(o.governor) ? null : 'Unknown plan'
     }
+    case 'buyShares':
+    case 'sellShares':
+      return validateTrade(s, o, pending)
     case 'operation':
       return validateOperation(s, o, pending)
     case 'domestic':

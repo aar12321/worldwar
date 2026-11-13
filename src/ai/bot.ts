@@ -1,4 +1,5 @@
 import { levelCost } from '../data/agencies'
+import { homeOwner } from '../engine/stocks'
 import { difficultyOf } from '../data/difficulty'
 import { BUDGET_KEYS } from '../data/government'
 import { PERSONALITIES } from '../data/personalities'
@@ -249,6 +250,14 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         if (humans.has(e) && !ctx.coalition && diff.skill < 2) continue
         const ops: Array<'sabotage' | 'rebels'> = ['sabotage', 'rebels']
         if (rng.chance(0.4) && tryAdd({ type: 'operation', nationId, op: rng.pick(ops), target: e })) return true
+      }
+      // Invest spare money in the companies of friendly countries.
+      if (money > 250 && rng.chance(diff.skill === 2 ? 0.3 : 0.12)) {
+        const listed = Object.keys(s.stocks.price).sort().filter((id) => {
+          const home = homeOwner(s, id)
+          return home && home !== nationId && s.nations[home]?.alive && !atWar(s, nationId, home) && (s.stocks.held[nationId]?.[id] ?? 0) < 200
+        })
+        if (listed.length && tryAdd({ type: 'buyShares', nationId, company: rng.pick(listed), shares: 20 })) return true
       }
       for (const kind of ['foreign', 'domestic'] as const) {
         if (n.agencies[kind].level < cap && money > levelCost(n.agencies[kind].level) * 3 && rng.chance(0.15) && tryAdd({ type: 'fundAgency', nationId, agency: kind })) return true

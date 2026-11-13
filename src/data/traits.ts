@@ -38,7 +38,7 @@ const KNOWN: Record<string, TraitId> = {
   panama: 'trade_hub', turkey: 'trade_hub', italy: 'culture', spain: 'culture', greece: 'shipyards', denmark: 'shipyards', israel: 'research',
   sweden: 'research', finland: 'research', 'south-africa': 'minerals', 'democratic-republic-of-the-congo': 'minerals', chile: 'minerals',
   peru: 'minerals', mongolia: 'minerals', afghanistan: 'fortress', nepal: 'fortress', vietnam: 'manpower', thailand: 'culture', mexico: 'manpower',
-  'new-zealand': 'farmland', ireland: 'finance', poland: 'heavy', 'czech-republic': 'heavy', 'saudi arabia': 'energy', kazakhstan: 'energy',
+  'new-zealand': 'farmland', ireland: 'finance', poland: 'heavy', czechia: 'heavy', 'saudi arabia': 'energy', kazakhstan: 'energy',
   venezuela: 'energy', libya: 'energy', algeria: 'energy', 'north-korea': 'fortress', cuba: 'culture', 'hong-kong': 'finance',
 }
 

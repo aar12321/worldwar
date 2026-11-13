@@ -1,3 +1,4 @@
+import { newStocks } from './stocks'
 import { EVENT_BY_ID } from '../data/events'
 import { startingCities } from './cities'
 import { lineMax } from './economy'
@@ -55,6 +56,7 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   game.infamy ??= {}
   game.cases ??= []
   game.intel ??= {}
+  game.stocks ??= newStocks(map)
   game.crises ??= []
   game.sanctions ??= []
   game.guarantees ??= []

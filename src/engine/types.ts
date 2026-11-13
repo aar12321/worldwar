@@ -361,6 +361,8 @@ export type Order =
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId }
   | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
+  | { type: 'buyShares'; nationId: NationId; company: string; shares: number }
+  | { type: 'sellShares'; nationId: NationId; company: string; shares: number }
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
@@ -435,6 +437,21 @@ export interface Crisis {
   answered: NationId[]
 }
 
+export interface StockState {
+  /** Share price of each listed company. */
+  price: Record<string, number>
+  /** Last month's price, to show the change. */
+  last: Record<string, number>
+  /** The home sector's size last month, to see whether it grew. */
+  size: Record<string, number>
+  /** Shares each nation holds: nation -> company -> shares. */
+  held: Record<NationId, Record<string, number>>
+  /** The market's mood: a crash or boom that fades. */
+  mood: number
+  /** The whole exchange as one number, starting at 100. */
+  index: number
+}
+
 export interface CaseFile {
   holder: NationId
   target: NationId
@@ -472,6 +489,7 @@ export interface GameState {
   cases: CaseFile[]
   /** "holder|target" -> the turn until which the holder can see the target's real numbers. */
   intel: Record<string, number>
+  stocks: StockState
   /** Trouble building around the world. News of it comes in stages. */
   crises: Crisis[]
   /** Sorted "a|b" keys of defensive alliances. */

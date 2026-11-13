@@ -17,7 +17,7 @@ import { netWarScore } from './warscore'
 
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
-  | { desk: 'economy'; tab: 'country' | 'budget' | 'market' | 'business' | 'government' | 'people'; region?: RegionId }
+  | { desk: 'economy'; tab: 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'; region?: RegionId }
   | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }

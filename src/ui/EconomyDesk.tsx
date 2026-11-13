@@ -5,6 +5,7 @@ import { BusinessTab } from './economy/BusinessTab'
 import { CountryTab } from './economy/CountryTab'
 import { GovernmentTab } from './economy/GovernmentTab'
 import { MarketTab } from './economy/MarketTab'
+import { StocksTab } from './economy/StocksTab'
 import { PeopleTab } from './economy/PeopleTab'
 import { PanelShell, Tabs } from './panel'
 
@@ -12,6 +13,7 @@ const TABS = [
   ['country', 'Country'],
   ['budget', 'Budget'],
   ['market', 'Market'],
+  ['stocks', 'Stocks'],
   ['business', 'Business'],
   ['government', 'Government'],
   ['people', 'People'],
@@ -36,6 +38,7 @@ export function EconomyDesk() {
         {tab === 'country' && <CountryTab />}
         {tab === 'budget' && <BudgetTab />}
         {tab === 'market' && <MarketTab />}
+        {tab === 'stocks' && <StocksTab />}
         {tab === 'business' && <BusinessTab />}
         {tab === 'government' && <GovernmentTab />}
         {tab === 'people' && <PeopleTab />}

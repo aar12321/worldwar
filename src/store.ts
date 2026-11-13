@@ -25,7 +25,7 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 /** The five desks, plus News and Settings which open from the top bar. */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'log' | 'settings'
-export type EconomyTab = 'country' | 'budget' | 'market' | 'business' | 'government' | 'people'
+export type EconomyTab = 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'
 export type MilitaryTab = 'forces' | 'wars' | 'agencies'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts'
@@ -322,6 +322,7 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
+  if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)
   if (order.type === 'operation') return typeof order.target === 'string' && typeof order.op === 'string'
   if (order.type === 'domestic') return typeof order.op === 'string'
   if (order.type === 'fundAgency') return order.agency === 'foreign' || order.agency === 'domestic'
@@ -897,3 +898,6 @@ export const useGame = create<GameStore>((set, get) => ({
     save(game, orders)
   },
 }))
+
+// A handle for browser tests, in development only.
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __store: typeof useGame }).__store = useGame
