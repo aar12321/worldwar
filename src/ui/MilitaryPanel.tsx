@@ -2,6 +2,7 @@ import { TRAINING, UNIT_SPECS, WEAPONS, trainingCost, trainingRank, weaponCost }
 import { MAX_WARS } from '../data/war'
 import { nextWeaponLevel } from '../engine/arms'
 import { enemiesOf, formatDivisions } from '../engine/helpers'
+import { orderCost } from '../engine/orders'
 import { militarySheet, type UnitStatLine } from '../engine/militaryStats'
 import { trainMonths } from '../engine/training'
 import { useGame } from '../store'
@@ -68,8 +69,8 @@ function UnitCard({ line }: { line: UnitStatLine }) {
         <OrderButton
           order={{ type: 'queueTrain', nationId: player.id, unit: line.unit }}
           label="Train one"
-          cost={`${spec.capitalCost} money`}
-          effect={`${spec.manpowerCost}k soldiers · ready in ${months} ${months === 1 ? 'turn' : 'turns'}`}
+          cost={`${orderCost(game, { type: 'queueTrain', nationId: player.id, unit: line.unit }).capital} money${spec.steel > 0 ? ` · ${spec.steel} steel` : ''}`}
+          effect={`${spec.manpowerCost}k soldiers · ready in ${months} ${months === 1 ? 'turn' : 'turns'}${spec.oil > 0 ? ` · burns ${spec.oil} oil a month` : ''}`}
           tone="btn-primary"
         />
         <OrderButton

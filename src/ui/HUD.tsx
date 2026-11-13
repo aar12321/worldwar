@@ -201,6 +201,8 @@ export function HUD() {
             <Row k="Factories" v={signed(econ.factoryIncome)} />
             <Row k="Trade" v={signed(econ.tradeIncome)} />
             <Row k="Upkeep" v={signed(-econ.upkeep)} warn />
+            {econ.corporateIncome !== 0 && <Row k="Business tax and banks" v={signed(econ.corporateIncome)} />}
+            {econ.interest > 0 && <Row k="Interest on bonds" v={signed(-econ.interest)} warn />}
             {econ.warBills.length > 0 && <Row k={`War bills (${econ.warBills.length} of ${MAX_WARS})`} v={signed(-econ.warBillTotal)} warn />}
             <Row k="Waiting for next turn" v={fmt(-committed.capital)} />
             {player.inDebt && <p className="text-[13px] text-[#ff6961]">In debt. Stability is falling.</p>}
@@ -218,6 +220,20 @@ export function HUD() {
           <Resource label="Research" amount={player.resources.tp - committed.tp} delta={signed(econ.tpGain)}>
             <Row k="University levels" v={`${econ.buildings.university}`} />
             <p className="text-[13px] text-white/65">Spend it in Research. A technology you pick arrives when you press Next turn.</p>
+          </Resource>
+          <Resource label="Oil" amount={player.resources.oil} delta={signed(econ.netOil)} warn={player.oilShortage || econ.netOil < 0}>
+            <Row k="Pumped" v={signed(econ.oilProduction)} />
+            <Row k="Burned by your units" v={signed(-econ.oilUse)} warn />
+            {player.oilShortage ? <p className="text-[13px] text-[#ff6961]">Out of oil: tanks, planes and ships fight at 60%.</p> : <p className="text-[13px] text-white/65">Tanks, planes and warships burn it. Buy more on the market in Economy.</p>}
+          </Resource>
+          <Resource label="Steel" amount={player.resources.steel} delta={signed(econ.steelProduction)}>
+            <Row k="Made each month" v={signed(econ.steelProduction)} />
+            <p className="text-[13px] text-white/65">Tanks, artillery, planes and warships are built from steel. Factories and mines make it.</p>
+          </Resource>
+          <Resource label="Goods" amount={player.resources.goods} delta={signed(econ.netGoods)} warn={player.goodsShortage || econ.netGoods < 0}>
+            <Row k="Made" v={signed(econ.goodsProduction)} />
+            <Row k="Bought by your people" v={signed(-econ.goodsUse)} warn />
+            {player.goodsShortage && <p className="text-[13px] text-[#ff6961]">Sold out: people are restless and stability drops.</p>}
           </Resource>
           <Resource label="Stability" amount={player.stability} format={(v) => Math.round(v).toString()} suffix="%" warn={player.stability < 35}>
             <Row k="Heading toward" v={`${Math.round(econ.stabilityTarget)}%`} />

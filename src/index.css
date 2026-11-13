@@ -146,13 +146,16 @@ body,
 
 .segmented {
   display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
   padding: 2px;
   gap: 2px;
   border-radius: 10px;
   background: rgba(118, 118, 128, 0.24);
 }
 .segmented > button {
-  flex: 1;
+  flex: 1 0 auto;
+  white-space: nowrap;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -618,6 +621,22 @@ body:has(.drawer) .country-card {
   pointer-events: none;
 }
 
+/* Economy desk tabs: one column on small screens, two on wide ones. */
+.econ-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.econ-grid > .span-all {
+  grid-column: 1 / -1;
+}
+@media (min-width: 1100px) {
+  .econ-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* Desks, report and map controls. */
 .unit-badge {
   flex: none;
@@ -752,7 +771,7 @@ body:has(.drawer) .map-modes {
 
 @media (max-width: 900px) {
   :root {
-    --hud-h: 200px;
+    --hud-h: 236px;
   }
   .report-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -771,10 +790,10 @@ body:has(.drawer) .map-modes {
   }
   /* One row of six numbers, so the HUD leaves room for the desk below it. */
   .hud-resources {
-    flex-wrap: nowrap !important;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
   .hud-resources > div {
-    flex: 1 1 0;
     min-width: 0;
   }
   .hud-resources [role='button'] {

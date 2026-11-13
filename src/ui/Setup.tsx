@@ -8,9 +8,9 @@ import { peekSave, useGame } from '../store'
 import { globeBridge } from './globeBridge'
 
 const VICTORY_OPTIONS = [
-  { share: 0.25, label: 'Short', sub: 'Take 3 countries, or lead 25%' },
-  { share: 0.4, label: 'Full', sub: 'Take 6 countries, or lead 40%' },
-  { share: 0.6, label: 'Long', sub: 'Take 12 countries, or lead 60%' },
+  { share: 0.25, label: 'Short', sub: 'Take 3 countries, lead 25% of people, or 11% of output' },
+  { share: 0.4, label: 'Full', sub: 'Take 6 countries, lead 40% of people, or 18% of output' },
+  { share: 0.6, label: 'Long', sub: 'Take 12 countries, lead 60% of people, or 27% of output' },
 ]
 
 export function Setup() {

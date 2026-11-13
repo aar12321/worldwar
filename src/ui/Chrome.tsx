@@ -148,7 +148,7 @@ export function TurnSummary() {
         <div className="space-y-5">
           <section>
             <h3 className="text-[15px] font-semibold mb-2">Your country</h3>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {summary.deltas.map((d) => (
                 <DeltaCell key={d.label} d={d} />
               ))}

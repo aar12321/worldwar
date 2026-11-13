@@ -14,7 +14,7 @@ describe('the advisor', () => {
     const list = advise(s, map, 'r0')
     expect(list[0].id).toBe('starving')
     expect(list[0].urgency).toBe('now')
-    expect(list[0].target).toMatchObject({ desk: 'economy', tab: 'build' })
+    expect(list[0].target).toMatchObject({ desk: 'economy', tab: 'country' })
   })
 
   it('warns how many months of food or money are left', () => {
@@ -71,6 +71,46 @@ describe('the advisor', () => {
     const s = startState(map)
     s.nations.r1.alive = false
     expect(advise(s, map, 'r1')).toEqual([])
+  })
+})
+
+describe('the advisor on the new systems', () => {
+  it('warns about oil, goods and the market', () => {
+    const s = startState(map)
+    s.nations.r0.oilShortage = true
+    s.nations.r0.goodsShortage = true
+    const list = advise(s, map, 'r0', [], 12)
+    expect(ids(list)).toContain('no-oil')
+    expect(ids(list)).toContain('no-goods')
+    expect(list.find((a) => a.id === 'no-oil')?.target).toMatchObject({ desk: 'economy', tab: 'market' })
+  })
+
+  it('says when the treasury is about to default', () => {
+    const s = startState(map)
+    s.nations.r0.inDebt = true
+    s.nations.r0.debt = 200
+    s.nations.r0.redMonths = 2
+    expect(advise(s, map, 'r0', [], 12).find((a) => a.id === 'default')?.urgency).toBe('now')
+  })
+
+  it('reminds a democracy about an election it might lose', () => {
+    const s = startState(map)
+    s.nations.r0.government = 'democracy'
+    s.nations.r0.nextElection = s.turn + 3
+    s.nations.r0.stability = 40
+    const e = advise(s, map, 'r0', [], 12).find((a) => a.id === 'election')
+    expect(e?.title).toMatch(/3 months/)
+    s.nations.r0.stability = 90
+    expect(ids(advise(s, map, 'r0', [], 12))).not.toContain('election')
+  })
+
+  it('suggests growing a city and backing a business when there is money to spare', () => {
+    const s = startState(map)
+    s.regions.r0.population = 60
+    s.nations.r0.resources.capital = 900
+    const list = ids(advise(s, map, 'r0', [], 20))
+    expect(list).toContain('city')
+    expect(list).toContain('business')
   })
 })
 

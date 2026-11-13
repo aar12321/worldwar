@@ -1,5 +1,6 @@
 import { OBJECTIVES, type Advice } from '../engine/advisor'
-import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
+import { conquestGoal, countriesTaken, economicGoal, economicShare, populationShare } from '../engine/victory'
+import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { useAdvice, usePlayerView } from './hooks'
 import { PanelShell } from './panel'
@@ -62,6 +63,7 @@ export function Briefing() {
   const lands = conquestGoal(goal)
   const taken = countriesTaken(game)
   const share = populationShare(game, player.id)
+  const econShare = economicShare(game, getWorld().map, player.id)
   const reached = new Set(player.milestones ?? [])
   if (orders.some((o) => o.type === 'research')) reached.add('research')
   const left = OBJECTIVES.filter((o) => !reached.has(o.id))
@@ -73,6 +75,7 @@ export function Briefing() {
         <div className="text-[16px] font-semibold tracking-tight">How you win</div>
         <Progress label={`Take ${lands} countries`} value={taken} goal={lands} text={`${taken} of ${lands}`} />
         <Progress label={`Or lead ${Math.round(goal * 100)}% of the world's people`} value={share} goal={goal} text={`${(share * 100).toFixed(1)}%`} />
+        <Progress label={`Or produce ${(economicGoal(goal) * 100).toFixed(0)}% of the world's output`} value={econShare} goal={economicGoal(goal)} text={`${(econShare * 100).toFixed(1)}%`} />
         <p className="text-[13px] text-white/70">You lose if {player.name} is wiped out.</p>
       </section>
 

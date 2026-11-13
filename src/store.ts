@@ -8,7 +8,8 @@ import { normalizeGame } from './engine/migrate'
 import { MONTH_END_ORDERS, validateOrder } from './engine/orders'
 import type { Commit, Stance } from './data/war'
 import { applyOrderNow, resolveTurn } from './engine/resolveTurn'
-import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
+import { BUDGET_KEYS } from './data/government'
+import type { BattleReport, Budget, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
 import { getWorld } from './map/world'
 import { globeBridge, useFx } from './ui/globeBridge'
 import { speak } from './ui/plain'
@@ -21,10 +22,17 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 /** The five desks, plus News and Settings which open from the top bar. */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'log' | 'settings'
-export type EconomyTab = 'build' | 'budget' | 'people' | 'laws'
+export type EconomyTab = 'country' | 'budget' | 'market' | 'business' | 'government' | 'people'
 export type MilitaryTab = 'forces' | 'wars'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts'
+
+export interface PolicyPatch {
+  taxRate?: number
+  draftRate?: number
+  corporateTax?: number
+  budget?: Budget
+}
 
 export interface Settings {
   reducedMotion: boolean
@@ -107,7 +115,8 @@ interface GameStore {
   openDiplomacy(nationId: NationId | null): void
   issueOrder(order: Order): boolean
   removeOrder(index: number): void
-  setPolicy(taxRate: number, draftRate: number): void
+  /** Queues new tax, draft, business tax or budget settings for the end of the month. */
+  setPolicy(patch: PolicyPatch): void
   attack(target: RegionId, commit?: Commit, stance?: Stance): boolean
   openWarRoom(target: RegionId | null): void
   endTurn(): void
@@ -214,7 +223,7 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (!item || typeof item !== 'object') return false
   const order = item as Order
   if (typeof order.type !== 'string' || order.nationId !== playerId || !MONTH_END_ORDERS.has(order.type)) return false
-  if (order.type === 'setPolicy') return Number.isFinite(order.taxRate) && Number.isFinite(order.draftRate)
+  if (order.type === 'setPolicy') return Number.isFinite(order.taxRate) && Number.isFinite(order.draftRate) && (order.corporateTax === undefined || Number.isFinite(order.corporateTax))
   if (order.type === 'propose') return typeof order.target === 'string' && !!order.proposal && typeof order.proposal.kind === 'string'
   if (order.type === 'respond') return typeof order.proposalId === 'string' && typeof order.accept === 'boolean'
   if (order.type === 'research') return typeof order.techId === 'string'
@@ -285,6 +294,9 @@ function buildReport(before: GameState, after: GameState, player: NationId, batt
       { label: 'Food', before: a.resources.food, after: b.resources.food },
       { label: 'Influence', before: a.resources.pp, after: b.resources.pp },
       { label: 'Research', before: a.resources.tp, after: b.resources.tp },
+      { label: 'Oil', before: a.resources.oil, after: b.resources.oil },
+      { label: 'Steel', before: a.resources.steel, after: b.resources.steel },
+      { label: 'Goods', before: a.resources.goods, after: b.resources.goods },
       { label: 'Soldiers', before: a.militaryPool, after: b.militaryPool, suffix: 'k' },
       { label: 'Divisions', before: sumUnits(before, player), after: sumUnits(after, player), digits: 1 },
       { label: 'Stability', before: a.stability, after: b.stability, suffix: '%' },
@@ -300,7 +312,7 @@ export const useGame = create<GameStore>((set, get) => ({
   orders: [],
   selectedRegion: null,
   panel: 'none',
-  economyTab: 'build',
+  economyTab: 'country',
   economyRegion: null,
   militaryTab: 'forces',
   mapMode: 'political',
@@ -324,7 +336,7 @@ export const useGame = create<GameStore>((set, get) => ({
       selectedRegion: game.playerId,
       // A new game opens on the Briefing: the first steps and what the advisor would do.
       panel: 'briefing',
-      economyTab: 'build',
+      economyTab: 'country',
       economyRegion: null,
       militaryTab: 'forces',
       mapMode: 'political',
@@ -457,13 +469,20 @@ export const useGame = create<GameStore>((set, get) => ({
     writeOrders(next)
   },
 
-  setPolicy(taxRate, draftRate) {
+  setPolicy(patch) {
     const { game, orders } = get()
     if (!game) return
     const rest = orders.filter((o) => o.type !== 'setPolicy')
     const n = game.nations[game.playerId]
-    const unchanged = Math.abs(n.taxRate - taxRate) < 1e-6 && Math.abs(n.draftRate - draftRate) < 1e-6
-    const next: Order[] = unchanged ? rest : [...rest, { type: 'setPolicy', nationId: game.playerId, taxRate, draftRate }]
+    const queued = orders.find((o) => o.type === 'setPolicy')
+    const was = queued && queued.type === 'setPolicy' ? queued : null
+    const taxRate = patch.taxRate ?? was?.taxRate ?? n.taxRate
+    const draftRate = patch.draftRate ?? was?.draftRate ?? n.draftRate
+    const corporateTax = patch.corporateTax ?? was?.corporateTax ?? n.corporateTax
+    const budget = patch.budget ?? was?.budget ?? n.budget
+    const same = (a: number, b: number) => Math.abs(a - b) < 1e-6
+    const unchanged = same(n.taxRate, taxRate) && same(n.draftRate, draftRate) && same(n.corporateTax, corporateTax) && BUDGET_KEYS.every((k) => same(n.budget[k], budget[k]))
+    const next: Order[] = unchanged ? rest : [...rest, { type: 'setPolicy', nationId: game.playerId, taxRate, draftRate, corporateTax, budget }]
     set({ orders: next })
     writeOrders(next)
   },
