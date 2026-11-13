@@ -6,6 +6,7 @@ import { conquestGoal, countriesTaken, populationShare } from '../engine/victory
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
+import { OnlinePeople, OnlineStatus } from './Online'
 
 /** Eases a displayed number toward `value` instead of snapping. */
 function useTweenedNumber(value: number, ms = 520): number {
@@ -128,6 +129,8 @@ export function HUD() {
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const reduced = useGame((s) => s.settings.reducedMotion)
   const endTurn = useGame((s) => s.endTurn)
+  const setReady = useGame((s) => s.setReady)
+  const online = useGame((s) => (s.online?.status === 'playing' ? s.online : null))
   const setPanel = useGame((s) => s.setPanel)
   const setHelp = useGame((s) => s.setHelp)
   const panel = useGame((s) => s.panel)
@@ -138,8 +141,10 @@ export function HUD() {
   const goal = game.settings.victoryShare
   const taken = countriesTaken(game)
   const lands = conquestGoal(goal)
-  const blocked = !!game.pendingEvent || fxBusy || game.outcome !== 'playing'
-  const label = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle playing' : 'Next turn'
+  const watching = !!online && game.eliminated.includes(game.playerId)
+  const waiting = !!online && online.ready.includes(game.playerId)
+  const blocked = !!game.pendingEvent || fxBusy || game.outcome !== 'playing' || watching
+  const label = game.pendingEvent ? 'Decide first' : fxBusy ? 'Battle playing' : watching ? 'Watching' : online ? (waiting ? 'Waiting for others' : 'Ready') : 'Next turn'
   const civic = econ.buildings.civic
 
   return (
@@ -201,6 +206,8 @@ export function HUD() {
             <Row k="Factories" v={signed(econ.factoryIncome)} />
             <Row k="Trade" v={signed(econ.tradeIncome)} />
             <Row k="Upkeep" v={signed(-econ.upkeep)} warn />
+            {econ.corporateIncome !== 0 && <Row k="Business tax and banks" v={signed(econ.corporateIncome)} />}
+            {econ.interest > 0 && <Row k="Interest on bonds" v={signed(-econ.interest)} warn />}
             {econ.warBills.length > 0 && <Row k={`War bills (${econ.warBills.length} of ${MAX_WARS})`} v={signed(-econ.warBillTotal)} warn />}
             <Row k="Waiting for next turn" v={fmt(-committed.capital)} />
             {player.inDebt && <p className="text-[13px] text-[#ff6961]">In debt. Stability is falling.</p>}
@@ -217,7 +224,21 @@ export function HUD() {
           </Resource>
           <Resource label="Research" amount={player.resources.tp - committed.tp} delta={signed(econ.tpGain)}>
             <Row k="University levels" v={`${econ.buildings.university}`} />
-            <p className="text-[13px] text-white/65">Spend it in Research. A technology you pick arrives when you press Next turn.</p>
+            <p className="text-[13px] text-white/65">Spend it in Research. A technology you pick arrives when the month ends.</p>
+          </Resource>
+          <Resource label="Oil" amount={player.resources.oil} delta={signed(econ.netOil)} warn={player.oilShortage || econ.netOil < 0}>
+            <Row k="Pumped" v={signed(econ.oilProduction)} />
+            <Row k="Burned by your units" v={signed(-econ.oilUse)} warn />
+            {player.oilShortage ? <p className="text-[13px] text-[#ff6961]">Out of oil: tanks, planes and ships fight at 60%.</p> : <p className="text-[13px] text-white/65">Tanks, planes and warships burn it. Buy more on the market in Economy.</p>}
+          </Resource>
+          <Resource label="Steel" amount={player.resources.steel} delta={signed(econ.steelProduction)}>
+            <Row k="Made each month" v={signed(econ.steelProduction)} />
+            <p className="text-[13px] text-white/65">Tanks, artillery, planes and warships are built from steel. Factories and mines make it.</p>
+          </Resource>
+          <Resource label="Goods" amount={player.resources.goods} delta={signed(econ.netGoods)} warn={player.goodsShortage || econ.netGoods < 0}>
+            <Row k="Made" v={signed(econ.goodsProduction)} />
+            <Row k="Bought by your people" v={signed(-econ.goodsUse)} warn />
+            {player.goodsShortage && <p className="text-[13px] text-[#ff6961]">Sold out: people are restless and stability drops.</p>}
           </Resource>
           <Resource label="Stability" amount={player.stability} format={(v) => Math.round(v).toString()} suffix="%" warn={player.stability < 35}>
             <Row k="Heading toward" v={`${Math.round(econ.stabilityTarget)}%`} />
@@ -228,10 +249,16 @@ export function HUD() {
         </div>
 
         <div className="hud-next glass rounded-2xl p-2 pointer-events-auto flex flex-col gap-1 min-w-[168px]">
-          <button className={`btn btn-primary px-4 py-3 text-[15px] ${blocked ? '' : 'pulse-cta'}`} disabled={blocked} onClick={endTurn} title="Resolve the month (Enter)">
+          <button
+            className={`btn btn-primary px-4 py-3 text-[15px] ${blocked || waiting ? '' : 'pulse-cta'}`}
+            disabled={blocked}
+            onClick={online && waiting ? () => setReady(false) : endTurn}
+            title={online ? (waiting ? 'Press to keep planning' : 'Done planning (Enter)') : 'Resolve the month (Enter)'}
+          >
             {label}
           </button>
-          <div className="px-1 text-center text-[12px] text-white/70">{orders.length > 0 ? `${orders.length} order${orders.length === 1 ? '' : 's'} waiting` : 'Enter'}</div>
+          <div className="px-1 text-center text-[12px] text-white/70">{online ? <OnlineStatus /> : orders.length > 0 ? `${orders.length} order${orders.length === 1 ? '' : 's'} waiting` : 'Enter'}</div>
+          {online && <OnlinePeople />}
         </div>
       </div>
       {top && top.urgency === 'now' && panel === 'none' && (

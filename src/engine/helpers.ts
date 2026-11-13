@@ -10,6 +10,18 @@ export const hasPact = (s: GameState, a: NationId, b: NationId) => (s.pacts[pair
 export const hasCasusBelli = (s: GameState, holder: NationId, target: NationId) =>
   (s.casusBelli[`${holder}|${target}`] ?? -1) >= s.turn
 
+/** Nations that have promised to defend `id`. */
+export const guarantorsOf = (s: GameState, id: NationId): NationId[] => (s.guarantees ?? []).filter((g) => g.to === id && g.until >= s.turn).map((g) => g.from)
+
+/** Nations currently cutting off trade with `id`. */
+export const sanctionersOf = (s: GameState, id: NationId): NationId[] => (s.sanctions ?? []).filter((x) => x.to === id && x.until >= s.turn && s.nations[x.from]?.alive).map((x) => x.from)
+
+/** Nations that are puppets of `id`. */
+export const puppetsOf = (s: GameState, id: NationId): NationId[] =>
+  Object.values(s.nations)
+    .filter((n) => n.alive && n.overlord === id)
+    .map((n) => n.id)
+
 export const isAllied = (s: GameState, a: NationId, b: NationId) => a !== b && s.alliances.includes(pairKey(a, b))
 
 function partnersIn(keys: string[], id: NationId): NationId[] {
@@ -62,9 +74,9 @@ export function formatDivisions(n: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
-export const emptyUnits = (): UnitCounts => ({ infantry: 0, armor: 0, air: 0, naval: 0 })
+export const emptyUnits = (): UnitCounts => ({ infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0 })
 
-export const totalUnits = (u: UnitCounts) => u.infantry + u.armor + u.air + u.naval
+export const totalUnits = (u: UnitCounts) => (u.infantry ?? 0) + (u.armor ?? 0) + (u.artillery ?? 0) + (u.fighter ?? 0) + (u.air ?? 0) + (u.naval ?? 0)
 
 export function sumUnits(list: UnitCounts[]): UnitCounts {
   const out = emptyUnits()
@@ -131,7 +143,9 @@ export function canUseUnit(n: Nation, unit: UnitType): boolean {
   const required: Record<UnitType, string> = {
     infantry: 'land_rifles',
     armor: 'land_light_tanks',
-    air: 'air_propeller',
+    artillery: 'land_artillery',
+    fighter: 'air_propeller',
+    air: 'air_bombers',
     naval: 'naval_gunboats',
   }
   return hasTech(n, required[unit])

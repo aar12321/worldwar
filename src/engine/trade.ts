@@ -1,6 +1,8 @@
 import { MARKET, TRADE_LIMITS } from '../data/unitTypes'
+import { MATERIALS } from '../data/deposits'
+import { ECON, computeEconomy, marketSpread } from './economy'
 import { clamp } from './helpers'
-import type { GameState, Nation, NationId, ResourceBundle, TradeResource, TradeTerms } from './types'
+import type { GameState, Nation, NationId, ResourceBundle, TradeResource, TradeTerms, WorldMap } from './types'
 import { TRADE_RESOURCES } from './types'
 
 export type MarketPrices = Record<TradeResource, number>
@@ -24,9 +26,25 @@ export function marketPrices(s: GameState): MarketPrices {
   const out = {} as MarketPrices
   for (const r of TRADE_RESOURCES) {
     const m = median(alive.map((n) => stockOf(n, r)))
-    out[r] = Math.round(MARKET[r].base * clamp(Math.sqrt(MARKET[r].reference / Math.max(1, m)), 0.6, 1.8) * 100) / 100
+    out[r] = Math.round(MARKET[r].base * clamp(Math.sqrt(MARKET[r].reference / Math.max(1, m)), MATERIALS.priceMin, MATERIALS.priceMax) * 100) / 100
   }
   return out
+}
+
+/** Materials and food can be bought and sold on the world market. Money, research and soldiers cannot. */
+export const MARKET_GOODS: TradeResource[] = ['food', 'oil', 'steel', 'goods']
+
+/** Money for `amount` of a resource: what the nation pays when buying, or is paid when selling. */
+export function marketValue(s: GameState, n: Nation, r: TradeResource, amount: number, side: 'buy' | 'sell', prices: MarketPrices = marketPrices(s)): number {
+  const spread = marketSpread(n)
+  return amount * prices[r] * (side === 'buy' ? 1 + spread : 1 - spread)
+}
+
+/** Units this nation can still move through the market this month. */
+export function tradeRoom(s: GameState, map: WorldMap, nationId: NationId): number {
+  const n = s.nations[nationId]
+  const cap = computeEconomy(s, map, nationId).tradeCapacity * ((n.embargoedUntil ?? 0) >= s.turn ? ECON.embargoTradeMult : 1)
+  return Math.max(0, cap - (n.tradeUsed ?? 0))
 }
 
 export const bundleEntries = (b: ResourceBundle) =>

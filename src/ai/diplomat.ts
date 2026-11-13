@@ -1,4 +1,5 @@
 import { PERSONALITIES } from '../data/personalities'
+import { loanPayment } from '../engine/diplomacy'
 import { computeEconomy, militaryPower, type EconomyReport } from '../engine/economy'
 import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey } from '../engine/helpers'
 import type { Rng } from '../engine/rng'
@@ -28,6 +29,14 @@ function needFor(s: GameState, id: NationId, r: TradeResource, econ: EconomyRepo
     case 'manpower':
       if (enemiesOf(s, id).length > 0) return 1.4
       return n.militaryPool > econ.militaryCap * 0.8 ? 0.6 : 1
+    case 'oil':
+      if (n.oilShortage) return 1.8
+      return econ.netOil < 0 ? 1.4 : n.resources.oil > econ.oilUse * 6 + 20 ? 0.6 : 1
+    case 'steel':
+      return n.resources.steel < 6 ? 1.4 : n.resources.steel > 60 ? 0.6 : 1
+    case 'goods':
+      if (n.goodsShortage) return 1.7
+      return econ.netGoods < 0 ? 1.3 : n.resources.goods > econ.goodsUse * 6 ? 0.6 : 1
   }
 }
 
@@ -36,7 +45,7 @@ function valueFor(s: GameState, id: NationId, b: ResourceBundle, prices: MarketP
 }
 
 /** Amount of a resource a nation keeps back and will not trade away. */
-export const TRADE_RESERVE: Record<TradeResource, number> = { capital: 25, food: 8, tp: 0, manpower: 30 }
+export const TRADE_RESERVE: Record<TradeResource, number> = { capital: 25, food: 8, tp: 0, manpower: 30, oil: 6, steel: 8, goods: 8 }
 
 export interface Verdict {
   accept: boolean
@@ -68,6 +77,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       const fresh = s.turn - started < 3
       const bias = { expansionist: -12, opportunist: -4, turtle: 10, trader: 8, honorable: 0 }[me.personality ?? 'honorable']
       const score = me.warWeariness * 1.1 + (ratio - 1) * 25 + net * 0.6 + concession - demand * 0.8 + op * 0.15 + bias - (fresh ? 12 : 0) - 8 + noise
+      if (p.terms.puppet && score <= 25) return verdict(false, 'we will never be your puppet')
       if (score > 0) {
         if (me.warWeariness > 25) return verdict(true, 'the war has bled us dry')
         if (ratio > 1.3 || net > 15) return verdict(true, 'we cannot win this war')
@@ -97,7 +107,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       for (const x of myNeighbors) {
         if (x === p.from || !s.nations[x]?.alive) continue
         if (!(theirNeighbors.has(x) || atWar(s, p.from, x))) continue
-        const px = perceivedPower(s, map, botId, x) * (coalition && x === s.playerId ? 1.4 : 1)
+        const px = perceivedPower(s, map, botId, x) * (coalition && s.humans.includes(x) ? 1.4 : 1)
         if (px > myP * 1.3 && opinionOf(s, map, botId, x, { borders: true, coalition }) < 10) {
           threat = x
           break
@@ -140,6 +150,23 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       const fairness = got / Math.max(0.01, paid)
       if (fairness >= threshold + noise / 150) return verdict(true, fairness > 1.25 ? 'an excellent bargain' : 'a fair exchange')
       return verdict(false, `the price is too low (worth ${Math.round(fairness * 100)}% to us)`)
+    }
+    case 'loan': {
+      if (atWar(s, botId, p.from)) return verdict(false, 'we do not borrow from enemies')
+      const econ = computeEconomy(s, map, botId)
+      const pay = loanPayment(p.amount, p.months)
+      if (econ.netCapital < pay * 0.8) return verdict(false, 'we could not make the payments')
+      if (op < -25) return verdict(false, 'we do not trust you with our debts')
+      const hungry = me.resources.capital < 40 || econ.netCapital < 2
+      if (hungry) return verdict(true, 'we need the money')
+      return op > 15 && p.amount < me.resources.capital ? verdict(true, 'a friendly loan is welcome') : verdict(false, 'we have no need to borrow')
+    }
+    case 'guarantee': {
+      if (op < -20) return verdict(false, 'a guarantee from you is no comfort')
+      if (me.overlord === p.from) return verdict(false, 'we are already yours')
+      const threatened = enemiesOf(s, botId).length > 0 || [...myNeighbors].some((x) => perceivedPower(s, map, botId, x) > myP * 1.3)
+      if (threatened || op > 10) return verdict(true, threatened ? 'we welcome a protector' : 'our friendship is strong')
+      return verdict(false, 'we are not in need of protection')
     }
     case 'callToArms': {
       const enemy = p.enemy

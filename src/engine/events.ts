@@ -79,7 +79,7 @@ export function effectAmount(e: Extract<EventEffect, { type: 'resource' }>, work
 
 export function describeEffect(e: EventEffect, workforce: number, s: GameState, map: WorldMap, ev: PendingEvent): string {
   const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`)
-  const labels = { capital: 'money', food: 'food', pp: 'influence', tp: 'research' }
+  const labels = { capital: 'money', food: 'food', pp: 'influence', tp: 'research', oil: 'oil', steel: 'steel', goods: 'goods' }
   const rival = ev.rivalId ? s.nations[ev.rivalId].name : 'Rival'
   switch (e.type) {
     case 'opinion':

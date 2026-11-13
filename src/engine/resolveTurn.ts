@@ -1,16 +1,23 @@
 import { TECH_BY_ID } from '../data/techTree'
-import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { applyDeals, cancelDeal, declareWar, expireDiplomacy, leaveAlliance, propose, respond } from './diplomacy'
-import { applyEconomy } from './economy'
+import { FOCUS } from '../data/cities'
+import { INVEST, SECTORS } from '../data/business'
+import { GOVERNMENTS, REFORM } from '../data/government'
+import { addOpinion } from '../ai/opinion'
+import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
+import { applyDeals, cancelDeal, declareWar, expireDiplomacy, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
+import { addToSector, cleanInvestments, makeInvestment } from './business'
+import { applyEconomy, nationWorkforce } from './economy'
 import { runSpyMission } from './espionage'
 import { EVENT_GAP_TURNS, scheduleEvent } from './events'
 import { addLog, reach, regionsOf } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
+import { runPolitics } from './politics'
 import { research } from './tech'
+import { marketPrices, marketValue } from './trade'
 import { tickTraining, trainMonths } from './training'
 import { UNIT_TYPES, type BattleReport, type GameState, type Order, type WorldMap } from './types'
-import { checkOutcome } from './victory'
+import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
 
 export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
@@ -18,7 +25,33 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
   const nation = (id: string) => s.nations[id]?.name ?? id
   switch (o.type) {
     case 'setPolicy':
-      return `Set taxes ${Math.round(o.taxRate * 100)}% / draft ${Math.round(o.draftRate * 100)}%`
+      return `Set taxes ${Math.round(o.taxRate * 100)}% / draft ${Math.round(o.draftRate * 100)}%${o.corporateTax !== undefined ? ` / business tax ${Math.round(o.corporateTax * 100)}%` : ''}${o.budget ? ' / new budget' : ''}`
+    case 'developCity': {
+      const city = s.regions[o.regionId]?.cities.find((c) => c.id === o.cityId)
+      return `Develop ${city?.name ?? 'a city'}`
+    }
+    case 'setCityFocus': {
+      const city = s.regions[o.regionId]?.cities.find((c) => c.id === o.cityId)
+      return `Make ${city?.name ?? 'a city'} a ${FOCUS[o.focus].name.toLowerCase()} city`
+    }
+    case 'imposeSanctions':
+      return `Sanction ${nation(o.target)}`
+    case 'liftSanctions':
+      return `Lift sanctions on ${nation(o.target)}`
+    case 'releasePuppet':
+      return `Set ${nation(o.target)} free`
+    case 'fundSector':
+      return `Fund ${SECTORS[o.sector].name.toLowerCase()} with ${Math.round(o.amount)}`
+    case 'setSubsidies':
+      return 'Change the subsidies'
+    case 'issueBonds':
+      return `Issue ${Math.round(o.amount)} in bonds`
+    case 'repayDebt':
+      return `Repay ${Math.round(o.amount)} of debt`
+    case 'invest':
+      return `Invest ${Math.round(o.amount)} in ${nation(o.target)}'s ${SECTORS[o.sector].name.toLowerCase()}`
+    case 'setGovernment':
+      return `Change the government to ${GOVERNMENTS[o.government].name}`
     case 'build':
       return `Upgrade ${BUILDING_SPECS[o.building].name} in ${region(o.regionId)}`
     case 'queueTrain':
@@ -31,6 +64,12 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Drill ${UNIT_SPECS[o.unit].name}`
     case 'upgradeWeapons':
       return `Upgrade ${UNIT_SPECS[o.unit].name} weapons`
+    case 'marketBuy':
+      return `Buy ${Math.round(o.amount)} ${MARKET[o.resource].name.toLowerCase()}`
+    case 'marketSell':
+      return `Sell ${Math.round(o.amount)} ${MARKET[o.resource].name.toLowerCase()}`
+    case 'setAutoBuy':
+      return 'Change what is bought automatically'
     case 'research':
       return `Research ${TECH_BY_ID[o.techId]?.name ?? o.techId}`
     case 'attack':
@@ -68,10 +107,12 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 
 const PHASES: Order['type'][][] = [
   ['respond'],
-  ['setPolicy', 'enactLaw', 'repealLaw'],
+  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw'],
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'propose'],
   ['cancelTrain'],
+  ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy'],
+  ['issueBonds', 'repayDebt', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
   ['research', 'build', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['spy'],
@@ -103,6 +144,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
       n.resources.capital -= cost.capital
       n.resources.pp -= cost.pp
       n.militaryPool -= cost.manpower
+      n.resources.steel -= cost.steel
       executeOrder(s, map, o, rng)
     }
   }
@@ -124,17 +166,22 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
     .map((n) => n.id)
     .sort()
   for (const id of alive) if (regionsOf(s, id).length === 0) killNation(s, id, null)
-  for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng)
+  cleanInvestments(s)
+  const prices = marketPrices(s)
+  for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng, prices)
   applyDeals(s)
+  runPolitics(s, map, rng)
 
   s.turn++
   expireDiplomacy(s)
-  const player = s.nations[s.playerId]
-  if (player.alive && s.turn >= s.nextEventTurn) {
-    s.pendingEvent = scheduleEvent(s, map, s.playerId, rng)
+  // Surprise decisions are for single-player games. Online, everyone plans the same month, with no interruptions.
+  const player = s.nations[s.humans[0] ?? s.playerId]
+  if (s.humans.length === 1 && player?.alive && s.turn >= s.nextEventTurn) {
+    s.pendingEvent = scheduleEvent(s, map, player.id, rng)
     s.nextEventTurn = s.turn + EVENT_GAP_TURNS
   }
-  s.outcome = checkOutcome(s)
+  s.worldGross = worldGross(s, map)
+  s.outcome = checkOutcome(s, map)
   return s
 }
 
@@ -151,10 +198,11 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
   n.resources.capital -= cost.capital
   n.resources.pp -= cost.pp
   n.militaryPool -= cost.manpower
+  n.resources.steel -= cost.steel
   const rng = createRng(s.seed, s.turn * 31 + s.nextId)
   if (o.type === 'attack') {
     const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance)
-    s.outcome = checkOutcome(s)
+    s.outcome = checkOutcome(s, map)
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
   }
   executeOrder(s, map, o, rng)
@@ -176,6 +224,58 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'setPolicy':
       n.taxRate = o.taxRate
       n.draftRate = o.draftRate
+      if (o.corporateTax !== undefined) n.corporateTax = o.corporateTax
+      if (o.budget) n.budget = { ...o.budget }
+      break
+    case 'developCity': {
+      const city = s.regions[o.regionId].cities.find((c) => c.id === o.cityId)
+      if (city) {
+        city.level++
+        if (n.isPlayer) addLog(s, 'economy', `${city.name} grew to level ${city.level}.`, [o.nationId])
+      }
+      break
+    }
+    case 'setCityFocus': {
+      const city = s.regions[o.regionId].cities.find((c) => c.id === o.cityId)
+      if (city) city.focus = o.focus
+      break
+    }
+    case 'imposeSanctions':
+      imposeSanctions(s, o.nationId, o.target)
+      break
+    case 'liftSanctions':
+      liftSanctions(s, o.nationId, o.target)
+      break
+    case 'releasePuppet':
+      releasePuppet(s, o.nationId, o.target)
+      break
+    case 'fundSector':
+      addToSector(n, o.sector, o.amount, nationWorkforce(s, map, o.nationId))
+      break
+    case 'setSubsidies':
+      n.subsidies = [...new Set(o.sectors)]
+      break
+    case 'issueBonds':
+      n.resources.capital += o.amount
+      n.debt += o.amount
+      break
+    case 'repayDebt':
+      n.debt = Math.max(0, n.debt - o.amount)
+      break
+    case 'invest': {
+      const target = s.nations[o.target]
+      addToSector(target, o.sector, o.amount, nationWorkforce(s, map, o.target), INVEST.efficiency)
+      makeInvestment(s, o.nationId, o.target, o.sector, o.amount)
+      addOpinion(s, o.target, o.nationId, 'Invested in our businesses', 12, 0.2)
+      if (n.isPlayer) addLog(s, 'economy', `You invested ${Math.round(o.amount)} in ${target.name}'s ${SECTORS[o.sector].name.toLowerCase()}. It pays dividends while you stay at peace.`, [o.nationId, o.target])
+      break
+    }
+    case 'setGovernment':
+      n.government = o.government
+      n.stability = Math.max(0, n.stability - REFORM.turmoil)
+      n.lastReform = s.turn
+      n.nextElection = GOVERNMENTS[o.government].election > 0 ? s.turn + GOVERNMENTS[o.government].election : 0
+      addLog(s, 'event', `${n.name} is now a ${GOVERNMENTS[o.government].name.toLowerCase()}.`, [o.nationId])
       break
     case 'enactLaw':
       n.laws.push(o.law)
@@ -195,6 +295,18 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'research':
       if (research(s, o.nationId, o.techId)) reach(n, 'research')
       break
+    case 'marketBuy':
+      n.resources[o.resource as 'food'] += o.amount
+      n.tradeUsed += o.amount
+      break
+    case 'marketSell':
+      n.resources[o.resource as 'food'] -= o.amount
+      n.resources.capital += marketValue(s, n, o.resource, o.amount, 'sell')
+      n.tradeUsed += o.amount
+      break
+    case 'setAutoBuy':
+      n.autoBuy = [...new Set(o.resources)]
+      break
     case 'build':
       s.regions[o.regionId].buildings[o.building]++
       reach(n, 'build')
@@ -213,6 +325,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       const job = s.trainingQueue[index]
       const spec = UNIT_SPECS[job.unit]
       const refund = job.remaining === job.total ? 1 : 0.5
+      n.resources.steel += spec.steel * refund
       n.resources.capital += spec.capitalCost * refund
       n.militaryPool += spec.manpowerCost * refund
       s.trainingQueue.splice(index, 1)

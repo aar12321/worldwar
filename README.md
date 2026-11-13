@@ -1,6 +1,6 @@
 # Worlds of Others
 
-A browser-based, turn-based grand strategy game of total global hegemony. You command one of 175 nations; every other nation is run by an AI rival. One turn is one month, starting January 1936.
+A browser-based, turn-based grand strategy game of total global hegemony. You command one of 175 nations; every other nation is run by an AI rival, or by a friend: one to four people can play the same world online. One turn is one month, starting January 1936.
 
 ## Quick start
 
@@ -15,12 +15,12 @@ npm run build      # type-check + production bundle
 
 The game is turn based. One turn is one month, starting January 1936. Nothing moves until you press **Next turn** (or Enter).
 
-1. Pick a nation on the main menu (search the list or click the globe), choose a victory condition (take 3, 6 or 12 countries, or lead 25% / 40% / 60% of world population), and begin.
+1. Pick a nation on the main menu (search the list or click the globe), choose a victory condition (take 3, 6 or 12 countries, lead 25% / 40% / 60% of world population, or produce 11% / 18% / 27% of world output) and how skilled your rivals are, and begin. **Easy** rivals play the basics, wait a long time before attacking you, and never band together against you. **Medium** rivals also grow cities, set budgets and laws, fund business, and form alliances and blocs. **Hard** rivals also borrow, invest abroad, sanction, counter the units you field, press an ally's enemy together, and turn a crushing win into a puppet state.
 2. The game is run from **five desks** on the left:
    - **Briefing** (`B`): your goal, a first-steps checklist for new players, and your advisor's list of what needs you this month. Every item has a button that takes you to the fix.
-   - **Economy** (`E`): four tabs. *Upgrades* buys Factory (money), Farm (food), University (research), Barracks (training slots and defenders), Port (trade and sea attacks) and Civic Hall (influence and research); they work the moment you buy them. *Budget* shows where money comes from and goes, and sets taxes and the draft. *People* shows food, work, pay, peace and order. *Laws* passes laws.
-   - **Military** (`M`): two tabs. *Forces* trains infantry, tanks, planes and warships (they arrive after 1 to 3 turns), buys permanent weapon levels and drill, and appoints a commander. Every unit shows its attack and defense and where each bonus comes from; battles use exactly those numbers. *Wars* (`W`) lists your wars (three at most), their monthly bills and each front's Defense Line.
-   - **Diplomacy** (`D`): offers waiting on you, deals, and every neighbor's opinion of you with pacts, alliances, trade and peace terms.
+   - **Economy** (`E`): six tabs. *Country* grows your cities (each takes a focus that boosts the whole country: industry, farming, harbor, research, fortress, finance) and buys Factory, Farm, University, Barracks, Port and Civic Hall upgrades. *Budget* shows where money comes from and goes, sets income tax and the draft, and runs the treasury: borrow with bonds, pay interest, keep a credit rating, or default. *Market* buys and sells food, oil, steel and goods at world prices, within a monthly trade limit that ports raise, with auto-buy for shortages. *Business* has six private sectors that grow by themselves (set the business tax, give grants, subsidize, invest abroad). *Government* picks democracy, monarchy, junta or one-party rule, splits tax money across military, education, health and infrastructure, and passes ten laws. *People* shows food, goods, work, pay, peace and order.
+   - **Military** (`M`): two tabs. *Forces* trains infantry, tanks, artillery, fighters, bombers and warships (they arrive after 1 to 3 turns; vehicles cost steel and burn oil, and fighters decide how much bombers can do), buys permanent weapon levels and drill, and appoints a commander. Every unit shows its attack and defense and where each bonus comes from; battles use exactly those numbers. *Wars* (`W`) lists your wars (three at most), their monthly bills and each front's Defense Line.
+   - **Diplomacy** (`D`): offers waiting on you, deals, and every neighbor's opinion of you with pacts, alliances, guarantees, trade, loans, investment, sanctions and peace terms, including making a defeated nation a puppet that pays tribute.
    - **Research** (`R`): spend research on technologies.
    - News (`N`), help (`?`) and settings sit in the top-left bar.
 3. **War is a campaign.** Click a neighboring country and press **Declare war** (costs influence). Then press **Plan an attack** (`A`) to open the War Room: choose how much of your military to send (Probe, Main force or All in) and how to fight (Assault, Blitz or Siege). The room shows honest odds, expected losses and what the war costs. Each win pushes back the country's **Defense Line**; when it reaches zero the country falls. Big countries and capitals have long lines, small ones short. Lines heal a little in months nobody attacks them.
@@ -29,6 +29,33 @@ The game is turn based. One turn is one month, starting January 1936. Nothing mo
    - **Conquered land starts restless** and produces about 40% at first, settling over a year. Holding many countries strains stability.
 4. **Next turn** runs the rivals, training, research, income, diplomacy, rebels and any attacks on you, replays the battles you were in, then shows a **monthly report**: what changed, the news, and what the advisor would do next.
 5. The **map control** (bottom left) switches the globe between Nations, Relations (allies, pacts, enemies) and Fronts (how much Defense Line is left).
+
+## Play with friends (1 to 4 players)
+
+On the main menu press **Play with friends online**, type a name, and **Create a room**. You get a five-letter code. Friends press the same button, choose **Join a room** and type it. In the lobby everyone picks a nation, and the host sets the rules: rival skill (Easy, Medium, Hard), how you win, and how long each month lasts (no timer, 1, 1.5, 2 or 3 minutes). Nations nobody picks are run by the AI, and AI nations still ally, trade and fight each other.
+
+- **Everyone plans the same month at once.** Press **Ready** when you are done. The month moves on when every player is ready, or when the timer ends. Press the button again to keep planning. Players who are away are skipped, and their nation is run by the AI until they return.
+- **Attacks wait for the end of the month online.** In a one-player game an attack plays out the moment you order it. Online, it joins your plan and is resolved at month end in a seeded order, so nobody wins by clicking faster. Builds, trades and training still happen at once.
+- **No random events online**, since one player's choice would stall the others.
+- The first player to reach the goal wins. A player whose nation falls keeps watching; the game ends when someone wins or every player has fallen.
+- Open **Players and chat** under the Ready button to see who is ready and to talk. If your tab closes, press **Rejoin** on the same menu to take your seat back. If the host leaves, the next player takes over the game.
+
+### Connecting players
+
+The room code is shared through [Supabase Realtime](https://supabase.com/docs/guides/realtime) broadcast. No tables or accounts are needed, only a project's URL and public ("anon") key, which the browser reads at build time:
+
+1. Create a free project at supabase.com. Realtime broadcast is on by default.
+2. Copy **Project URL** and the **anon public** key from *Project Settings, API*.
+3. For local use put them in `.env.local` (see `.env.example`). For a deployed site set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` where the site is built, then build again: Vite bakes them in.
+
+```bash
+cp .env.example .env.local   # then edit the two values
+npm run dev
+```
+
+Without them the game still runs, and **Play with friends** works in a practice mode between tabs of the same browser (open the page twice). It cannot connect different computers.
+
+How it works: the host's browser runs the same pure engine as a one-player game and is the referee. Other players send their plan for the month to the host, who checks every order against that player's own nation, resolves the month, and sends the new game back (compressed, in pieces under 50 KB). Everyone's game is therefore identical. The room is a trust-your-friends design: the host's browser holds the truth, and there is no server-side anti-cheat. Messages are not encrypted beyond what Supabase provides, so do not share the room code with strangers.
 
 Shortcuts: `Enter` next turn, `B` briefing, `E` economy, `M` military, `W` wars, `D` diplomacy, `R` research, `N` news, `A` War Room for the selected country, `?` help, `Esc` close.
 
@@ -44,14 +71,15 @@ src/
     arms.ts / training.ts   weapon levels, training slots and queue
     economy.ts / diplomacy.ts / espionage.ts / tech.ts / victory.ts
   data/        Tech tree, units, buildings, terrain, events, country stats, starting nations
-  ai/bot.ts    Rule-based orders for every non-player nation (same rules as the player)
+  ai/          Rule-based orders for every nation no human plays (same rules as the player): bot, diplomat, management, opinion, blocs
+  net/         Online play: protocol (messages, room codes, compressed snapshots), transport (Supabase Realtime, same-browser fallback), session (lobby, host, ready, timer, host handover)
   map/world.ts Natural Earth 110m countries -> regions, adjacency, coastlines, sea lanes
   ui/          React: globe, HUD, drawers, Modal, battle window, diplomacy, tech tree
   store.ts     Zustand store: orders, turn flow, battle queue, autosave (localStorage)
 ```
 
-The engine is seeded and side-effect free, so the same seed and orders always produce the same world. That makes it straightforward to move turn resolution to an authoritative server for real multiplayer later.
+The engine is seeded and side-effect free, so the same seed and orders always produce the same world. `GameState.humans` lists the nations people play (one in a one-player game), so a multiplayer game and a single-player game run the same code. Online, the host resolves each month and everyone else receives the result.
 
 ## Tech stack
 
-Vite, React 19, TypeScript, Zustand, Framer Motion, Tailwind CSS v4, three.js via `react-globe.gl`, `world-atlas` + `topojson-client` + `d3-geo` for map data, Vitest.
+Vite, React 19, TypeScript, Zustand, Framer Motion, Tailwind CSS v4, three.js via `react-globe.gl`, `world-atlas` + `topojson-client` + `d3-geo` for map data, Vitest, and `@supabase/supabase-js` for online rooms.

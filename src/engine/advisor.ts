@@ -1,11 +1,15 @@
+import { ELECTION } from '../data/government'
+import { SECTORS, SECTOR_IDS } from '../data/business'
 import { TECHS } from '../data/techTree'
 import { BUILDING_SPECS, UNIT_SPECS, buildingCost, weaponCost } from '../data/unitTypes'
 import { MAX_WARS } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { computeEconomy, lineMax } from './economy'
+import { cityDevelopCost } from './cities'
 import { enemiesOf, hasPact, isAllied, totalUnits } from './helpers'
 import { militaryPower, militarySheet } from './militaryStats'
 import { validateOrder } from './orders'
+import { monthsToElection } from './politics'
 import type { BuildingType, GameState, Milestone, NationId, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 import { canAttackRegion, forecastAttack, garrisonStrength } from './warfare'
@@ -13,7 +17,7 @@ import { netWarScore } from './warscore'
 
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
-  | { desk: 'economy'; tab: 'build' | 'budget' | 'people' | 'laws'; region?: RegionId }
+  | { desk: 'economy'; tab: 'country' | 'budget' | 'market' | 'business' | 'government' | 'people'; region?: RegionId }
   | { desk: 'military'; tab: 'forces' | 'wars' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
@@ -53,7 +57,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
 
   // Food
   if (n.foodShortage) {
-    add('now', 90, { id: 'starving', title: 'Your people are starving', detail: 'There is no food left. The military fights 30% weaker and stability is falling. Build farms or cut the draft.', action: 'Build a farm', target: { desk: 'economy', tab: 'build', region: capital } })
+    add('now', 90, { id: 'starving', title: 'Your people are starving', detail: 'There is no food left. The military fights 30% weaker and stability is falling. Build farms or cut the draft.', action: 'Build a farm', target: { desk: 'economy', tab: 'country', region: capital } })
   } else if (econ.netFood < 0) {
     const months = Math.max(1, Math.floor(n.resources.food / -econ.netFood))
     add(months <= 4 ? 'now' : 'soon', 60 - Math.min(40, months), {
@@ -61,7 +65,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       title: `Food runs out in ${months} ${months === 1 ? 'month' : 'months'}`,
       detail: `You eat ${(-econ.netFood).toFixed(1)} more than you grow each month. A farm adds 3.`,
       action: 'Build a farm',
-      target: { desk: 'economy', tab: 'build', region: capital },
+      target: { desk: 'economy', tab: 'country', region: capital },
     })
   }
 
@@ -79,6 +83,19 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
     })
   }
 
+  // Materials
+  if (n.oilShortage) {
+    add('now', 75, { id: 'no-oil', title: 'You are out of oil', detail: 'Tanks, planes and warships fight at 60% strength until you have oil. Buy it on the market, or turn on auto-buy.', action: 'Open the market', target: { desk: 'economy', tab: 'market' } })
+  } else if (econ.netOil < -0.05 && n.resources.oil < econ.oilUse * 4) {
+    const months = Math.max(1, Math.floor(n.resources.oil / -econ.netOil))
+    add(months <= 3 ? 'now' : 'soon', 55, { id: 'oil', title: `Oil runs out in ${months} ${months === 1 ? 'month' : 'months'}`, detail: `Your units burn ${econ.oilUse.toFixed(1)} a month and you pump ${econ.oilProduction.toFixed(1)}. Buy some, or build an energy sector.`, action: 'Open the market', target: { desk: 'economy', tab: 'market' } })
+  }
+  if (n.goodsShortage) {
+    add('now', 65, { id: 'no-goods', title: 'The shops are empty', detail: 'People are going without goods and stability is falling. Buy goods on the market, or grow factories and manufacturing.', action: 'Open the market', target: { desk: 'economy', tab: 'market' } })
+  } else if (econ.netGoods < 0 && n.resources.goods < econ.goodsUse * 3) {
+    add('soon', 35, { id: 'goods', title: 'Goods are running short', detail: 'People use more than you make. Buy some, or grow manufacturing.', action: 'Open the market', target: { desk: 'economy', tab: 'market' } })
+  }
+
   // Order at home
   if (n.stability < 35) {
     add('now', 70, { id: 'unrest', title: 'The country is close to revolt', detail: `Stability is ${Math.round(n.stability)}%. Below 30% rebels rise. See what your people are missing.`, action: 'See your people', target: { desk: 'economy', tab: 'people' } })
@@ -90,6 +107,19 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
     .sort((a, b) => b.rebels - a.rebels)[0]
   if (rebel) {
     add('now', 55, { id: 'rebels', title: `Rebels in ${name(rebel.id)}`, detail: `${rebel.rebels.toFixed(1)} divisions of rebels are fighting your garrison. If they win, the country breaks away.`, action: 'Go there', target: { desk: 'map', region: rebel.id } })
+  }
+
+  // Borrowing
+  if (!n.inDebt && econ.netCapital < 0 && econ.credit.room > 20 && money < -econ.netCapital * 8) {
+    add('soon', 45, { id: 'borrow', title: 'You could borrow to cover the gap', detail: `You can still borrow ${Math.floor(econ.credit.room)} at ${(econ.credit.rate * 100).toFixed(2)}% a month (rating ${econ.credit.rating}). Better to fix the budget, but bonds buy time.`, action: 'Open the treasury', target: { desk: 'economy', tab: 'budget' } })
+  }
+  if (n.debt > 0 && n.inDebt && n.redMonths >= 1) {
+    add('now', 85, { id: 'default', title: 'You are close to defaulting', detail: `You have been in the red for ${n.redMonths} month${n.redMonths === 1 ? '' : 's'} with ${Math.round(n.debt)} in bonds outstanding. At 3 you default and nobody will lend to you for two years.`, action: 'Open the budget', target: { desk: 'economy', tab: 'budget' } })
+  }
+  // An election
+  const election = monthsToElection(s, nationId)
+  if (election !== null && election <= 6 && n.stability < ELECTION.needed + 8) {
+    add('soon', 52, { id: 'election', title: `An election is ${election === 0 ? 'this month' : `${election} months away`}`, detail: `Stability is ${Math.round(n.stability)}% and you need ${ELECTION.needed}% to win. Lower taxes or spend more on health.`, action: 'Open Government', target: { desk: 'economy', tab: 'government' } })
   }
 
   // Offers on the table
@@ -191,6 +221,20 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
     if (tech) add('idea', 50, { id: 'research', title: `You can research ${tech.name}`, detail: `You have ${Math.floor(n.resources.tp)} research. ${tech.description}`, action: 'Open Research', target: { desk: 'research' } })
   }
 
+  // Cities and business
+  if (money > 150 && econ.netCapital >= 0) {
+    const grow = Object.values(s.regions)
+      .filter((r) => r.owner === nationId)
+      .flatMap((r) => r.cities.map((c) => ({ r, c })))
+      .filter(({ r, c }) => validateOrder(s, map, { type: 'developCity', nationId, regionId: r.id, cityId: c.id }, pending) === null && cityDevelopCost(c) * 1.5 <= money)
+      .sort((a, b) => a.c.level - b.c.level)[0]
+    if (grow) add('idea', 38, { id: 'city', title: `${grow.c.name} could grow`, detail: `A bigger city adds workers and strengthens its ${grow.c.focus} focus. It costs ${cityDevelopCost(grow.c)}.`, action: 'Open Cities', target: { desk: 'economy', tab: 'country', region: grow.r.id } })
+  }
+  if (money > 250 && econ.netCapital > 5 && !n.inDebt) {
+    const weakest = SECTOR_IDS.map((id) => ({ id, size: n.sectors[id] ?? 0 })).sort((a, b) => a.size - b.size)[0]
+    if (weakest) add('idea', 28, { id: 'business', title: `Back your ${SECTORS[weakest.id].name.toLowerCase()} sector`, detail: `It is your smallest industry at ${weakest.size.toFixed(1)}. A grant of 100 makes it ${SECTORS[weakest.id].yields.replace('+', 'produce ')}.`, action: 'Open Business', target: { desk: 'economy', tab: 'business' } })
+  }
+
   // Growth
   if (capital && econ.netCapital >= 0) {
     const options: BuildingType[] = econ.netFood < 1 ? ['farm'] : ['factory', 'university', 'farm', 'barracks', 'civic']
@@ -201,7 +245,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
         title: `You have ${Math.floor(money)} money to invest`,
         detail: `A ${BUILDING_SPECS[pick].name.toLowerCase()} costs ${buildingCost(pick, s.regions[capital].buildings[pick])}. ${BUILDING_SPECS[pick].effect}`,
         action: 'Upgrade the country',
-        target: { desk: 'economy', tab: 'build', region: capital },
+        target: { desk: 'economy', tab: 'country', region: capital },
       })
     }
   }
@@ -239,7 +283,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
 
 /** First-game goals, ticked off from what the nation has actually done. */
 export const OBJECTIVES: { id: Milestone; title: string; how: string; target: AdviceTarget }[] = [
-  { id: 'build', title: 'Upgrade your country', how: 'Open Economy and buy a factory or a farm.', target: { desk: 'economy', tab: 'build' } },
+  { id: 'build', title: 'Upgrade your country', how: 'Open Economy and buy a factory or a farm.', target: { desk: 'economy', tab: 'country' } },
   { id: 'train', title: 'Train a unit', how: 'Open Military and train infantry, tanks or planes.', target: { desk: 'military', tab: 'forces' } },
   { id: 'research', title: 'Research a technology', how: 'Open Research and pick one you can afford.', target: { desk: 'research' } },
   { id: 'war', title: 'Declare war on a neighbor', how: 'Click a country on the globe, then Declare war.', target: { desk: 'military', tab: 'wars' } },

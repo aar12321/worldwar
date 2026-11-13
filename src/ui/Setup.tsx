@@ -6,11 +6,13 @@ import type { Difficulty } from '../engine/types'
 import { getWorld } from '../map/world'
 import { peekSave, useGame } from '../store'
 import { globeBridge } from './globeBridge'
+import { nationScore, nationTier, rankNations } from './nationList'
+import { OnlineEntry } from './Online'
 
 const VICTORY_OPTIONS = [
-  { share: 0.25, label: 'Short', sub: 'Take 3 countries, or lead 25%' },
-  { share: 0.4, label: 'Full', sub: 'Take 6 countries, or lead 40%' },
-  { share: 0.6, label: 'Long', sub: 'Take 12 countries, or lead 60%' },
+  { share: 0.25, label: 'Short', sub: 'Take 3 countries, lead 25% of people, or 11% of output' },
+  { share: 0.4, label: 'Full', sub: 'Take 6 countries, lead 40% of people, or 18% of output' },
+  { share: 0.6, label: 'Long', sub: 'Take 12 countries, lead 60% of people, or 27% of output' },
 ]
 
 export function Setup() {
@@ -26,13 +28,8 @@ export function Setup() {
   const saved = useMemo(() => (hasSave ? peekSave() : null), [hasSave])
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6))
 
-  const nations = useMemo(
-    () =>
-      Object.values(map.regions)
-        .map((r) => ({ r, score: Math.pow(r.basePopulation, 0.6) * (0.3 + 0.7 * r.development) }))
-        .sort((a, b) => b.score - a.score),
-    [map],
-  )
+  const nations = useMemo(() => rankNations(map), [map])
+  const [onlineOpen, setOnlineOpen] = useState(false)
   const filtered = nations.filter(({ r }) => r.name.toLowerCase().includes(query.toLowerCase()))
   const pick = selected ? map.regions[selected] : null
   useEffect(() => {
@@ -40,9 +37,10 @@ export function Setup() {
     const region = selected ? map.regions[selected] : null
     if (region) globeBridge.api?.pointOfView({ lat: region.lat, lng: region.lng, altitude: 1.8 }, 700)
   }, [selected, map])
-  const tier = (score: number) => (score > 25 ? 'Great Power' : score > 10 ? 'Major Power' : score > 4 ? 'Regional Power' : 'Minor Nation')
+  const tier = nationTier
 
   return (
+    <>
     <div className="absolute inset-0 z-30 pointer-events-none">
       <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="setup-title absolute top-8 left-1/2 -translate-x-1/2 text-center w-[min(640px,90vw)]">
         <p className="text-[13px] font-medium text-white/50">January 1936</p>
@@ -77,7 +75,7 @@ export function Setup() {
       <motion.div initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="setup-card glass pointer-events-auto absolute right-6 bottom-6 w-[400px] rounded-[22px] p-5 space-y-4">
         {pick ? (
           <div>
-            <div className="label">{tier(Math.pow(pick.basePopulation, 0.6) * (0.3 + 0.7 * pick.development))}</div>
+            <div className="label">{tier(nationScore(pick))}</div>
             <h2 className="text-[28px] font-semibold tracking-tight mt-1">{pick.name}</h2>
             <div className="grid grid-cols-3 gap-2 mt-3 text-center">
               <div className="inset-card py-2">
@@ -113,11 +111,17 @@ export function Setup() {
         </div>
         <div>
           <div className="label mb-2">Rivals</div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid gap-1.5" role="radiogroup" aria-label="Rival skill">
             {(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => (
-              <button key={d} onClick={() => setDifficulty(d)} title={DIFFICULTY[d].description} className={`rounded-xl p-2 text-left ${difficulty === d ? 'bg-white/16' : 'bg-white/8 hover:bg-white/12'}`}>
-                <div className="text-[13px] font-semibold">{DIFFICULTY[d].name}</div>
-                <div className="text-[11px] text-white/50 leading-tight">{DIFFICULTY[d].description}</div>
+              <button
+                key={d}
+                role="radio"
+                aria-checked={difficulty === d}
+                onClick={() => setDifficulty(d)}
+                className={`rounded-xl p-2.5 text-left border ${difficulty === d ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/8 hover:bg-white/12'}`}
+              >
+                <div className="text-[14px] font-semibold">{DIFFICULTY[d].name}</div>
+                <div className="text-[12px] text-white/75 leading-snug">{DIFFICULTY[d].description}</div>
               </button>
             ))}
           </div>
@@ -147,8 +151,13 @@ export function Setup() {
             Start game
           </button>
         </div>
-        <p className="text-[13px] text-white/65">Every other nation is a rival. They act when you press Next turn.</p>
+        <button className="btn w-full py-2.5 text-[14px]" onClick={() => setOnlineOpen(true)}>
+          Play with friends online
+        </button>
+        <p className="text-[13px] text-white/65">Every other nation is a rival. They act when you press Next turn. Playing with friends? Everyone presses Ready instead.</p>
       </motion.div>
     </div>
+      {onlineOpen && <OnlineEntry onClose={() => setOnlineOpen(false)} />}
+    </>
   )
 }

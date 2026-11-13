@@ -1,3 +1,4 @@
+import { economicGoal } from '../engine/victory'
 import { useGame } from '../store'
 import { Modal } from './Modal'
 import { SHORTCUTS } from './SidePanels'
@@ -20,12 +21,19 @@ const TERMS: [string, string][] = [
   ['Stance', 'How you fight. Assault is balanced. Blitz breaks the line faster and costs more. Siege is slow, saves lives, and shuts their factories.'],
   ['War bill', 'Every war costs money every month. You can fight three wars at most.'],
   ['Settling', 'A conquered country gives about 40% of its output at first and reaches 100% after a year.'],
+  ['Oil, steel, goods', 'Oil fuels tanks, planes and warships. Steel builds them. Goods keep your people content. Buy what you lack on the Market in Economy.'],
+  ['Cities', 'Each country has cities. Grow them for workers and give each a focus that boosts the whole country.'],
+  ['Business', 'Six private sectors grow on their own. Lower business tax, calm people and new technology make them grow faster.'],
+  ['Bonds and credit', 'Borrow with bonds and pay interest. A nation in the red for 3 months with debt defaults, and nobody lends to it for two years.'],
+  ['Budget', 'Four shares of tax money: Military, Education, Health, Infrastructure. Leaning one way means leaning away from the rest.'],
+  ['Puppet state', 'Win a war big enough and you can make the loser a puppet: it keeps its land, pays you 12% of its income, and counts as half a country.'],
 ]
 
 export function Help() {
   const open = useGame((s) => s.helpOpen)
   const setHelp = useGame((s) => s.setHelp)
   const game = useGame((s) => s.game)
+  const online = useGame((s) => s.online?.status === 'playing')
   if (!open || !game) return null
   const goal = game.settings.victoryShare
   return (
@@ -40,7 +48,7 @@ export function Help() {
       }
     >
       <p className="text-[15px] text-white/85">
-        You run a country, one month at a time. <strong>To win</strong>, take {goal <= 0.25 ? 3 : goal >= 0.6 ? 12 : 6} countries beyond your own, or lead {Math.round(goal * 100)}% of the world's people. You lose if your nation is wiped out.
+        You run a country, one month at a time. <strong>To win</strong>, take {goal <= 0.25 ? 3 : goal >= 0.6 ? 12 : 6} countries beyond your own, lead {Math.round(goal * 100)}% of the world's people, or produce {(economicGoal(goal) * 100).toFixed(0)}% of the world's output. You lose if your nation is wiped out.
       </p>
       <h3 className="text-[16px] font-semibold mt-5 mb-2">A turn</h3>
       <ol className="space-y-3">
@@ -54,6 +62,11 @@ export function Help() {
           </li>
         ))}
       </ol>
+      {online && (
+        <p className="mt-3 text-[14px] text-white/80 rounded-xl bg-[#0a84ff]/15 border border-[#0a84ff]/40 px-3 py-2.5">
+          <strong>Playing with friends.</strong> Everyone plans the same month at once. Press <strong>Ready</strong> when you are done (press it again to keep planning). The month moves on when everyone is ready or the timer ends. Attacks are planned now and play out at month end, so nobody wins by clicking faster.
+        </p>
+      )}
       <h3 className="text-[16px] font-semibold mt-5 mb-2">Words you will see</h3>
       <dl className="space-y-2">
         {TERMS.map(([term, meaning]) => (

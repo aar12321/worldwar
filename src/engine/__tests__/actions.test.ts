@@ -503,15 +503,15 @@ describe('the national military', () => {
   it('trains each unit type on its own, and a commander drills for free', () => {
     const s = base()
     const m = s.nations[P].military
-    m.units = { infantry: 6, armor: 2, air: 0, naval: 0 }
-    m.drill = { infantry: 0, armor: 1, air: 0, naval: 0 }
+    m.units = { infantry: 6, armor: 2, artillery: 0, fighter: 0, air: 0, naval: 0 }
+    m.drill = { infantry: 0, armor: 1, artillery: 0, fighter: 0, air: 0, naval: 0 }
     const generalId = s.nations[P].generals[0].id
     expect(validateOrder(s, map, { type: 'train', nationId: P, unit: 'air' })).toMatch(/No troops/)
     const paid = resolveTurn(structuredClone(s), map, [
       { type: 'train', nationId: P, unit: 'infantry' },
       { type: 'train', nationId: P, unit: 'armor' },
     ])
-    expect(paid.nations[P].military.drill).toEqual({ infantry: 1, armor: 2, air: 0, naval: 0 })
+    expect(paid.nations[P].military.drill).toEqual({ infantry: 1, armor: 2, artillery: 0, fighter: 0, air: 0, naval: 0 })
     const idle = resolveTurn(structuredClone(s), map, [])
     expect(idle.nations[P].resources.capital - paid.nations[P].resources.capital).toBe(trainingCost(0) + trainingCost(1))
 

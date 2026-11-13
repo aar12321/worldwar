@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeEconomy, lineMax } from '../economy'
-import { forecastAttack } from '../warfare'
+import { WAR } from '../../data/war'
+import { forecastAttack, gunBonus } from '../warfare'
 import { hasCombinedArms, resolveBattle, sidePower, type Combatant } from '../combat'
 import { combatMods } from '../arms'
 import { createRng } from '../rng'
@@ -8,9 +9,9 @@ import { validateOrder } from '../orders'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import { giveRegions, lineMap, setMilitary, startState } from './fixtures'
 
-const even = { infantry: 1, armor: 1, air: 1, naval: 1 }
+const even = { infantry: 1, armor: 1, artillery: 1, fighter: 1, air: 1, naval: 1 }
 const side = (units: Partial<Combatant['units']>): Combatant => ({
-  units: { infantry: 0, armor: 0, air: 0, naval: 0, ...units },
+  units: { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, ...units },
   mods: null,
   penalty: 1,
   penaltyNotes: [],
@@ -49,6 +50,46 @@ describe('combat math', () => {
   it('a weak attacker is repulsed', () => {
     const out = resolveBattle({ attacker: side({ infantry: 1 }), defender: side({ infantry: 8 }), terrain: 'mountain', coastal: false }, createRng(2))
     expect(out.winner).toBe('defender')
+  })
+})
+
+describe('the six unit types', () => {
+  it('fighters make or break bombers', () => {
+    const bombers = side({ air: 6, infantry: 3 })
+    const target = side({ infantry: 6 })
+    const open = resolveBattle({ attacker: bombers, defender: target, terrain: 'plains', coastal: false }, createRng(3))
+    const contested = resolveBattle({ attacker: bombers, defender: side({ infantry: 6, fighter: 6 }), terrain: 'plains', coastal: false }, createRng(3))
+    const escorted = resolveBattle({ attacker: side({ air: 6, infantry: 3, fighter: 6 }), defender: side({ infantry: 6, fighter: 1 }), terrain: 'plains', coastal: false }, createRng(3))
+    // Round one is the air war: bombers without fighters against fighters barely scratch the defender.
+    expect(contested.rounds[0].attackerDamage).toBeLessThan(open.rounds[0].attackerDamage * 0.7)
+    expect(escorted.rounds[0].attackerDamage).toBeGreaterThan(open.rounds[0].attackerDamage)
+  })
+
+  it('combined arms counts fighters or bombers', () => {
+    expect(hasCombinedArms({ infantry: 2, armor: 2, artillery: 0, fighter: 1, air: 0, naval: 0 })).toBe(true)
+    expect(hasCombinedArms({ infantry: 2, armor: 2, artillery: 3, fighter: 0, air: 0, naval: 0 })).toBe(false)
+  })
+
+  it('artillery pushes the Defense Line further, and most in a siege', () => {
+    const none = { infantry: 12, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0 }
+    const guns = { infantry: 8, armor: 0, artillery: 4, fighter: 0, air: 0, naval: 0 }
+    expect(gunBonus(none, 'siege')).toBe(1)
+    expect(gunBonus(guns, 'assault')).toBeGreaterThan(1)
+    expect(gunBonus(guns, 'siege')).toBeGreaterThan(gunBonus(guns, 'assault'))
+    // The bonus stops growing once a third of the force is guns.
+    expect(gunBonus({ ...none, infantry: 0, artillery: 20 }, 'siege')).toBeCloseTo(1 + WAR.artilleryCap * WAR.artillerySiege)
+  })
+
+  it('old saves without the new unit keys load as zero', async () => {
+    const { normalizeGame } = await import('../migrate')
+    const map = lineMap(2)
+    const s = startState(map)
+    const m = s.nations.r0.military as unknown as { units: Record<string, number> }
+    delete m.units.fighter
+    delete m.units.artillery
+    const loaded = normalizeGame(structuredClone(s), map)
+    expect(loaded.nations.r0.military.units.fighter).toBe(0)
+    expect(loaded.nations.r0.military.units.artillery).toBe(0)
   })
 })
 

@@ -7,8 +7,8 @@ import { useGame } from '../store'
 import { fmt, usePlayerView } from './hooks'
 import { speak } from './plain'
 
-const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra']
-const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2' }
+const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy']
+const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2', economy: '#30d158' }
 
 function TechNode({ tech }: { tech: Tech }) {
   const view = usePlayerView()!
@@ -62,7 +62,7 @@ export function TechTree() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-none">
         <div>
           <h2 className="text-[28px] font-semibold tracking-tight">Research</h2>
-          <p className="text-[13px] text-white/55 mt-0.5">Click a technology to queue it. It finishes when you press Next turn.</p>
+          <p className="text-[13px] text-white/55 mt-0.5">Click a technology to queue it. It finishes when the month ends.</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">

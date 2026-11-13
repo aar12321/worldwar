@@ -1,7 +1,9 @@
 import { addOpinion, forgetNation } from '../ai/opinion'
 import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
+import { MATERIALS } from '../data/deposits'
 import { COMMITS, STANCES, WAR, type Commit, type Stance } from '../data/war'
+import { cityEffects, razeCities } from './cities'
 import { lineMax, regionWorkforce } from './economy'
 import { resolveBattle, type Combatant } from './combat'
 import { createRng } from './rng'
@@ -43,7 +45,7 @@ export function garrisonStrength(s: GameState, map: WorldMap, regionId: RegionId
   const r = s.regions[regionId]
   const owner = s.nations[r.owner]
   const capitalBonus = owner?.capital === regionId ? 0.75 : 0
-  return 0.8 + r.buildings.barracks * 0.75 + regionWorkforce(r, map.regions[regionId]) * 0.05 + capitalBonus
+  return 0.8 + r.buildings.barracks * 0.75 + regionWorkforce(r, map.regions[regionId]) * 0.05 + capitalBonus + cityEffects(r).garrison
 }
 
 export function emptyMilitary(units: UnitCounts = emptyUnits()): Military {
@@ -77,6 +79,7 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
   region.rebels = 0
   if (raze) region.buildings.barracks = 0
   region.attackedTurn = s.turn
+  if (raze) razeCities(region)
   // Conquered land starts restless and half-productive. A negotiated cession is gentler.
   region.integration = raze ? 0 : 0.5
   region.line = raze ? lineMax(s, map, regionId) * WAR.capturedLine : lineMax(s, map, regionId)
@@ -120,7 +123,12 @@ function makeCombatant(n: Nation | null, military: Military | null, garrison: Un
     // The garrison is green, so it pulls the drill of its type down.
     drill[k] = army + extra > 0 ? ((military?.drill[k] ?? 0) * army) / (army + extra) : 0
   }
-  return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes }
+  let vehicleMult = 1
+  if (n?.oilShortage) {
+    vehicleMult = MATERIALS.noOilStrength
+    notes.push(`no oil (tanks, planes and ships at ${Math.round(MATERIALS.noOilStrength * 100)}%)`)
+  }
+  return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes, vehicleMult }
 }
 
 /** Share of a nation's military that is free to defend: units committed to attacks this turn fight at half strength. */
@@ -143,6 +151,12 @@ export interface AttackResult {
  * One nation's whole military attacks a country. The defender is its whole military plus the country's garrison.
  * A win takes the country. Returns null when the attack is not allowed to happen.
  */
+/** How much a force's artillery multiplies the push on a Defense Line. A Siege makes the most of guns. */
+export function gunBonus(units: UnitCounts, stance: Stance): number {
+  const share = Math.min(WAR.artilleryCap, units.artillery / Math.max(0.1, totalUnits(units)))
+  return 1 + share * (stance === 'siege' ? WAR.artillerySiege : WAR.artilleryAssault)
+}
+
 interface Setup {
   attacker: Combatant
   defender: Combatant
@@ -273,7 +287,8 @@ export function resolveAttack(
   let lineAfter = lineBefore
   if (outcome.winner === 'attacker') {
     const ratio = Math.min(WAR.maxPowerRatio, Math.max(WAR.minPowerRatio, outcome.attackerPower / Math.max(0.1, outcome.defenderPower)))
-    lineAfter = Math.max(0, lineBefore - WAR.advanceBase * ratio * spec.advance)
+    const guns = gunBonus(attacker.units, stance)
+    lineAfter = Math.max(0, lineBefore - WAR.advanceBase * ratio * spec.advance * guns)
     if (spec.siegeTurns > 0) targetRegion.sabotaged = Math.max(targetRegion.sabotaged, spec.siegeTurns)
   }
   targetRegion.line = lineAfter
@@ -360,7 +375,7 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
   if (existing && !existing.alive) {
     existing.alive = true
     existing.capital = regionId
-    existing.resources = { capital: 20, food: 10, pp: 10, tp: existing.resources.tp }
+    existing.resources = { capital: 20, food: 10, pp: 10, tp: existing.resources.tp, oil: 4, steel: 3, goods: 6 }
     existing.stability = 55
     existing.warWeariness = 0
     existing.military = military
@@ -376,7 +391,7 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
       originalCapital: regionId,
       isPlayer: false,
       alive: true,
-      resources: { capital: 20, food: 10, pp: 10, tp: 0 },
+      resources: { capital: 20, food: 10, pp: 10, tp: 0, oil: 4, steel: 3, goods: 6 },
       militaryPool: 0,
       stability: 55,
       warWeariness: 0,

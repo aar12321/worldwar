@@ -119,7 +119,7 @@ export function CountryPanel() {
 
         {mine ? (
           <div className="flex flex-wrap gap-2">
-            <button className="btn btn-primary" onClick={() => openEconomy('build', selected)}>
+            <button className="btn btn-primary" onClick={() => openEconomy('country', selected)}>
               Upgrade this country
             </button>
             <button className="btn" onClick={() => openMilitary('forces')}>

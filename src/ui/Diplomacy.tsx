@@ -3,15 +3,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { perceivedPower } from '../ai/diplomat'
 import { coalitionActive, nationNeighbors, opinionLabel, opinionReport, type OpinionReport } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
-import { COSTS, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS } from '../data/unitTypes'
-import { PACT_TURNS, describeProposal } from '../engine/diplomacy'
+import { COSTS, DIPLOMACY, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS } from '../data/unitTypes'
+import { blocOf, blocsOf } from '../engine/blocs'
+import { PACT_TURNS, describeProposal, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
 import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey, regionsOf, turnDate } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { bundleValue, describeBundle, marketPrices, stockOf } from '../engine/trade'
-import type { Deal, Dispatch, NationId, Proposal, RegionId, ResourceBundle, TradeResource } from '../engine/types'
+import type { Deal, Dispatch, NationId, Proposal, RegionId, ResourceBundle, SectorId, TradeResource } from '../engine/types'
+import { INVEST, SECTORS, SECTOR_IDS } from '../data/business'
 import { TRADE_RESOURCES } from '../engine/types'
-import { MAX_REPARATIONS, netWarScore, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
+import { MAX_REPARATIONS, netWarScore, puppetValue, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { usePlayerView } from './hooks'
@@ -143,7 +145,11 @@ function DealRow({ d }: { d: Deal }) {
   const into: ResourceBundle = paying ? d.receive : d.give
   const left = d.until - game.turn + 1
   const text =
-    d.kind === 'reparations'
+    d.kind === 'loan'
+      ? paying
+        ? `You repay ${describeBundle(out)} a month on a loan from ${partner.name}`
+        : `${partner.name} repays you ${describeBundle(into)} a month on your loan`
+      : d.kind === 'reparations'
       ? paying
         ? `You pay ${describeBundle(out)} a month in war reparations`
         : `${partner.name} pays you ${describeBundle(into)} a month in war reparations`
@@ -158,19 +164,19 @@ function DealRow({ d }: { d: Deal }) {
         <span className="text-[10px] font-display tracking-widest text-slate-400">{left} MO LEFT</span>
       </div>
       <p className="text-slate-300 text-xs">{text}.</p>
-      {!(d.kind === 'reparations' && paying) && (
+      {!((d.kind === 'reparations' || d.kind === 'loan') && paying) && (
         <OrderButton
           order={{ type: 'cancelDeal', nationId: player.id, dealId: d.id }}
-          label={d.kind === 'reparations' ? 'Forgive debt' : 'Break deal'}
-          effect={d.kind === 'reparations' ? 'They will remember the kindness' : 'They will remember the betrayal'}
-          tone={d.kind === 'reparations' ? '' : 'btn-red'}
+          label={d.kind === 'reparations' ? 'Forgive debt' : d.kind === 'loan' ? 'Forgive the loan' : 'Break deal'}
+          effect={d.kind === 'trade' ? 'They will remember the betrayal' : 'They will remember the kindness'}
+          tone={d.kind === 'trade' ? 'btn-red' : ''}
         />
       )}
     </div>
   )
 }
 
-const ZERO: Record<TradeResource, number> = { capital: 0, food: 0, tp: 0, manpower: 0 }
+const ZERO: Record<TradeResource, number> = { capital: 0, food: 0, tp: 0, manpower: 0, oil: 0, steel: 0, goods: 0 }
 const compact = (b: Record<TradeResource, number>): ResourceBundle => {
   const out: ResourceBundle = {}
   for (const r of TRADE_RESOURCES) if (b[r] > 0) out[r] = b[r]
@@ -239,7 +245,7 @@ function TradeComposer({ target }: { target: NationId }) {
         Market value: you give <span className="text-white">{gv.toFixed(0)}</span>, you get <span className="text-white">{rv.toFixed(0)}</span> money.{' '}
         {rv > 0 && gv / rv < 1 && 'They will want more for it, unless they are short of what you offer.'}
       </div>
-      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label="Offer deal" cost={`${PROPOSAL_COSTS.trade} influence`} effect="They answer when you press Next turn" tone="btn-primary" />
+      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label="Offer deal" cost={`${PROPOSAL_COSTS.trade} influence`} effect="They answer when the month ends" tone="btn-primary" />
     </div>
   )
 }
@@ -269,8 +275,9 @@ function PeaceComposer({ target }: { target: NationId }) {
   const { map } = getWorld()
   const [cede, setCede] = useState<RegionId[]>([])
   const [reparations, setReparations] = useState(0)
+  const [puppet, setPuppet] = useState(false)
   const live = cede.filter((id) => game.regions[id] && (game.regions[id].owner === target || game.regions[id].owner === player.id))
-  const terms = { cede: live, reparations }
+  const terms = { cede: live, reparations, ...(puppet ? { puppet: true } : {}) }
   const net = netWarScore(game, player.id, target)
   const budget = Math.max(0, net)
   const { demand, concession } = termsCost(game, map, terms, player.id, target)
@@ -306,13 +313,68 @@ function PeaceComposer({ target }: { target: NationId }) {
         <input type="range" className="w-full" min={-MAX_REPARATIONS} max={MAX_REPARATIONS} step={1} value={reparations} onChange={(e) => setReparations(+e.target.value)} />
         <div className="text-[12px] text-white/45">Paid in money for {REPARATION_MONTHS} months.</div>
       </div>
+      {!game.nations[target].overlord && !player.overlord && (
+        <label className="flex items-start gap-2 text-[14px]">
+          <input type="checkbox" className="mt-1" checked={puppet} onChange={(e) => setPuppet(e.target.checked)} />
+          <span>
+            Make them a puppet state
+            <span className="block text-[12px] text-white/65">
+              They keep their land but pay you {Math.round(DIPLOMACY.puppet.tribute * 100)}% of their income and cannot declare war. It costs {puppetValue(game, map, target)} war score, and they may break free if they grow strong or restless.
+            </span>
+          </span>
+        </label>
+      )}
       <OrderButton
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
-        label={live.length === 0 && reparations === 0 ? 'Offer peace with no terms' : 'Send terms'}
+        label={live.length === 0 && reparations === 0 && !puppet ? 'Offer peace with no terms' : 'Send terms'}
         cost={`${PROPOSAL_COSTS.peace} influence`}
-        effect="They answer when you press Next turn"
+        effect="They answer when the month ends"
         tone="btn-primary"
       />
+    </div>
+  )
+}
+
+/** Loans and investment: lend money, or put money into their business. */
+function MoneyComposer({ target }: { target: NationId }) {
+  const view = usePlayerView()!
+  const { game, player } = view
+  const [amount, setAmount] = useState(100)
+  const [months, setMonths] = useState(12)
+  const [sector, setSector] = useState<SectorId>('manufacturing')
+  const L = DIPLOMACY.loan
+  const them = game.nations[target]
+  return (
+    <div className="space-y-3 rounded-lg bg-slate-950/50 p-2.5">
+      <div className="space-y-1.5">
+        <div className="text-[15px] font-semibold">Lend them money</div>
+        <div className="flex justify-between text-[14px]">
+          <span className="text-white/75">Amount</span>
+          <span className="tabular-nums">{amount}</span>
+        </div>
+        <input type="range" className="w-full" aria-label="Loan amount" min={L.min} max={L.max} step={10} value={amount} onChange={(e) => setAmount(+e.target.value)} />
+        <div className="flex justify-between text-[14px]">
+          <span className="text-white/75">Repaid over</span>
+          <span className="tabular-nums">{months} months</span>
+        </div>
+        <input type="range" className="w-full" aria-label="Loan length" min={L.minMonths} max={L.maxMonths} step={1} value={months} onChange={(e) => setMonths(+e.target.value)} />
+        <p className="text-[13px] text-white/70">
+          They pay {loanPayment(amount, months).toFixed(1)} a month, {(loanPayment(amount, months) * months - amount).toFixed(0)} more than you lend. Someone who cannot pay breaks the deal and loses your trust.
+        </p>
+        <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'loan', amount, months } }} label="Offer the loan" cost={`${PROPOSAL_COSTS.loan} influence`} effect="Money moves when they accept" tone="btn-primary" />
+      </div>
+      <div className="space-y-1.5 border-t border-white/10 pt-3">
+        <div className="text-[15px] font-semibold">Invest in their business</div>
+        <p className="text-[13px] text-white/70">It makes their firms grow, pays you {(INVEST.dividend * 100).toFixed(1)}% a month, and they like you for it. If you go to war, you lose it.</p>
+        <select className="field w-full px-3 py-2 text-[14px]" aria-label="Sector" value={sector} onChange={(e) => setSector(e.target.value as SectorId)}>
+          {SECTOR_IDS.map((id) => (
+            <option key={id} value={id}>
+              {SECTORS[id].name} (they have {(them.sectors[id] ?? 0).toFixed(1)})
+            </option>
+          ))}
+        </select>
+        <OrderButton order={{ type: 'invest', nationId: player.id, target, sector, amount }} label={`Invest ${amount}`} cost={`${amount} money`} effect="Starts at once" />
+      </div>
     </div>
   )
 }
@@ -329,7 +391,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const { game, player } = view
   const { map } = getWorld()
   const ref = useRef<HTMLDivElement>(null)
-  const [mode, setMode] = useState<'none' | 'trade' | 'peace'>('none')
+  const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'money'>('none')
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [focused])
@@ -343,10 +405,12 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const report = useMemo(() => opinionReport(game, map, id, player.id, { borders, coalition: ctx.coalition }), [game, map, id, player.id, borders, ctx.coalition])
   const power = perceivedPower(game, map, player.id, id)
   const persona = PERSONALITIES[n.personality]
+  const bloc = blocOf(game, id)
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
-  const status = war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
+  const sanctionedByMe = game.sanctions.some((x) => x.from === player.id && x.to === id && x.until >= game.turn)
+  const status = n.overlord ? `Puppet of ${game.nations[n.overlord]?.name ?? 'someone'}` : war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
   const statusColor = war ? 'text-rose-400' : allied ? 'text-cyan-300' : pact ? 'text-emerald-300' : 'text-slate-400'
-  const toggle = (m: 'trade' | 'peace') => setMode((cur) => (cur === m ? 'none' : m))
+  const toggle = (m: 'trade' | 'peace' | 'money') => setMode((cur) => (cur === m ? 'none' : m))
   return (
     <div
       ref={ref}
@@ -363,6 +427,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
         <span className="chip" title={persona.description}>
           {persona.name}
         </span>
+        {bloc && <span className="chip chip-blue">{bloc.name}</span>}
         <span>
           {regionsOf(game, id).length === 1 ? '1 country' : `${regionsOf(game, id).length} countries`} · strength {power.toFixed(0)} ({power > ctx.myPower ? 'stronger than you' : 'weaker than you'})
         </span>
@@ -384,6 +449,9 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           <>
             <button className={`btn btn-primary ${mode === 'trade' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('trade')}>
               Trade
+            </button>
+            <button className={`btn ${mode === 'money' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('money')}>
+              Loans and investment
             </button>
             {!allied && (
               <OrderButton
@@ -414,6 +482,30 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
             cost={`${PROPOSAL_COSTS.alliance} influence`}
             effect="Each of you can call the other into a war"
           />
+          <OrderButton
+            order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'guarantee' } }}
+            label="Guarantee"
+            cost={`${PROPOSAL_COSTS.guarantee} influence`}
+            effect={`You defend them if attacked, for ${DIPLOMACY.guarantee.months} months`}
+          />
+        </div>
+      )}
+      {!war && (
+        <div className="flex flex-wrap gap-1.5">
+          {sanctionedByMe ? (
+            <OrderButton order={{ type: 'liftSanctions', nationId: player.id, target: id }} label="Lift sanctions" effect="They will like you more" />
+          ) : (
+            !allied && (
+              <OrderButton
+                order={{ type: 'imposeSanctions', nationId: player.id, target: id }}
+                label="Sanction"
+                cost={`${DIPLOMACY.sanctions.cost} influence`}
+                effect={`Cuts their trade room and port income for ${DIPLOMACY.sanctions.months} months`}
+                tone="btn-quiet"
+              />
+            )
+          )}
+          {n.overlord === player.id && <OrderButton order={{ type: 'releasePuppet', nationId: player.id, target: id }} label="Set free" effect="They stop paying tribute and will thank you" />}
         </div>
       )}
       {callable.length > 0 && (
@@ -432,7 +524,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
       <AnimatePresence initial={false}>
         {mode !== 'none' && (
           <motion.div key={mode} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
-            {mode === 'trade' ? <TradeComposer target={id} /> : <PeaceComposer target={id} />}
+            {mode === 'trade' ? <TradeComposer target={id} /> : mode === 'money' ? <MoneyComposer target={id} /> : <PeaceComposer target={id} />}
           </motion.div>
         )}
       </AnimatePresence>
@@ -467,6 +559,7 @@ export function DiplomacyPanel() {
   const deals = game.deals.filter((d) => d.from === me || d.to === me)
   const mine = game.dispatches.filter((d) => d.from === me || d.to === me)
   const world = game.dispatches.filter((d) => d.from !== me && d.to !== me)
+  const blocs = blocsOf(game)
 
   const close = new Set<NationId>([...ctx.neighbors, ...enemiesOf(game, me), ...alliesOf(game, me)])
   for (const d of deals) close.add(d.from === me ? d.to : d.from)
@@ -478,7 +571,7 @@ export function DiplomacyPanel() {
     .slice(0, 6)
 
   return (
-    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. Offers are answered when you press Next turn.`} panel="diplomacy">
+    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. Offers are answered when the month ends.`} panel="diplomacy">
       {ctx.coalition && (
         <div className="rounded-lg border border-rose-500/50 bg-rose-500/10 p-3 text-xs text-rose-200">
           Your growing power alarms the world. Neighbors now distrust you and are quicker to band together against you.
@@ -496,6 +589,23 @@ export function DiplomacyPanel() {
           </motion.section>
         )}
       </AnimatePresence>
+      {blocs.length > 0 && (
+        <section className="space-y-2">
+          <div className="label">Alliance blocs in the world</div>
+          {blocs.slice(0, 6).map((b) => {
+            const mineBloc = b.members.includes(me)
+            return (
+              <div key={b.leader} className={`rounded-lg border p-2.5 text-[13px] ${mineBloc ? 'border-cyan-400/50 bg-cyan-400/5' : 'border-slate-700/70 bg-slate-900/40'}`}>
+                <div className="flex justify-between gap-2">
+                  <span className="font-semibold">{b.name}{mineBloc ? ' (yours)' : ''}</span>
+                  <span className="text-white/70 tabular-nums">strength {b.power.toFixed(0)}</span>
+                </div>
+                <div className="text-white/75 mt-0.5">{b.members.map((id) => game.nations[id]?.name).join(', ')}</div>
+              </div>
+            )
+          })}
+        </section>
+      )}
       {mine.length > 0 && (
         <section className="space-y-1.5">
           <div className="label">Last month</div>

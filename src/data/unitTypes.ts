@@ -1,3 +1,4 @@
+import type { PolicyEffects } from './government'
 import type { BuildingType, LawId, ProposalKind, TradeResource, UnitCounts, UnitType } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 
@@ -11,6 +12,10 @@ export interface UnitSpec {
   manpowerCost: number
   upkeep: number
   food: number
+  /** Steel to build one. */
+  steel: number
+  /** Oil it burns each month. */
+  oil: number
   requiresBuilding: BuildingType
 }
 
@@ -18,6 +23,8 @@ export interface UnitSpec {
 export const TRAIN_MONTHS: Record<UnitType, number> = {
   infantry: 1,
   armor: 2,
+  artillery: 2,
+  fighter: 2,
   air: 2,
   naval: 3,
 }
@@ -26,10 +33,12 @@ export const TRAIN_MONTHS: Record<UnitType, number> = {
 export const TRAIN_QUEUE_LIMIT = 4
 
 export const UNIT_SPECS: Record<UnitType, UnitSpec> = {
-  infantry: { name: 'Infantry', role: 'Cheap and steady. Best in cities, forests and mountains.', attack: 1, defense: 1.2, capitalCost: 10, manpowerCost: 10, upkeep: 0.6, food: 0.3, requiresBuilding: 'barracks' },
-  armor: { name: 'Tanks', role: 'Hits hardest on plains and desert. Poor in mountains and cities.', attack: 2.4, defense: 1.6, capitalCost: 25, manpowerCost: 5, upkeep: 1.4, food: 0.2, requiresBuilding: 'barracks' },
-  air: { name: 'Planes', role: 'Strikes first in every battle. Fragile when it has to defend.', attack: 2.2, defense: 0.8, capitalCost: 30, manpowerCost: 3, upkeep: 1.5, food: 0.1, requiresBuilding: 'factory' },
-  naval: { name: 'Warships', role: 'Fights only on coasts. A port lets you attack across the sea.', attack: 1.6, defense: 1.4, capitalCost: 35, manpowerCost: 4, upkeep: 1.6, food: 0.15, requiresBuilding: 'port' },
+  infantry: { name: 'Infantry', role: 'Cheap and steady. Best in cities, forests and mountains.', attack: 1, defense: 1.2, capitalCost: 10, manpowerCost: 10, upkeep: 0.6, food: 0.3, steel: 0, oil: 0, requiresBuilding: 'barracks' },
+  armor: { name: 'Tanks', role: 'Hits hardest on plains and desert. Poor in mountains and cities.', attack: 2.4, defense: 1.6, capitalCost: 25, manpowerCost: 5, upkeep: 1.4, food: 0.2, steel: 3, oil: 0.15, requiresBuilding: 'barracks' },
+  artillery: { name: 'Artillery', role: 'Big guns. Grinds down a Defense Line, best with a Siege. Weak if caught alone.', attack: 2, defense: 0.7, capitalCost: 28, manpowerCost: 4, upkeep: 1.3, food: 0.2, steel: 2, oil: 0.06, requiresBuilding: 'barracks' },
+  fighter: { name: 'Fighters', role: 'Wins the air. The side with more fighters makes the other side\'s bombers far weaker.', attack: 1.2, defense: 1.4, capitalCost: 26, manpowerCost: 2, upkeep: 1.3, food: 0.1, steel: 2, oil: 0.1, requiresBuilding: 'factory' },
+  air: { name: 'Bombers', role: 'Strikes first and hard. Useless if the enemy rules the air.', attack: 2.4, defense: 0.5, capitalCost: 32, manpowerCost: 3, upkeep: 1.5, food: 0.1, steel: 3, oil: 0.12, requiresBuilding: 'factory' },
+  naval: { name: 'Warships', role: 'Fights only on coasts. A port lets you attack across the sea.', attack: 1.6, defense: 1.4, capitalCost: 35, manpowerCost: 4, upkeep: 1.6, food: 0.15, steel: 5, oil: 0.2, requiresBuilding: 'port' },
 }
 
 export interface BuildingSpec {
@@ -66,12 +75,27 @@ export interface LawSpec {
   name: string
   cost: number
   description: string
+  effects: Partial<PolicyEffects>
 }
 
 export const LAW_SPECS: Record<LawId, LawSpec> = {
-  martial_law: { name: 'Martial Law', cost: 20, description: 'Stability +15, but all economic output -15%.' },
-  war_economy: { name: 'War Economy', cost: 25, description: 'Factory output +25%, stability -10.' },
-  conscription_act: { name: 'Conscription Act', cost: 20, description: 'Raises the maximum draft rate from 20% to 35%.' },
+  martial_law: { name: 'Martial Law', cost: 20, description: 'Stability +15, but all economic output -15%.', effects: { stability: 15, output: -0.15 } },
+  war_economy: { name: 'War Economy', cost: 25, description: 'Factory output +25%, stability -10.', effects: { factory: 0.25, stability: -10 } },
+  conscription_act: { name: 'Conscription Act', cost: 20, description: 'Raises the maximum draft rate from 20% to 35%.', effects: {} },
+  free_trade: { name: 'Free Trade', cost: 25, description: 'The market keeps 3% instead of 8%, ports move 25% more, and businesses grow faster. Stability -2.', effects: { trade: 0.25, growth: 0.15, stability: -2 } },
+  rationing: { name: 'Rationing', cost: 15, description: 'People eat 15% less and use 20% fewer goods. Stability -6.', effects: { foodUse: -0.15, goodsUse: -0.2, stability: -6 } },
+  universal_healthcare: { name: 'Universal Healthcare', cost: 30, description: 'Stability +8. Costs 6% of your income.', effects: { stability: 8, money: -0.06 } },
+  industrial_policy: { name: 'Industrial Policy', cost: 25, description: 'Factory output +12% and businesses grow faster. Costs 4% of your income.', effects: { factory: 0.12, growth: 0.1, money: -0.04 } },
+  press_control: { name: 'Press Control', cost: 20, description: 'Influence +0.8 a month and stability +4, but research -8%.', effects: { influence: 0.8, stability: 4, research: -0.08 } },
+  austerity: { name: 'Austerity', cost: 20, description: 'Upkeep -12% and 4% more income. Stability -8.', effects: { upkeep: -0.12, money: 0.04, stability: -8 } },
+  research_grants: { name: 'Research Grants', cost: 25, description: 'Research +20%. Costs 5% of your income.', effects: { research: 0.2, money: -0.05 } },
+}
+
+export const DIPLOMACY = {
+  loan: { min: 30, max: 400, minMonths: 3, maxMonths: 24, interest: 0.007 },
+  sanctions: { cost: 15, months: 12, tradeCut: 0.2, minFloor: 0.2 },
+  guarantee: { months: 36 },
+  puppet: { tribute: 0.12, breakChance: 0.05, valueShare: 0.6, minValue: 20 },
 }
 
 export const COSTS = {
@@ -88,6 +112,8 @@ export const PROPOSAL_COSTS: Record<ProposalKind, number> = {
   alliance: 25,
   trade: 5,
   callToArms: 10,
+  loan: 5,
+  guarantee: 10,
 }
 
 export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
@@ -96,6 +122,8 @@ export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
   alliance: 'Defensive alliance',
   trade: 'Trade deal',
   callToArms: 'Call to arms',
+  loan: 'Loan',
+  guarantee: 'Guarantee of independence',
 }
 
 /** Repeatable drilling. Rank 0 is Green; rank 5 is Guard. */
@@ -118,7 +146,7 @@ export function trainingRank(level: number): string {
 export type UnitTraining = Record<UnitType, number>
 
 export function emptyTraining(): UnitTraining {
-  return { infantry: 0, armor: 0, air: 0, naval: 0 }
+  return { infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0 }
 }
 
 export function clampTraining(level: number): number {
@@ -171,6 +199,9 @@ export const MARKET: Record<TradeResource, MarketSpec> = {
   food: { name: 'Food', short: 'Food', base: 1.3, reference: 60 },
   tp: { name: 'Research', short: 'Research', base: 2.2, reference: 40 },
   manpower: { name: 'Soldiers', short: 'Soldiers', base: 0.12, reference: 400 },
+  oil: { name: 'Oil', short: 'Oil', base: 2, reference: 14 },
+  steel: { name: 'Steel', short: 'Steel', base: 1.8, reference: 12 },
+  goods: { name: 'Goods', short: 'Goods', base: 1.1, reference: 20 },
 }
 
 export const TRADE_LIMITS = { maxMonths: 12, maxAmount: 500 }

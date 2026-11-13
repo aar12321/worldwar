@@ -18,12 +18,23 @@ export interface DifficultySpec {
   aggression: number
   /** Scales how many units bots recruit each month, and across how many sites. */
   production: number
+  /**
+   * How much of the country a bot runs. 0 plays the basics. 1 also grows cities, sets budgets and laws,
+   * and funds business. 2 also borrows, invests, sanctions, counters your units, and fights together with allies.
+   */
+  skill: 0 | 1 | 2
+  /** Most alliances a bot keeps. */
+  maxAlliances: number
+  /** Whether neighbors band together against a runaway player. */
+  coalitions: boolean
+  /** Chance an opportunist drops a weak ally each month. */
+  betrayal: number
 }
 
 export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
   easy: {
     name: 'Easy',
-    description: 'Cautious rivals who rarely gang up on you.',
+    description: 'Cautious rivals who play the basics, wait a long time before attacking you, and never band together against you.',
     attackRatio: 1.6,
     warDeclarePowerRatio: 2,
     playerGracePeriod: 30,
@@ -32,10 +43,14 @@ export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
     mistakeRate: 0.1,
     aggression: 0.6,
     production: 0.7,
+    skill: 0,
+    maxAlliances: 1,
+    coalitions: false,
+    betrayal: 0,
   },
   normal: {
-    name: 'Normal',
-    description: 'Rivals play like seasoned humans.',
+    name: 'Medium',
+    description: 'Rivals run their countries well: cities, budgets, laws and business. They form alliances and gang up on a runaway leader.',
     attackRatio: 1.3,
     warDeclarePowerRatio: 1.5,
     playerGracePeriod: 20,
@@ -44,10 +59,14 @@ export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
     mistakeRate: 0.05,
     aggression: 1,
     production: 1.2,
+    skill: 1,
+    maxAlliances: 2,
+    coalitions: true,
+    betrayal: 0.04,
   },
   hard: {
     name: 'Hard',
-    description: 'Ruthless rivals with a richer economy.',
+    description: 'Ruthless rivals with a richer economy. They borrow, invest, sanction, counter your army and fight side by side with allies.',
     attackRatio: 1.15,
     warDeclarePowerRatio: 1.3,
     playerGracePeriod: 10,
@@ -56,6 +75,10 @@ export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
     mistakeRate: 0.02,
     aggression: 1.25,
     production: 1.8,
+    skill: 2,
+    maxAlliances: 3,
+    coalitions: true,
+    betrayal: 0.08,
   },
 }
 

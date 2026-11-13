@@ -27,7 +27,22 @@ const UNIT_GLYPH: Record<UnitType, ReactNode> = {
       <path d="M7 16h.01M12 16h.01M17 16h.01" />
     </>
   ),
-  // A plane seen from above.
+  // A field gun.
+  artillery: (
+    <>
+      <path d="M3 15.5h4.5" />
+      <path d="M6.5 13.2l10.8-4.4 1.2 3-10.8 4.4z" />
+      <circle cx="10" cy="17.5" r="3" />
+      <path d="M17.8 9.2l3.2-1.3" />
+    </>
+  ),
+  // A small fast jet.
+  fighter: (
+    <>
+      <path d="M12 2.5c.7 0 1.1 1.2 1.1 2.8v4.1l5.9 3.6v1.6l-5.9-1.6v3.5l1.7 1.3v1.2L12 17.8l-2.8.8v-1.2l1.7-1.3v-3.5L5 14.6V13l5.9-3.6V5.3c0-1.6.4-2.8 1.1-2.8z" />
+    </>
+  ),
+  // A heavy bomber seen from above.
   air: (
     <>
       <path d="M12 2.5c.9 0 1.5 1 1.5 2.4V9l7.5 4.2v1.9l-7.5-2.2v4.3l2.3 1.7v1.4L12 19.4l-3.8.9v-1.4l2.3-1.7v-4.3L3 15.1v-1.9L10.5 9V4.9c0-1.4.6-2.4 1.5-2.4z" />

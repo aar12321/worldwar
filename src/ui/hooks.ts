@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { advise, type Advice } from '../engine/advisor'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { committedCost, type OrderCost } from '../engine/orders'
-import type { GameState, Nation, Order } from '../engine/types'
+import type { Budget, GameState, Nation, Order } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 
@@ -12,7 +12,7 @@ export interface PlayerView {
   econ: EconomyReport
   committed: OrderCost
   orders: Order[]
-  pendingPolicy: { taxRate: number; draftRate: number }
+  pendingPolicy: { taxRate: number; draftRate: number; corporateTax: number; budget: Budget }
 }
 
 const viewCache = new WeakMap<GameState, { orders: Order[]; view: PlayerView }>()
@@ -36,7 +36,10 @@ function buildPlayerView(game: GameState, orders: Order[]): PlayerView {
   const { map } = getWorld()
   const player = game.nations[game.playerId]
   const policy = orders.find((o) => o.type === 'setPolicy')
-  const pendingPolicy = policy && policy.type === 'setPolicy' ? { taxRate: policy.taxRate, draftRate: policy.draftRate } : { taxRate: player.taxRate, draftRate: player.draftRate }
+  const pendingPolicy =
+    policy && policy.type === 'setPolicy'
+      ? { taxRate: policy.taxRate, draftRate: policy.draftRate, corporateTax: policy.corporateTax ?? player.corporateTax, budget: policy.budget ?? player.budget }
+      : { taxRate: player.taxRate, draftRate: player.draftRate, corporateTax: player.corporateTax, budget: player.budget }
   const projectedGame: GameState = policy
     ? { ...game, nations: { ...game.nations, [player.id]: { ...player, ...pendingPolicy } } }
     : game

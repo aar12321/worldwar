@@ -2,22 +2,42 @@ import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
 export type NationId = string
-export type UnitType = 'infantry' | 'armor' | 'air' | 'naval'
+/** Planes are two types: fighters win the air, bombers (`air`) strike the ground. */
+export type UnitType = 'infantry' | 'armor' | 'artillery' | 'fighter' | 'air' | 'naval'
 export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic'
-export type TechBranch = 'land' | 'air' | 'naval' | 'infra'
-export type LawId = 'martial_law' | 'war_economy' | 'conscription_act'
+export type TechBranch = 'land' | 'air' | 'naval' | 'infra' | 'economy'
+export type LawId =
+  | 'martial_law'
+  | 'war_economy'
+  | 'conscription_act'
+  | 'free_trade'
+  | 'rationing'
+  | 'universal_healthcare'
+  | 'industrial_policy'
+  | 'press_control'
+  | 'austerity'
+  | 'research_grants'
+export type SectorId = 'farming' | 'energy' | 'manufacturing' | 'arms' | 'technology' | 'finance'
+export type CityFocus = 'balanced' | 'industry' | 'farming' | 'harbor' | 'research' | 'fortress' | 'finance'
+export type GovernmentType = 'democracy' | 'monarchy' | 'junta' | 'one_party'
+/** Where tax money goes. Each share is 0 to 1 and the four add up to 1. */
+export type BudgetKey = 'military' | 'education' | 'health' | 'infrastructure'
+export type Budget = Record<BudgetKey, number>
 export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marshal' | 'stalwart'
 export type SpyMission = 'sabotage'
 export type Difficulty = 'easy' | 'normal' | 'hard'
 export type Personality = 'expansionist' | 'trader' | 'turtle' | 'opportunist' | 'honorable'
-export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower'
+export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower' | 'oil' | 'steel' | 'goods'
+/** The materials a nation holds beyond money and people. */
+export type Material = 'oil' | 'steel' | 'goods'
 /** First-game goals a player nation has reached. */
 export type Milestone = 'build' | 'train' | 'research' | 'war' | 'win' | 'capture'
-export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms'
+export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms' | 'loan' | 'guarantee'
 
-export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'air', 'naval']
+export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'artillery', 'fighter', 'air', 'naval']
 export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic']
-export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower']
+export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower', 'oil', 'steel', 'goods']
+export const MATERIALS_LIST: Material[] = ['oil', 'steel', 'goods']
 
 /** Static geography, never mutated during play. */
 export interface MapRegion {
@@ -52,6 +72,18 @@ export interface WorldMap {
 export type Buildings = Record<BuildingType, number>
 export type UnitCounts = Record<UnitType, number>
 
+/** A city inside a country. It grows with money and takes a focus that boosts the country. */
+export interface City {
+  id: string
+  name: string
+  /** 1 to 5. */
+  level: number
+  focus: CityFocus
+  port: boolean
+  lat?: number
+  lng?: number
+}
+
 export interface RegionState {
   id: RegionId
   owner: NationId
@@ -67,6 +99,7 @@ export interface RegionState {
   integration: number
   /** Last turn an enemy attacked this country. It heals only in quiet months. */
   attackedTurn: number
+  cities: City[]
 }
 
 export interface General {
@@ -98,6 +131,12 @@ export interface Resources {
   food: number
   pp: number
   tp: number
+  /** Fuel for tanks, planes and warships. */
+  oil: number
+  /** What vehicles are built from. */
+  steel: number
+  /** What your people buy. Running out costs stability. */
+  goods: number
 }
 
 export interface Nation {
@@ -115,10 +154,38 @@ export interface Nation {
   draftRate: number
   stability: number
   warWeariness: number
+  government: GovernmentType
+  budget: Budget
+  /** Tax on private businesses, 0 to 0.4. */
+  corporateTax: number
+  /** Turn of the next election, or 0 when the government holds none. */
+  nextElection: number
+  /** Turn the form of government last changed. */
+  lastReform: number
+  /** The nation that rules this one as a puppet, if any. */
+  overlord: NationId | null
+  /** Size of each private business sector. */
+  sectors: Record<SectorId, number>
+  /** Sectors the state subsidizes: they cost money and grow faster. */
+  subsidies: SectorId[]
+  /** Bonds the state owes. Interest is paid every month. */
+  debt: number
+  /** Months in a row the treasury has been in the red with debt outstanding. */
+  redMonths: number
+  /** Turn until which no one will lend to this nation after a default. */
+  defaultedUntil: number
   techs: string[]
   laws: LawId[]
   generals: General[]
   foodShortage: boolean
+  /** No oil: vehicles fight at reduced strength. */
+  oilShortage: boolean
+  /** No goods: the people are unhappy. */
+  goodsShortage: boolean
+  /** Units moved through the world market this month. */
+  tradeUsed: number
+  /** Materials the country buys on its own to keep a small reserve. */
+  autoBuy: TradeResource[]
   inDebt: boolean
   /** Consecutive months spent with negative Capital. */
   debtTurns: number
@@ -136,6 +203,8 @@ export type ResourceBundle = Partial<Record<TradeResource, number>>
 export interface PeaceTerms {
   /** Regions that change hands; each goes to the side that does not currently own it. */
   cede: RegionId[]
+  /** The loser becomes a puppet of the proposer instead of losing land. */
+  puppet?: boolean
   /** Capital per month for REPARATION_MONTHS. Positive: the target pays the proposer. Negative: the proposer pays. */
   reparations: number
 }
@@ -155,6 +224,8 @@ export type ProposalDraft =
   | { kind: 'alliance' }
   | { kind: 'trade'; terms: TradeTerms }
   | { kind: 'callToArms'; enemy: NationId }
+  | { kind: 'loan'; amount: number; months: number }
+  | { kind: 'guarantee' }
 
 export type Proposal = ProposalDraft & {
   id: string
@@ -165,9 +236,24 @@ export type Proposal = ProposalDraft & {
   expires: number
 }
 
+export interface Pledge {
+  from: NationId
+  to: NationId
+  until: number
+}
+
+/** Money one nation has put into another's business sector. It pays dividends until war or collapse. */
+export interface Investment {
+  id: string
+  investor: NationId
+  target: NationId
+  sector: SectorId
+  amount: number
+}
+
 export interface Deal {
   id: string
-  kind: 'trade' | 'reparations'
+  kind: 'trade' | 'reparations' | 'loan'
   from: NationId
   to: NationId
   /** Paid by `from` to `to` every month. */
@@ -222,13 +308,27 @@ export interface PendingEvent {
 }
 
 export type Order =
-  | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number }
+  | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number; corporateTax?: number; budget?: Budget }
+  | { type: 'setGovernment'; nationId: NationId; government: GovernmentType }
+  | { type: 'imposeSanctions'; nationId: NationId; target: NationId }
+  | { type: 'liftSanctions'; nationId: NationId; target: NationId }
+  | { type: 'releasePuppet'; nationId: NationId; target: NationId }
+  | { type: 'developCity'; nationId: NationId; regionId: RegionId; cityId: string }
+  | { type: 'setCityFocus'; nationId: NationId; regionId: RegionId; cityId: string; focus: CityFocus }
+  | { type: 'fundSector'; nationId: NationId; sector: SectorId; amount: number }
+  | { type: 'setSubsidies'; nationId: NationId; sectors: SectorId[] }
+  | { type: 'issueBonds'; nationId: NationId; amount: number }
+  | { type: 'repayDebt'; nationId: NationId; amount: number }
+  | { type: 'invest'; nationId: NationId; target: NationId; sector: SectorId; amount: number }
   | { type: 'build'; nationId: NationId; regionId: RegionId; building: BuildingType }
   | { type: 'queueTrain'; nationId: NationId; unit: UnitType }
   | { type: 'cancelTrain'; nationId: NationId; jobId: string }
   | { type: 'train'; nationId: NationId; unit: UnitType }
   | { type: 'upgradeWeapons'; nationId: NationId; unit: UnitType }
   | { type: 'research'; nationId: NationId; techId: string }
+  | { type: 'marketBuy'; nationId: NationId; resource: TradeResource; amount: number }
+  | { type: 'marketSell'; nationId: NationId; resource: TradeResource; amount: number }
+  | { type: 'setAutoBuy'; nationId: NationId; resources: TradeResource[] }
   | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
@@ -295,7 +395,14 @@ export interface GameState {
   turn: number
   seed: number
   settings: GameSettings
+  /** The nation of the player at this screen. In online games each screen sets its own. */
   playerId: NationId
+  /** Every nation a person plays. One in a single-player game, two to four online. */
+  humans: NationId[]
+  /** The human who won, once the game is won. */
+  winner: NationId | null
+  /** Humans knocked out of an online game. Their nations carry on under the AI. */
+  eliminated: NationId[]
   nations: Record<NationId, Nation>
   regions: Record<RegionId, RegionState>
   /** Units in production. The front jobs advance each month, up to the nation's training slots. */
@@ -311,6 +418,11 @@ export interface GameState {
   /** Proposals awaiting an answer from the player. */
   proposals: Proposal[]
   deals: Deal[]
+  investments: Investment[]
+  /** Trade sanctions: `from` is cutting off `to` until the turn given. */
+  sanctions: Pledge[]
+  /** Promises to defend a nation: `from` guards `to` until the turn given. */
+  guarantees: Pledge[]
   /** "a>b" -> war score a has earned against b (0..100). */
   warScore: Record<string, number>
   /** Sorted "a|b" -> turn the war started. */
@@ -328,4 +440,6 @@ export interface GameState {
   log: LogEntry[]
   nextId: number
   outcome: 'playing' | 'victory' | 'defeat'
+  /** Every nation's gross income added together, from the last turn. The base for the economic victory. */
+  worldGross: number
 }

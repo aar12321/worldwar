@@ -1,11 +1,17 @@
 import { PLAYER_COLOR, mapColor } from './mapColors'
-import { emptyTraining } from './unitTypes'
+import { OIL_DEPOSITS, STEEL_DEPOSITS } from './deposits'
+import { SECTOR_IDS, SECTORS } from './business'
+import { sectorCap } from '../engine/business'
+import { worldGross } from '../engine/victory'
+import { startingCities } from '../engine/cities'
+import { CORPORATE_TAX, EVEN_BUDGET, GOVERNMENTS } from './government'
+import { UNIT_SPECS, emptyTraining } from './unitTypes'
 import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
-import { BUILDING_TYPES } from '../engine/types'
-import type { Difficulty, GameSettings, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
+import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
+import type { Difficulty, GameSettings, GovernmentType, SectorId, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
 
 const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dmitri', 'Saoirse', 'Tariq', 'Mei', 'Lucien', 'Zofia', 'Kwame', 'Elena', 'Hugo', 'Anika', 'Mateo', 'Yara', 'Bogdan', 'Ines']
 const GENERAL_LAST = ['Varga', 'Okafor', 'Takeda', 'Brandt', 'Montoya', 'Haddad', 'Volkov', 'Byrne', 'Rahman', 'Lin', 'Moreau', 'Nowak', 'Mensah', 'Petrova', 'Lindqvist', 'Sato', 'Reyes', 'Kader', 'Horvat', 'Silva']
@@ -25,6 +31,8 @@ function nationColor(index: number): string {
 
 export interface NewGameOptions {
   playerRegionId: string
+  /** Every nation a person plays, for an online game. Defaults to just the player's. */
+  humans?: string[]
   seed: number
   victoryShare: number
   difficulty?: Difficulty
@@ -37,6 +45,14 @@ function pickPersonality(aggression: number, rng: Rng): Personality {
   return roll < 0.3 ? 'trader' : roll < 0.55 ? 'opportunist' : roll < 0.8 ? 'honorable' : roll < 0.9 ? 'turtle' : 'expansionist'
 }
 
+/** Early business: bigger and more varied in richer countries. */
+function startingSectors(workforce: number, dev: number): Record<SectorId, number> {
+  const cap = sectorCap(workforce)
+  const out = {} as Record<SectorId, number>
+  for (const id of SECTOR_IDS) out[id] = Math.round(cap * dev * SECTORS[id].startShare * 1.2 * 100) / 100
+  return out
+}
+
 export function createInitialState(map: WorldMap, opts: NewGameOptions): GameState {
   const rng = createRng(opts.seed, 9999)
   // The old early-surprise roll stays so a seed still builds the same generals and personalities.
@@ -47,6 +63,9 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     seed: opts.seed,
     settings,
     playerId: opts.playerRegionId,
+    humans: [...new Set([opts.playerRegionId, ...(opts.humans ?? [])])],
+    winner: null,
+    eliminated: [],
     nations: {},
     regions: {},
     trainingQueue: [],
@@ -56,6 +75,9 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     alliances: [],
     proposals: [],
     deals: [],
+    investments: [],
+    sanctions: [],
+    guarantees: [],
     warScore: {},
     warStarted: {},
     opinions: {},
@@ -67,6 +89,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     log: [],
     nextId: 1,
     outcome: 'playing',
+    worldGross: 0,
   }
 
   map.order.forEach((id, index) => {
@@ -81,6 +104,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       line: 0,
       integration: 1,
       attackedTurn: -1,
+      cities: startingCities(mr),
     }
     const w = regionWorkforce(region, mr)
     const dev = mr.development
@@ -90,17 +114,20 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     region.buildings.port = mr.coastal ? 1 + Math.floor((w / 20) * dev) : 0
 
     const techs = ['land_rifles']
-    if (dev >= 0.5) techs.push('land_light_tanks', 'air_propeller')
+    if (dev >= 0.5) techs.push('land_light_tanks', 'air_propeller', 'land_artillery')
+    if (dev >= 0.7) techs.push('air_bombers')
     if (dev >= 0.5 && mr.coastal) techs.push('naval_gunboats')
     if (dev >= 0.8) techs.push('infra_farming')
 
     const units = {
       infantry: Math.max(1, Math.round(1 + Math.sqrt(w) * 1.2)),
       armor: techs.includes('land_light_tanks') ? Math.round(w / 10) : 0,
-      air: techs.includes('air_propeller') ? Math.round(w / 12) : 0,
+      artillery: techs.includes('land_artillery') ? Math.round(w / 16) : 0,
+      fighter: techs.includes('air_propeller') ? Math.round(w / 20) : 0,
+      air: techs.includes('air_bombers') ? Math.round(w / 20) : 0,
       naval: techs.includes('naval_gunboats') ? Math.round(w / 15) : 0,
     }
-    const armyFood = units.infantry * 0.3 + units.armor * 0.2 + units.air * 0.1 + units.naval * 0.15
+    const armyFood = UNIT_TYPES.reduce((sum, k) => sum + units[k] * UNIT_SPECS[k].food, 0)
     region.buildings.farm = Math.max(1, Math.ceil((armyFood + w * 0.12) / ECON.foodPerFarm))
     for (const b of BUILDING_TYPES) region.buildings[b] = Math.min(region.buildings[b], buildingCap(w, b))
 
@@ -114,7 +141,10 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       })
     }
 
-    const isPlayer = id === opts.playerRegionId
+    // Rich countries are mostly democracies; the rest are a mix.
+    const govRoll = rng.next()
+    const government: GovernmentType = dev >= 0.7 ? (govRoll < 0.75 ? 'democracy' : govRoll < 0.88 ? 'monarchy' : 'one_party') : dev >= 0.4 ? (govRoll < 0.4 ? 'democracy' : govRoll < 0.65 ? 'monarchy' : govRoll < 0.85 ? 'one_party' : 'junta') : govRoll < 0.2 ? 'democracy' : govRoll < 0.5 ? 'monarchy' : govRoll < 0.7 ? 'one_party' : 'junta'
+    const isPlayer = state.humans.includes(id)
     const aggression = isPlayer ? 0 : rng.range(0.15, 0.9)
     const personality = isPlayer ? 'honorable' : pickPersonality(aggression, rng)
     const nation: Nation = {
@@ -125,7 +155,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       originalCapital: id,
       isPlayer,
       alive: true,
-      resources: { capital: 30 + w * 6, food: w * 4, pp: 30, tp: 0 },
+      resources: { capital: 30 + w * 6, food: w * 4, pp: 30, tp: 0, oil: 8 + (OIL_DEPOSITS[id] ?? 0) * 6, steel: 6 + (STEEL_DEPOSITS[id] ?? 0) * 4, goods: w * 2 },
       militaryPool: w * 0.05 * ECON.militaryCapPerWorkforce * 0.5,
       taxRate: 0.25,
       draftRate: 0.05,
@@ -134,7 +164,22 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       techs,
       laws: [],
       generals,
+      government,
+      budget: { ...EVEN_BUDGET },
+      overlord: null,
+      sectors: startingSectors(w, dev),
+      subsidies: [],
+      debt: 0,
+      redMonths: 0,
+      defaultedUntil: 0,
+      corporateTax: CORPORATE_TAX.default,
+      nextElection: GOVERNMENTS[government].election > 0 ? 12 + rng.int(0, 24) : 0,
+      lastReform: 0,
       foodShortage: false,
+      oilShortage: false,
+      goodsShortage: false,
+      tradeUsed: 0,
+      autoBuy: ['food', 'oil', 'goods'],
       inDebt: false,
       debtTurns: 0,
       embargoedUntil: 0,
@@ -163,6 +208,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     if (nation.resources.food < 8) nation.resources.food = 8
   }
   for (const r of Object.values(state.regions)) r.line = lineMax(state, map, r.id)
+  state.worldGross = worldGross(state, map)
 
   return state
 }

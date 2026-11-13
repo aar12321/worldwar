@@ -48,10 +48,12 @@ export function forgetNation(s: GameState, id: NationId) {
 
 /** Rivals also band together once the player has taken half the countries their victory needs. */
 export function coalitionActive(s: GameState, map?: WorldMap): boolean {
-  const p = s.nations[s.playerId]
-  if (!p?.alive) return false
-  if (populationShare(s, p.id) >= s.settings.victoryShare * COALITION_THRESHOLD) return true
-  return !!map && countriesTaken(s) >= Math.ceil(conquestGoal(s.settings.victoryShare) / 2)
+  return s.humans.some((id) => {
+    const p = s.nations[id]
+    if (!p?.alive) return false
+    if (populationShare(s, id) >= s.settings.victoryShare * COALITION_THRESHOLD) return true
+    return !!map && countriesTaken(s, id) >= Math.ceil(conquestGoal(s.settings.victoryShare) / 2)
+  })
 }
 
 /** Nations sharing a land border or sea lane with `id`. */
@@ -111,7 +113,7 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   if (borders) push('Border tensions', h.personality === 'expansionist' ? -14 : -6)
   if (hasCasusBelli(s, holder, target)) push('Grievance', -15)
   const coalition = ctx.coalition ?? coalitionActive(s)
-  if (coalition && target === s.playerId && borders) push('Fears your power', -20)
+  if (coalition && s.humans.includes(target) && borders) push('Fears your power', -20)
   for (const m of storedOpinion(s, holder, target)) push(m.label, m.value)
   const total = Math.round(clamp(parts.reduce((sum, p) => sum + p.value, 0), -100, 100))
   return { total, parts }
