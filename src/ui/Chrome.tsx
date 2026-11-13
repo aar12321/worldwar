@@ -4,17 +4,18 @@ import { turnDate } from '../engine/helpers'
 import { describeOrder } from '../engine/resolveTurn'
 import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
 import { getWorld } from '../map/world'
-import { useGame, type Panel } from '../store'
-import { usePlayerView } from './hooks'
+import { useGame, type Panel, type ReportDelta } from '../store'
+import { AdviceList } from './Briefing'
+import { fmt, signed, useAdvice, usePlayerView } from './hooks'
+import { BriefingIcon, DiplomacyIcon, EconomyIcon, MilitaryIcon, ResearchIcon } from './icons'
 import { Modal } from './Modal'
 
 const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
-  { panel: 'country', label: 'Country', key: 'C', icon: <NationIcon /> },
+  { panel: 'briefing', label: 'Briefing', key: 'B', icon: <BriefingIcon /> },
+  { panel: 'economy', label: 'Economy', key: 'E', icon: <EconomyIcon /> },
   { panel: 'military', label: 'Military', key: 'M', icon: <MilitaryIcon /> },
-  { panel: 'tech', label: 'Research', key: 'T', icon: <ResearchIcon /> },
-  { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <PeopleIcon /> },
-  { panel: 'log', label: 'News', key: 'L', icon: <NewsIcon /> },
-  { panel: 'settings', label: 'Settings', key: '', icon: <SettingsIcon /> },
+  { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <DiplomacyIcon /> },
+  { panel: 'tech', label: 'Research', key: 'R', icon: <ResearchIcon /> },
 ]
 
 export function NavRail() {
@@ -25,8 +26,10 @@ export function NavRail() {
     const unanswered = s.game.proposals.filter((p) => p.to === s.game!.playerId && !s.orders.some((o) => o.type === 'respond' && o.proposalId === p.id))
     return unanswered.length
   })
+  const urgent = useAdvice().filter((a) => a.urgency === 'now').length
+  const badge = (p: Panel) => (p === 'diplomacy' ? offers : p === 'briefing' ? urgent : 0)
   return (
-    <nav className="nav-dock" aria-label="Game sections">
+    <nav className="nav-dock" aria-label="Desks">
       <div className="surface max-h-full overflow-y-auto scroll-thin rounded-[22px] p-1.5 flex flex-col gap-0.5">
         {NAV.map((n) => (
           <button
@@ -38,8 +41,10 @@ export function NavRail() {
           >
             {n.icon}
             <span className="text-[12px] font-medium tracking-tight">{n.label}</span>
-            {n.panel === 'diplomacy' && offers > 0 && (
-              <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full bg-[#ff453a] text-[11px] font-semibold text-white flex items-center justify-center">{offers}</span>
+            {badge(n.panel) > 0 && (
+              <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full bg-[#ff453a] text-[11px] font-semibold text-white flex items-center justify-center" aria-label={`${badge(n.panel)} need you`}>
+                {badge(n.panel)}
+              </span>
             )}
           </button>
         ))}
@@ -102,32 +107,97 @@ export function Toasts() {
   )
 }
 
-/** What happened this turn, once the battles have played. */
+function DeltaCell({ d }: { d: ReportDelta }) {
+  const digits = d.digits ?? 0
+  const change = d.after - d.before
+  const flat = Math.abs(change) < (digits ? 0.05 : 0.5)
+  return (
+    <div className="inset-card py-2 px-2 text-center">
+      <div className="label">{d.label}</div>
+      <div className="text-[17px] font-semibold tabular-nums">
+        {fmt(d.after, digits)}
+        {d.suffix}
+      </div>
+      <div className={`text-[12px] font-semibold tabular-nums ${flat ? 'text-white/60' : change > 0 ? 'text-[#6eeb8a]' : 'text-[#ff8a84]'}`}>{flat ? 'no change' : `${signed(change, digits)}${d.suffix ?? ''}`}</div>
+    </div>
+  )
+}
+
+/** The monthly report: what the month did to you, and what the advisor would do next. */
 export function TurnSummary() {
   const summary = useGame((s) => s.summary)
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const eventPending = useGame((s) => !!s.game?.pendingEvent)
   const outcome = useGame((s) => s.game?.outcome)
   const dismiss = useGame((s) => s.dismissSummary)
+  const advice = useAdvice(3)
   if (!summary || fxBusy || outcome !== 'playing') return null
   return (
     <Modal
       title={`${turnDate(summary.turn)} is over`}
-      kicker={`Turn ${summary.turn}`}
+      kicker="Monthly report"
       onClose={dismiss}
+      wide
       footer={
         <button className="btn btn-primary px-5 py-2.5 text-[15px]" data-autofocus onClick={dismiss}>
-          {eventPending ? 'Continue' : 'Start the next turn'}
+          {eventPending ? 'Continue' : `Start ${turnDate(summary.turn + 1)}`}
         </button>
       }
     >
-      <ul className="space-y-2">
-        {summary.lines.slice(-14).map((line, i) => (
-          <li key={i} className="text-[15px] text-white/85 border-l-2 border-white/20 pl-3">
-            {line}
-          </li>
-        ))}
-      </ul>
+      <div className="report-grid">
+        <div className="space-y-5">
+          <section>
+            <h3 className="text-[15px] font-semibold mb-2">Your country</h3>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {summary.deltas.map((d) => (
+                <DeltaCell key={d.label} d={d} />
+              ))}
+            </div>
+          </section>
+          {summary.battles.length > 0 && (
+            <section>
+              <h3 className="text-[15px] font-semibold mb-2">Battles</h3>
+              <ul className="space-y-1.5">
+                {summary.battles.map((b, i) => (
+                  <li key={i} className={`text-[15px] border-l-2 pl-3 ${b.good ? 'border-[#30d158] text-white/90' : 'border-[#ff453a] text-white/90'}`}>
+                    {b.text}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {summary.lines.length > 0 && (
+            <section>
+              <h3 className="text-[15px] font-semibold mb-2">News at home</h3>
+              <ul className="space-y-1.5">
+                {summary.lines.map((line, i) => (
+                  <li key={i} className="text-[15px] text-white/85 border-l-2 border-white/20 pl-3">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {summary.world.length > 0 && (
+            <section>
+              <h3 className="text-[15px] font-semibold mb-2">The world</h3>
+              <ul className="space-y-1.5">
+                {summary.world.map((line, i) => (
+                  <li key={i} className="text-[14px] text-white/75 border-l-2 border-white/15 pl-3">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+        {!eventPending && (
+          <section>
+            <h3 className="text-[15px] font-semibold mb-2">This month</h3>
+            <AdviceList items={advice} compact />
+          </section>
+        )}
+      </div>
     </Modal>
   )
 }
@@ -178,73 +248,5 @@ export function GameOver() {
         </div>
       </dl>
     </Modal>
-  )
-}
-
-function IconFrame({ children }: { children: ReactNode }) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      {children}
-    </svg>
-  )
-}
-
-function MilitaryIcon() {
-  return (
-    <IconFrame>
-      <path d="M12 3l7 3v6c0 4.2-2.8 6.8-7 8-4.2-1.2-7-3.8-7-8V6l7-3z" />
-      <path d="M9 12h6" />
-    </IconFrame>
-  )
-}
-
-function NationIcon() {
-  return (
-    <IconFrame>
-      <path d="M4 20h16" />
-      <path d="M6 20V10l6-5 6 5v10" />
-      <path d="M10 20v-5h4v5" />
-    </IconFrame>
-  )
-}
-
-function ResearchIcon() {
-  return (
-    <IconFrame>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.5 1.5M16.9 16.9l1.5 1.5M18.4 5.6l-1.5 1.5M7.1 16.9l-1.5 1.5" />
-    </IconFrame>
-  )
-}
-
-function PeopleIcon() {
-  return (
-    <IconFrame>
-      <circle cx="8" cy="8" r="2.2" />
-      <circle cx="16" cy="8" r="2.2" />
-      <path d="M3.5 19a4.5 4.5 0 0 1 9 0" />
-      <path d="M13 19a4.5 4.5 0 0 1 7.5-3.3" />
-    </IconFrame>
-  )
-}
-
-function NewsIcon() {
-  return (
-    <IconFrame>
-      <path d="M5 5h9a2 2 0 0 1 2 2v12H7a2 2 0 0 1-2-2V5z" />
-      <path d="M16 9h2.5A1.5 1.5 0 0 1 20 10.5V19a2 2 0 0 1-2 2H8" />
-      <path d="M8 9h5M8 13h5" />
-    </IconFrame>
-  )
-}
-
-function SettingsIcon() {
-  return (
-    <IconFrame>
-      <path d="M4 7h16M4 12h16M4 17h16" />
-      <circle cx="8" cy="7" r="1.6" fill="currentColor" stroke="none" />
-      <circle cx="15" cy="12" r="1.6" fill="currentColor" stroke="none" />
-      <circle cx="10" cy="17" r="1.6" fill="currentColor" stroke="none" />
-    </IconFrame>
   )
 }

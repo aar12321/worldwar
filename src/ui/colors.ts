@@ -56,3 +56,8 @@ export const NEON = {
   red: '#f43f5e',
   green: '#34d399',
 }
+
+/** Colors for the Relations map mode. The globe and its legend read the same table. */
+export const RELATION_COLORS = { yours: '#0a84ff', ally: '#30d158', pact: '#64d2ff', war: '#ff453a', other: '#5b6270' }
+/** Fronts mode: a full Defense Line is the strong color, a broken one fades toward the pale color. */
+export const FRONT_COLORS = { yours: '#0a84ff', enemy: '#ff453a', weak: '#f1e3c8', other: '#3d434e' }

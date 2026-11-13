@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { advise, type Advice } from '../engine/advisor'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { committedCost, type OrderCost } from '../engine/orders'
 import type { GameState, Nation, Order } from '../engine/types'
@@ -47,6 +48,13 @@ function buildPlayerView(game: GameState, orders: Order[]): PlayerView {
     orders,
     pendingPolicy,
   }
+}
+
+/** The advisor's list for the player's nation, worked out once per game state. */
+export function useAdvice(limit = 6): Advice[] {
+  const game = useGame((s) => s.game)
+  const orders = useGame((s) => s.orders)
+  return useMemo(() => (game ? advise(game, getWorld().map, game.playerId, orders, limit) : []), [game, orders, limit])
 }
 
 /** Matches the CSS `@media (max-width)` breakpoints, including the boundary pixel. */

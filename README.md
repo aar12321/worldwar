@@ -16,12 +16,21 @@ npm run build      # type-check + production bundle
 The game is turn based. One turn is one month, starting January 1936. Nothing moves until you press **Next turn** (or Enter).
 
 1. Pick a nation on the main menu (search the list or click the globe), choose a victory condition (take 3, 6 or 12 countries, or lead 25% / 40% / 60% of world population), and begin.
-2. **Country** (`C`): buy upgrades for your whole country. Factory (money), Farm (food), University (research), Barracks (training slots and defenders), Port (trade and sea attacks) and Civic Hall (influence and research). Upgrades work the moment you buy them. The Economy tab sets taxes and the draft; the Laws tab passes laws.
-3. **Military** (`M`): you have one military. Train units (they arrive after 1 to 3 turns), drill each unit type, buy permanent weapon levels (0 to 5, gated by factory level), and appoint a commander who drills for free. The stat sheet shows every unit's attack and defense and where each bonus comes from. Battles use exactly those numbers.
-4. **War**: click a neighboring country, press **Declare war** (costs influence), then **Attack**. Your whole military fights the defender's whole military plus the country's garrison. A battle window plays three rounds, showing the damage each side dealt and the units lost. Win and you take the whole country. Each nation can attack once per turn.
-5. **Next turn** runs the rivals, training, research, income, diplomacy, rebels and any attacks on you, then replays the battles you were in. Decision events appear every few months.
+2. The game is run from **five desks** on the left:
+   - **Briefing** (`B`): your goal, a first-steps checklist for new players, and your advisor's list of what needs you this month. Every item has a button that takes you to the fix.
+   - **Economy** (`E`): four tabs. *Upgrades* buys Factory (money), Farm (food), University (research), Barracks (training slots and defenders), Port (trade and sea attacks) and Civic Hall (influence and research); they work the moment you buy them. *Budget* shows where money comes from and goes, and sets taxes and the draft. *People* shows food, work, pay, peace and order. *Laws* passes laws.
+   - **Military** (`M`): two tabs. *Forces* trains infantry, tanks, planes and warships (they arrive after 1 to 3 turns), buys permanent weapon levels and drill, and appoints a commander. Every unit shows its attack and defense and where each bonus comes from; battles use exactly those numbers. *Wars* (`W`) lists your wars (three at most), their monthly bills and each front's Defense Line.
+   - **Diplomacy** (`D`): offers waiting on you, deals, and every neighbor's opinion of you with pacts, alliances, trade and peace terms.
+   - **Research** (`R`): spend research on technologies.
+   - News (`N`), help (`?`) and settings sit in the top-left bar.
+3. **War is a campaign.** Click a neighboring country and press **Declare war** (costs influence). Then press **Plan an attack** (`A`) to open the War Room: choose how much of your military to send (Probe, Main force or All in) and how to fight (Assault, Blitz or Siege). The room shows honest odds, expected losses and what the war costs. Each win pushes back the country's **Defense Line**; when it reaches zero the country falls. Big countries and capitals have long lines, small ones short. Lines heal a little in months nobody attacks them.
+   - **Units you send are away until the turn ends**, so your home army fights at reduced strength and rivals can punish an all-in attack.
+   - **Every war costs a monthly bill** that grows with your military and the enemy's size, and tires your people. You can be in **at most three wars** at once.
+   - **Conquered land starts restless** and produces about 40% at first, settling over a year. Holding many countries strains stability.
+4. **Next turn** runs the rivals, training, research, income, diplomacy, rebels and any attacks on you, replays the battles you were in, then shows a **monthly report**: what changed, the news, and what the advisor would do next.
+5. The **map control** (bottom left) switches the globe between Nations, Relations (allies, pacts, enemies) and Fronts (how much Defense Line is left).
 
-Shortcuts: `Enter` next turn, `A` attack the selected country, `C` country, `M` military, `T` research, `D` diplomacy, `L` news, `?` help, `Esc` close.
+Shortcuts: `Enter` next turn, `B` briefing, `E` economy, `M` military, `W` wars, `D` diplomacy, `R` research, `N` news, `A` War Room for the selected country, `?` help, `Esc` close.
 
 ## Architecture
 

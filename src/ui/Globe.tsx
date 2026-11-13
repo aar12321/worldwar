@@ -4,12 +4,13 @@ import * as THREE from 'three'
 import { mapColor } from '../data/mapColors'
 import { TERRAIN } from '../data/terrain'
 import { militaryPower } from '../engine/militaryStats'
-import { atWar } from '../engine/helpers'
+import { lineMax } from '../engine/economy'
+import { atWar, hasPact, isAllied } from '../engine/helpers'
 import type { GameState, RegionId } from '../engine/types'
-import { attackableRegions, garrisonStrength } from '../engine/warfare'
+import { attackableRegions } from '../engine/warfare'
 import { getWorld, type CountryFeature } from '../map/world'
 import { useGame } from '../store'
-import { NEON, tint, wash, withAlpha } from './colors'
+import { FRONT_COLORS, NEON, RELATION_COLORS, mix, tint, wash, withAlpha } from './colors'
 import { globeBridge, useFx } from './globeBridge'
 
 const { map, features } = getWorld()
@@ -47,6 +48,24 @@ function regionColor(game: GameState | null, id: RegionId): string {
   return wash(game.nations[game.regions[id].owner]?.color ?? '#8d6b4a', terrain)
 }
 
+/** What a country's color means in a map mode other than Political. */
+function modeColor(game: GameState, mode: 'relations' | 'fronts', id: RegionId): string {
+  const r = game.regions[id]
+  const me = game.playerId
+  const mine = r.owner === me
+  if (mode === 'relations') {
+    if (mine) return RELATION_COLORS.yours
+    if (atWar(game, me, r.owner)) return RELATION_COLORS.war
+    if (isAllied(game, me, r.owner)) return RELATION_COLORS.ally
+    if (hasPact(game, me, r.owner)) return RELATION_COLORS.pact
+    return RELATION_COLORS.other
+  }
+  const enemy = !mine && atWar(game, me, r.owner)
+  if (!mine && !enemy) return FRONT_COLORS.other
+  const left = Math.max(0, Math.min(1, r.line / lineMax(game, map, id)))
+  return mix(FRONT_COLORS.weak, mine ? FRONT_COLORS.yours : FRONT_COLORS.enemy, 0.25 + 0.75 * left)
+}
+
 interface Marker {
   key: string
   lat: number
@@ -76,6 +95,7 @@ export function WorldGlobe() {
   const game = useGame((s) => s.game)
   const selectedRegion = useGame((s) => s.selectedRegion)
   const reducedMotion = useGame((s) => s.settings.reducedMotion)
+  const mapMode = useGame((s) => s.mapMode)
   const fxQueue = useGame((s) => s.fxQueue)
   const rings = useFx((s) => s.rings)
   const revealedBattleId = useFx((s) => s.revealedBattleId)
@@ -142,7 +162,7 @@ export function WorldGlobe() {
   }, [fxQueue, revealedBattleId, game])
 
   const targets = useMemo(() => {
-    if (!game || game.outcome !== 'playing' || game.nations[game.playerId].military.lastAttackTurn === game.turn) return EMPTY_REGIONS
+    if (!game || game.outcome !== 'playing' || game.nations[game.playerId].military.exposed >= 0.95) return EMPTY_REGIONS
     return new Set(attackableRegions(game, map, game.playerId))
   }, [game])
 
@@ -150,13 +170,17 @@ export function WorldGlobe() {
     (f: object) => {
       const id = regionOf(f)
       const hidden = hiddenCaptures.get(id)
+      if (game && mapMode !== 'political') {
+        const base = modeColor(game, mapMode, id)
+        return id === selectedRegion ? tint(base, 0.14) : id === hover ? tint(base, 0.08) : base
+      }
       const base = hidden ? wash(hidden, map.regions[id].terrain) : regionColor(game, id)
       if (targets.has(id)) return tint(NEON.magenta, hover === id ? 0.14 : 0)
       if (id === selectedRegion) return tint(base, 0.2, 0.1)
       if (id === hover) return tint(base, 0.1)
       return base
     },
-    [game, hiddenCaptures, targets, selectedRegion, hover],
+    [game, hiddenCaptures, targets, selectedRegion, hover, mapMode],
   )
   const polygonSideColor = useCallback((f: object) => tint(polygonColor(f), -0.2), [polygonColor])
   const polygonAltitude = useCallback(
@@ -188,7 +212,7 @@ export function WorldGlobe() {
       const rebels = game.regions[id].rebels
       const war = !yours && owner && atWar(game, game.playerId, owner.id)
       const power = owner ? militaryPower(game, owner.id).toFixed(0) : '0'
-      return `<div class="globe-tip"><b>${escapeHtml(mr.name)}</b><div style="color:${escapeHtml(owner?.color ?? '#fff')}">${yours ? 'Your country' : escapeHtml(owner?.name ?? 'Unknown')}${war ? ' · at war' : ''}</div><div>${TERRAIN[mr.terrain].name}</div><div>Military strength ${power} · garrison ${garrisonStrength(game, map, id).toFixed(1)}</div>${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
+      return `<div class="globe-tip"><b>${escapeHtml(mr.name)}</b><div style="color:${escapeHtml(owner?.color ?? '#fff')}">${yours ? 'Your country' : escapeHtml(owner?.name ?? 'Unknown')}${war ? ' · at war' : ''}</div><div>${TERRAIN[mr.terrain].name}</div><div>Military strength ${power}</div><div>Defense Line ${Math.min(game.regions[id].line, lineMax(game, map, id)).toFixed(1)} of ${lineMax(game, map, id).toFixed(1)}</div>${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
     },
     [game],
   )

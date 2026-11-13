@@ -2,6 +2,7 @@ import { militarySheet } from '../engine/militaryStats'
 import { UNIT_TYPES } from '../engine/types'
 import type { GameState, NationId } from '../engine/types'
 import { formatDivisions } from '../engine/helpers'
+import { UnitIcon } from './icons'
 
 /** Two militaries side by side: how many of each unit, their effective attack and defense, and total strength. */
 export function MilitaryCompare({ game, mine, theirs }: { game: GameState; mine: NationId; theirs: NationId }) {
@@ -39,7 +40,12 @@ export function MilitaryCompare({ game, mine, theirs }: { game: GameState; mine:
             if (x.count < 0.05 && y.count < 0.05) return null
             return (
               <tr key={u} className="border-t border-white/10">
-                <td className="py-1 text-left">{x.name}</td>
+                <td className="py-1 text-left">
+                  <span className="inline-flex items-center gap-1.5">
+                    <UnitIcon unit={u} size={15} />
+                    {x.name}
+                  </span>
+                </td>
                 <td className="text-center">{formatDivisions(x.count)}</td>
                 <td className="text-center text-white/70">
                   {x.attack.toFixed(1)} / {x.defense.toFixed(1)}

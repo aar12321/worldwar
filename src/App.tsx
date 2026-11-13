@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { attackableRegions } from './engine/warfare'
 import { getWorld } from './map/world'
-import { useGame } from './store'
+import { useGame, type Panel } from './store'
 import { BattleFX } from './ui/BattleFX'
+import { Briefing } from './ui/Briefing'
 import { GameOver, NavRail, OrdersTray, Toasts, TurnSummary } from './ui/Chrome'
 import { CountryPanel } from './ui/CountryPanel'
 import { DiplomacyPanel } from './ui/Diplomacy'
@@ -11,10 +12,12 @@ import { WorldGlobe } from './ui/Globe'
 import { useFx } from './ui/globeBridge'
 import { Help } from './ui/Help'
 import { HUD } from './ui/HUD'
+import { MapModes } from './ui/MapModes'
 import { MilitaryPanel } from './ui/MilitaryPanel'
 import { Setup } from './ui/Setup'
-import { CountryDrawer, LogPanel, SettingsPanel } from './ui/SidePanels'
+import { EconomyDesk, LogPanel, SettingsPanel } from './ui/SidePanels'
 import { TechTree } from './ui/TechTree'
+import { WarRoom } from './ui/WarRoom'
 
 function useShortcuts() {
   useEffect(() => {
@@ -25,7 +28,7 @@ function useShortcuts() {
       const st = useGame.getState()
       if (!st.game) return
       // A dialog is open: it handles its own keys.
-      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary) return
+      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom) return
       if (e.key === 'Escape') {
         if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
@@ -37,14 +40,18 @@ function useShortcuts() {
       } else if (e.key.toLowerCase() === 'a') {
         // Attack the selected country if your military can reach it.
         const target = st.selectedRegion
-        if (target && attackableRegions(st.game, getWorld().map, st.game.playerId).includes(target)) st.attack(target)
+        if (target && attackableRegions(st.game, getWorld().map, st.game.playerId).includes(target)) st.openWarRoom(target)
         else st.toast('Select an enemy country you are at war with and border, then press A', 'error')
       } else if (e.key === '?') {
         st.setHelp(true)
       } else {
-        const map: Record<string, 'tech' | 'country' | 'diplomacy' | 'log' | 'military'> = { t: 'tech', c: 'country', d: 'diplomacy', l: 'log', m: 'military' }
-        const panel = map[e.key.toLowerCase()]
-        if (panel) st.setPanel(panel)
+        const key = e.key.toLowerCase()
+        if (key === 'w') st.openMilitary('wars')
+        else {
+          const desks: Record<string, Panel> = { b: 'briefing', e: 'economy', c: 'economy', m: 'military', d: 'diplomacy', r: 'tech', t: 'tech', n: 'log', l: 'log' }
+          const panel = desks[key]
+          if (panel) st.setPanel(panel)
+        }
       }
     }
     window.addEventListener('keydown', onKey)
@@ -101,14 +108,17 @@ export default function App() {
         <>
           <HUD />
           <NavRail />
+          <MapModes />
+          {panel === 'briefing' && <Briefing key="briefing" />}
+          {panel === 'economy' && <EconomyDesk key="economy" />}
           {panel === 'military' && <MilitaryPanel key="military" />}
-          {panel === 'country' && <CountryDrawer key="country" />}
           {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
           {panel === 'log' && <LogPanel key="log" />}
           {panel === 'settings' && <SettingsPanel key="settings" />}
           {panel === 'tech' && <TechTree key="tech" />}
           <CountryPanel />
           <OrdersTray />
+          <WarRoom />
           <BattleFX />
           <TurnSummary />
           <EventModal />

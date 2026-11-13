@@ -1,6 +1,6 @@
 import { PLAYER_COLOR, mapColor } from './mapColors'
 import { emptyTraining } from './unitTypes'
-import { ECON, buildingCap, computeEconomy, regionWorkforce } from '../engine/economy'
+import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
@@ -78,6 +78,9 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       buildings: { factory: 0, farm: 0, university: 0, barracks: 1, port: 0, civic: 0 },
       sabotaged: 0,
       rebels: 0,
+      line: 0,
+      integration: 1,
+      attackedTurn: -1,
     }
     const w = regionWorkforce(region, mr)
     const dev = mr.development
@@ -137,7 +140,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       embargoedUntil: 0,
       aggression,
       personality,
-      military: { units, drill: emptyTraining(), weapons: emptyTraining(), commanderId: null, lastAttackTurn: 0 },
+      military: { units, drill: emptyTraining(), weapons: emptyTraining(), commanderId: null, lastAttackTurn: 0, attacksThisTurn: 0, exposed: 0 },
     }
 
     state.regions[id] = region
@@ -159,6 +162,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     }
     if (nation.resources.food < 8) nation.resources.food = 8
   }
+  for (const r of Object.values(state.regions)) r.line = lineMax(state, map, r.id)
 
   return state
 }

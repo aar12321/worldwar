@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { UNIT_SPECS } from '../data/unitTypes'
+import { COMMITS, STANCES } from '../data/war'
 import { formatDivisions, totalUnits } from '../engine/helpers'
 import type { BattleReport, GameState, NationId, UnitCounts } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
@@ -8,7 +9,9 @@ import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { NEON } from './colors'
 import { globeBridge, useFx } from './globeBridge'
+import { UnitIcon } from './icons'
 import { Modal } from './Modal'
+import { LineBar } from './WarRoom'
 
 const INTRO_MS = 700
 const ROUND_MS = 1400
@@ -24,11 +27,12 @@ function verdict(b: BattleReport, playerId: NationId, place: string): { title: s
   const attackerWon = b.winner === 'attacker'
   if (playerAttacking) {
     if (b.defender.nationId === 'rebels') return attackerWon ? { title: 'Rebellion crushed', text: 'The rebels are beaten.', good: true } : { title: 'Rebels hold out', text: 'They are still fighting.', good: false }
-    return attackerWon && b.captured
-      ? { title: `${place} captured`, text: `The whole country is now yours.`, good: true }
-      : { title: 'Attack repulsed', text: `${place} held. Rebuild and try again next turn.`, good: false }
+    if (attackerWon && b.captured) return { title: `${place} captured`, text: 'The Defense Line broke. The whole country is now yours, though it will take months to settle.', good: true }
+    if (attackerWon) return { title: 'The line gives way', text: `${place}'s Defense Line is down to ${(b.lineAfter ?? 0).toFixed(1)}. Press on next turn before it heals.`, good: true }
+    return { title: 'Attack repulsed', text: `${place} held. Your losses were heavy. Try a different stance, or send more.`, good: false }
   }
   if (attackerWon && b.captured) return { title: b.attacker.nationId === 'rebels' ? `${place} breaks away` : `${place} lost`, text: 'The country has fallen.', good: false }
+  if (attackerWon) return { title: 'The line is pushed back', text: `${place} is losing ground. Rebuild your military and hold on.`, good: false }
   return { title: 'The line holds', text: `${place} was not taken.`, good: true }
 }
 
@@ -39,7 +43,7 @@ function LossChips({ losses }: { losses: UnitCounts }) {
     <span className="flex flex-wrap gap-1">
       {hit.map((k) => (
         <motion.span key={k} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="chip chip-red">
-          −{formatDivisions(losses[k])} {UNIT_SPECS[k].name}
+          <UnitIcon unit={k} size={14} />−{formatDivisions(losses[k])} {UNIT_SPECS[k].name}
         </motion.span>
       ))}
     </span>
@@ -196,6 +200,7 @@ export function BattleFX() {
             <div className="flex flex-wrap gap-1.5 text-[13px] text-white/75">
               {UNIT_TYPES.filter((k) => col.units[k] >= 0.05).map((k) => (
                 <span key={k} className="chip">
+                  <UnitIcon unit={k} size={14} />
                   {UNIT_SPECS[k].name} {formatDivisions(col.units[k])}
                 </span>
               ))}
@@ -203,6 +208,23 @@ export function BattleFX() {
           </div>
         ))}
       </div>
+
+      {battle.lineMax !== undefined && battle.lineBefore !== undefined && (
+        <div className="mt-5 space-y-1.5">
+          <div className="flex items-baseline justify-between text-[14px]">
+            <span className="font-semibold">Defense Line · {region?.name}</span>
+            <span className="tabular-nums text-white/80">
+              {done ? `${battle.lineBefore.toFixed(1)} → ${(battle.lineAfter ?? battle.lineBefore).toFixed(1)}` : battle.lineBefore.toFixed(1)} of {battle.lineMax.toFixed(1)}
+            </span>
+          </div>
+          <LineBar now={done ? (battle.lineAfter ?? battle.lineBefore) : battle.lineBefore} max={battle.lineMax} />
+          {battle.stance && battle.commit && (
+            <p className="text-[13px] text-white/70">
+              {STANCES[battle.stance].name} · {COMMITS[battle.commit].name.toLowerCase()}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-6 space-y-3">
         {battle.rounds.slice(0, visibleRounds).map((r, i) => {

@@ -1,7 +1,8 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
 import { PROPOSAL_LABELS } from '../data/unitTypes'
-import { addLog, alliesOf, atWar, hasPact, isAllied, newId, pairKey } from './helpers'
+import { MAX_WARS } from '../data/war'
+import { addLog, alliesOf, atWar, enemiesOf, hasPact, isAllied, newId, pairKey } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
 import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, WorldMap } from './types'
@@ -26,6 +27,8 @@ const name = (s: GameState, id: NationId) => s.nations[id]?.name ?? id
 export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId, rng: Rng, callAllies = true) {
   const key = pairKey(a, b)
   if (s.wars.includes(key)) return
+  // Nobody fights more than MAX_WARS wars at once. Allies who are already stretched stay out.
+  if (!callAllies && (enemiesOf(s, a).length >= MAX_WARS || enemiesOf(s, b).length >= MAX_WARS)) return
   s.wars.push(key)
   s.wars.sort()
   s.warStarted[key] = s.turn
