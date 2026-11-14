@@ -1,6 +1,6 @@
 import { levelCost } from '../data/agencies'
 import { systemCost, type SystemId } from '../data/systems'
-import { homeOwner } from '../engine/stocks'
+import { companiesOf, directiveOf, stakeShare, strengthOf } from '../engine/stocks'
 import { difficultyOf } from '../data/difficulty'
 import { BUDGET_KEYS } from '../data/government'
 import { PERSONALITIES } from '../data/personalities'
@@ -252,13 +252,18 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         const ops: Array<'sabotage' | 'rebels'> = ['sabotage', 'rebels']
         if (rng.chance(0.4) && tryAdd({ type: 'operation', nationId, op: rng.pick(ops), target: e })) return true
       }
-      // Invest spare money in the companies of friendly countries.
+      // Spare money goes into the companies at home. With a board seat, a company gets a job to do.
       if (money > 250 && rng.chance(diff.skill === 2 ? 0.3 : 0.12)) {
-        const listed = Object.keys(s.stocks.price).sort().filter((id) => {
-          const home = homeOwner(s, id)
-          return home && home !== nationId && s.nations[home]?.alive && !atWar(s, nationId, home) && (s.stocks.held[nationId]?.[id] ?? 0) < 200
-        })
-        if (listed.length && tryAdd({ type: 'buyShares', nationId, company: rng.pick(listed), shares: 20 })) return true
+        const mine = companiesOf(s, nationId)
+        for (const company of mine) {
+          if (strengthOf(stakeShare(s, nationId, company)) > 0 && directiveOf(s, company) === 'payout') {
+            const sector = s.stocks.meta[company].sector
+            const directive = sector === 'technology' || sector === 'arms' || rng.chance(0.5) ? 'focus' : 'expand'
+            if (tryAdd({ type: 'setDirective', nationId, company, directive })) return true
+          }
+        }
+        const room = mine.filter((c) => stakeShare(s, nationId, c) < (diff.skill === 2 ? 0.75 : 0.51))
+        if (room.length && tryAdd({ type: 'buyShares', nationId, company: rng.pick(room), shares: 100 })) return true
       }
       // Frontier systems: shields against what flies, Cyber Command against what is hacked, then the rest as money allows.
       if (diff.skill >= 1 && money > 250 && rng.chance(0.25)) {

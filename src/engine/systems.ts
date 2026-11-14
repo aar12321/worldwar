@@ -1,3 +1,4 @@
+import { companyEffects } from './stocks'
 import { FRONTIER, SYSTEM_IDS, SYSTEM_MAX, SYSTEM_SPECS, systemsCost, type SystemId } from '../data/systems'
 import { TECH_BY_ID } from '../data/techTree'
 import { addOpinion } from '../ai/opinion'
@@ -34,7 +35,8 @@ export function validateFundSystem(s: GameState, o: Fund, pending: Order[]): str
 }
 
 export function fundSystemCost(s: GameState, o: Fund): number {
-  return systemsCost(o.system, s.nations[o.nationId]?.systems?.[o.system] ?? 0, o.levels ?? 1)
+  const full = systemsCost(o.system, s.nations[o.nationId]?.systems?.[o.system] ?? 0, o.levels ?? 1)
+  return Math.round(full * (1 - (s.nations[o.nationId] ? companyEffects(s, o.nationId).systemDiscount : 0)))
 }
 
 export function fundSystem(s: GameState, nationId: NationId, system: SystemId, levels = 1) {

@@ -1,12 +1,12 @@
 import { TECH_BY_ID } from '../data/techTree'
+import { DIRECTIVES } from '../data/companies'
 import { FOCUS } from '../data/cities'
 import { JUSTIFY } from '../data/war'
 import { ACTION_LABELS } from '../data/crises'
 import { DOMESTIC_OPS, FOREIGN_OPS } from '../data/agencies'
 import { fundAgency, runDomestic, runOperation } from './agencies'
 import { GOVERNOR_LABELS, governorOrders } from './governors'
-import { COMPANY_BY_ID } from '../data/companies'
-import { buyShares, runStocks, sellShares } from './stocks'
+import { buyShares, runStocks, sellShares, setDirective } from './stocks'
 import { SYSTEM_SPECS } from '../data/systems'
 import { fundSystem, runStrike, runSystems } from './systems'
 import { INVEST, SECTORS } from '../data/business'
@@ -101,9 +101,11 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'domestic':
       return DOMESTIC_OPS[o.op].name
     case 'buyShares':
-      return `Buy ${o.shares} shares of ${COMPANY_BY_ID[o.company]?.name ?? o.company}`
+      return `Buy ${o.shares} shares of ${s.stocks.meta[o.company]?.name ?? o.company}`
     case 'sellShares':
-      return `Sell ${o.shares} shares of ${COMPANY_BY_ID[o.company]?.name ?? o.company}`
+      return `Sell ${o.shares} shares of ${s.stocks.meta[o.company]?.name ?? o.company}`
+    case 'setDirective':
+      return `Tell ${s.stocks.meta[o.company]?.name ?? o.company}: ${DIRECTIVES[o.directive]?.name ?? o.directive}`
     case 'fundSystem':
       return `Raise ${SYSTEM_SPECS[o.system].name}${(o.levels ?? 1) > 1 ? ` by ${o.levels} levels` : ''}`
     case 'strike':
@@ -140,7 +142,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 
 const PHASES: Order['type'][][] = [
   ['respond'],
-  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor'],
+  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor', 'setDirective'],
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose'],
   ['cancelTrain'],
@@ -416,6 +418,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'strike':
       runStrike(s, map, o)
+      break
+    case 'setDirective':
+      setDirective(s, o.company, o.directive)
       break
     case 'buyShares':
       buyShares(s, o.nationId, o.company, o.shares)

@@ -5,7 +5,7 @@ import { BUSINESS, INVEST, SECTORS, SECTOR_IDS, TREASURY } from '../data/busines
 import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
 import { EMPIRE, JUSTIFY, STANCES } from '../data/war'
 import { nextWeaponLevel } from './arms'
-import { tradeValue, validateTrade } from './stocks'
+import { companyEffects, tradeValue, validateDirective, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
@@ -72,7 +72,7 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.capital = o.amount
       break
     case 'queueTrain':
-      c.capital = Math.round(UNIT_SPECS[o.unit].capitalCost * (1 - (s.nations[o.nationId] ? sectorYield(s.nations[o.nationId]).armsDiscount : 0)))
+      c.capital = Math.round(UNIT_SPECS[o.unit].capitalCost * (1 - (s.nations[o.nationId] ? Math.min(0.5, sectorYield(s.nations[o.nationId]).armsDiscount + companyEffects(s, o.nationId).armsDiscount) : 0)))
       c.manpower = UNIT_SPECS[o.unit].manpowerCost
       c.steel = UNIT_SPECS[o.unit].steel
       break
@@ -399,6 +399,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'buyShares':
     case 'sellShares':
       return validateTrade(s, o, pending)
+    case 'setDirective':
+      return validateDirective(s, o)
     case 'operation':
       return validateOperation(s, o, pending)
     case 'domestic':
