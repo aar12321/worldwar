@@ -2,7 +2,7 @@ import { TECH_BY_ID } from '../data/techTree'
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingRank } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { COMBAT, hasCombinedArms } from './combat'
-import { nationModifiers, totalUnits } from './helpers'
+import { forceUnits, nationModifiers, totalUnits } from './helpers'
 import { trainingSlots } from './training'
 import type { GameState, NationId, UnitType } from './types'
 import { UNIT_TYPES } from './types'
@@ -36,7 +36,10 @@ export interface UnitStatLine {
 export interface MilitarySheet {
   units: UnitStatLine[]
   totalPower: number
+  /** Divisions in the whole force: at home and, in a live game, in armies in the field. */
   totalUnits: number
+  /** Divisions out in armies. Zero in a turn game. */
+  inField: number
   upkeep: number
   foodUse: number
   combinedArms: boolean
@@ -84,12 +87,15 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
     }
   })
   const units = n.military.units
+  // Armies in the field cost the same upkeep and food as when they are at home.
+  const force = forceUnits(s, nationId)
   return {
     units: lines,
     totalPower: lines.reduce((sum, l) => sum + l.power, 0),
-    totalUnits: totalUnits(units),
-    upkeep: UNIT_TYPES.reduce((sum, k) => sum + units[k] * UNIT_SPECS[k].upkeep, 0),
-    foodUse: UNIT_TYPES.reduce((sum, k) => sum + units[k] * UNIT_SPECS[k].food, 0),
+    totalUnits: totalUnits(force),
+    inField: Math.max(0, totalUnits(force) - totalUnits(units)),
+    upkeep: UNIT_TYPES.reduce((sum, k) => sum + force[k] * UNIT_SPECS[k].upkeep, 0),
+    foodUse: UNIT_TYPES.reduce((sum, k) => sum + force[k] * UNIT_SPECS[k].food, 0),
     combinedArms: hasCombinedArms(units),
     combinedArmsBonus: COMBAT.combinedArmsBonus + base.combinedArms,
     trainingSlots: trainingSlots(s, nationId),

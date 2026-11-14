@@ -1,3 +1,4 @@
+import { isLive } from '../engine/calendar'
 import { useState } from 'react'
 import { turnDate } from '../engine/helpers'
 import type { LogKind } from '../engine/types'
@@ -54,8 +55,24 @@ export function SettingsPanel() {
   const update = useGame((s) => s.updateSettings)
   const quit = useGame((s) => s.quitToMenu)
   const setHelp = useGame((s) => s.setHelp)
+  const live = useGame((s) => !!s.game && isLive(s.game))
   return (
     <PanelShell title="Settings" kicker="The game saves itself." panel="settings">
+      {live && (
+        <>
+          <label className="flex items-center justify-between text-[15px] gap-3">
+            <span>Pause and open the battle window for my battles</span>
+            <input type="checkbox" checked={settings.pauseOnBattles} onChange={(e) => update({ pauseOnBattles: e.target.checked })} />
+          </label>
+          <label className="flex items-center justify-between text-[15px] gap-3">
+            <span>When a month ends</span>
+            <select className="field px-3 py-2" value={settings.liveReport} onChange={(e) => update({ liveReport: e.target.value as 'note' | 'pause' })}>
+              <option value="note">Show a short note</option>
+              <option value="pause">Pause for the report</option>
+            </select>
+          </label>
+        </>
+      )}
       <label className="flex items-center justify-between text-[15px]">
         <span>Battle windows</span>
         <select className="field px-3 py-2" value={settings.battleScenes} onChange={(e) => update({ battleScenes: e.target.value as 'all' | 'mine' | 'off' })}>
@@ -90,7 +107,7 @@ export function SettingsPanel() {
         Leave game
       </button>
       <div className="label pt-2">Shortcuts</div>
-      <p className="text-[14px] text-white/70">{SHORTCUTS}</p>
+      <p className="text-[14px] text-white/70">{live ? SHORTCUTS.replace('Enter: next turn. ', 'Space: play or pause. 1, 2, 3: speed. ') : SHORTCUTS}</p>
     </PanelShell>
   )
 }

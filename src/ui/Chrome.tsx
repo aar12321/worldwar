@@ -1,3 +1,4 @@
+import { dayDate, isLive } from '../engine/calendar'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { turnDate } from '../engine/helpers'
@@ -62,7 +63,7 @@ export function OrdersTray() {
   return (
     <div className="orders-tray absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
       <div className="surface rounded-full px-3 py-1.5 flex items-center gap-2 overflow-x-auto scroll-thin">
-        <span className="label whitespace-nowrap px-1">Next turn</span>
+        <span className="label whitespace-nowrap px-1">{isLive(game) ? `On ${dayDate(game.turn + 1, 0)}` : 'Next turn'}</span>
         <AnimatePresence initial={false}>
           {orders.map((o, i) => (
             <motion.button

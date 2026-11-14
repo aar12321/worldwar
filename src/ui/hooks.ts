@@ -15,6 +15,38 @@ export interface PlayerView {
   pendingPolicy: { taxRate: number; draftRate: number; corporateTax: number; budget: Budget }
 }
 
+/** What a live game changes on a quiet day. Nothing else is touched, so nothing that reads the rest needs to redo its work. */
+const CLOCK_KEYS = new Set(['day', 'armies', 'launches', 'flights', 'battles'])
+let slowGame: GameState | null = null
+
+/**
+ * The game, except that a day in which only the date moved gives back the game it already had. Desks, the HUD and the
+ * advisor read this, so a live game's quiet days cost them nothing. In a turn game it is just the game.
+ */
+function settle(game: GameState | null): GameState | null {
+  if (!game) {
+    slowGame = null
+    return null
+  }
+  const prev = slowGame
+  if (prev && prev !== game) {
+    let same = true
+    for (const k of Object.keys(game) as (keyof GameState)[]) {
+      if (!CLOCK_KEYS.has(k) && prev[k] !== game[k]) {
+        same = false
+        break
+      }
+    }
+    if (same) return prev
+  }
+  slowGame = game
+  return game
+}
+
+export function useSlowGame(): GameState | null {
+  return useGame((s) => settle(s.game))
+}
+
 const viewCache = new WeakMap<GameState, { orders: Order[]; view: PlayerView }>()
 
 /** Every component asks for the view; the economy is worked out once per game state and order list. */
@@ -27,7 +59,7 @@ function playerViewFor(game: GameState, orders: Order[]): PlayerView {
 }
 
 export function usePlayerView(): PlayerView | null {
-  const game = useGame((s) => s.game)
+  const game = useSlowGame()
   const orders = useGame((s) => s.orders)
   return useMemo(() => (game ? playerViewFor(game, orders) : null), [game, orders])
 }
@@ -55,7 +87,7 @@ function buildPlayerView(game: GameState, orders: Order[]): PlayerView {
 
 /** The advisor's list for the player's nation, worked out once per game state. */
 export function useAdvice(limit = 6): Advice[] {
-  const game = useGame((s) => s.game)
+  const game = useSlowGame()
   const orders = useGame((s) => s.orders)
   return useMemo(() => (game ? advise(game, getWorld().map, game.playerId, orders, limit) : []), [game, orders, limit])
 }

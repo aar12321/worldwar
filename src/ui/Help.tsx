@@ -1,3 +1,4 @@
+import { isLive } from '../engine/calendar'
 import { useGame } from '../store'
 import { Modal } from './Modal'
 import { SHORTCUTS } from './SidePanels'
@@ -8,6 +9,13 @@ const TURN = [
   { title: 'Press Next turn', body: 'Every other nation moves, income arrives, units finish training, and attacks on you play out. A monthly report shows what changed.' },
 ]
 
+const LIVE_STEPS = [
+  { title: 'Press play', body: 'Time flows by itself: a month takes about a minute. Pause any time with Space, and speed it up with 1, 2 and 3. The clock stops while you plan an attack or decide an event, and a new game starts paused.' },
+  { title: 'Give your orders', body: 'Upgrades, training, trades, shares and war work the moment you press the button. Research, taxes, the draft and offers to other nations take effect on the 1st of the next month, and the Orders bar says when.' },
+  { title: 'Send armies', body: 'An attack in the War Room sends an army out of your military. It marches for days, fights when it arrives, and comes home. Units that are away do not defend your country. Recall an army while it is still on its way out.' },
+  { title: 'Watch for armies marching on you', body: 'An enemy army shows in red with the days left. You have that time to recall your own armies, raise shields, fire missiles or make peace, which turns armies back.' },
+]
+
 const TERMS: [string, string][] = [
   ['Money', 'Comes from taxes, factories and ports. Pays for upgrades, units, their upkeep and your wars.'],
   ['Food', 'Farms grow it; people and soldiers eat it. Run out and your military fights 30% weaker.'],
@@ -16,7 +24,7 @@ const TERMS: [string, string][] = [
   ['Stability', 'How content your people are. High taxes, hunger, debt and long wars lower it. Below 30% rebels rise.'],
   ['Division', 'One unit. Infantry, tanks, planes and warships each have attack and defense numbers, and battles use exactly those.'],
   ['Defense Line', 'How much resistance a country has left. Each battle you win pushes it down. At zero the country is yours. It heals in months nobody attacks.'],
-  ['Force size', 'How much of your military you send: a probe, the main force, or all in. What you send fights at half strength at home until the month ends.'],
+  ['Force size', 'How much of your military you send: a probe, the main force, or all in. In a turn game the rest of your army at home fights at half strength until the month ends. In a live game what you send leaves home until it is back.'],
   ['Stance', 'How you fight. Assault is balanced. Blitz breaks the line faster and costs more. Siege is slow, saves lives, and shuts their factories.'],
   ['War bill', 'Every war costs money every month. A small country can fight three wars at once, a big empire more.'],
   ['Settling', 'A conquered country gives about 40% of its output at first and reaches 100% after six months.'],
@@ -42,6 +50,8 @@ export function Help() {
   const game = useGame((s) => s.game)
   const online = useGame((s) => s.online?.status === 'playing')
   if (!open || !game) return null
+  const live = isLive(game)
+  const steps = live ? LIVE_STEPS : TURN
   const total = Object.keys(game.regions).length
   return (
     <Modal
@@ -55,11 +65,11 @@ export function Help() {
       }
     >
       <p className="text-[15px] text-white/85">
-        You run a country, one month at a time. <strong>To win</strong>, hold the whole world: all {total} countries yours or puppets of yours. It is a long game. A war needs a reason, so build a case, use your agencies and answer the crises in the news. You lose if your nation is wiped out.
+        You run a country{live ? ' as the days pass' : ', one month at a time'}. <strong>To win</strong>, hold the whole world: all {total} countries yours or puppets of yours. It is a long game. A war needs a reason, so build a case, use your agencies and answer the crises in the news. You lose if your nation is wiped out.
       </p>
-      <h3 className="text-[16px] font-semibold mt-5 mb-2">A turn</h3>
+      <h3 className="text-[16px] font-semibold mt-5 mb-2">{live ? 'A live game' : 'A turn'}</h3>
       <ol className="space-y-3">
-        {TURN.map((s, i) => (
+        {steps.map((s, i) => (
           <li key={s.title} className="flex gap-3">
             <span className="flex-none w-7 h-7 rounded-full bg-[#0a84ff] text-white text-[14px] font-semibold flex items-center justify-center">{i + 1}</span>
             <div>

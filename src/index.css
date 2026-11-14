@@ -755,6 +755,28 @@ body:has(.drawer) .map-modes {
 .advice-pill:hover {
   background: #23262d;
 }
+/* Pills that sit under the top bar stack one above the other instead of overlapping. */
+.pill-stack {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(var(--hud-h) + 8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+}
+.pill-stack .advice-pill {
+  position: static;
+  transform: none;
+  max-width: 100%;
+}
+.live-alert {
+  border-color: rgba(255, 69, 58, 0.6);
+}
 .details-card {
   border-top: 1px solid var(--line);
   padding-top: 12px;
@@ -807,6 +829,21 @@ body:has(.drawer) .map-modes {
   }
   .advice-pill {
     top: calc(var(--hud-h) + 4px);
+  }
+  .pill-stack {
+    top: calc(var(--hud-h) + 4px);
+  }
+  .hud-live {
+    gap: 4px !important;
+  }
+  .hud-live > .flex {
+    flex: 1;
+  }
+  .hud-live .hud-live-status {
+    display: none;
+  }
+  .hud-live .btn {
+    min-height: 42px;
   }
   .hud-row {
     flex-direction: column;
@@ -943,4 +980,61 @@ body:has(.drawer) .map-modes {
     width: auto !important;
     max-height: 50vh !important;
   }
+}
+
+/* Live games: a panel of armies over the globe, above the map colors. */
+.armies-dock {
+  position: absolute;
+  z-index: 17;
+  left: 16px;
+  bottom: 118px;
+  width: 268px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+@media (max-height: 760px), (max-width: 1100px) {
+  .armies-dock {
+    display: none;
+  }
+}
+body:has(.drawer) .armies-dock {
+  display: none;
+}
+
+/* A live battle on the globe: a pin over the country with its Defense Line draining, then who won. */
+.battle-pin {
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translate(-50%, -150%);
+  width: 156px;
+  padding: 6px 9px 7px;
+  border-radius: 10px;
+  background: rgba(21, 23, 28, 0.94);
+  border: 1px solid rgba(255, 159, 10, 0.75);
+  color: #fff;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 12px;
+}
+.battle-pin-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.battle-pin-bar {
+  margin-top: 5px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.battle-pin-fill {
+  height: 100%;
+  background: #ff9f0a;
+  transition: width 1.2s ease-out;
+}
+.battle-pin-result {
+  min-height: 15px;
+  margin-top: 3px;
+  font-weight: 700;
+  color: #ffd60a;
 }

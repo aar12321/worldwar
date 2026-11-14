@@ -3,9 +3,11 @@ import { generateAllBotOrders } from './ai/bot'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import type { AdviceTarget } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
-import { maxAttacks, totalUnits, turnDate } from './engine/helpers'
+import { forceUnits, maxAttacks, totalUnits, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
-import { MONTH_END_ORDERS, validateOrder } from './engine/orders'
+import { MONTH_END_ORDERS, isMonthEndOrder, validateOrder } from './engine/orders'
+import { absDate, dayDate, isLive } from './engine/calendar'
+import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
 import { applyOrderNow, resolveTurn } from './engine/resolveTurn'
 import { BUDGET_KEYS } from './data/government'
@@ -15,6 +17,8 @@ import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, t
 import { OnlineSession } from './net/session'
 import { openTransport } from './net/transport'
 import { globeBridge, useFx } from './ui/globeBridge'
+import { battleLine, scenesFor } from './ui/battleText'
+import { presentLiveStep } from './ui/livePresent'
 import { speak } from './ui/plain'
 
 const SAVE_KEY = 'worlds-of-others-save-v4'
@@ -26,7 +30,7 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 /** The five desks, plus News and Settings which open from the top bar. */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'log' | 'settings'
 export type EconomyTab = 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'
-export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems'
+export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts'
 
@@ -48,6 +52,12 @@ export interface Settings {
   monthlyReport: boolean
   /** Show the first-steps checklist in the Briefing. */
   showGuide: boolean
+  /** Live games: stop the clock and play the battle window for every battle you are in. */
+  pauseOnBattles: boolean
+  /** Live games: at the end of a month, stop for the report, or show it as a short note while the clock runs. */
+  liveReport: 'note' | 'pause'
+  /** Live games: how fast time runs. */
+  liveSpeed: 1 | 2 | 4
 }
 
 export interface Toast {
@@ -179,6 +189,14 @@ interface GameStore {
   settings: Settings
   toasts: Toast[]
   hasSave: boolean
+  /** Live games: whether the clock is running. A game starts, loads and leaves its menus paused. */
+  running: boolean
+  /** Live games: the army whose card is showing. */
+  selectedArmy: string | null
+  /** Live games: the last battles the player was in, newest first. */
+  recentBattles: BattleReport[]
+  /** Live games: the month's report, waiting to be opened. */
+  liveNote: MonthReport | null
 
   newGame(opts: NewGameOptions): void
   loadGame(): void
@@ -205,6 +223,19 @@ interface GameStore {
   attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number): boolean
   openWarRoom(target: RegionId | null): void
   endTurn(): void
+  /** Live games: start or stop the clock. */
+  play(): void
+  pause(): void
+  togglePause(): void
+  setSpeed(speed: 1 | 2 | 4): void
+  /** Live games: moves the game on by one day, unless something holds the clock. */
+  stepDay(): void
+  selectArmy(id: string | null): void
+  recallArmy(id: string): boolean
+  /** Plays a battle from the recent list again in the battle window. */
+  openBattle(id: string): void
+  /** Opens the month's report that was waiting as a note. */
+  openNote(): void
   chooseEventOption(index: number): void
   shiftFx(): void
   clearFx(): void
@@ -223,6 +254,9 @@ const defaultSettings: Settings = {
   seenHelp: false,
   monthlyReport: true,
   showGuide: true,
+  pauseOnBattles: false,
+  liveReport: 'note',
+  liveSpeed: 1,
 }
 
 /** Keeps a stored setting only if it has a value the game understands. */
@@ -236,6 +270,9 @@ function sanitizeSettings(raw: Partial<Settings>): Settings {
     seenHelp: merged.seenHelp === true,
     monthlyReport: merged.monthlyReport !== false,
     showGuide: merged.showGuide !== false,
+    pauseOnBattles: merged.pauseOnBattles === true,
+    liveReport: oneOf(merged.liveReport, ['note', 'pause'], 'note'),
+    liveSpeed: oneOf(merged.liveSpeed, [1, 2, 4], 1),
   }
 }
 
@@ -262,13 +299,14 @@ function writeOrders(orders: Order[]) {
 }
 
 /** A one-line description of the saved game, for the Continue button. */
-export function peekSave(): { nation: string; date: string } | null {
+export function peekSave(): { nation: string; date: string; live: boolean } | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) return null
     const saved = JSON.parse(raw) as GameState
     const nation = saved.nations?.[saved.playerId]?.name
-    return nation ? { nation, date: turnDate(saved.turn) } : null
+    const live = saved.settings?.mode === 'live'
+    return nation ? { nation, date: live ? dayDate(saved.turn, saved.day ?? 0) : turnDate(saved.turn), live } : null
   } catch {
     return null
   }
@@ -355,31 +393,8 @@ function flashCapture(regionId: RegionId, loss: boolean, color: string) {
   useFx.getState().shake(loss ? 1.15 : 0.7)
 }
 
-/** Which of these battles play in the window, by the player's setting. */
-function scenesFor(settings: Settings, player: NationId, battles: BattleReport[]): BattleReport[] {
-  if (settings.battleScenes === 'off') return []
-  return battles.filter((b) => b.attacker.nationId === player || (settings.battleScenes === 'all' && b.defender.nationId === player))
-}
-
-const sumUnits = (game: GameState, id: NationId) => {
-  const u = game.nations[id]?.military.units
-  return u ? totalUnits(u) : 0
-}
-
-/** One line for a battle the player was in, and whether it went their way. */
-function battleLine(b: BattleReport, game: GameState, player: NationId): { text: string; good: boolean } {
-  const place = getWorld().map.regions[b.regionId]?.name ?? 'the front'
-  const line = b.lineBefore !== undefined && b.lineAfter !== undefined ? ` (Defense Line ${b.lineBefore.toFixed(1)} → ${b.lineAfter.toFixed(1)})` : ''
-  const won = b.winner === 'attacker'
-  if (b.attacker.nationId === 'rebels') return won && b.captured ? { text: `Rebels took ${place}. It has broken away.`, good: false } : { text: `Your garrison beat back rebels in ${place}.`, good: true }
-  if (b.attacker.nationId === player) {
-    if (b.captured) return { text: `You captured ${place}.`, good: true }
-    return won ? { text: `You pushed back the defense of ${place}${line}.`, good: true } : { text: `Your attack on ${place} was repulsed.`, good: false }
-  }
-  const who = game.nations[b.attacker.nationId]?.name ?? 'An enemy'
-  if (b.captured) return { text: `${who} captured ${place} from you.`, good: false }
-  return won ? { text: `${who} pushed back your defense of ${place}${line}.`, good: false } : { text: `${who} attacked ${place} and was repulsed.`, good: true }
-}
+/** Divisions a nation has, at home and in the field. */
+const sumUnits = (game: GameState, id: NationId) => (game.nations[id] ? totalUnits(forceUnits(game, id)) : 0)
 
 /** The monthly report: what changed for the player between two states, from the numbers and the log. */
 function buildReport(before: GameState, after: GameState, player: NationId, battles: BattleReport[]): MonthReport {
@@ -407,6 +422,27 @@ function buildReport(before: GameState, after: GameState, player: NationId, batt
     world: world.slice(-4),
   }
 }
+
+// ---- live games ----
+
+/** Why a live game's clock is held other than the player's own pause, or null when nothing holds it. */
+export type Hold = 'online' | 'over' | 'event' | 'battle' | 'report' | 'planning' | 'help'
+
+export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'>): Hold | null {
+  if (st.online) return 'online'
+  if (!st.game || st.game.outcome !== 'playing') return 'over'
+  if (st.game.pendingEvent) return 'event'
+  if (st.fxQueue.length > 0) return 'battle'
+  if (st.summary) return 'report'
+  if (st.warRoom) return 'planning'
+  if (st.helpOpen) return 'help'
+  return null
+}
+
+/** The month as it began, and the player's battles in it, for the month's report. */
+let monthStart: GameState | null = null
+let monthBattles: BattleReport[] = []
+const botPlanner = (s: GameState, m: ReturnType<typeof getWorld>['map']) => generateAllBotOrders(s, m)
 
 // ---- online play ----
 
@@ -436,7 +472,7 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
   const mine = next.battles
     .filter((b) => b.attacker.nationId === player || b.defender.nationId === player)
     .sort((a, b) => Number(b.defender.nationId === player && b.attacker.nationId !== 'rebels') - Number(a.defender.nationId === player && a.attacker.nationId !== 'rebels'))
-  const fx = scenesFor(settings, player, mine)
+  const fx = scenesFor(settings.battleScenes, player, mine)
   for (const b of mine) if (b.captured) flashCapture(b.regionId, b.defender.nationId === player, next.nations[player]?.color ?? '#fff')
   // With the report off, the turn's big moments still get a line.
   if (!settings.monthlyReport) {
@@ -553,6 +589,10 @@ export const useGame = create<GameStore>((set, get) => ({
   settings: loadSettings(),
   toasts: [],
   hasSave: hasStoredSave(),
+  running: false,
+  selectedArmy: null,
+  recentBattles: [],
+  liveNote: null,
   online: null,
   lastRoom: loadIdentity().code,
 
@@ -560,7 +600,13 @@ export const useGame = create<GameStore>((set, get) => ({
     const { map } = getWorld()
     const game = createInitialState(map, opts)
     save(game, [])
+    monthStart = game
+    monthBattles = []
     set({
+      running: false,
+      selectedArmy: null,
+      recentBattles: [],
+      liveNote: null,
       game,
       orders: [],
       selectedRegion: game.playerId,
@@ -584,7 +630,9 @@ export const useGame = create<GameStore>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
       const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
-      set({ game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
+      monthStart = game
+      monthBattles = []
+      set({ running: false, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
@@ -597,7 +645,7 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     const { game, orders } = get()
     if (game) save(game, orders)
-    set({ game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
+    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
   },
 
   abandonGame() {
@@ -606,11 +654,11 @@ export const useGame = create<GameStore>((set, get) => ({
       return
     }
     save(null)
-    set({ game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: false })
+    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: false })
   },
 
   selectRegion(id) {
-    set({ selectedRegion: id })
+    set(id ? { selectedRegion: id, selectedArmy: null } : { selectedRegion: id })
   },
 
   setPanel(panel) {
@@ -691,7 +739,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return false
     }
     // Online, an attack waits for the month to end like every other country's, so nobody wins by clicking fast.
-    if (!MONTH_END_ORDERS.has(order.type) && !(playing && order.type === 'attack')) {
+    if (!isMonthEndOrder(game, order.type) && !(playing && order.type === 'attack')) {
       const next = structuredClone(game)
       const result = applyOrderNow(next, map, order, orders)
       if (result.error) {
@@ -726,7 +774,7 @@ export const useGame = create<GameStore>((set, get) => ({
     let done = 0
     let failed = 0
     let firstError = ''
-    if (playing || batch.some((o) => MONTH_END_ORDERS.has(o.type))) {
+    if (playing || batch.some((o) => isMonthEndOrder(game, o.type))) {
       // Online, or with orders that wait for the month end, each goes through the usual single path.
       for (const o of batch) {
         if (get().issueOrder(o)) done++
@@ -796,6 +844,14 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     const next = structuredClone(game)
     const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, missiles }, get().orders)
+    // In a live game the army sets out and fights when it arrives.
+    if (result.army) {
+      const a = result.army
+      set({ warRoom: null, game: next })
+      save(next)
+      get().toast(`An army left for ${map.regions[target].name}. It arrives ${absDate(a.end)}.`, 'info', 5000)
+      return true
+    }
     if (result.error || !result.battle) {
       get().toast(result.error ?? 'The attack could not be made', 'error')
       return false
@@ -815,7 +871,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   endTurn() {
     const { game, orders, fxQueue, online } = get()
-    if (!game || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
+    if (!game || isLive(game) || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
     // Online, the month ends when everyone is ready, so this only says this player is done.
     if (session && online?.status === 'playing') {
       get().setReady(true)
@@ -827,6 +883,74 @@ export const useGame = create<GameStore>((set, get) => ({
     const shown = presentMonth(game, next, game.playerId)
     save(next, [])
     set({ game: next, orders: [], ...shown })
+  },
+
+  play() {
+    const { game } = get()
+    if (!game || !isLive(game) || game.outcome !== 'playing') return
+    set({ running: true })
+  },
+
+  pause() {
+    if (!get().running) return
+    set({ running: false })
+    get().persist()
+  },
+
+  togglePause() {
+    if (get().running) get().pause()
+    else get().play()
+  },
+
+  setSpeed(speed) {
+    get().updateSettings({ liveSpeed: speed })
+    get().play()
+  },
+
+  stepDay() {
+    const st = get()
+    const { game, orders } = st
+    if (!game || !isLive(game) || session || liveHold(st)) return
+    const { map } = getWorld()
+    const step = advanceDay(game, map, { monthOrders: orders, planner: botPlanner })
+    if (step.state === game) return
+    const shown = presentLiveStep({ step, player: game.playerId, before: game, fxQueue: st.fxQueue, recentBattles: st.recentBattles, settings: st.settings, toast: st.toast })
+    monthBattles.push(...shown.mine)
+    const patch: Partial<GameStore> = { game: step.state, recentBattles: shown.recentBattles, fxQueue: shown.fxQueue, fxTotal: shown.fxQueue.length }
+    if (step.monthEnded) {
+      // Uprisings are fought as the month turns over.
+      monthBattles.push(...step.state.battles.filter((b) => b.attacker.nationId === 'rebels' && b.defender.nationId === game.playerId))
+      const report = buildReport(monthStart ?? game, step.state, game.playerId, monthBattles)
+      monthStart = step.state
+      monthBattles = []
+      patch.orders = []
+      if (st.settings.liveReport === 'pause') patch.summary = report
+      else patch.liveNote = report
+      save(step.state, [])
+    }
+    set(patch)
+  },
+
+  selectArmy(id) {
+    set({ selectedArmy: id })
+  },
+
+  recallArmy(id) {
+    const { game } = get()
+    if (!game) return false
+    const ok = get().issueOrder({ type: 'recall', nationId: game.playerId, armyId: id })
+    if (ok) get().toast('The army is coming home.', 'info', 3000)
+    return ok
+  },
+
+  openBattle(id) {
+    const b = get().recentBattles.find((x) => x.id === id)
+    if (b) set({ fxQueue: [b], fxTotal: 1 })
+  },
+
+  openNote() {
+    const note = get().liveNote
+    if (note) set({ summary: note, liveNote: null })
   },
 
   async createOnline(name, settings) {

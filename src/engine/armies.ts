@@ -4,7 +4,7 @@ import { FRONTIER } from '../data/systems'
 import { clamp, distanceKm, emptyUnits, newId, totalUnits } from './helpers'
 import { fireMissiles } from './systems'
 import { canAttackRegion, commitShare } from './warfare'
-import type { Army, AttackOrder, GameState, GeoPoint, MissileFlight, NationId, Order, RegionId, Via, WorldMap } from './types'
+import type { Army, AttackOrder, GameState, GeoPoint, MissileFlight, NationId, Order, RegionId, UnitCounts, UnitType, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
 type Strike = Extract<Order, { type: 'strike' }>
@@ -211,6 +211,19 @@ export function turnBack(s: GameState, map: WorldMap, a: Army, today: number, wh
   const marched = Math.max(1, Math.ceil(here.progress * (a.end - a.start)))
   a.outcome = why
   heading(s, map, a, { lat: here.lat, lng: here.lng }, today, marched)
+}
+
+/** The kind of unit that makes up most of an army, for its badge and its name on the screen. */
+export function dominantUnit(units: UnitCounts): UnitType {
+  let best: UnitType = 'infantry'
+  let most = -1
+  for (const k of UNIT_TYPES) {
+    if (units[k] > most + 1e-9) {
+      best = k
+      most = units[k]
+    }
+  }
+  return best
 }
 
 export const armiesOf = (s: Pick<GameState, 'armies'>, nationId?: NationId): Army[] => (s.armies ?? []).filter((a) => !nationId || a.nationId === nationId)
