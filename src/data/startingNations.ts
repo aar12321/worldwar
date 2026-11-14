@@ -38,6 +38,8 @@ export interface NewGameOptions {
   victoryShare?: number
   goal?: 'world' | 'classic'
   difficulty?: Difficulty
+  /** 'live': time flows and armies march. Turns, the default, is the game as it has always played. */
+  mode?: 'turns' | 'live'
 }
 
 function pickPersonality(aggression: number, rng: Rng): Personality {
@@ -225,6 +227,14 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
   }
   for (const r of Object.values(state.regions)) r.line = lineMax(state, map, r.id)
   state.worldGross = worldGross(state, map)
+  // The live fields exist only in a live game, so a turn game's save is exactly what it always was.
+  if (opts.mode === 'live') {
+    state.settings.mode = 'live'
+    state.day = 0
+    state.armies = []
+    state.launches = []
+    state.flights = []
+  }
 
   return state
 }

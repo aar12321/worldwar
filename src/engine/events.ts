@@ -143,6 +143,7 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         break
       case 'armyAttrition':
         for (const k of UNIT_TYPES) n.military.units[k] *= 1 - e.fraction
+        for (const a of s.armies ?? []) if (a.nationId === nationId) for (const k of UNIT_TYPES) a.units[k] *= 1 - e.fraction
         break
       case 'unlockRandomTech': {
         const avail = availableTechs(s, nationId)

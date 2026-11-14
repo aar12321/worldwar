@@ -91,6 +91,29 @@ export function missilesLeft(stock: number, pending: Order[], nationId: NationId
   return Math.max(0, Math.floor(stock + 1e-9) - used)
 }
 
+/** Takes the missiles out of a nation's stock for a salvo, and returns how many were fired. Each one is used up, whatever it hits. */
+export function fireMissiles(s: GameState, o: Strike): number {
+  const n = s.nations[o.nationId]
+  const fired = Math.min(o.count ?? 1, Math.floor(n.military.units.missile + 1e-9))
+  if (fired < 1) return 0
+  n.military.units.missile -= fired
+  n.lastStrike = s.turn
+  return fired
+}
+
+/** What a salvo of `fired` missiles does when it lands on a country. */
+export function strikeHits(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, fired: number) {
+  const n = s.nations[nationId]
+  const region = s.regions[target]
+  const victim = s.nations[region.owner]
+  const place = map.regions[target].name
+  const stops = interceptFactor(victim.systems?.shield ?? 0)
+  const hit = Math.min(FRONTIER.strikeLineMax, fired * FRONTIER.strikeLine) * stops
+  region.line = Math.max(0.5, region.line - hit)
+  region.sabotaged = Math.max(region.sabotaged, FRONTIER.strikeFactoryTurns)
+  addLog(s, 'battle', `${fired} hypersonic missile${fired === 1 ? '' : 's'} from ${n.name} hit ${place}. The Defense Line fell by ${hit.toFixed(1)}${stops < 1 ? ` (the shield stopped ${Math.round((1 - stops) * 100)}%)` : ''} and the factories stopped.`, [nationId, region.owner])
+}
+
 export function runStrike(s: GameState, map: WorldMap, o: Strike) {
   const n = s.nations[o.nationId]
   const region = s.regions[o.target]
@@ -98,15 +121,9 @@ export function runStrike(s: GameState, map: WorldMap, o: Strike) {
   const place = map.regions[o.target].name
   const stops = interceptFactor(victim.systems?.shield ?? 0)
   if (o.weapon === 'missile') {
-    // Each missile fired is used up, whatever it hits.
-    const fired = Math.min(o.count ?? 1, Math.floor(n.military.units.missile + 1e-9))
+    const fired = fireMissiles(s, o)
     if (fired < 1) return
-    n.military.units.missile -= fired
-    const hit = Math.min(FRONTIER.strikeLineMax, fired * FRONTIER.strikeLine) * stops
-    region.line = Math.max(0.5, region.line - hit)
-    region.sabotaged = Math.max(region.sabotaged, FRONTIER.strikeFactoryTurns)
-    n.lastStrike = s.turn
-    addLog(s, 'battle', `${fired} hypersonic missile${fired === 1 ? '' : 's'} from ${n.name} hit ${place}. The Defense Line fell by ${hit.toFixed(1)}${stops < 1 ? ` (the shield stopped ${Math.round((1 - stops) * 100)}%)` : ''} and the factories stopped.`, [o.nationId, region.owner])
+    strikeHits(s, map, o.nationId, o.target, fired)
     return
   }
   const level = n.systems?.orbital ?? 1

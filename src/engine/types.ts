@@ -376,6 +376,8 @@ export type Order =
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
+  /** Live mode: calls an army that is still on its way out back home. */
+  | { type: 'recall'; nationId: NationId; armyId: string }
 
 export interface BattleSide {
   nationId: NationId
@@ -410,6 +412,8 @@ export interface BattleReport {
   lineBefore?: number
   lineAfter?: number
   lineMax?: number
+  /** Live mode: the army that fought it. */
+  armyId?: string
 }
 
 export type LogKind = 'news' | 'info' | 'war' | 'battle' | 'tech' | 'economy' | 'event' | 'spy' | 'diplomacy'
@@ -427,6 +431,8 @@ export interface GameSettings {
   goal: 'world' | 'classic'
   seed: number
   difficulty: Difficulty
+  /** 'live': time flows and armies march. Missing means turns, the way the game has always played. */
+  mode?: 'turns' | 'live'
 }
 
 export interface Crisis {
@@ -549,4 +555,68 @@ export interface GameState {
   outcome: 'playing' | 'victory' | 'defeat'
   /** Every nation's gross income added together, from the last turn. The base for the economic victory. */
   worldGross: number
+  /** Live mode only: the day of the month, from 0. `turn` is still the month. */
+  day?: number
+  /** Live mode only: armies marching, fighting or coming home. */
+  armies?: Army[]
+  /** Live mode only: attacks the AI planned for this month that have not left yet. */
+  launches?: PlannedLaunch[]
+  /** Live mode only: hypersonic salvos in the air. */
+  flights?: MissileFlight[]
+}
+
+/** How an army gets to its target. Over water or air it fights with the amphibious penalty. */
+export type Via = 'land' | 'lane' | 'fleet' | 'air'
+export interface GeoPoint {
+  lat: number
+  lng: number
+}
+export type ArmyPhase = 'outbound' | 'fighting' | 'returning'
+export type AttackOrder = Extract<Order, { type: 'attack' }>
+
+/** Live mode: part of a nation's military sent to attack a country. It takes days to arrive, fights once, and comes home. */
+export interface Army {
+  id: string
+  nationId: NationId
+  /** The units in the field. They left the national military when the army set out and rejoin it when it is home. */
+  units: UnitCounts
+  commit: Commit
+  stance: Stance
+  /** Share of the military it was when it left, for the battle report. */
+  share: number
+  via: Via
+  /** Fixed at launch: crossing water or air fights with the amphibious penalty. */
+  bySea: boolean
+  /** Where it set out from. It returns here, or to the nearest country still held. */
+  home: RegionId
+  target: RegionId
+  phase: ArmyPhase
+  /** The leg it is on now, in absolute days. Before `start` it is still mustering at `from`. */
+  from: GeoPoint
+  to: GeoPoint
+  start: number
+  end: number
+  launched: number
+  battleId?: string
+  outcome?: 'captured' | 'won' | 'repulsed' | 'recalled' | 'peace' | 'taken'
+}
+
+/** Live mode: an attack the AI means to launch on a given day. */
+export interface PlannedLaunch {
+  id: string
+  /** Absolute day. */
+  at: number
+  order: AttackOrder
+}
+
+/** Live mode: a salvo of hypersonic missiles on its way. */
+export interface MissileFlight {
+  id: string
+  nationId: NationId
+  from: RegionId
+  target: RegionId
+  count: number
+  launched: number
+  /** Absolute day it lands. */
+  lands: number
 }
