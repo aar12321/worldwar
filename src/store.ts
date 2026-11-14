@@ -360,7 +360,7 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'research') return typeof order.techId === 'string'
   if (order.type === 'spy') return typeof order.target === 'string' && order.mission === 'sabotage'
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
-  if (order.type === 'leaveAlliance') return typeof order.target === 'string'
+  if (order.type === 'leaveAlliance' || order.type === 'breakPact') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
   if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital') && (order.count === undefined || Number.isInteger(order.count))
   if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)

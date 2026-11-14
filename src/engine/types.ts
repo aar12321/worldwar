@@ -188,6 +188,8 @@ export interface Nation {
   secureUntil: number
   /** The turn it became a puppet, so a master can only annex one that has settled. */
   overlordSince?: number
+  /** Turn of the last corruption sweep. Stolen money takes time to build up again. */
+  lastSweep?: number
   /** Size of each private business sector. */
   sectors: Record<SectorId, number>
   /** Sectors the state subsidizes: they cost money and grow faster. */
@@ -363,6 +365,8 @@ export type Order =
   | { type: 'respond'; nationId: NationId; proposalId: string; accept: boolean }
   | { type: 'cancelDeal'; nationId: NationId; dealId: string }
   | { type: 'leaveAlliance'; nationId: NationId; target: NationId }
+  /** Tears up a non-aggression pact, at a cost in reputation. */
+  | { type: 'breakPact'; nationId: NationId; target: NationId }
   | { type: 'spy'; nationId: NationId; target: RegionId; mission: SpyMission }
   | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
@@ -551,7 +555,7 @@ export interface GameState {
   /** Diplomatic outcomes from the most recent turn. */
   dispatches: Dispatch[]
   pendingEvent: PendingEvent | null
-  /** Turn when the next surprise decision may appear. New games wait until turn 21. */
+  /** Turn when the next surprise decision may appear. New games wait until turn 8 (FIRST_EVENT_TURN). */
   nextEventTurn: number
   battles: BattleReport[]
   log: LogEntry[]
@@ -559,6 +563,8 @@ export interface GameState {
   outcome: 'playing' | 'victory' | 'defeat'
   /** Every nation's gross income added together, from the last turn. The base for the economic victory. */
   worldGross: number
+  /** How much buying (positive) or selling (negative) has pushed each world price lately. It fades every month. */
+  marketPressure?: Partial<Record<TradeResource, number>>
   /** Live mode only: the day of the month, from 0. `turn` is still the month. */
   day?: number
   /** Live mode only: armies marching, fighting or coming home. */

@@ -133,7 +133,8 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
   for (const e of option.effects) {
     switch (e.type) {
       case 'resource':
-        n.resources[e.key] = Math.max(0, n.resources[e.key] + effectAmount(e, workforce))
+        // Money can go into the red: a choice that costs money is not free for a nation that has none.
+        n.resources[e.key] = e.key === 'capital' ? n.resources.capital + effectAmount(e, workforce) : Math.max(0, n.resources[e.key] + effectAmount(e, workforce))
         break
       case 'stability':
         n.stability = clamp(n.stability + e.amount, 0, 100)

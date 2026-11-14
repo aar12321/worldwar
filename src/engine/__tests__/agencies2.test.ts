@@ -67,8 +67,16 @@ describe('every foreign operation works end to end', () => {
   it('stealing technology gives you one you lacked', () => {
     succeeds(foreign('steal'), (b, a) => a.nations.r0.techs.length > b.nations.r0.techs.length)
   })
-  it('a coup on a shaky nation makes it your puppet', () => {
-    succeeds(foreign('coup'), (_, a) => a.nations.r1.overlord === 'r0')
+  it('a coup on a shaky nation installs a friendly junta, not a puppet', () => {
+    succeeds(
+      foreign('coup'),
+      (_, a) => a.nations.r1.overlord === null && a.nations.r1.government === 'junta' && (a.pacts['r0|r1'] ?? 0) > a.turn,
+      (s) => {
+        // A coup needs a smaller, weaker target.
+        s.regions.r2.owner = 'r0'
+        s.nations.r0.military.units.infantry = s.nations.r1.military.units.infantry + 5
+      },
+    )
   })
   it('a cyber attack drains their treasury', () => {
     succeeds(

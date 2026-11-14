@@ -76,7 +76,10 @@ describe('reaching far countries', () => {
     s.regions.r0.buildings.factory = 0
     expect(canAttackRegion(s, map, 'r0', 'r1').ok).toBe(false)
     s.regions.r0.buildings.factory = 1
+    // One squadron cannot carry thirty divisions: planes must be a twentieth of the military.
     setMilitary(s, 'r0', { infantry: 30, air: 1 })
+    expect(canAttackRegion(s, map, 'r0', 'r1').ok).toBe(false)
+    setMilitary(s, 'r0', { infantry: 30, air: 2 })
     expect(canAttackRegion(s, map, 'r0', 'r1').ok).toBe(true)
     map.regions.r1.lng = (REACH.airKm + 1000) / 111.19
     expect(canAttackRegion(s, map, 'r0', 'r1').ok).toBe(false)
@@ -94,7 +97,7 @@ describe('a distant attack really plays out', () => {
   it('resolves with the amphibious penalty and can take the country', () => {
     const { map, s } = oceanWorld(7000)
     s.regions.r0.buildings.port = 1
-    setMilitary(s, 'r0', { infantry: 60, naval: 2 })
+    setMilitary(s, 'r0', { infantry: 60, naval: 4 })
     setMilitary(s, 'r1', { infantry: 1 })
     const order = { type: 'attack', nationId: 'r0', target: 'r1' } as const
     const next = resolveTurn(s, map, [order])

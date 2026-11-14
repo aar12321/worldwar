@@ -22,7 +22,7 @@ import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
 const LIVE_NOW = new Set<Order['type']>(['strike', 'respond', 'propose'])
@@ -34,6 +34,11 @@ const LIVE_NOW = new Set<Order['type']>(['strike', 'respond', 'propose'])
 export function isMonthEndOrder(s: Pick<GameState, 'settings'>, type: Order['type']): boolean {
   if (isLive(s) && LIVE_NOW.has(type)) return false
   return MONTH_END_ORDERS.has(type)
+}
+
+/** Influence to annex a puppet: more for a bigger one. */
+export function annexCost(s: GameState, target: string): number {
+  return EMPIRE.annexCost * Math.max(1, Object.values(s.regions).filter((r) => r.owner === target).length)
 }
 
 /** Influence a war on `target` costs `nationId` right now: little with a reason, a great deal without one. */
@@ -115,7 +120,7 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.capital = Math.round(tradeValue(s, o.company, o.shares, 'buy'))
       break
     case 'annexPuppet':
-      c.pp = EMPIRE.annexCost
+      c.pp = annexCost(s, o.target)
       break
     case 'crisisAction': {
       const k = crisisCost(o.action)
@@ -128,6 +133,9 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     case 'leaveAlliance':
       c.pp = COSTS.leaveAlliance
+      break
+    case 'breakPact':
+      c.pp = COSTS.breakPact
       break
     case 'spy':
       c.capital = COSTS.spy
@@ -266,7 +274,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return s.nations[o.target]?.overlord === o.nationId ? null : 'They are not your puppet'
     case 'setGovernment': {
       if (n.government === o.government) return 'You already have that government'
-      if (s.turn - n.lastReform < REFORM.cooldown && n.lastReform > 0) return `The government can change again in ${REFORM.cooldown - (s.turn - n.lastReform)} months`
+      if (s.turn - n.lastReform < REFORM.cooldown) return `The government can change again in ${REFORM.cooldown - (s.turn - n.lastReform)} months`
       return null
     }
     case 'build': {
@@ -296,7 +304,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'train': {
       if (forceUnits(s, o.nationId)[o.unit] < 0.05) return 'No troops of that type'
       if (n.military.drill[o.unit] >= TRAINING.max) return 'Already fully trained'
-      if (n.military.commanderId) return 'A commander trains your military for free'
+      if (pending.some((p) => p.type === 'train' && p.unit === o.unit)) return 'Already drilling this month'
       return null
     }
     case 'upgradeWeapons':
@@ -402,6 +410,10 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     }
     case 'leaveAlliance':
       return isAllied(s, o.nationId, o.target) ? null : 'Not allied'
+    case 'breakPact':
+      if (!hasPact(s, o.nationId, o.target)) return 'There is no pact with them'
+      if (pending.some((p) => p.type === 'breakPact' && p.target === o.target)) return 'Already ordered'
+      return null
     case 'setGovernor': {
       const r = s.regions[o.regionId]
       if (r?.owner !== o.nationId) return 'You do not control this country'

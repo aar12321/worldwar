@@ -3,8 +3,9 @@ import { AGENCY, DOMESTIC_OPS, FOREIGN_OPS, levelsCost, agencyName, type AgencyI
 import { FRONTIER } from '../data/systems'
 import { TECH_BY_ID } from '../data/techTree'
 import { JUSTIFY } from '../data/war'
-import { SPY } from './espionage'
-import { addInfamy, addLog, alliesOf, atWar, clamp, grantJustification, hasTech, isAllied, nationModifiers, regionsOf } from './helpers'
+import { CAUGHT_SPYING, SPY } from './espionage'
+import { addInfamy, addLog, alliesOf, atWar, clamp, enemiesOf, grantJustification, hasTech, isAllied, nationModifiers, pairKey, regionsOf } from './helpers'
+import { militaryPower } from './militaryStats'
 import type { Rng } from './rng'
 import type { GameState, NationId, Order, WorldMap } from './types'
 
@@ -66,7 +67,12 @@ export function validateOperation(s: GameState, o: Extract<Order, { type: 'opera
   if (used >= teams(s, o.nationId, 'foreign')) return `All ${name} teams are busy this month`
   if (pending.some((p) => p.type === 'operation' && p.op === o.op && p.target === o.target)) return 'Already ordered'
   if (spec.needsShaky && t.stability >= 45) return `${t.name} is too stable for that (stability ${Math.round(t.stability)}%, needs under 45%)`
-  if (o.op === 'coup' && t.overlord) return 'They already have an overlord'
+  if (o.op === 'coup') {
+    if (t.overlord) return 'They already have an overlord'
+    if (enemiesOf(s, o.target).length > 0) return `${t.name} is at war. A coup needs a quiet capital.`
+    if (regionsOf(s, o.target).length >= regionsOf(s, o.nationId).length) return `${t.name} is too big for a coup. It must hold fewer countries than you.`
+    if (militaryPower(s, o.target) >= militaryPower(s, o.nationId)) return `${t.name}'s army is too strong. It must be weaker than yours.`
+  }
   if (o.op === 'case' && s.casusBelli[`${o.nationId}|${o.target}`] !== undefined && s.casusBelli[`${o.nationId}|${o.target}`] >= s.turn) return 'You already have a reason to fight them'
   if (o.op === 'steal' && !stealable(s, o.nationId, o.target)) return 'They have nothing you can use yet'
   if (o.op === 'aid' && atWar(s, o.nationId, o.target)) return 'Not while at war'
@@ -121,7 +127,7 @@ export function fundAgency(s: GameState, nationId: NationId, agency: AgencyId, l
 
 function caught(s: GameState, nationId: NationId, target: NationId, what: string) {
   addInfamy(s, nationId, JUSTIFY.infamyCaught)
-  addOpinion(s, target, nationId, 'Caught our agents', -25, 0.4)
+  addOpinion(s, target, nationId, CAUGHT_SPYING, -25, 0.4)
   grantJustification(s, target, nationId, 'Caught agents', JUSTIFY.reasonTurns)
   addLog(s, 'spy', `${nm(s, target)} caught ${nm(s, nationId)}'s agents ${what}. ${nm(s, target)} now has a reason to fight.`, [nationId, target])
 }
@@ -179,17 +185,23 @@ export function runOperation(s: GameState, map: WorldMap, nationId: NationId, op
       }
       break
     }
-    case 'coup':
-      t.overlord = nationId
-      t.overlordSince = s.turn
-      t.stability = 40
+    case 'coup': {
+      // A friendly junta takes power: it owes you, but it is not your puppet. The country is shaken.
+      t.government = 'junta'
+      t.lastReform = s.turn
+      t.nextElection = 0
+      t.stability = 30
+      t.laws = []
       for (const k of s.alliances.filter((a) => a.split('|').includes(target))) {
         const other = k.split('|').find((x) => x !== target)!
         if (atWar(s, nationId, other) || !isAllied(s, nationId, other)) s.alliances = s.alliances.filter((a) => a !== k)
       }
+      addOpinion(s, target, nationId, 'Put us in power', 45, 0.5)
+      s.pacts[pairKey(nationId, target)] = Math.max(s.pacts[pairKey(nationId, target)] ?? -1, s.turn + AGENCY.coupPactMonths)
       addInfamy(s, nationId, 15)
-      addLog(s, 'news', `A coup in ${t.name}. The new government answers to ${n.name}, and the world suspects who helped.`, [nationId, target])
+      addLog(s, 'news', `A coup in ${t.name}. A junta friendly to ${n.name} holds power, and the world suspects who helped.`, [nationId, target])
       break
+    }
     case 'cyber':
       // A Cyber Command at home blunts the blow.
       t.resources.capital *= 1 - 0.3 * (1 - FRONTIER.cyberDefense * (t.systems?.cyber ?? 0))
@@ -222,10 +234,15 @@ export function runDomestic(s: GameState, nationId: NationId, op: DomesticOp, re
       mine(`${agencyName(n.name, 'domestic')} broke up the rebels.`)
       break
     }
-    case 'corruption':
-      n.resources.capital += 10 + 12 * level
-      n.stability = clamp(n.stability + 2, 0, 100)
-      mine(`${agencyName(n.name, 'domestic')} recovered stolen money and won back some trust.`)
+    case 'corruption': {
+      // There is only so much stolen money to find: a sweep soon after the last one recovers less.
+      const ripe = Math.min(1, (s.turn - (n.lastSweep ?? -99)) / AGENCY.sweepMonths)
+      const found = Math.round((10 + 12 * level) * ripe)
+      n.lastSweep = s.turn
+      n.resources.capital += found
+      n.stability = clamp(n.stability + 2 * ripe, 0, 100)
+      mine(ripe < 1 ? `${agencyName(n.name, 'domestic')} recovered ${found} money. The last sweep was recent, so there was less to find.` : `${agencyName(n.name, 'domestic')} recovered ${found} stolen money and won back some trust.`)
       break
+    }
   }
 }

@@ -126,4 +126,4 @@ export const ELECTION = {
   lose: { stability: -12, influenceLoss: 0.5, tax: 0.2 },
 }
 
-export const COUP = { below: 25, perPoint: 0.012, stabilityAfter: 40 }
+export const COUP = { below: 25, perPoint: 0.012, stabilityAfter: 30 }

@@ -57,8 +57,10 @@ export const BUSINESS = {
 
 export const INVEST = {
   min: 40,
-  /** Monthly dividend as a share of the money invested. */
+  /** Monthly dividend as a share of the money still invested. */
   dividend: 0.008,
+  /** Share of an investment used up each month (the plant ages, the loan is repaid), so it pays about 1.3 times itself over its life. */
+  amortize: 0.006,
   /** A foreign investor's money adds this much of what a government grant would. */
   efficiency: 0.8,
   /** Largest total outside investment in a sector, as a multiple of its size. */

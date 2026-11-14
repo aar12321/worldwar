@@ -8,7 +8,7 @@ import { blocOf, blocsOf } from '../engine/blocs'
 import { PACT_TURNS, describeProposal, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
 import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, regionsOf, turnDate } from '../engine/helpers'
-import { warCost } from '../engine/orders'
+import { annexCost, warCost } from '../engine/orders'
 import { isLive } from '../engine/calendar'
 import { CRISIS } from '../data/crises'
 import { EMPIRE, JUSTIFY } from '../data/war'
@@ -467,7 +467,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
               />
             )}
             {n.overlord === player.id && (
-              <OrderButton order={{ type: 'annexPuppet', nationId: player.id, target: id }} label="Annex" cost={`${EMPIRE.annexCost} influence`} effect="Its land joins your empire at once. A puppet must serve six months first." />
+              <OrderButton order={{ type: 'annexPuppet', nationId: player.id, target: id }} label="Annex" cost={`${annexCost(game, id)} influence`} effect={`Its land, army and treasury join yours. A puppet must serve ${EMPIRE.annexMonths} months first.`} />
             )}
             {!allied && !cb && (
               <OrderButton

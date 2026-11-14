@@ -508,7 +508,7 @@ describe('country upgrades', () => {
 })
 
 describe('the national military', () => {
-  it('trains each unit type on its own, and a commander drills for free', () => {
+  it('trains each unit type on its own, and a commander drills for free besides', () => {
     const s = base()
     const m = s.nations[P].military
     m.units = { infantry: 6, armor: 2, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 }
@@ -525,7 +525,8 @@ describe('the national military', () => {
 
     const withCommander = structuredClone(s)
     withCommander.nations[P].military.commanderId = generalId
-    expect(validateOrder(withCommander, map, { type: 'train', nationId: P, unit: 'infantry' })).toMatch(/commander/i)
+    // Paid drill still works with a commander: the commander drills one more type for free.
+    expect(validateOrder(withCommander, map, { type: 'train', nationId: P, unit: 'infantry' })).toBeNull()
     const free = resolveTurn(withCommander, map, [])
     expect(free.nations[P].military.drill.infantry).toBe(1)
     expect(free.nations[P].resources.capital).toBe(idle.nations[P].resources.capital)
@@ -550,7 +551,7 @@ describe('the national military', () => {
     expect(orderCost(s, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' }).capital).toBe(weaponCost(0))
     s.nations[P].military.weapons.infantry = 2
     expect(orderCost(s, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' }).capital).toBe(weaponCost(2))
-    expect(validateOrder(s, map, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' })).toMatch(/factory level 3/)
+    expect(validateOrder(s, map, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' })).toMatch(/factory of level 3/)
   })
 
   it('the stat sheet shows each source of a unit bonus', () => {

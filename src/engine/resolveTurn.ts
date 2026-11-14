@@ -13,7 +13,7 @@ import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { annexPuppet, applyDeals, cancelDeal, declareWar, expireDiplomacy, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
+import { annexPuppet, applyDeals, breakPact, cancelDeal, declareWar, expireDiplomacy, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
 import { addToSector, cleanInvestments, makeInvestment } from './business'
 import { applyEconomy, nationWorkforce } from './economy'
 import { runSpyMission } from './espionage'
@@ -27,7 +27,7 @@ import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
 import { runPolitics } from './politics'
 import { research } from './tech'
-import { marketPrices, marketValue } from './trade'
+import { fadeMarket, marketPrices, marketValue, pushMarket } from './trade'
 import { tickTraining, trainMonths } from './training'
 import { UNIT_TYPES, type Army, type AttackOrder, type BattleReport, type GameState, type Order, type TrainingJob, type WorldMap } from './types'
 import { checkOutcome, worldGross } from './victory'
@@ -135,6 +135,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return 'Cancel deal'
     case 'leaveAlliance':
       return `Leave alliance with ${nation(o.target)}`
+    case 'breakPact':
+      return `Break the pact with ${nation(o.target)}`
     case 'spy':
       return `Sabotage ${region(o.target)}`
     case 'enactLaw':
@@ -149,7 +151,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 const PHASES: Order['type'][][] = [
   ['respond'],
   ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor', 'setDirective'],
-  ['cancelDeal', 'leaveAlliance'],
+  ['cancelDeal', 'leaveAlliance', 'breakPact'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy', 'sellShares', 'buyShares'],
@@ -234,6 +236,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
     .sort()
   for (const id of alive) if (regionsOf(s, id).length === 0) killNation(s, id, null)
   cleanInvestments(s)
+  fadeMarket(s)
   const prices = marketPrices(s)
   for (const id of alive) if (s.nations[id].alive) applyEconomy(s, map, id, rng, prices)
   applyDeals(s)
@@ -298,6 +301,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'leaveAlliance':
       leaveAlliance(s, o.nationId, o.target)
+      break
+    case 'breakPact':
+      breakPact(s, o.nationId, o.target)
       break
     case 'setPolicy':
       n.taxRate = o.taxRate
@@ -386,11 +392,13 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'marketBuy':
       n.resources[o.resource as 'food'] += o.amount
       n.tradeUsed += o.amount
+      pushMarket(s, o.resource, o.amount)
       break
     case 'marketSell':
       n.resources[o.resource as 'food'] -= o.amount
       n.resources.capital += marketValue(s, n, o.resource, o.amount, 'sell')
       n.tradeUsed += o.amount
+      pushMarket(s, o.resource, -o.amount)
       break
     case 'setAutoBuy':
       n.autoBuy = [...new Set(o.resources)]

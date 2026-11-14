@@ -34,7 +34,10 @@ export function runPolitics(s: GameState, map: WorldMap, rng: Rng) {
       n.resources.pp = 0
       n.laws = []
       n.draftRate = Math.min(n.draftRate, 0.1)
-      addLog(s, 'event', `A coup overthrew the junta in ${n.name}. Its laws are gone and a new junta holds power.`, [n.id])
+      // Loyalists of the fallen junta take up arms somewhere in the country.
+      const held = Object.values(s.regions).filter((r) => r.owner === n.id && r.id !== n.capital).sort((a, b) => (a.id < b.id ? -1 : 1))
+      if (held.length) rng.pick(held).rebels += 1
+      addLog(s, 'event', `A coup overthrew the junta in ${n.name}. Its laws are gone, a new junta holds power, and loyalists of the old one have taken up arms.`, [n.id])
     }
   }
 }

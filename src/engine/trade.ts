@@ -26,9 +26,26 @@ export function marketPrices(s: GameState): MarketPrices {
   const out = {} as MarketPrices
   for (const r of TRADE_RESOURCES) {
     const m = median(alive.map((n) => stockOf(n, r)))
-    out[r] = Math.round(MARKET[r].base * clamp(Math.sqrt(MARKET[r].reference / Math.max(1, m)), MATERIALS.priceMin, MATERIALS.priceMax) * 100) / 100
+    const push = 1 + clamp(s.marketPressure?.[r] ?? 0, MATERIALS.pressureMin, MATERIALS.pressureMax)
+    out[r] = Math.round(MARKET[r].base * clamp(Math.sqrt(MARKET[r].reference / Math.max(1, m)), MATERIALS.priceMin, MATERIALS.priceMax) * push * 100) / 100
   }
   return out
+}
+
+/** Records a trade on the world market: buying pushes the price up, selling pushes it down. */
+export function pushMarket(s: GameState, r: TradeResource, amount: number) {
+  const p = (s.marketPressure ??= {})
+  p[r] = clamp((p[r] ?? 0) + (amount / MATERIALS.pressureScale) * 0.1, MATERIALS.pressureMin, MATERIALS.pressureMax)
+}
+
+/** The month's fading of the market's memory of big trades. */
+export function fadeMarket(s: GameState) {
+  if (!s.marketPressure) return
+  for (const r of Object.keys(s.marketPressure) as TradeResource[]) {
+    const v = (s.marketPressure[r] ?? 0) * (1 - MATERIALS.pressureFade)
+    if (Math.abs(v) < 0.002) delete s.marketPressure[r]
+    else s.marketPressure[r] = v
+  }
 }
 
 /** Materials and food can be bought and sold on the world market. Money, research and soldiers cannot. */

@@ -192,7 +192,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       defaultedUntil: 0,
       corporateTax: CORPORATE_TAX.default,
       nextElection: GOVERNMENTS[government].election > 0 ? 12 + rng.int(0, 24) : 0,
-      lastReform: 0,
+      lastReform: -99,
       foodShortage: false,
       oilShortage: false,
       goodsShortage: false,

@@ -65,7 +65,7 @@ export const STOCKS = {
   /** Buying or selling the whole float at once would move the price by this much. Smaller trades move it less. */
   impact: 0.6,
   /** Dividend each month, as a share of the value held, by what the company has been told to do. */
-  dividend: { payout: 0.014, expand: 0, focus: 0.004 } as Record<Directive, number>,
+  dividend: { payout: 0.006, expand: 0, focus: 0.002 } as Record<Directive, number>,
   /** Chance each month of a market-wide crash or boom, before world tension adds. */
   crash: 0.006,
   boom: 0.01,

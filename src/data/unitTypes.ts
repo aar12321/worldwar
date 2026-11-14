@@ -98,7 +98,9 @@ export const LAW_SPECS: Record<LawId, LawSpec> = {
 }
 
 export const DIPLOMACY = {
-  loan: { min: 30, max: 400, minMonths: 3, maxMonths: 24, interest: 0.007 },
+  loan: { min: 30, max: 400, minMonths: 3, maxMonths: 24, interest: 0.007, defaultInfamy: 10, defaultLockMonths: 12 },
+  /** Reputation lost for tearing up a non-aggression pact. */
+  pactBreakInfamy: 12,
   sanctions: { cost: 15, months: 12, tradeCut: 0.2, minFloor: 0.2 },
   guarantee: { months: 36 },
   puppet: { tribute: 0.12, breakChance: 0.05, valueShare: 0.6, minValue: 20 },
@@ -108,6 +110,7 @@ export const COSTS = {
   declareWar: 25,
   declareWarWithCasusBelli: 10,
   leaveAlliance: 10,
+  breakPact: 25,
   suppressRebels: 10,
   spy: 30,
 }

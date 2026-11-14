@@ -102,7 +102,9 @@ export function cleanInvestments(s: GameState) {
       if (b.isPlayer) addLog(s, 'economy', `${a.name}'s investment in your ${SECTORS[inv.sector].name.toLowerCase()} was lost in the war.`, [inv.investor, inv.target])
       continue
     }
-    kept.push(inv)
+    // An investment pays a steady income, not a free one forever: it runs down as it pays.
+    inv.amount *= 1 - INVEST.amortize
+    if (inv.amount >= 1) kept.push(inv)
   }
   s.investments = kept
 }

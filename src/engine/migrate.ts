@@ -34,7 +34,8 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     n.budget ??= { military: 0.25, education: 0.25, health: 0.25, infrastructure: 0.25 }
     n.corporateTax ??= 0.15
     n.nextElection ??= 0
-    n.lastReform ??= 0
+    n.lastReform ??= -99
+    if (n.lastReform === 0) n.lastReform = -99
     n.resources.oil ??= 6
     n.resources.steel ??= 6
     n.resources.goods ??= 10

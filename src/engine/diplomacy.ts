@@ -2,7 +2,7 @@ import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
 import { EMPIRE, JUSTIFY } from '../data/war'
-import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, maxWars, newId, pairKey } from './helpers'
+import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, maxWars, newId, pairKey, puppetsOf } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
 import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, WorldMap } from './types'
@@ -47,6 +47,16 @@ export function liftSanctions(s: GameState, from: NationId, to: NationId) {
 /** A master absorbs a puppet that has served long enough. Its land joins the empire at once, half settled. */
 export function annexPuppet(s: GameState, map: WorldMap, master: NationId, puppet: NationId) {
   addLog(s, 'diplomacy', `${name(s, master)} has annexed its puppet ${name(s, puppet)}.`, [master, puppet])
+  // Its army and treasury join the master's: an annexation is a merger, not a conquest.
+  const p = s.nations[puppet]
+  const m = s.nations[master]
+  for (const k of Object.keys(p.military.units) as (keyof typeof p.military.units)[]) {
+    m.military.units[k] += p.military.units[k]
+    p.military.units[k] = 0
+  }
+  for (const a of s.armies ?? []) if (a.nationId === puppet) a.nationId = master
+  m.resources.capital += Math.max(0, p.resources.capital)
+  p.resources.capital = Math.min(0, p.resources.capital)
   for (const id of Object.keys(s.regions).sort()) if (s.regions[id].owner === puppet) transferRegion(s, map, id, master, false)
   addInfamy(s, master, EMPIRE.annexInfamy)
 }
@@ -88,6 +98,18 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   s.proposals = s.proposals.filter((p) => !((p.from === a && p.to === b) || (p.from === b && p.to === a)) || p.kind === 'peace')
   addOpinion(s, b, a, 'Declared war on us', -40, 0.4)
   addLog(s, 'war', `${name(s, a)} has declared war on ${name(s, b)}!`, [a, b])
+  // Puppets fight beside their overlord, on either side, without being asked.
+  for (const [side, foe] of [[a, b], [b, a]] as const) {
+    for (const puppet of puppetsOf(s, side)) {
+      if (puppet === foe || atWar(s, puppet, foe) || !s.nations[puppet]?.alive) continue
+      const pk = pairKey(puppet, foe)
+      s.wars.push(pk)
+      s.wars.sort()
+      s.warStarted[pk] = s.turn
+      delete s.pacts[pk]
+      addLog(s, 'war', `${name(s, puppet)} follows its overlord ${name(s, side)} into the war against ${name(s, foe)}.`, [puppet, side, foe])
+    }
+  }
   if (!callAllies) return
   for (const ally of [...new Set([...alliesOf(s, b), ...guarantorsOf(s, b)])].sort()) {
     const n = s.nations[ally]
@@ -247,6 +269,9 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
       if (bundleEmpty(receive)) {
         const value = bundleValue(give, marketPrices(s)) * Math.max(1, months)
         addOpinion(s, p.to, p.from, 'Generous gifts', Math.min(30, 4 + value / 6), 0.5)
+      } else if (bundleEmpty(give)) {
+        // Paying tribute under threat is not friendship.
+        addOpinion(s, p.to, p.from, 'Forced us to pay tribute', -20, 0.25)
       } else {
         addOpinion(s, p.to, p.from, 'Fair dealing', 4, 0.25)
         addOpinion(s, p.from, p.to, 'Fair dealing', 4, 0.25)
@@ -339,8 +364,27 @@ export function cancelDeal(s: GameState, nationId: NationId, dealId: string) {
     pushDispatch(s, { kind: 'completed', from: nationId, to: partner, proposalKind: 'deal', text: `${name(s, nationId)} forgave the rest of ${name(s, partner)}'s loan.` })
     return
   }
+  if (d.kind === 'loan') {
+    // Walking away from a loan is a default: the lender is wronged, the world takes note, and other lenders charge more.
+    addOpinion(s, partner, nationId, 'Defaulted on our loan', -50, 0.3)
+    grantJustification(s, partner, nationId, 'Defaulted on our loan', JUSTIFY.reasonTurns)
+    addInfamy(s, nationId, DIPLOMACY.loan.defaultInfamy)
+    s.nations[nationId].defaultedUntil = Math.max(s.nations[nationId].defaultedUntil ?? 0, s.turn + DIPLOMACY.loan.defaultLockMonths)
+    pushDispatch(s, { kind: 'broken', from: nationId, to: partner, proposalKind: 'deal', text: `${name(s, nationId)} stopped paying its loan from ${name(s, partner)}. Nobody will lend to it for a while.` })
+    return
+  }
   addOpinion(s, partner, nationId, 'Broke a trade deal', -35, 0.4)
   pushDispatch(s, { kind: 'broken', from: nationId, to: partner, proposalKind: 'deal', text: `${name(s, nationId)} tore up its trade deal with ${name(s, partner)}.` })
+}
+
+/** Tears up a non-aggression pact. The other side and the world remember it. */
+export function breakPact(s: GameState, a: NationId, b: NationId) {
+  delete s.pacts[pairKey(a, b)]
+  addOpinion(s, b, a, 'Broke our pact', -35, 0.3)
+  grantJustification(s, b, a, 'Broke our pact', JUSTIFY.reasonTurns)
+  addInfamy(s, a, DIPLOMACY.pactBreakInfamy)
+  for (const other of Object.keys(s.nations).sort()) if (other !== a && other !== b && s.nations[other].alive) addOpinion(s, other, a, 'Breaks its word', -4, 0.3)
+  pushDispatch(s, { kind: 'broken', from: a, to: b, proposalKind: 'pact', text: `${name(s, a)} tore up its non-aggression pact with ${name(s, b)}.` })
 }
 
 export function leaveAlliance(s: GameState, a: NationId, b: NationId) {

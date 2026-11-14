@@ -13,7 +13,7 @@ import type { Rng } from './rng'
 import { checkDefault, type CreditReport, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
 import { cityEffects, cityWorkforceBonus } from './cities'
 import { policyEffects } from './policy'
-import { marketPrices, type MarketPrices } from './trade'
+import { marketPrices, pushMarket, type MarketPrices } from './trade'
 import type { Buildings, BuildingType, GameState, MapRegion, NationId, RegionState, TradeResource, WorldMap } from './types'
 import { BUILDING_TYPES, UNIT_TYPES } from './types'
 
@@ -397,14 +397,17 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
 function buyShortfalls(s: GameState, nationId: NationId, e: EconomyReport, prices: MarketPrices) {
   const n = s.nations[nationId]
   if (!n.autoBuy?.length) return
-  const use: Partial<Record<TradeResource, number>> = { food: e.foodConsumption, oil: e.oilUse, goods: e.goodsUse, steel: 0 }
+  const use: Partial<Record<TradeResource, number>> = { food: e.foodConsumption, oil: e.oilUse, goods: e.goodsUse }
   const net: Partial<Record<TradeResource, number>> = { food: e.netFood, oil: e.netOil, goods: e.netGoods, steel: e.steelProduction }
+  // An embargo cuts what can be bought, on auto-buy as by hand.
+  const capacity = e.tradeCapacity * ((n.embargoedUntil ?? 0) >= s.turn ? ECON.embargoTradeMult : 1)
   for (const r of n.autoBuy) {
     if (r === 'capital' || r === 'tp' || r === 'manpower') continue
     const stock = n.resources[r]
-    const want = (use[r] ?? 0) * MATERIALS.autoBuyMonths - stock
-    if (want <= 0 || (net[r] ?? 0) >= 0 && stock >= 0) continue
-    const left = Math.max(0, e.tradeCapacity - n.tradeUsed)
+    // Steel is not used up month to month: the reserve is a store for building and training, topped up when production is thin.
+    const want = r === 'steel' ? MATERIALS.steelReserve - stock : (use[r] ?? 0) * MATERIALS.autoBuyMonths - stock
+    if (want <= 0 || (r === 'steel' ? (net.steel ?? 0) >= 1 : (net[r] ?? 0) >= 0 && stock >= 0)) continue
+    const left = Math.max(0, capacity - n.tradeUsed)
     const price = prices[r] * (1 + marketSpread(n))
     const afford = Math.max(0, (n.resources.capital - 15) / price)
     const amount = Math.min(want, left, afford)
@@ -412,6 +415,7 @@ function buyShortfalls(s: GameState, nationId: NationId, e: EconomyReport, price
     n.resources.capital -= amount * price
     n.resources[r] += amount
     n.tradeUsed += amount
+    pushMarket(s, r, amount)
   }
 }
 
