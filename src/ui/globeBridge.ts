@@ -31,12 +31,15 @@ export interface BattleOverlay {
 interface FxState {
   rings: FxRing[]
   battles: BattleOverlay[]
+  /** Countries that keep their old color for a moment after they were taken, so the capture lands when the fight is over. */
+  held: Record<string, string>
   shakeKey: number
   shakeStrength: number
   /** Battle whose outcome has been revealed by the cinematic (its result banner is showing). */
   revealedBattleId: string | null
   addRing(ring: Omit<FxRing, 'id'>, ttlMs: number): void
   addBattle(battle: BattleOverlay, ttlMs: number): void
+  hold(regionId: string, color: string, ms: number): void
   shake(strength: number): void
   reveal(battleId: string | null): void
 }
@@ -46,6 +49,7 @@ let ringId = 1
 export const useFx = create<FxState>((set) => ({
   rings: [],
   battles: [],
+  held: {},
   shakeKey: 0,
   shakeStrength: 1,
   revealedBattleId: null,
@@ -56,6 +60,10 @@ export const useFx = create<FxState>((set) => ({
     const id = ringId++
     set((s) => ({ rings: [...s.rings, { ...ring, id }] }))
     setTimeout(() => set((s) => ({ rings: s.rings.filter((r) => r.id !== id) })), ttlMs)
+  },
+  hold(regionId, color, ms) {
+    set((s) => ({ held: { ...s.held, [regionId]: color } }))
+    setTimeout(() => set((s) => ({ held: Object.fromEntries(Object.entries(s.held).filter(([k]) => k !== regionId)) })), ms)
   },
   addBattle(battle, ttlMs) {
     set((s) => ({ battles: [...s.battles.filter((b) => b.id !== battle.id), battle] }))

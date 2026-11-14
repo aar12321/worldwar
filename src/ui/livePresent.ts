@@ -75,6 +75,11 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
           { id: b.id, lat: map.regions[b.regionId].lat, lng: map.regions[b.regionId].lng, place: place(b.regionId), before: b.lineBefore ?? max, after: b.lineAfter ?? max, max: b.lineMax ?? max, captured: b.captured, attackerWon: b.winner === 'attacker', mine: true },
           settings.reducedMotion ? 3500 : 5200,
         )
+        // The country keeps its old color until the bar has drained and the verdict is in.
+        if (b.captured && !settings.pauseOnBattles) {
+          const old = before.nations[b.defender.nationId]?.color
+          if (old) useFx.getState().hold(b.regionId, old, settings.reducedMotion ? 0 : 1500)
+        }
         if (settings.pauseOnBattles) {
           const scene = scenesFor(settings.battleScenes, player, [b])
           queue = [...queue, ...scene]

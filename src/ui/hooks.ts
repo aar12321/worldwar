@@ -23,7 +23,7 @@ let slowGame: GameState | null = null
  * The game, except that a day in which only the date moved gives back the game it already had. Desks, the HUD and the
  * advisor read this, so a live game's quiet days cost them nothing. In a turn game it is just the game.
  */
-function settle(game: GameState | null): GameState | null {
+export function settleGame(game: GameState | null): GameState | null {
   if (!game) {
     slowGame = null
     return null
@@ -44,7 +44,7 @@ function settle(game: GameState | null): GameState | null {
 }
 
 export function useSlowGame(): GameState | null {
-  return useGame((s) => settle(s.game))
+  return useGame((s) => settleGame(s.game))
 }
 
 const viewCache = new WeakMap<GameState, { orders: Order[]; view: PlayerView }>()

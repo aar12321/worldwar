@@ -1,3 +1,4 @@
+import { isLive } from '../engine/calendar'
 import { OBJECTIVES, type Advice } from '../engine/advisor'
 import { controlled } from '../engine/victory'
 import { useGame } from '../store'
@@ -13,7 +14,8 @@ const URGENCY: Record<Advice['urgency'], { label: string; color: string }> = {
 /** Advice cards. Each one says what is going on and has one button that takes you to the fix. */
 export function AdviceList({ items, compact = false }: { items: Advice[]; compact?: boolean }) {
   const goTo = useGame((s) => s.goTo)
-  if (items.length === 0) return <p className="text-[14px] text-white/70">Nothing needs you right now. Press the green button (Next turn, or Ready online) when you are ready.</p>
+  const live = useGame((s) => !!s.game && isLive(s.game))
+  if (items.length === 0) return <p className="text-[14px] text-white/70">{live ? 'Nothing needs you right now. Press Play when you are ready.' : 'Nothing needs you right now. Press the green button (Next turn, or Ready online) when you are ready.'}</p>
   return (
     <ul className="space-y-2.5">
       {items.map((a) => (

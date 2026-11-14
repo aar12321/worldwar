@@ -56,6 +56,8 @@ function suggestedCommit(game: GameState, nationId: NationId, target: RegionId):
 function WarRoomDialog({ target }: { target: RegionId }) {
   const attack = useGame((s) => s.attack)
   const open = useGame((s) => s.openWarRoom)
+  // Read the date from the game itself: the view the rest of this screen reads can be a few quiet days behind.
+  const today = useGame((s) => (s.game ? clockOf(s.game) : 0))
   const view = usePlayerView()
   const [commit, setCommit] = useState<Commit>(() => (view ? suggestedCommit(view.game, view.player.id, target) : 'main'))
   const [stance, setStance] = useState<Stance>('assault')
@@ -97,7 +99,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const lineMaxNow = f?.lineMax ?? lineNow
   const live = isLive(game)
   const trip = live ? planTrip(game, map, player.id, target) : null
-  const when = trip ? tripSchedule(trip, clockOf(game)) : null
+  const when = trip ? tripSchedule(trip, today) : null
   const share = f?.share ?? COMMITS[commit].share
   const sentAway = totalUnits(player.military.units) * share
   const stayHome = totalUnits(player.military.units) - sentAway

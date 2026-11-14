@@ -23,7 +23,7 @@ import { LineBar } from './WarRoom'
 /** The country you clicked: who holds it, how strong it is, and the two or three things you can do about it. */
 export function CountryPanel() {
   const view = usePlayerView()
-  const selected = useGame((s) => (s.selectedArmy ? null : s.selectedRegion))
+  const selected = useGame((s) => (s.selectedArmy && s.game?.armies?.some((a) => a.id === s.selectedArmy) ? null : s.selectedRegion))
   const selectRegion = useGame((s) => s.selectRegion)
   const openDiplomacy = useGame((s) => s.openDiplomacy)
   const openAgencies = useGame((s) => s.openAgencies)

@@ -917,6 +917,8 @@ export const useGame = create<GameStore>((set, get) => ({
     const shown = presentLiveStep({ step, player: game.playerId, before: game, fxQueue: st.fxQueue, recentBattles: st.recentBattles, settings: st.settings, toast: st.toast })
     monthBattles.push(...shown.mine)
     const patch: Partial<GameStore> = { game: step.state, recentBattles: shown.recentBattles, fxQueue: shown.fxQueue, fxTotal: shown.fxQueue.length }
+    // An army that has gone home or been lost no longer has a card.
+    if (st.selectedArmy && !step.state.armies?.some((a) => a.id === st.selectedArmy)) patch.selectedArmy = null
     if (step.monthEnded) {
       // Uprisings are fought as the month turns over.
       monthBattles.push(...step.state.battles.filter((b) => b.attacker.nationId === 'rebels' && b.defender.nationId === game.playerId))

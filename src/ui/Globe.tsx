@@ -9,8 +9,9 @@ import { atWar, hasPact, isAllied } from '../engine/helpers'
 import type { GameState, RegionId } from '../engine/types'
 import { attackableRegions } from '../engine/warfare'
 import { getWorld, type CountryFeature } from '../map/world'
-import { useGame, type MapMode } from '../store'
+import { useGame } from '../store'
 import { useSlowGame } from './hooks'
+import { paintSignature } from './globe/paint'
 import { useArmyLayer } from './globe/useArmyLayer'
 import { FRONT_COLORS, NEON, RELATION_COLORS, mix, tint, wash, withAlpha } from './colors'
 import { globeBridge, useFx, type BattleOverlay } from './globeBridge'
@@ -77,19 +78,6 @@ interface Marker {
   city?: boolean
   /** A live battle's pin, with its Defense Line bar. */
   battle?: BattleOverlay
-}
-
-/** What the polygons' colors depend on, as one string. A day in which armies march and nothing changes hands leaves it the same. */
-function paintSignature(game: GameState | null, mode: MapMode): string {
-  if (!game) return 'none'
-  let out = `${game.playerId}|`
-  for (const id of map.order) out += `${game.regions[id].owner},`
-  if (mode === 'relations') out += `|${game.wars.join(',')}|${game.alliances.join(',')}|${Object.keys(game.pacts).join(',')}|${game.turn}`
-  if (mode === 'fronts') {
-    out += `|${game.wars.join(',')}|`
-    for (const id of map.order) out += `${Math.round(game.regions[id].line * 10)},`
-  }
-  return out
 }
 
 /** The pin for a live battle: its name, a Defense Line bar that drains from before to after, and who won. */
@@ -206,6 +194,7 @@ export function WorldGlobe() {
   }, [playerId])
 
   // A captured country keeps its old color until its battle window has played.
+  const heldColors = useFx((s) => s.held)
   const hiddenCaptures = useMemo(() => {
     const out = new Map<RegionId, string>()
     if (!game) return out
@@ -214,8 +203,9 @@ export function WorldGlobe() {
       const prev = game.nations[b.defender.nationId]
       if (prev) out.set(b.regionId, prev.color)
     }
+    for (const [id, color] of Object.entries(heldColors)) if (!out.has(id)) out.set(id, color)
     return out
-  }, [fxQueue, revealedBattleId, game])
+  }, [fxQueue, revealedBattleId, game, heldColors])
 
   // The set of countries you can attack keeps the same identity until it really changes, so the map is not repainted for nothing.
   const targetsRef = useRef<{ key: string; set: Set<RegionId> }>({ key: '', set: EMPTY_REGIONS })
