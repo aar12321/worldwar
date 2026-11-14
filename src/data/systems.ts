@@ -105,8 +105,9 @@ export const FRONTIER = {
   /** Hypersonic strike from afar. */
   strikeKm: 6000,
   strikeLine: 0.6,
-  strikeLineMax: 4,
-  strikeMoney: 30,
+  strikeLineMax: 8,
+  /** Launch cost of a strike, whatever the number of missiles. The missiles themselves are used up. */
+  strikeMoney: 15,
   strikeFactoryTurns: 2,
   /** Orbital strike once every this many months. */
   orbitalCooldown: 12,

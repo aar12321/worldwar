@@ -10,6 +10,7 @@ import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { FRONTIER } from '../data/systems'
+import { missilesLeft } from '../engine/systems'
 import { usePlayerView } from './hooks'
 import { OrderButton } from './panel'
 import { UnitIcon } from './icons'
@@ -56,26 +57,34 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const view = usePlayerView()
   const [commit, setCommit] = useState<Commit>(() => (view ? suggestedCommit(view.game, view.player.id, target) : 'main'))
   const [stance, setStance] = useState<Stance>('assault')
+  // null means the default: the share of the missiles that goes with the force sent.
+  const [fire, setFire] = useState<number | null>(null)
+  const [salvo, setSalvo] = useState(1)
   const { map } = getWorld()
   const game = view?.game
   const player = view?.player
+  const free = game && player ? missilesLeft(player.military.units.missile, view?.orders ?? [], player.id) : 0
+  const missiles = free > 0 ? Math.min(free, fire ?? Math.min(free, Math.ceil(free * COMMITS[commit].share))) : undefined
   const forecasts = useMemo(() => {
     if (!game || !player) return null
-    return Object.fromEntries(STANCE_KEYS.map((st) => [st, forecastAttack(game, map, player.id, target, commit, st)])) as Record<Stance, ReturnType<typeof forecastAttack>>
-  }, [game, player, target, commit, map])
+    return Object.fromEntries(STANCE_KEYS.map((st) => [st, forecastAttack(game, map, player.id, target, commit, st, undefined, missiles)])) as Record<Stance, ReturnType<typeof forecastAttack>>
+  }, [game, player, target, commit, map, missiles])
   if (!view || !game || !player || !game.regions[target]) return null
 
   const region = game.regions[target]
   const mr = map.regions[target]
   const owner = game.nations[region.owner]
-  const order = { type: 'attack' as const, nationId: player.id, target, commit, stance }
+  const order = { type: 'attack' as const, nationId: player.id, target, commit, stance, missiles }
   const err = validateOrder(game, map, order, view.orders)
   const f = forecasts?.[stance] ?? null
   const aiLevel = player.systems?.ai ?? 0
   // AI Battle Command recommends the stance with the best mix of line damage, odds and losses.
   const bestStance = aiLevel >= 2 && forecasts ? STANCE_KEYS.reduce((best, st) => (score(forecasts[st]) > score(forecasts[best]) ? st : best), STANCE_KEYS[0]) : null
+  // Missiles the attack itself will fire are not free for a strike.
+  const strikeMax = Math.max(0, free - (missiles ?? 0))
+  const salvoSize = Math.max(1, Math.min(salvo, Math.max(1, strikeMax)))
   const strikeOrders = [
-    { type: 'strike' as const, nationId: player.id, target, weapon: 'missile' as const },
+    { type: 'strike' as const, nationId: player.id, target, weapon: 'missile' as const, count: salvoSize },
     { type: 'strike' as const, nationId: player.id, target, weapon: 'orbital' as const },
   ]
   const hasStrikeWeapons = player.military.units.missile >= 1 || (player.systems?.orbital ?? 0) > 0
@@ -97,7 +106,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
             Cancel
           </button>
           {err && <span className="text-[13px] text-white/80 max-w-[260px] text-right">{speak(err)}</span>}
-          <button className="btn btn-red px-5" data-autofocus disabled={!!err} onClick={() => attack(target, commit, stance)}>
+          <button className="btn btn-red px-5" data-autofocus disabled={!!err} onClick={() => attack(target, commit, stance, missiles)}>
             Launch attack
           </button>
         </>
@@ -149,6 +158,19 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </p>
         </section>
 
+        {free > 0 && (
+          <section className="space-y-2">
+            <div className="flex items-baseline justify-between">
+              <h3 className="text-[15px] font-semibold">Missiles to fire</h3>
+              <span className="text-[14px] tabular-nums text-white/80">
+                {missiles ?? 0} of {free}
+              </span>
+            </div>
+            <input type="range" className="w-full" min={0} max={free} step={1} value={missiles ?? 0} onChange={(e) => setFire(+e.target.value)} aria-label="Missiles to fire in this battle" />
+            <p className="text-[13px] text-white/70">They strike first, before the air war, and crack the Defense Line directly. Each one fired is used up. A shield stops part of them.</p>
+          </section>
+        )}
+
         <section className="space-y-2">
           <h3 className="text-[15px] font-semibold">How to fight</h3>
           <div className="grid gap-2" role="radiogroup" aria-label="Stance">
@@ -187,8 +209,20 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           <section className="space-y-2">
             <h3 className="text-[15px] font-semibold">Strike from afar</h3>
             <p className="text-[13px] text-white/70">Weapons that need no army. They resolve when the month ends, and an Interceptor Shield stops part of them.</p>
+            {player.military.units.missile >= 1 && (
+              <div className="space-y-1">
+                <div className="flex items-baseline justify-between text-[14px]">
+                  <span>Missiles in this strike</span>
+                  <span className="tabular-nums text-white/80">
+                    {Math.min(salvoSize, Math.max(1, strikeMax))} of {strikeMax} free this month
+                  </span>
+                </div>
+                <input type="range" className="w-full" min={1} max={Math.max(1, strikeMax)} step={1} value={Math.min(salvoSize, Math.max(1, strikeMax))} onChange={(e) => setSalvo(+e.target.value)} aria-label="Missiles in this strike" />
+                <p className="text-[12px] text-white/65">You can fire as many strikes a month as you have missiles. Each missile fired is used up.</p>
+              </div>
+            )}
             <div className="grid gap-2 sm:grid-cols-2">
-              <OrderButton order={strikeOrders[0]} label="Hypersonic strike" cost={`${FRONTIER.strikeMoney} money`} effect="Cuts the Defense Line and stops factories for 2 months." />
+              {player.military.units.missile >= 1 && <OrderButton order={strikeOrders[0]} label={`Fire ${salvoSize} missile${salvoSize === 1 ? '' : 's'}`} cost={`${FRONTIER.strikeMoney} money`} effect="Cuts the Defense Line and stops factories for 2 months." />}
               {(player.systems?.orbital ?? 0) > 0 && <OrderButton order={strikeOrders[1]} label="Orbital strike" cost={`${FRONTIER.orbitalMoney} money, ${FRONTIER.orbitalPP} influence`} effect="Once a year. Cuts the line hard, wrecks a building, and shames you." />}
             </div>
           </section>

@@ -107,7 +107,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'fundSystem':
       return `Raise ${SYSTEM_SPECS[o.system].name}${(o.levels ?? 1) > 1 ? ` by ${o.levels} levels` : ''}`
     case 'strike':
-      return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Hypersonic strike on ${region(o.target)}`
+      return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Fire ${o.count ?? 1} missile${(o.count ?? 1) === 1 ? '' : 's'} at ${region(o.target)}`
     case 'setGovernor':
       return `Governor of ${region(o.regionId)}: ${GOVERNOR_LABELS[o.governor]}`
     case 'fundAgency':
@@ -190,7 +190,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   // Each nation's one attack for the turn. The AI goes in a seeded order.
   for (const o of live) {
     if (o.type !== 'attack' || validateOrder(s, map, o)) continue
-    resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance)
+    resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles)
   }
   resolveRebels(s, map, rng)
   // Armies that fought this turn are back at their posts for the next one.
@@ -240,7 +240,7 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
   n.resources.steel -= cost.steel
   const rng = createRng(s.seed, s.turn * 31 + s.nextId)
   if (o.type === 'attack') {
-    const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance)
+    const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles)
     s.outcome = checkOutcome(s, map)
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
   }

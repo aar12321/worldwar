@@ -240,7 +240,7 @@ interface Setup {
 }
 
 /** Builds both sides of an attack, or null if it is not allowed. Shared by the real fight and the forecast. */
-function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance): Setup | null {
+function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, missiles?: number): Setup | null {
   const attackerNation = s.nations[nationId]
   const targetRegion = s.regions[target]
   const mr = map.regions[target]
@@ -262,6 +262,8 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
     attNotes.push(`amphibious assault (-${Math.round(40 * (1 - reduction))}%)`)
   }
   const attacker = makeCombatant(attackerNation, attackerNation.military, null, attNotes, attPenalty, share)
+  // The player chooses how many missiles to fire. Left out, a share of them fire with the force sent.
+  if (missiles !== undefined) attacker.units.missile = Math.min(Math.max(0, Math.floor(missiles)), Math.floor(attackerNation.military.units.missile + 1e-9))
   attacker.boost = spec.boost
   attacker.damageTaken = spec.ownLosses
   const garrison = emptyUnits()
@@ -290,8 +292,8 @@ export interface AttackForecast {
 }
 
 /** Plays the attack out several times on fixed seeds, so the War Room can show honest odds without changing the game. */
-export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs?: number): AttackForecast | null {
-  const setup = prepareAttack(s, map, nationId, target, commit, stance)
+export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs?: number, missiles?: number): AttackForecast | null {
+  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles)
   if (!setup) return null
   // AI Battle Command plays the fight many more times, so its odds are exact.
   const exact = (s.nations[nationId]?.systems?.ai ?? 0) > 0
@@ -340,8 +342,9 @@ export function resolveAttack(
   rng: Rng,
   commit: Commit = 'main',
   stance: Stance = 'assault',
+  missiles?: number,
 ): AttackResult | null {
-  const setup = prepareAttack(s, map, nationId, target, commit, stance)
+  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles)
   if (!setup) return null
   const { attacker, defender, garrison, share } = setup
   const attackerNation = s.nations[nationId]
@@ -355,6 +358,9 @@ export function resolveAttack(
   applyLosses(attackerNation.military, emptyUnits(), outcome.attackerLosses)
   applyLosses(defenderNation.military, garrison, outcome.defenderLosses)
   // Nano-medicine brings part of what a side lost back.
+  // Every missile fired is used up, unless the fight already took it as a loss.
+  const firedMissiles = attacker.units.missile
+  if (firedMissiles > 0) attackerNation.military.units.missile = Math.max(0, attackerNation.military.units.missile - Math.max(0, firedMissiles - outcome.attackerLosses.missile))
   const savedA = reviveLosses(attackerNation, outcome.attackerLosses)
   const savedD = reviveLosses(defenderNation, outcome.defenderLosses)
   const m = attackerNation.military
@@ -412,6 +418,7 @@ export function resolveAttack(
   }
   const verb = captured ? 'captured' : outcome.winner === 'attacker' ? 'pushed back the defense of' : 'was repulsed attacking'
   addLog(s, 'battle', `${attackerNation.name} ${verb} ${mr.name} (held by ${defenderNation.name}).`, [nationId, defenderId])
+  if (firedMissiles >= 0.5) report.modifiers.push(`Fired ${Math.round(firedMissiles)} hypersonic missile${Math.round(firedMissiles) === 1 ? '' : 's'} (used up)`)
   if (missileHits > 0) report.modifiers.push(`Hypersonic batteries cut the Defense Line by ${missileHits.toFixed(1)}`)
   if (savedA + savedD > 0) report.modifiers.push(`Nano-medicine saved ${(savedA + savedD).toFixed(1)} divisions`)
   return { report }

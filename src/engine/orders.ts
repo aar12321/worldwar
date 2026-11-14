@@ -7,7 +7,7 @@ import { EMPIRE, JUSTIFY, STANCES } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { tradeValue, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
-import { fundSystemCost, strikeCost, validateFundSystem, validateStrike } from './systems'
+import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
@@ -317,6 +317,11 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (totalUnits(n.military.units) < 0.1) return 'You have no military to attack with'
       if (commitShare(n, o.commit ?? 'main') < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
       if (!canAttackRegion(s, map, o.nationId, o.target).ok) return reachProblem(s, map, o.nationId, o.target)
+      if (o.missiles !== undefined) {
+        if (!Number.isInteger(o.missiles) || o.missiles < 0) return 'Choose how many missiles to fire'
+        const left = missilesLeft(n.military.units.missile, pending, o.nationId)
+        if (o.missiles > left) return left <= 0 ? 'You have no missiles left to fire' : `You only have ${left} missile${left === 1 ? '' : 's'} left`
+      }
       return null
     }
     case 'assignGeneral':

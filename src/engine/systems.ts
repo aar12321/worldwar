@@ -55,13 +55,17 @@ export function validateStrike(s: GameState, map: WorldMap, o: Strike, pending: 
   const t = map.regions[o.target]
   if (!r || !t) return 'Unknown country'
   if (r.owner === o.nationId || !atWar(s, o.nationId, r.owner)) return 'You can only strike a country you are at war with'
-  if (pending.some((p) => p.type === 'strike' && p.weapon === o.weapon)) return 'Only one strike of that kind a month'
   if (o.weapon === 'orbital') {
+    if (pending.some((p) => p.type === 'strike' && p.weapon === 'orbital')) return 'Only one orbital strike a month'
     if ((n.systems?.orbital ?? 0) < 1) return 'Needs an Orbital Network'
     if (s.turn - n.lastOrbital < FRONTIER.orbitalCooldown) return `The orbital weapon recharges in ${FRONTIER.orbitalCooldown - (s.turn - n.lastOrbital)} months`
     return null
   }
-  if (n.military.units.missile < 1) return 'Needs a hypersonic battery'
+  if (n.military.units.missile < 1) return 'Needs hypersonic missiles'
+  const count = o.count ?? 1
+  if (!Number.isInteger(count) || count < 1) return 'Choose how many missiles to fire'
+  const left = missilesLeft(n.military.units.missile, pending, o.nationId)
+  if (left < count) return left <= 0 ? 'No missiles left this month' : `Only ${left} missile${left === 1 ? '' : 's'} left this month`
   const near = Object.values(s.regions).some((own) => own.owner === o.nationId && own.buildings.factory > 0 && map.regions[own.id] && distanceKm(map.regions[own.id], t) <= FRONTIER.strikeKm)
   if (!near) return `Out of range: batteries reach ${FRONTIER.strikeKm} km from a country with a factory`
   return null
@@ -74,6 +78,17 @@ function highestBuilding(s: GameState, id: RegionId) {
   return best
 }
 
+/** Missiles still free to fire: the stock, less what other strikes and attacks waiting for the month end already claim. */
+export function missilesLeft(stock: number, pending: Order[], nationId: NationId): number {
+  let used = 0
+  for (const p of pending) {
+    if (p.nationId !== nationId) continue
+    if (p.type === 'strike' && p.weapon === 'missile') used += p.count ?? 1
+    else if (p.type === 'attack') used += p.missiles ?? 0
+  }
+  return Math.max(0, Math.floor(stock + 1e-9) - used)
+}
+
 export function runStrike(s: GameState, map: WorldMap, o: Strike) {
   const n = s.nations[o.nationId]
   const region = s.regions[o.target]
@@ -81,11 +96,15 @@ export function runStrike(s: GameState, map: WorldMap, o: Strike) {
   const place = map.regions[o.target].name
   const stops = interceptFactor(victim.systems?.shield ?? 0)
   if (o.weapon === 'missile') {
-    const hit = Math.min(FRONTIER.strikeLineMax, n.military.units.missile * FRONTIER.strikeLine) * stops
+    // Each missile fired is used up, whatever it hits.
+    const fired = Math.min(o.count ?? 1, Math.floor(n.military.units.missile + 1e-9))
+    if (fired < 1) return
+    n.military.units.missile -= fired
+    const hit = Math.min(FRONTIER.strikeLineMax, fired * FRONTIER.strikeLine) * stops
     region.line = Math.max(0.5, region.line - hit)
     region.sabotaged = Math.max(region.sabotaged, FRONTIER.strikeFactoryTurns)
     n.lastStrike = s.turn
-    addLog(s, 'battle', `Hypersonic missiles from ${n.name} hit ${place}. The Defense Line fell by ${hit.toFixed(1)}${stops < 1 ? ` (the shield stopped ${Math.round((1 - stops) * 100)}%)` : ''} and the factories stopped.`, [o.nationId, region.owner])
+    addLog(s, 'battle', `${fired} hypersonic missile${fired === 1 ? '' : 's'} from ${n.name} hit ${place}. The Defense Line fell by ${hit.toFixed(1)}${stops < 1 ? ` (the shield stopped ${Math.round((1 - stops) * 100)}%)` : ''} and the factories stopped.`, [o.nationId, region.owner])
     return
   }
   const level = n.systems?.orbital ?? 1

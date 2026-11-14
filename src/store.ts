@@ -197,10 +197,12 @@ interface GameStore {
   goTo(target: AdviceTarget): void
   openDiplomacy(nationId: NationId | null): void
   issueOrder(order: Order): boolean
+  /** Issues several orders at once, one save and one summary. Returns how many went through. */
+  issueBatch(orders: Order[]): { done: number; failed: number }
   removeOrder(index: number): void
   /** Queues new tax, draft, business tax or budget settings for the end of the month. */
   setPolicy(patch: PolicyPatch): void
-  attack(target: RegionId, commit?: Commit, stance?: Stance): boolean
+  attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number): boolean
   openWarRoom(target: RegionId | null): void
   endTurn(): void
   chooseEventOption(index: number): void
@@ -322,7 +324,7 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
-  if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital')
+  if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital') && (order.count === undefined || Number.isInteger(order.count))
   if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)
   if (order.type === 'operation') return typeof order.target === 'string' && typeof order.op === 'string'
   if (order.type === 'domestic') return typeof order.op === 'string'
@@ -715,6 +717,36 @@ export const useGame = create<GameStore>((set, get) => ({
     return true
   },
 
+  issueBatch(batch) {
+    const { game, orders, online } = get()
+    if (!game || batch.length === 0) return { done: 0, failed: 0 }
+    const { map } = getWorld()
+    const playing = !!session && online?.status === 'playing'
+    let done = 0
+    let failed = 0
+    let firstError = ''
+    if (playing || batch.some((o) => MONTH_END_ORDERS.has(o.type))) {
+      // Online, or with orders that wait for the month end, each goes through the usual single path.
+      for (const o of batch) {
+        if (get().issueOrder(o)) done++
+        else failed++
+      }
+      return { done, failed }
+    }
+    const next = structuredClone(game)
+    for (const o of batch) {
+      const result = applyOrderNow(next, map, o, orders)
+      if (result.error) {
+        failed++
+        firstError ||= result.error
+      } else done++
+    }
+    set({ game: next })
+    save(next)
+    if (failed > 0) get().toast(`${done} done, ${failed} could not be made: ${firstError}`, 'error')
+    return { done, failed }
+  },
+
   removeOrder(index) {
     const next = get().orders.filter((_, i) => i !== index)
     set({ orders: next })
@@ -744,7 +776,7 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ warRoom: target })
   },
 
-  attack(target, commit = 'main', stance = 'assault') {
+  attack(target, commit = 'main', stance = 'assault', missiles) {
     const { game, settings, online } = get()
     if (!game) return false
     const { map } = getWorld()
@@ -754,7 +786,7 @@ export const useGame = create<GameStore>((set, get) => ({
         get().toast(`Your military can plan ${maxAttacks(game, game.playerId)} attacks a month`, 'error')
         return false
       }
-      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance })
+      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles })
       if (ok) {
         set({ warRoom: null })
         get().toast(`Attack on ${map.regions[target].name} planned. It plays out when the month ends.`, 'info', 4500)
@@ -762,7 +794,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return ok
     }
     const next = structuredClone(game)
-    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance }, get().orders)
+    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, missiles }, get().orders)
     if (result.error || !result.battle) {
       get().toast(result.error ?? 'The attack could not be made', 'error')
       return false

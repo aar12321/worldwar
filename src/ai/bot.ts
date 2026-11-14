@@ -280,7 +280,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       if (diff.skill === 2 && enemies.length > 0 && rng.chance(0.35)) {
         const targets = Object.values(s.regions).filter((r) => enemies.includes(r.owner)).sort((a, b) => b.line - a.line || (a.id < b.id ? -1 : 1))
         for (const weapon of ['orbital', 'missile'] as const) {
-          for (const r of targets.slice(0, 6)) if (tryAdd({ type: 'strike', nationId, target: r.id, weapon })) return true
+          const salvo = Math.max(1, Math.min(6, Math.floor(n.military.units.missile / 2)))
+          for (const r of targets.slice(0, 6)) if (tryAdd(weapon === 'missile' ? { type: 'strike', nationId, target: r.id, weapon, count: salvo } : { type: 'strike', nationId, target: r.id, weapon })) return true
         }
       }
       for (const kind of ['foreign', 'domestic'] as const) {
