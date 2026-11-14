@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { TERRAIN } from '../data/terrain'
 import { COMMITS, STANCES, type Commit, type Stance } from '../data/war'
+import { planTrip, tripSchedule } from '../engine/armies'
+import { absDate, clockOf, isLive } from '../engine/calendar'
 import { computeEconomy } from '../engine/economy'
-import { formatDivisions, totalUnits } from '../engine/helpers'
+import { formatDivisions, maxAttacks, totalUnits } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { forecastAttack } from '../engine/warfare'
 import type { GameState, NationId, RegionId } from '../engine/types'
@@ -54,6 +56,8 @@ function suggestedCommit(game: GameState, nationId: NationId, target: RegionId):
 function WarRoomDialog({ target }: { target: RegionId }) {
   const attack = useGame((s) => s.attack)
   const open = useGame((s) => s.openWarRoom)
+  // Read the date from the game itself: the view the rest of this screen reads can be a few quiet days behind.
+  const today = useGame((s) => (s.game ? clockOf(s.game) : 0))
   const view = usePlayerView()
   const [commit, setCommit] = useState<Commit>(() => (view ? suggestedCommit(view.game, view.player.id, target) : 'main'))
   const [stance, setStance] = useState<Stance>('assault')
@@ -93,6 +97,14 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const away = Math.min(1, player.military.exposed + (f?.share ?? COMMITS[commit].share))
   const lineNow = f?.lineBefore ?? region.line
   const lineMaxNow = f?.lineMax ?? lineNow
+  const live = isLive(game)
+  const trip = live ? planTrip(game, map, player.id, target) : null
+  const when = trip ? tripSchedule(trip, today) : null
+  const share = f?.share ?? COMMITS[commit].share
+  const sentAway = totalUnits(player.military.units) * share
+  const stayHome = totalUnits(player.military.units) - sentAway
+  const sentThisMonth = player.military.lastAttackTurn === game.turn ? player.military.attacksThisTurn : 0
+  const route = trip ? (trip.via === 'land' ? 'by land' : trip.via === 'lane' ? 'across the sea' : trip.via === 'fleet' ? 'by sea' : 'by air') : ''
 
   return (
     <Modal
@@ -107,7 +119,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </button>
           {err && <span className="text-[13px] text-white/80 max-w-[260px] text-right">{speak(err)}</span>}
           <button className="btn btn-red px-5" data-autofocus disabled={!!err} onClick={() => attack(target, commit, stance, missiles)}>
-            Launch attack
+            {live ? 'Launch army' : 'Launch attack'}
           </button>
         </>
       }
@@ -123,6 +135,18 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           <LineBar now={lineNow} max={lineMaxNow} after={f ? Math.max(0, lineNow - f.lineDamage) : undefined} />
           <p className="text-[13px] text-white/70">Win battles to wear the line down. At zero the country falls. It heals a little every quiet month, so keep the pressure on.</p>
         </section>
+
+        {trip && when && (
+          <section className="inset-card p-3.5 space-y-1" aria-label="The march">
+            <h3 className="text-[15px] font-semibold">The march</h3>
+            <p className="text-[14px] text-white/85">
+              Marches {route} from {map.regions[trip.from].name} · {trip.days} day{trip.days === 1 ? '' : 's'} · arrives {absDate(when.arrives)} · home about {absDate(when.homeBy)}.
+            </p>
+            <p className="text-[13px] text-white/70">
+              The army sets out tomorrow and fights when it arrives. Odds are as of today: their army may change by then. Armies sent this month: {sentThisMonth} of {maxAttacks(game, player.id)}.
+            </p>
+          </section>
+        )}
 
         <MilitaryCompare game={game} mine={player.id} theirs={owner.id} />
 
@@ -154,7 +178,12 @@ function WarRoomDialog({ target }: { target: RegionId }) {
             })}
           </div>
           <p className="text-[13px] text-white/70">
-            {COMMITS[commit].blurb} {away > 0 ? `Until the turn ends, your army at home fights at ${Math.round((1 - away * 0.5) * 100)}% strength, so rivals can hit you while it is away.` : ''}
+            {COMMITS[commit].blurb}{' '}
+            {live
+              ? `${formatDivisions(sentAway)} divisions leave and ${formatDivisions(stayHome)} stay home to defend. The army is gone until it is back.`
+              : away > 0
+                ? `Until the turn ends, your army at home fights at ${Math.round((1 - away * 0.5) * 100)}% strength, so rivals can hit you while it is away.`
+                : ''}
           </p>
         </section>
 
@@ -208,7 +237,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
         {hasStrikeWeapons && (
           <section className="space-y-2">
             <h3 className="text-[15px] font-semibold">Strike from afar</h3>
-            <p className="text-[13px] text-white/70">Weapons that need no army. They resolve when the month ends, and an Interceptor Shield stops part of them.</p>
+            <p className="text-[13px] text-white/70">{live ? 'Weapons that need no army. Missiles leave at once and land a day later; an orbital strike hits at once. An Interceptor Shield stops part of them.' : 'Weapons that need no army. They resolve when the month ends, and an Interceptor Shield stops part of them.'}</p>
             {player.military.units.missile >= 1 && (
               <div className="space-y-1">
                 <div className="flex items-baseline justify-between text-[14px]">
@@ -218,7 +247,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
                   </span>
                 </div>
                 <input type="range" className="w-full" min={1} max={Math.max(1, strikeMax)} step={1} value={Math.min(salvoSize, Math.max(1, strikeMax))} onChange={(e) => setSalvo(+e.target.value)} aria-label="Missiles in this strike" />
-                <p className="text-[12px] text-white/65">You can fire as many strikes a month as you have missiles. Each missile fired is used up.</p>
+                <p className="text-[12px] text-white/65">You can fire as many strikes {live ? '' : 'a month '}as you have missiles. Each missile fired is used up.</p>
               </div>
             )}
             <div className="grid gap-2 sm:grid-cols-2">

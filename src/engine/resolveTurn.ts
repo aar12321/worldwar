@@ -18,7 +18,9 @@ import { addToSector, cleanInvestments, makeInvestment } from './business'
 import { applyEconomy, nationWorkforce } from './economy'
 import { runSpyMission } from './espionage'
 import { EVENT_GAP_TURNS, scheduleEvent } from './events'
-import { addLog, reach, regionsOf } from './helpers'
+import { addLog, forceUnits, reach, regionsOf } from './helpers'
+import { clockOf, isLive } from './calendar'
+import { launchArmy, launchStrike, turnBack } from './armies'
 import { answerCrisis, runCrises } from './crises'
 import { runJustification } from './justification'
 import { orderCost, validateOrder } from './orders'
@@ -27,7 +29,7 @@ import { runPolitics } from './politics'
 import { research } from './tech'
 import { marketPrices, marketValue } from './trade'
 import { tickTraining, trainMonths } from './training'
-import { UNIT_TYPES, type BattleReport, type GameState, type Order, type WorldMap } from './types'
+import { UNIT_TYPES, type Army, type AttackOrder, type BattleReport, type GameState, type Order, type TrainingJob, type WorldMap } from './types'
 import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
 
@@ -108,6 +110,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Tell ${s.stocks.meta[o.company]?.name ?? o.company}: ${DIRECTIVES[o.directive]?.name ?? o.directive}`
     case 'fundSystem':
       return `Raise ${SYSTEM_SPECS[o.system].name}${(o.levels ?? 1) > 1 ? ` by ${o.levels} levels` : ''}`
+    case 'recall': {
+      const a = s.armies?.find((x) => x.id === o.armyId)
+      return a ? `Recall the army marching on ${region(a.target)}` : 'Recall an army'
+    }
     case 'strike':
       return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Fire ${o.count ?? 1} missile${(o.count ?? 1) === 1 ? '' : 's'} at ${region(o.target)}`
     case 'setGovernor':
@@ -162,14 +168,32 @@ const PHASES: Order['type'][][] = [
 export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): GameState {
   if (prev.outcome !== 'playing' || prev.pendingEvent) return prev
   const s = structuredClone(prev)
+  runMonth(s, map, orders)
+  return s
+}
+
+export interface MonthResult {
+  /** Live mode: the attacks the month's orders asked for. They are not fought here; the clock sends them out as armies. */
+  attacks: AttackOrder[]
+  /** Training that finished this month. */
+  trained: TrainingJob[]
+}
+
+/**
+ * The month's work on a state the caller owns (it mutates `s`): orders in phases, training, the economy, politics, the end of
+ * the month. In a turn game attacks are fought here. In a live game they are handed back, because armies march and fight on
+ * their own days.
+ */
+export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthResult {
   const rng = createRng(s.seed, s.turn)
+  const attacks: AttackOrder[] = []
   s.battles = []
   s.dispatches = []
   // A player's governors add their own upgrades to the month's orders.
-  const live = [...orders, ...governorOrders(s, map)].filter((o) => s.nations[o.nationId]?.alive)
+  const all = [...orders, ...governorOrders(s, map)].filter((o) => s.nations[o.nationId]?.alive)
 
   for (const phase of PHASES) {
-    for (const o of live) {
+    for (const o of all) {
       if (!phase.includes(o.type)) continue
       const err = validateOrder(s, map, o)
       if (err) {
@@ -186,12 +210,18 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
     }
   }
 
-  tickTraining(s)
+  const trained = tickTraining(s)
   drillWithCommanders(s)
 
   // Each nation's one attack for the turn. The AI goes in a seeded order.
-  for (const o of live) {
-    if (o.type !== 'attack' || validateOrder(s, map, o)) continue
+  const marching = isLive(s)
+  for (const o of all) {
+    if (o.type !== 'attack') continue
+    if (marching) {
+      attacks.push(o)
+      continue
+    }
+    if (validateOrder(s, map, o)) continue
     resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles)
   }
   resolveRebels(s, map, rng)
@@ -223,7 +253,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   }
   s.worldGross = worldGross(s, map)
   s.outcome = checkOutcome(s, map)
-  return s
+  return { attacks, trained }
 }
 
 /**
@@ -231,7 +261,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
  * Mutates `s`; the caller passes a copy. An attack also returns its battle report.
  */
 /** `pending` are month-end orders already queued: their costs are held back from what this order may spend. */
-export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Order[] = []): { error: string | null; battle?: BattleReport } {
+export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Order[] = []): { error: string | null; battle?: BattleReport; army?: Army } {
   const err = validateOrder(s, map, o, pending)
   if (err) return { error: err }
   const n = s.nations[o.nationId]
@@ -242,6 +272,11 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
   n.resources.steel -= cost.steel
   const rng = createRng(s.seed, s.turn * 31 + s.nextId)
   if (o.type === 'attack') {
+    // In a live game the attack becomes an army that marches. It fights when it arrives.
+    if (isLive(s)) {
+      const army = launchArmy(s, map, o, clockOf(s))
+      return army ? { error: null, army } : { error: 'The attack could not be made' }
+    }
     const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles)
     s.outcome = checkOutcome(s, map)
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
@@ -417,8 +452,15 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       fundSystem(s, o.nationId, o.system, o.levels ?? 1)
       break
     case 'strike':
-      runStrike(s, map, o)
+      // Live missiles fly for a day before they land. Everything else lands at once.
+      if (isLive(s) && o.weapon === 'missile') launchStrike(s, map, o, clockOf(s))
+      else runStrike(s, map, o)
       break
+    case 'recall': {
+      const a = s.armies?.find((x) => x.id === o.armyId)
+      if (a) turnBack(s, map, a, clockOf(s), 'recalled')
+      break
+    }
     case 'setDirective':
       setDirective(s, o.company, o.directive)
       break
@@ -440,7 +482,8 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
 function drillWithCommanders(s: GameState) {
   for (const n of Object.values(s.nations)) {
     if (!n.alive || !n.military.commanderId) continue
-    const types = UNIT_TYPES.filter((k) => n.military.units[k] >= 0.05 && n.military.drill[k] < 5).sort((a, b) => n.military.drill[a] - n.military.drill[b])
+    const force = forceUnits(s, n.id)
+    const types = UNIT_TYPES.filter((k) => force[k] >= 0.05 && n.military.drill[k] < 5).sort((a, b) => n.military.drill[a] - n.military.drill[b])
     const k = types[0]
     if (!k) continue
     n.military.drill[k] += 1

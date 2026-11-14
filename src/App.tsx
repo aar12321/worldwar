@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react'
+import { isLive } from './engine/calendar'
 import { attackableRegions } from './engine/warfare'
 import { getWorld } from './map/world'
 import { useGame, type Panel } from './store'
+import { ArmiesDock, ArmyCard } from './ui/ArmiesTab'
 import { BattleFX } from './ui/BattleFX'
 import { Briefing } from './ui/Briefing'
 import { GameOver, NavRail, OrdersTray, Toasts, TurnSummary } from './ui/Chrome'
@@ -13,6 +15,7 @@ import { WorldGlobe } from './ui/Globe'
 import { useFx } from './ui/globeBridge'
 import { Help } from './ui/Help'
 import { HUD } from './ui/HUD'
+import { useLiveClock } from './ui/liveClock'
 import { MapModes } from './ui/MapModes'
 import { MilitaryPanel } from './ui/MilitaryPanel'
 import { Setup } from './ui/Setup'
@@ -39,6 +42,13 @@ function useShortcuts() {
         if (target.tagName === 'BUTTON' || e.repeat) return
         e.preventDefault()
         st.endTurn()
+      } else if (e.key === ' ' && isLive(st.game)) {
+        // A focused button uses Space for itself.
+        if (target.tagName === 'BUTTON' || e.repeat) return
+        e.preventDefault()
+        st.togglePause()
+      } else if ((e.key === '1' || e.key === '2' || e.key === '3') && isLive(st.game)) {
+        st.setSpeed(([1, 2, 4] as const)[Number(e.key) - 1])
       } else if (e.key.toLowerCase() === 'a') {
         // Attack the selected country if your military can reach it.
         const target = st.selectedRegion
@@ -88,8 +98,15 @@ function useFlushOnExit() {
       const st = useGame.getState()
       if (st.game) st.persist()
     }
+    const hidden = () => {
+      if (document.hidden) flush()
+    }
     window.addEventListener('pagehide', flush)
-    return () => window.removeEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', hidden)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', hidden)
+    }
   }, [])
 }
 
@@ -97,8 +114,10 @@ export default function App() {
   const inGame = useGame((s) => !!s.game)
   const online = useGame((s) => !!s.online)
   const panel = useGame((s) => s.panel)
+  const live = useGame((s) => !!s.game && isLive(s.game) && !s.online)
   useShortcuts()
   useFlushOnExit()
+  useLiveClock(live)
 
   return (
     <div className="relative w-full h-full select-none">
@@ -121,6 +140,8 @@ export default function App() {
           {panel === 'settings' && <SettingsPanel key="settings" />}
           {panel === 'tech' && <TechTree key="tech" />}
           <CountryPanel />
+          <ArmyCard />
+          <ArmiesDock />
           <OrdersTray />
           <WarRoom />
           <BattleFX />

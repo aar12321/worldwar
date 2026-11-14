@@ -6,7 +6,9 @@ import { controlled } from '../engine/victory'
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
+import { IncomingChip, LiveControls, LiveDate, MonthBar } from './LiveControls'
 import { OnlinePeople, OnlineStatus } from './Online'
+import { isLive } from '../engine/calendar'
 
 /** Eases a displayed number toward `value` instead of snapping. */
 function useTweenedNumber(value: number, ms = 520): number {
@@ -137,6 +139,7 @@ export function HUD() {
   const top = useAdvice(1)[0]
   if (!view) return null
   const { game, player, econ, committed, orders } = view
+  const live = isLive(game)
   const held = controlled(game, player.id)
   const lands = Object.keys(game.regions).length
   const tension = worldTension(game)
@@ -168,6 +171,7 @@ export function HUD() {
                 </button>
               </div>
             </div>
+            <div className="relative">
             <div className="text-[13px] text-white/70 h-5 overflow-hidden">
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
@@ -177,9 +181,15 @@ export function HUD() {
                   exit={reduced ? { opacity: 0, transition: { duration: 0 } } : { y: -8, opacity: 0 }}
                   transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  Turn {game.turn} · {turnDate(game.turn)}
+                  {live ? <LiveDate /> : `Turn ${game.turn} · ${turnDate(game.turn)}`}
                 </motion.div>
               </AnimatePresence>
+            </div>
+            {live && (
+              <div className="absolute inset-x-0 bottom-0">
+                <MonthBar />
+              </div>
+            )}
             </div>
             <div className="mt-1.5 space-y-1" title={`Win by holding all ${lands} countries, yours or puppets of yours. World tension ${tension}: wars, crises and aggression raise it. Your reputation for aggression is ${standing}; it fades with time. You lose if ${player.name} is wiped out.`}>
               <div className="flex items-center justify-between gap-3 text-[12px] text-white/70 tabular-nums">
@@ -249,6 +259,9 @@ export function HUD() {
           </Resource>
         </div>
 
+        {live ? (
+          <LiveControls />
+        ) : (
         <div className="hud-next glass rounded-2xl p-2 pointer-events-auto flex flex-col gap-1 min-w-[168px]">
           <button
             className={`btn btn-primary px-4 py-3 text-[15px] ${blocked || waiting ? '' : 'pulse-cta'}`}
@@ -261,14 +274,18 @@ export function HUD() {
           <div className="px-1 text-center text-[12px] text-white/70">{online ? <OnlineStatus /> : orders.length > 0 ? `${orders.length} order${orders.length === 1 ? '' : 's'} waiting` : 'Enter'}</div>
           {online && <OnlinePeople />}
         </div>
+        )}
       </div>
-      {top && top.urgency === 'now' && panel === 'none' && (
-        <button className="advice-pill pointer-events-auto" onClick={() => setPanel('briefing')} title="Open the Briefing (B)">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#ff453a' }} />
-          <span className="truncate">{top.title}</span>
-          <span className="text-white/65 shrink-0">Briefing ›</span>
-        </button>
-      )}
+      <div className="pill-stack">
+        {live && <IncomingChip />}
+        {top && top.urgency === 'now' && panel === 'none' && !(live && top.id.startsWith('incoming-')) && (
+          <button className="advice-pill pointer-events-auto" onClick={() => setPanel('briefing')} title="Open the Briefing (B)">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#ff453a' }} />
+            <span className="truncate">{top.title}</span>
+            <span className="text-white/65 shrink-0">Briefing ›</span>
+          </button>
+        )}
+      </div>
     </div>
   )
 }

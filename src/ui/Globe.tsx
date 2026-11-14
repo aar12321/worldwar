@@ -10,8 +10,11 @@ import type { GameState, RegionId } from '../engine/types'
 import { attackableRegions } from '../engine/warfare'
 import { getWorld, type CountryFeature } from '../map/world'
 import { useGame } from '../store'
+import { useSlowGame } from './hooks'
+import { paintSignature } from './globe/paint'
+import { useArmyLayer } from './globe/useArmyLayer'
 import { FRONT_COLORS, NEON, RELATION_COLORS, mix, tint, wash, withAlpha } from './colors'
-import { globeBridge, useFx } from './globeBridge'
+import { globeBridge, useFx, type BattleOverlay } from './globeBridge'
 
 const { map, features } = getWorld()
 const EMPTY_REGIONS = new Set<RegionId>()
@@ -73,10 +76,47 @@ interface Marker {
   title: string
   yours: boolean
   city?: boolean
+  /** A live battle's pin, with its Defense Line bar. */
+  battle?: BattleOverlay
+  /** A short note floating up over the place, such as "+2 Infantry". */
+  pop?: string
+}
+
+/** The pin for a live battle: its name, a Defense Line bar that drains from before to after, and who won. */
+function paintBattle(b: BattleOverlay, reduced: boolean): HTMLElement {
+  const el = document.createElement('div')
+  el.className = 'battle-pin'
+  const title = document.createElement('div')
+  title.className = 'battle-pin-title'
+  title.textContent = `Battle · ${b.place}`
+  const bar = document.createElement('div')
+  bar.className = 'battle-pin-bar'
+  const fill = document.createElement('div')
+  fill.className = 'battle-pin-fill'
+  const pct = (v: number) => `${Math.max(0, Math.min(100, (v / Math.max(0.01, b.max)) * 100))}%`
+  fill.style.width = pct(reduced ? b.after : b.before)
+  bar.appendChild(fill)
+  const result = document.createElement('div')
+  result.className = 'battle-pin-result'
+  const verdict = b.captured ? 'Captured' : b.attackerWon ? 'Pushed back' : 'Held'
+  if (reduced) result.textContent = verdict
+  else {
+    requestAnimationFrame(() => requestAnimationFrame(() => (fill.style.width = pct(b.after))))
+    setTimeout(() => (result.textContent = verdict), 1300)
+  }
+  el.append(title, bar, result)
+  return el
 }
 
 function paintMarker(d: object): HTMLElement {
   const m = d as Marker
+  if (m.battle) return paintBattle(m.battle, useGame.getState().settings.reducedMotion)
+  if (m.pop) {
+    const el = document.createElement('div')
+    el.className = 'unit-pop'
+    el.textContent = m.pop
+    return el
+  }
   const el = document.createElement('div')
   el.style.pointerEvents = 'none'
   el.style.whiteSpace = 'nowrap'
@@ -97,13 +137,20 @@ function paintMarker(d: object): HTMLElement {
   return el
 }
 
+/** How often a ring pulses. Warning rings repeat faster than the fireworks of a battle. */
+const ringPeriod = (r: object) => (r as { repeat?: number }).repeat ?? 1400
+
 export function WorldGlobe() {
-  const game = useGame((s) => s.game)
+  const game = useSlowGame()
+  const gameRef = useRef(game)
+  gameRef.current = game
   const selectedRegion = useGame((s) => s.selectedRegion)
   const reducedMotion = useGame((s) => s.settings.reducedMotion)
   const mapMode = useGame((s) => s.mapMode)
   const fxQueue = useGame((s) => s.fxQueue)
   const rings = useFx((s) => s.rings)
+  const battles = useFx((s) => s.battles)
+  const pops = useFx((s) => s.pops)
   const revealedBattleId = useFx((s) => s.revealedBattleId)
   const ref = useRef<GlobeMethods | undefined>(undefined)
   const [hover, setHover] = useState<RegionId | null>(null)
@@ -156,6 +203,7 @@ export function WorldGlobe() {
   }, [playerId])
 
   // A captured country keeps its old color until its battle window has played.
+  const heldColors = useFx((s) => s.held)
   const hiddenCaptures = useMemo(() => {
     const out = new Map<RegionId, string>()
     if (!game) return out
@@ -164,17 +212,30 @@ export function WorldGlobe() {
       const prev = game.nations[b.defender.nationId]
       if (prev) out.set(b.regionId, prev.color)
     }
+    for (const [id, color] of Object.entries(heldColors)) if (!out.has(id)) out.set(id, color)
     return out
-  }, [fxQueue, revealedBattleId, game])
+  }, [fxQueue, revealedBattleId, game, heldColors])
 
+  // The set of countries you can attack keeps the same identity until it really changes, so the map is not repainted for nothing.
+  const targetsRef = useRef<{ key: string; set: Set<RegionId> }>({ key: '', set: EMPTY_REGIONS })
   const targets = useMemo(() => {
-    if (!game || game.outcome !== 'playing' || game.nations[game.playerId].military.exposed >= 0.95) return EMPTY_REGIONS
-    return new Set(attackableRegions(game, map, game.playerId))
+    if (!game || game.outcome !== 'playing' || game.nations[game.playerId].military.exposed >= 0.95) {
+      targetsRef.current = { key: '', set: EMPTY_REGIONS }
+      return EMPTY_REGIONS
+    }
+    const list = attackableRegions(game, map, game.playerId)
+    const key = list.join(',')
+    if (key === targetsRef.current.key) return targetsRef.current.set
+    targetsRef.current = { key, set: new Set(list) }
+    return targetsRef.current.set
   }, [game])
+  // What the colors depend on. The accessors below read the game from a ref and change only when this does.
+  const paintKey = useMemo(() => paintSignature(game, mapMode), [game, mapMode])
 
   const polygonColor = useCallback(
     (f: object) => {
       const id = regionOf(f)
+      const game = gameRef.current
       const hidden = hiddenCaptures.get(id)
       if (game && mapMode !== 'political') {
         const base = modeColor(game, mapMode, id)
@@ -186,18 +247,21 @@ export function WorldGlobe() {
       if (id === hover) return tint(base, 0.1)
       return base
     },
-    [game, hiddenCaptures, targets, selectedRegion, hover, mapMode],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [paintKey, hiddenCaptures, targets, selectedRegion, hover, mapMode],
   )
   const polygonSideColor = useCallback((f: object) => tint(polygonColor(f), -0.2), [polygonColor])
   const polygonAltitude = useCallback(
     (f: object) => {
       const id = regionOf(f)
+      const game = gameRef.current
       if (targets.has(id)) return 0.03
       if (id === selectedRegion) return 0.03
       if (game && game.regions[id].owner === game.playerId) return 0.014
       return 0.006
     },
-    [game, selectedRegion, targets],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [paintKey, selectedRegion, targets],
   )
   const polygonStroke = useCallback(
     (f: object) => {
@@ -212,6 +276,7 @@ export function WorldGlobe() {
     (f: object) => {
       const id = regionOf(f)
       const mr = map.regions[id]
+      const game = gameRef.current
       if (!game) return `<div class="globe-tip"><b>${escapeHtml(mr.name)}</b></div>`
       const owner = game.nations[game.regions[id].owner]
       const yours = owner?.id === game.playerId
@@ -220,7 +285,7 @@ export function WorldGlobe() {
       const power = owner ? militaryPower(game, owner.id).toFixed(0) : '0'
       return `<div class="globe-tip"><b>${escapeHtml(mr.name)}</b><div style="color:${escapeHtml(owner?.color ?? '#fff')}">${yours ? 'Your country' : escapeHtml(owner?.name ?? 'Unknown')}${war ? ' · at war' : ''}</div><div>${TERRAIN[mr.terrain].name}</div><div>Military strength ${power}</div><div>Defense Line ${Math.min(game.regions[id].line, lineMax(game, map, id)).toFixed(1)} of ${lineMax(game, map, id).toFixed(1)}</div>${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
     },
-    [game],
+    [],
   )
 
   const onPolygonClick = useCallback((f: object) => {
@@ -231,7 +296,9 @@ export function WorldGlobe() {
     setHover((prev) => (prev === id ? prev : id))
   }, [])
 
-  const markers = useMemo<Marker[]>(() => {
+  // The name pins keep the same identity until a country or city really changes, so the pins are not rebuilt for nothing.
+  const pinsRef = useRef<{ key: string; list: Marker[] }>({ key: '', list: [] })
+  const pins = useMemo<Marker[]>(() => {
     if (!game) return []
     const out: Marker[] = []
     for (const r of Object.values(game.regions)) {
@@ -241,8 +308,22 @@ export function WorldGlobe() {
       // Your other big cities show as small dots, so you can see where your country lives.
       for (const c of r.cities) if (c.lat !== undefined && c.lng !== undefined) out.push({ key: c.id, lat: c.lat, lng: c.lng, title: c.name, yours: false, city: true })
     }
+    const key = out.map((m) => `${m.key}:${m.title}`).join(';')
+    if (key === pinsRef.current.key) return pinsRef.current.list
+    pinsRef.current = { key, list: out }
     return out
   }, [game])
+  const overlayPins = useRef(new Map<string, Marker>())
+  const markers = useMemo<Marker[]>(() => {
+    const kept = new Map<string, Marker>()
+    for (const b of battles) kept.set(`battle:${b.id}`, overlayPins.current.get(`battle:${b.id}`) ?? { key: `battle:${b.id}`, lat: b.lat, lng: b.lng, title: b.place, yours: true, battle: b })
+    for (const p of pops) kept.set(`pop:${p.id}`, overlayPins.current.get(`pop:${p.id}`) ?? { key: `pop:${p.id}`, lat: p.lat, lng: p.lng, title: p.text, yours: true, pop: p.text })
+    overlayPins.current = kept
+    return kept.size ? [...pins, ...kept.values()] : pins
+  }, [pins, battles, pops])
+
+  const army = useArmyLayer(ref, reducedMotion)
+  const allRings = useMemo(() => (army.threatRings.length ? [...rings, ...army.threatRings] : rings), [rings, army.threatRings])
 
   const ringColor = useCallback((r: object) => (t: number) => withAlpha((r as { color: string }).color, Math.max(0, 1 - t)), [])
 
@@ -275,11 +356,12 @@ export function WorldGlobe() {
       htmlElementVisibilityModifier={(el, isVisible) => {
         el.style.opacity = isVisible ? '1' : '0'
       }}
-      ringsData={rings}
+      ringsData={allRings}
       ringColor={ringColor}
       ringMaxRadius="maxRadius"
       ringPropagationSpeed={3}
-      ringRepeatPeriod={1400}
+      ringRepeatPeriod={ringPeriod}
+      {...army.props}
     />
   )
 }

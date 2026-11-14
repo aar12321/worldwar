@@ -112,6 +112,19 @@ export const emptyUnits = (): UnitCounts => ({ infantry: 0, armor: 0, artillery:
 
 export const totalUnits = (u: UnitCounts) => (u.infantry ?? 0) + (u.armor ?? 0) + (u.artillery ?? 0) + (u.fighter ?? 0) + (u.air ?? 0) + (u.naval ?? 0) + (u.drone ?? 0) + (u.robot ?? 0) + (u.missile ?? 0)
 
+/**
+ * A nation's whole force: the military at home plus its armies in the field (live mode).
+ * With no armies abroad this is the military's own object, so turn mode reads exactly what it always did.
+ */
+export function forceUnits(s: Pick<GameState, 'nations' | 'armies'>, id: NationId): UnitCounts {
+  const home = s.nations[id]?.military.units ?? emptyUnits()
+  const away = s.armies?.filter((a) => a.nationId === id)
+  if (!away?.length) return home
+  const out = { ...home }
+  for (const a of away) for (const k of Object.keys(out) as UnitType[]) out[k] += a.units[k]
+  return out
+}
+
 export function sumUnits(list: UnitCounts[]): UnitCounts {
   const out = emptyUnits()
   for (const u of list) for (const k of Object.keys(out) as UnitType[]) out[k] += u[k]
@@ -195,7 +208,8 @@ export function canUseUnit(n: Nation, unit: UnitType): boolean {
 }
 
 export function addLog(s: GameState, kind: LogKind, text: string, nations: NationId[]) {
-  s.log.push({ turn: s.turn, kind, text, nations })
+  // A live game also records the day, so the news can say when. A turn game's entries are exactly what they were.
+  s.log.push(s.day === undefined ? { turn: s.turn, kind, text, nations } : { turn: s.turn, day: s.day, kind, text, nations })
   if (s.log.length > 300) s.log.splice(0, s.log.length - 300)
 }
 

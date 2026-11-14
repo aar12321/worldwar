@@ -1,3 +1,4 @@
+import { isLive } from '../engine/calendar'
 import { motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { UNIT_SPECS } from '../data/unitTypes'
@@ -22,13 +23,13 @@ function sideInfo(game: GameState, id: NationId) {
   return { name: n?.name ?? id, color: n?.color ?? '#94a3b8' }
 }
 
-function verdict(b: BattleReport, playerId: NationId, place: string): { title: string; text: string; good: boolean } {
+function verdict(b: BattleReport, playerId: NationId, place: string, live = false): { title: string; text: string; good: boolean } {
   const playerAttacking = b.attacker.nationId === playerId
   const attackerWon = b.winner === 'attacker'
   if (playerAttacking) {
     if (b.defender.nationId === 'rebels') return attackerWon ? { title: 'Rebellion crushed', text: 'The rebels are beaten.', good: true } : { title: 'Rebels hold out', text: 'They are still fighting.', good: false }
     if (attackerWon && b.captured) return { title: `${place} captured`, text: 'The Defense Line broke. The whole country is now yours, though it will take months to settle.', good: true }
-    if (attackerWon) return { title: 'The line gives way', text: `${place}'s Defense Line is down to ${(b.lineAfter ?? 0).toFixed(1)}. Press on next turn before it heals.`, good: true }
+    if (attackerWon) return { title: 'The line gives way', text: `${place}'s Defense Line is down to ${(b.lineAfter ?? 0).toFixed(1)}. Press on ${live ? 'with another army' : 'next turn'} before it heals.`, good: true }
     return { title: 'Attack repulsed', text: `${place} held. Your losses were heavy. Try a different stance, or send more.`, good: false }
   }
   if (attackerWon && b.captured) return { title: b.attacker.nationId === 'rebels' ? `${place} breaks away` : `${place} lost`, text: 'The country has fallen.', good: false }
@@ -149,7 +150,7 @@ export function BattleFX() {
   }
   const attStart = totalUnits(battle.attacker.units)
   const defStart = totalUnits(battle.defender.units)
-  const result = verdict(battle, player, region?.name ?? 'the country')
+  const result = verdict(battle, player, region?.name ?? 'the country', isLive(game))
   const finish = () => {
     useFx.getState().reveal(battle.id)
     shiftFx()

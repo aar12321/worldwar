@@ -8,7 +8,7 @@ import { TRAITS, traitOf } from '../data/traits'
 import { agencyUpkeep } from './agencies'
 import { systemUpkeep } from './systems'
 import { companyEffects } from './stocks'
-import { addLog, clamp, enemiesOf, nationModifiers, pairKey, sanctionersOf } from './helpers'
+import { addLog, clamp, enemiesOf, forceUnits, nationModifiers, pairKey, sanctionersOf } from './helpers'
 import type { Rng } from './rng'
 import { checkDefault, type CreditReport, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
 import { cityEffects, cityWorkforceBonus } from './cities'
@@ -214,11 +214,13 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   let armyFood = 0
   let divisions = 0
   let oilUse = 0
+  // Armies in the field still cost money, food and oil.
+  const force = forceUnits(s, nationId)
   for (const k of UNIT_TYPES) {
-    upkeep += n.military.units[k] * UNIT_SPECS[k].upkeep
-    armyFood += n.military.units[k] * UNIT_SPECS[k].food
-    oilUse += n.military.units[k] * UNIT_SPECS[k].oil
-    divisions += n.military.units[k]
+    upkeep += force[k] * UNIT_SPECS[k].upkeep
+    armyFood += force[k] * UNIT_SPECS[k].food
+    oilUse += force[k] * UNIT_SPECS[k].oil
+    divisions += force[k]
   }
   const goodsUse = workforce * MATERIALS.goodsUsePerWorkforce * (1 + pol.goodsUse)
   const warBills: WarBill[] = []
@@ -317,6 +319,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   if (n.debtTurns >= ECON.desertionAfter) {
     const loss = Math.min(ECON.maxDesertion, ECON.desertionPerMonth * (n.debtTurns - ECON.desertionAfter + 1))
     for (const k of UNIT_TYPES) n.military.units[k] *= 1 - loss
+    for (const a of s.armies ?? []) if (a.nationId === nationId) for (const k of UNIT_TYPES) a.units[k] *= 1 - loss
     if (n.isPlayer || n.debtTurns === ECON.desertionAfter)
       addLog(s, 'economy', `${n.name} cannot pay its soldiers: ${Math.round(loss * 100)}% of the military has deserted.`, [nationId])
   }

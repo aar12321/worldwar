@@ -1,4 +1,5 @@
 import { addLog } from './helpers'
+import { daysInMonth } from './calendar'
 import { newStocks } from './stocks'
 import { EVENT_BY_ID } from '../data/events'
 import { startingCities } from './cities'
@@ -89,5 +90,20 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     game.nextEventTurn = game.turn + EVENT_GAP_TURNS
   }
   if (game.pendingEvent && !EVENT_BY_ID[game.pendingEvent.eventId]) game.pendingEvent = null
+  if (game.settings.mode === 'live') cleanLive(game, map)
   return game
+}
+
+/** A live save: keeps the day in range and drops anything that no longer points at a real nation, country or number. Turn saves are left alone. */
+function cleanLive(game: GameState, map: WorldMap) {
+  const finite = (x: unknown) => typeof x === 'number' && Number.isFinite(x)
+  const point = (p: { lat?: unknown; lng?: unknown } | undefined) => !!p && finite(p.lat) && finite(p.lng)
+  const lastDay = daysInMonth(game.turn) - 1
+  game.day = finite(game.day) ? Math.min(lastDay, Math.max(0, Math.floor(game.day as number))) : 0
+  game.armies = (Array.isArray(game.armies) ? game.armies : []).filter(
+    (a) => !!a && game.nations[a.nationId]?.alive && !!map.regions[a.target] && !!map.regions[a.home] && finite(a.start) && finite(a.end) && point(a.from) && point(a.to) && !!a.units && UNIT_TYPES.every((k) => finite(a.units[k]) && a.units[k] >= 0),
+  )
+  const armyIds = new Set(game.armies.map((a) => a.id))
+  game.launches = (Array.isArray(game.launches) ? game.launches : []).filter((l) => !!l && finite(l.at) && !!l.order && !!game.nations[l.order.nationId]?.alive && !!game.regions[l.order.target] && !armyIds.has(l.id))
+  game.flights = (Array.isArray(game.flights) ? game.flights : []).filter((f) => !!f && finite(f.lands) && finite(f.count) && !!game.nations[f.nationId]?.alive && !!map.regions[f.target])
 }

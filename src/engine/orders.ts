@@ -13,14 +13,25 @@ import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
 import { investedIn, sectorCap, sectorYield } from './business'
 import { buildingCap, computeEconomy, nationWorkforce, regionWorkforce } from './economy'
-import { atWar, canUseUnit, enemiesOf, hasCasusBelli, hasPact, isAllied, maxAttacks, maxWars, totalUnits } from './helpers'
+import { atWar, canUseUnit, enemiesOf, forceUnits, hasCasusBelli, hasPact, isAllied, maxAttacks, maxWars, totalUnits } from './helpers'
 import { trainingSlots } from './training'
 import { MARKET_GOODS, marketValue, tradeRoom } from './trade'
 import type { GameState, Order, UnitType, WorldMap } from './types'
 import { canAttackRegion, commitShare, reachProblem } from './warfare'
+import { clockMonth, isLive } from './calendar'
+import { recallProblem } from './armies'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
 export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
+
+/**
+ * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, and an answer
+ * to an offer counts at once, so that accepting peace turns armies back before they arrive.
+ */
+export function isMonthEndOrder(s: Pick<GameState, 'settings'>, type: Order['type']): boolean {
+  if (isLive(s) && (type === 'strike' || type === 'respond')) return false
+  return MONTH_END_ORDERS.has(type)
+}
 
 /** Influence a war on `target` costs `nationId` right now: little with a reason, a great deal without one. */
 export function warCost(s: GameState, nationId: string, target: string): number {
@@ -280,7 +291,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return null
     }
     case 'train': {
-      if (n.military.units[o.unit] < 0.05) return 'No troops of that type'
+      if (forceUnits(s, o.nationId)[o.unit] < 0.05) return 'No troops of that type'
       if (n.military.drill[o.unit] >= TRAINING.max) return 'Already fully trained'
       if (n.military.commanderId) return 'A commander trains your military for free'
       return null
@@ -313,8 +324,9 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (target.owner === o.nationId) return 'That country is already yours'
       const pendingWar = pending.some((p) => p.type === 'declareWar' && p.target === target.owner)
       if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
-      if (n.military.lastAttackTurn === s.turn && n.military.attacksThisTurn >= maxAttacks(s, o.nationId)) return `Your military has already attacked ${maxAttacks(s, o.nationId)} times this turn`
-      if (totalUnits(n.military.units) < 0.1) return 'You have no military to attack with'
+      const live = isLive(s)
+      if (n.military.lastAttackTurn === (live ? clockMonth(s) : s.turn) && n.military.attacksThisTurn >= maxAttacks(s, o.nationId)) return live ? `You have already sent ${maxAttacks(s, o.nationId)} armies this month` : `Your military has already attacked ${maxAttacks(s, o.nationId)} times this turn`
+      if (totalUnits(n.military.units) < 0.1) return live ? 'No troops at home to send' : 'You have no military to attack with'
       if (commitShare(n, o.commit ?? 'main') < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
       if (!canAttackRegion(s, map, o.nationId, o.target).ok) return reachProblem(s, map, o.nationId, o.target)
       if (o.missiles !== undefined) {
@@ -421,5 +433,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (r?.owner !== o.nationId || r.rebels <= 0) return 'No rebels here'
       return null
     }
+    case 'recall':
+      return isLive(s) ? recallProblem(s, o.nationId, o.armyId) : 'Armies only march in a live game'
   }
 }

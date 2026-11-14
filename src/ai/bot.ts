@@ -14,6 +14,7 @@ import { computeEconomy, lineMax, type EconomyReport } from '../engine/economy'
 import { atWar, canUseUnit, clamp, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex, totalUnits } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { validateOrder } from '../engine/orders'
+import { clockMonth } from '../engine/calendar'
 import { createRng, type Rng } from '../engine/rng'
 import { MARKET_GOODS, marketPrices, stockOf, tradeRoom, type MarketPrices } from '../engine/trade'
 import type { BuildingType, UnitCounts, GameState, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
@@ -557,17 +558,19 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
 
   const attackRatio = (diff.attackRatio / persona.risk) * (mistake === 'overconfident' ? 0.75 : 1)
   // A war declared on the player gives them a couple of months to raise a military before the first blow.
-  const warTargets = new Set(enemies.filter((e) => !humans.has(e) || s.turn - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
+  // In a live game the plan is for the month about to begin, and its armies march during it. Rests and fronts count from that month.
+  const planned = clockMonth(s)
+  const warTargets = new Set(enemies.filter((e) => !humans.has(e) || planned - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
   for (const o of orders) if (o.type === 'declareWar' && !humans.has(o.target)) warTargets.add(o.target)
   // One attack a turn. A bot starts a campaign only now and then, but keeps pressing a front it has already cracked.
-  if (mistake !== 'idle' && s.turn - n.military.lastAttackTurn >= BOT.attackRestTurns && n.military.exposed < 0.05) {
+  if (mistake !== 'idle' && planned - n.military.lastAttackTurn >= BOT.attackRestTurns && n.military.exposed < 0.05) {
     const options = Object.values(s.regions)
       .filter((r) => warTargets.has(r.owner) && canAttackRegion(s, map, nationId, r.id).ok)
       .map((r) => {
         const max = lineMax(s, map, r.id)
         // A cracked line is cheaper to finish, so it counts as weaker.
         // The strongest tier joins a front an ally has just hit.
-        const joint = diff.skill === 2 && r.attackedTurn >= s.turn - 1 && r.attackedTurn !== s.turn ? 0.85 : 1
+        const joint = diff.skill === 2 && r.attackedTurn >= planned - 1 && r.attackedTurn !== planned ? 0.85 : 1
         return { id: r.id, def: estimateDefense(s, map, ctx, r.id) * (0.6 + 0.4 * Math.min(1, r.line / max)) * joint, started: r.line < max - 0.01 }
       })
       .sort((x, y) => x.def - y.def || (x.id < y.id ? -1 : 1))

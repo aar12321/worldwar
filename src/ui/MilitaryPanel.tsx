@@ -10,6 +10,8 @@ import { fmt, usePlayerView } from './hooks'
 import { UnitIcon } from './icons'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import { AgenciesTab } from './AgenciesTab'
+import { ArmiesTab } from './ArmiesTab'
+import { isLive } from '../engine/calendar'
 import { SystemsTab } from './SystemsTab'
 import { WarsTab } from './WarsPanel'
 
@@ -118,7 +120,7 @@ function Forces() {
     <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
         <Total label="Strength" value={sheet.totalPower.toFixed(0)} />
-        <Total label="Divisions" value={formatDivisions(sheet.totalUnits)} />
+        <Total label="Divisions" value={formatDivisions(sheet.totalUnits)} sub={sheet.inField > 0.05 ? `${formatDivisions(sheet.totalUnits - sheet.inField)} at home · ${formatDivisions(sheet.inField)} in the field` : undefined} />
         <Total label="Upkeep a month" value={`-${fmt(sheet.upkeep, 1)}`} />
         <Total label="Food a month" value={`-${fmt(sheet.foodUse, 1)}`} />
       </div>
@@ -197,18 +199,19 @@ export function MilitaryPanel() {
       kicker={`One force for the whole nation · ${wars} of ${maxWars(game, player.id)} wars`}
       panel="military"
       wide
-      tabs={<Tabs value={tab} onChange={setTab} options={[MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const} />}
+      tabs={<Tabs value={tab} onChange={setTab} options={isLive(game) ? ([MILITARY_TABS[0], ['armies', (game.armies?.filter((a) => a.nationId === player.id).length ?? 0) > 0 ? `Armies (${game.armies?.filter((a) => a.nationId === player.id).length})` : 'Armies'], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const) : ([MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const)} />}
     >
-      {tab === 'forces' ? <Forces /> : tab === 'wars' ? <WarsTab /> : tab === 'systems' ? <SystemsTab /> : <AgenciesTab />}
+      {tab === 'forces' ? <Forces /> : tab === 'wars' ? <WarsTab /> : tab === 'systems' ? <SystemsTab /> : tab === 'armies' && isLive(game) ? <ArmiesTab /> : <AgenciesTab />}
     </PanelShell>
   )
 }
 
-function Total({ label, value }: { label: string; value: string }) {
+function Total({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="inset-card py-2.5">
       <div className="label">{label}</div>
       <div className="text-[20px] font-semibold tabular-nums">{value}</div>
+      {sub && <div className="text-[11px] text-white/65 px-1">{sub}</div>}
     </div>
   )
 }

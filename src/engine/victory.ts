@@ -1,5 +1,5 @@
 import { UNIT_SPECS } from '../data/unitTypes'
-import { puppetsOf, regionsOf, totalUnits } from './helpers'
+import { forceUnits, puppetsOf, regionsOf, totalUnits } from './helpers'
 import { computeEconomy } from './economy'
 import type { GameState, NationId, WorldMap } from './types'
 
@@ -78,7 +78,7 @@ export function humanStatus(s: GameState, id: NationId, map?: WorldMap): 'playin
   const capitalLost = s.regions[p.originalCapital].owner !== id
   // Losing the capital only ends the game once there is nothing left to fight back with.
   const canRebuild = (s.trainingQueue ?? []).some((job) => job.nationId === id) || p.resources.capital >= UNIT_SPECS.infantry.capitalCost
-  if (capitalLost && totalUnits(p.military.units) < 0.1 && !canRebuild) return 'lost'
+  if (capitalLost && totalUnits(forceUnits(s, id)) < 0.1 && !canRebuild) return 'lost'
   if (s.settings.goal === 'world') return holdsTheWorld(s, id) ? 'won' : 'playing'
   if (countriesTaken(s, id) >= conquestGoal(s.settings.victoryShare)) return 'won'
   if (populationShare(s, id) >= s.settings.victoryShare) return 'won'

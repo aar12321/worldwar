@@ -13,7 +13,7 @@ npm run build      # type-check + production bundle
 
 ## How to play
 
-The game is turn based. One turn is one month, starting January 2026. Nothing moves until you press **Next turn** (or Enter).
+The game has two modes, chosen when you start. In **Turns** (the default), one turn is one month, starting January 2026, and nothing moves until you press **Next turn** (or Enter). In **Live** (for one player), time flows by itself and you watch armies march: see [Live mode](#live-mode).
 
 1. Pick a nation on the main menu (search the list or click the globe), and choose how skilled your rivals are. **You win by holding the whole world**: every country yours or a puppet of yours. It is a long game, built for about 12 to 15 hours of play. Taxes start at the neutral 20% (and business tax at 15%), so every change you make has an effect. **Easy** rivals play the basics, wait a long time before attacking you, and never band together against you. **Medium** rivals also grow cities, set budgets and laws, fund business, and form alliances and blocs. **Hard** rivals also borrow, invest abroad, sanction, counter the units you field, press an ally's enemy together, and turn a crushing win into a puppet state.
 2. The game is run from **five desks** on the left:
@@ -32,6 +32,16 @@ The game is turn based. One turn is one month, starting January 2026. Nothing mo
    - **Conquered land starts restless** and produces about 40% at first, settling over six months. Holding many unsettled countries strains stability.
 4. **Next turn** runs the rivals, training, research, income, diplomacy, rebels and any attacks on you, replays the battles you were in, then shows a **monthly report**: what changed, the news, and what the advisor would do next.
 5. The **map control** (bottom left) switches the globe between Nations, Relations (allies, pacts, enemies) and Fronts (how much Defense Line is left).
+
+## Live mode
+
+Pick **Live** on the start screen and the same game runs on a clock: a month takes about a minute at normal speed (a day every two seconds), with pause, 2x and 4x. A new game starts paused; **Space** plays or pauses, **1**, **2** and **3** set the speed. Everything else works as in Turns: the economy, research, diplomacy, agencies, crises, stocks, Frontier systems, governors and bulk upgrades.
+
+- **Orders.** Upgrades, training, trades, shares and war work at once. Research, taxes, the draft and offers to other nations wait for the 1st of the next month, and the Orders bar says when. Answering an offer, such as accepting peace, counts at once.
+- **Armies.** An attack in the War Room sends an army out of your military. It leaves from a border country, a port or an airbase, marches for days (by land, across a sea lane, by fleet or by air: the War Room shows the days and the dates), fights with the usual combat rules when it arrives, stays a day, and marches home; the survivors rejoin your military. Units that are away do not defend your country, but still cost upkeep. Recall an army while it is on its way out, or turn it back by making peace.
+- **On the globe.** Each army is a badge in its nation's color (a plane, ship, tank or infantry mark). Yours have a white outline and a dashed blue route; enemy armies marching on you are outlined in red with a red route, a pulsing ring over the country and an alert in the top bar with the days left. Battles show a pin with the Defense Line draining and the result; hypersonic missiles fly as arcs and land a day later; an orbital strike hits at once.
+- **The AI** plans once a month as in Turns, and its attacks leave on days of the month, so you see them coming.
+- **What stops the clock:** pausing, a decision (an event), a battle window (opt in with Settings > Pause on my battles), the monthly report if you chose that, the War Room, and the help window. The clock never runs in the background of a hidden tab. Live games are single player; playing with friends online uses Turns.
 
 ## Play with friends (1 to 4 players)
 
@@ -67,7 +77,10 @@ Shortcuts: `Enter` next turn, `B` briefing, `E` economy, `M` military, `W` wars,
 ```
 src/
   engine/      Pure, deterministic simulation (no DOM). resolveTurn(state, map, orders) -> new state
-    resolveTurn.ts  one month: month-end orders, training, attacks, rebels, economy, diplomacy, events
+    resolveTurn.ts  one month: month-end orders, training, attacks, rebels, economy, diplomacy, events (runMonth; resolveTurn wraps it)
+    live.ts         the live clock: advanceDay(state, map, { monthOrders, planner }) moves a live game by one day, running the month on the last day
+    armies.ts       live armies: launch point, march days, recall, the shortest-path position of an army at a given time
+    calendar.ts     real month lengths and absolute days for the live clock
     orders.ts       validation and costs. Orders in MONTH_END_ORDERS wait for Next turn; the rest apply at once
     militaryStats.ts  the per-unit stat sheet and military power (battles and the AI read the same numbers)
     combat.ts / warfare.ts  3-round battles, whole-country capture, garrisons, rebels
@@ -77,11 +90,11 @@ src/
   ai/          Rule-based orders for every nation no human plays (same rules as the player): bot, diplomat, management, opinion, blocs
   net/         Online play: protocol (messages, room codes, compressed snapshots), transport (Supabase Realtime, same-browser fallback), session (lobby, host, ready, timer, host handover)
   map/world.ts Natural Earth 110m countries -> regions, adjacency, coastlines, sea lanes
-  ui/          React: globe, HUD, drawers, Modal, battle window, diplomacy, tech tree
+  ui/          React: globe, HUD, drawers, Modal, battle window, diplomacy, tech tree. ui/globe has the army layer (badges, routes, missile arcs); ui/liveClock.ts is the one loop that runs a live game's clock
   store.ts     Zustand store: orders, turn flow, battle queue, autosave (localStorage)
 ```
 
-The engine is seeded and side-effect free, so the same seed and orders always produce the same world. `GameState.humans` lists the nations people play (one in a one-player game), so a multiplayer game and a single-player game run the same code. Online, the host resolves each month and everyone else receives the result.
+The engine is seeded and side-effect free, so the same seed and orders always produce the same world, and a live game's days are deterministic too. Turn games carry none of the live fields, and a pinned test (`turnGolden.test.ts`) keeps a turn month exactly as it was. `GameState.humans` lists the nations people play (one in a one-player game), so a multiplayer game and a single-player game run the same code. Online, the host resolves each month and everyone else receives the result.
 
 ## Tech stack
 

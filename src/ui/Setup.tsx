@@ -18,6 +18,7 @@ export function Setup() {
   const hasSave = useGame((s) => s.hasSave)
   const [query, setQuery] = useState('')
   const [difficulty, setDifficulty] = useState<Difficulty>('normal')
+  const [mode, setMode] = useState<'turns' | 'live'>('turns')
   const saved = useMemo(() => (hasSave ? peekSave() : null), [hasSave])
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6))
 
@@ -38,7 +39,7 @@ export function Setup() {
       <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="setup-title absolute top-8 left-1/2 -translate-x-1/2 text-center w-[min(640px,90vw)]">
         <p className="text-[13px] font-medium text-white/50">January 2026</p>
         <h1 className="text-[40px] font-semibold tracking-tight text-white mt-1">Worlds of Others</h1>
-        <p className="setup-blurb mt-2 text-[15px] text-white/65">Pick a nation. You and the other nations take turns, one month at a time. Win by taking countries, or by leading enough of the world’s people.</p>
+        <p className="setup-blurb mt-2 text-[15px] text-white/65">Pick a nation, turn by turn or live. Win by taking countries, or by leading enough of the world’s people.</p>
       </motion.div>
 
       <motion.div initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.05, ease: [0.22, 1, 0.36, 1] }} className="setup-list glass pointer-events-auto absolute left-6 top-36 bottom-6 w-[380px] rounded-[22px] flex flex-col overflow-hidden">
@@ -96,6 +97,28 @@ export function Setup() {
           <p className="text-[13px] text-white/75 leading-snug">Hold the whole world: every country yours, or a puppet of yours. It takes a long time. Wars need a reason, so you work through spies, allies and the news.</p>
         </div>
         <div>
+          <div className="label mb-2">How time passes</div>
+          <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Game mode">
+            {(
+              [
+                ['turns', 'Turns', 'Plan a month, then press Next turn. Everything happens at once.'],
+                ['live', 'Live', 'Time flows by itself. Armies march across the globe and fight when they arrive. Pause any time.'],
+              ] as const
+            ).map(([id, name, text]) => (
+              <button
+                key={id}
+                role="radio"
+                aria-checked={mode === id}
+                onClick={() => setMode(id)}
+                className={`rounded-xl p-2.5 text-left border ${mode === id ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/8 hover:bg-white/12'}`}
+              >
+                <div className="text-[14px] font-semibold">{name}</div>
+                <div className="text-[12px] text-white/75 leading-snug">{text}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
           <div className="label mb-2">Rivals</div>
           <div className="grid gap-1.5" role="radiogroup" aria-label="Rival skill">
             {(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => (
@@ -125,13 +148,13 @@ export function Setup() {
         <div className="flex gap-2">
           {hasSave && (
             <button className="btn flex-1 py-3" onClick={loadGame}>
-            Continue{saved ? ` ${saved.nation}, ${saved.date}` : ''}
+            Continue{saved ? ` ${saved.nation}, ${saved.date}${saved.live ? ' (live)' : ''}` : ''}
           </button>
           )}
           <button className="btn btn-primary flex-[2] py-3 text-[15px]" disabled={!pick} onClick={() => {
               if (!pick) return
               if (hasSave && !window.confirm(`Starting a new game replaces your saved game${saved ? ` (${saved.nation}, ${saved.date})` : ''}. Start anyway?`)) return
-              newGame({ playerRegionId: pick.id, seed, difficulty })
+              newGame({ playerRegionId: pick.id, seed, difficulty, mode })
             }}
           >
             Start game
@@ -140,7 +163,7 @@ export function Setup() {
         <button className="btn w-full py-2.5 text-[14px]" onClick={() => setOnlineOpen(true)}>
           Play with friends online
         </button>
-        <p className="text-[13px] text-white/65">Every other nation is a rival. They act when you press Next turn. Playing with friends? Everyone presses Ready instead.</p>
+        <p className="text-[13px] text-white/65">{mode === 'live' ? 'Every other nation is a rival, acting as the days pass. Live games are for one player; playing with friends online uses turns.' : 'Every other nation is a rival. They act when you press Next turn. Playing with friends? Everyone presses Ready instead.'}</p>
       </motion.div>
     </div>
       {onlineOpen && <OnlineEntry onClose={() => setOnlineOpen(false)} />}
