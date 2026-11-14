@@ -1,3 +1,4 @@
+import { UNIT_SPECS } from '../data/unitTypes'
 import { absDate } from '../engine/calendar'
 import { lineMax } from '../engine/economy'
 import type { LiveEvent, LiveStep } from '../engine/live'
@@ -108,8 +109,17 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
         } else if (e.flight.nationId === player) say('error', `Your missiles were wasted: the war ended before they landed.`)
         break
       }
-      case 'trained':
+      case 'trained': {
+        const mineJobs = e.jobs.filter((j) => j.nationId === player)
+        if (mineJobs.length === 0) break
+        const counts = new Map<string, number>()
+        for (const j of mineJobs) counts.set(j.unit, (counts.get(j.unit) ?? 0) + 1)
+        const text = [...counts].map(([unit, n]) => `${n} ${UNIT_SPECS[unit as keyof typeof UNIT_SPECS]?.name ?? unit}`).join(', ')
+        say('info', `Training finished: ${text} joined your military.`)
+        const capital = map.regions[game.nations[player]?.capital ?? '']
+        if (capital) useFx.getState().addPop({ lat: capital.lat, lng: capital.lng, text: `+${text}` }, settings.reducedMotion ? 2600 : 2400)
         break
+      }
     }
   }
 

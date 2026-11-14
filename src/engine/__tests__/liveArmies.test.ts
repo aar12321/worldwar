@@ -8,6 +8,7 @@ import { forceUnits, totalUnits } from '../helpers'
 import { advanceDay, startLive, type LiveEvent } from '../live'
 import { isMonthEndOrder, orderCost, validateOrder } from '../orders'
 import { applyOrderNow } from '../resolveTurn'
+import { advise } from '../advisor'
 import { addUnitToMilitary } from '../training'
 import type { GameState, Order, WorldMap } from '../types'
 import { humanStatus } from '../victory'
@@ -149,6 +150,8 @@ describe('sending an army', () => {
 
   it('fights the home army and garrison of the defender, and not what it has sent out itself', () => {
     const s = war()
+    // On Easy the defender does not call its army home when it sees ours coming, so only what is home defends.
+    s.settings.difficulty = 'easy'
     setMilitary(s, 'r1', { infantry: 6 })
     // The defender has sent half of an army out: only what is home defends.
     s.armies!.push({ id: 'ax', nationId: 'r1', units: { infantry: 6, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 }, commit: 'main', stance: 'assault', share: 0.5, via: 'land', bySea: false, home: 'r1', target: 'r0', phase: 'outbound', from: { lat: 0, lng: 5 }, to: { lat: 0, lng: 0 }, start: 50, end: 52, launched: 0 })
@@ -435,5 +438,19 @@ describe('hypersonic missiles in a live game', () => {
   it('a day of the clock is the same as a day of the calendar', () => {
     const s = war()
     expect(clockOf(s)).toBe(absDay(1, 0))
+  })
+})
+
+describe('the advisor in a live game', () => {
+  it('warns about an enemy army marching on you, with the days left, and points to the armies', () => {
+    const s = war()
+    s.armies!.push({ id: 'in1', nationId: 'r1', units: { infantry: 9, armor: 2, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 }, commit: 'main', stance: 'assault', share: 0.66, via: 'land', bySea: false, home: 'r1', target: 'r0', phase: 'outbound', from: { lat: 0, lng: 5 }, to: { lat: 0, lng: 0 }, start: 0, end: 4, launched: 0 })
+    const item = advise(s, map, 'r0', [], 20).find((a) => a.id === 'incoming-in1')!
+    expect(item).toBeTruthy()
+    expect(item.urgency).toBe('now')
+    expect(item.detail).toMatch(/arrive in 4 days/)
+    expect(item.target).toEqual({ desk: 'military', tab: 'armies' })
+    // Your own armies are not a warning.
+    expect(advise(startLive(startState(map)), map, 'r0', [], 20).some((a) => a.id.startsWith('incoming-'))).toBe(false)
   })
 })

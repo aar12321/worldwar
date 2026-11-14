@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from
 import type { GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
 import { LIVE } from '../../data/live'
-import { armyAt, greatCircle } from '../../engine/armies'
+import { armyAt, greatCircle, planTrip } from '../../engine/armies'
 import { clockOf } from '../../engine/calendar'
-import { formatDivisions, totalUnits } from '../../engine/helpers'
+import { atWar, formatDivisions, totalUnits } from '../../engine/helpers'
 import type { Army, MissileFlight } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
@@ -176,7 +176,7 @@ class LayerCache {
 }
 
 /** Samples along an army's current leg, arcing above the globe the way the badge travels. */
-function legPoints(a: Army): [number, number, number][] {
+function legPoints(a: Pick<Army, 'from' | 'to' | 'via'>): [number, number, number][] {
   const out: [number, number, number][] = []
   const n = 28
   for (let i = 0; i <= n; i++) {
@@ -275,7 +275,23 @@ export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, 
     useGame.getState().selectArmy((d as ArmyDatum).id)
   }, [])
 
-  const pathsData = useMemo(() => cache.syncPaths(armies, playerId, selected, mapMode, reduced), [cache, armies, playerId, selected, mapMode, reduced])
+  const routes = useMemo(() => cache.syncPaths(armies, playerId, selected, mapMode, reduced), [cache, armies, playerId, selected, mapMode, reduced])
+  // Pick an enemy country you could attack and the way an army would march there is drawn on the globe.
+  const target = useGame((s) => s.warRoom ?? s.selectedRegion)
+  const preview = useMemo<PathDatum | null>(() => {
+    const game = useGame.getState().game
+    if (!target || !game || game.settings.mode !== 'live' || !game.regions[target]) return null
+    const owner = game.regions[target].owner
+    if (owner === game.playerId || !atWar(game, game.playerId, owner)) return null
+    const trip = planTrip(game, map, game.playerId, target)
+    if (!trip) return null
+    const from = { lat: map.regions[trip.from].lat, lng: map.regions[trip.from].lng }
+    const to = { lat: map.regions[target].lat, lng: map.regions[target].lng }
+    return { id: 'preview', points: legPoints({ from, to, via: trip.via }), color: '#ffd60a', dash: 0.04, gap: 0.035, animate: 0, key: `preview|${trip.from}|${target}` }
+    // Armies changing hands of countries or a war starting change what can be reached, so the preview follows them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, armies])
+  const pathsData = useMemo(() => (preview ? [...routes, preview] : routes), [routes, preview])
   const arcsData = useMemo(() => cache.syncArcs(flights), [cache, flights])
 
   // A warning ring over each of your countries an enemy army is marching on.

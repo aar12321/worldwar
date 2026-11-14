@@ -278,7 +278,7 @@ export function HUD() {
       </div>
       <div className="pill-stack">
         {live && <IncomingChip />}
-        {top && top.urgency === 'now' && panel === 'none' && (
+        {top && top.urgency === 'now' && panel === 'none' && !(live && top.id.startsWith('incoming-')) && (
           <button className="advice-pill pointer-events-auto" onClick={() => setPanel('briefing')} title="Open the Briefing (B)">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#ff453a' }} />
             <span className="truncate">{top.title}</span>

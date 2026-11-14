@@ -1,3 +1,4 @@
+import { armiesToRecall, holdsBackLaunch } from '../ai/liveBot'
 import { LIVE } from '../data/live'
 import { bringHome, sendHome, turnBack, launchArmy } from './armies'
 import { absDay, clockOf, daysInMonth, isLive } from './calendar'
@@ -56,7 +57,7 @@ function planLaunches(s: GameState, attacks: AttackOrder[]) {
 }
 
 /** Whether anything needs doing on this day. A quiet day only moves the date. */
-function dueToday(s: GameState, today: number): boolean {
+function dueToday(s: GameState, map: WorldMap, today: number): boolean {
   if (s.launches?.some((l) => l.at <= today)) return true
   if (s.flights?.some((f) => f.lands <= today)) return true
   for (const a of s.armies ?? []) {
@@ -66,7 +67,8 @@ function dueToday(s: GameState, today: number): boolean {
       if (!owner || owner === a.nationId || !atWar(s, a.nationId, owner)) return true
     }
   }
-  return false
+  // A rival that sees an army marching on it, even one the player sent between ticks, acts today.
+  return armiesToRecall(s, map, today).length > 0
 }
 
 /** Everything that comes due on a day, in a fixed order. Mutates `s`, which the caller owns. */
@@ -81,6 +83,8 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
     s.launches = s.launches.filter((l) => l.at > today)
     for (const l of due) {
       if (!s.nations[l.order.nationId]?.alive || validateOrder(s, map, l.order)) continue
+      // A rival that is about to be attacked keeps its army at home.
+      if (holdsBackLaunch(s, map, l.order.nationId)) continue
       const army = launchArmy(s, map, l.order, today)
       if (army) events.push({ kind: 'launched', army: snapshot(army) })
     }
@@ -95,6 +99,15 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
     const before = snapshot(a)
     turnBack(s, map, a, today, why)
     events.push({ kind: 'turnedBack', army: { ...before, outcome: why }, why })
+  }
+
+  // 2b. A rival whose country is about to be overrun calls its strongest army home.
+  for (const id of armiesToRecall(s, map, today)) {
+    const a = s.armies?.find((x) => x.id === id)
+    if (!a || a.phase !== 'outbound') continue
+    const before = snapshot(a)
+    turnBack(s, map, a, today, 'recalled')
+    events.push({ kind: 'turnedBack', army: { ...before, outcome: 'recalled' }, why: 'recalled' })
   }
 
   // 3. Armies that have marched all the way fight.
@@ -181,7 +194,7 @@ export function advanceDay(prev: GameState, map: WorldMap, input: LiveInput = {}
   }
 
   const today = absDay(prev.turn, day + 1)
-  if (!dueToday(prev, today)) return { state: { ...prev, day: day + 1, ...(prev.battles.length ? { battles: [] } : {}) }, events, monthEnded: false }
+  if (!dueToday(prev, map, today)) return { state: { ...prev, day: day + 1, ...(prev.battles.length ? { battles: [] } : {}) }, events, monthEnded: false }
   const s = structuredClone(prev)
   s.day = day + 1
   s.battles = []

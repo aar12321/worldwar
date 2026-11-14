@@ -1038,3 +1038,39 @@ body:has(.drawer) .armies-dock {
   font-weight: 700;
   color: #ffd60a;
 }
+
+/* "+2 Infantry" floating up over the capital when training finishes. */
+.unit-pop {
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(48, 209, 88, 0.95);
+  color: #04210d;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  transform: translate(-50%, -140%);
+  animation: unit-pop 2.2s ease-out forwards;
+}
+@keyframes unit-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -90%);
+  }
+  12% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -300%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .unit-pop {
+    animation: none;
+  }
+}

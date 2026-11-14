@@ -7,7 +7,7 @@ import { absDay, daysInMonth } from '../calendar'
 import { applyEventChoice } from '../events'
 import { advanceDay, type LiveEvent } from '../live'
 import { resolveTurn } from '../resolveTurn'
-import type { GameState, Order } from '../types'
+import type { Army, GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { startLive } from '../live'
 
@@ -116,4 +116,80 @@ describe('the AI attacks about as often live as in turns', () => {
     expect(live).toBeGreaterThan(turns * 0.6)
     expect(live).toBeLessThan(turns * 1.6)
   }, 120_000)
+})
+
+describe('rivals that watch for armies marching on them', () => {
+  const units = (u: Partial<Record<'infantry' | 'armor', number>>) => ({ infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0, ...u })
+  const army = (over: Partial<Army>): Army => ({
+    id: 'a',
+    nationId: 'r1',
+    units: units({ infantry: 6 }),
+    commit: 'main',
+    stance: 'assault',
+    share: 0.66,
+    via: 'land',
+    bySea: false,
+    home: 'r1',
+    target: 'r3',
+    phase: 'outbound',
+    from: { lat: 0, lng: 5 },
+    to: { lat: 0, lng: 15 },
+    start: 0,
+    end: 6,
+    launched: 0,
+    ...over,
+  })
+
+  /** r1 is an AI at war with r3 and with the player's r0, which has an army marching on it while r1's own is out. */
+  function pincer(difficulty: 'easy' | 'normal' | 'hard') {
+    const s = startLive(startState(lineMap(6)))
+    s.settings.difficulty = difficulty
+    s.wars.push('r0|r1', 'r1|r3')
+    setMilitary(s, 'r1', { infantry: 2 })
+    s.armies = [
+      army({ id: 'ours', nationId: 'r1', units: units({ infantry: 8 }), target: 'r3' }),
+      army({ id: 'theirs', nationId: 'r0', units: units({ infantry: 20, armor: 8 }), home: 'r0', target: 'r1', from: { lat: 0, lng: 0 }, to: { lat: 0, lng: 5 }, end: 5 }),
+    ]
+    return s
+  }
+  const step = (s: ReturnType<typeof pincer>) => advanceDay(s, lineMap(6), { planner: () => [] })
+
+  it('a Hard rival calls its army home when a stronger army marches on its country', () => {
+    const { state, events } = step(pincer('hard'))
+    const ours = state.armies!.find((a) => a.id === 'ours')!
+    expect(ours.phase).toBe('returning')
+    expect(ours.outcome).toBe('recalled')
+    expect(events.some((e) => e.kind === 'turnedBack' && e.why === 'recalled' && e.army.nationId === 'r1')).toBe(true)
+    // The player's army is not touched.
+    expect(state.armies!.find((a) => a.id === 'theirs')!.phase).toBe('outbound')
+  })
+
+  it('a Medium rival does the same, and an Easy one does not', () => {
+    expect(step(pincer('normal')).state.armies!.find((a) => a.id === 'ours')!.phase).toBe('returning')
+    expect(step(pincer('easy')).state.armies!.find((a) => a.id === 'ours')!.phase).toBe('outbound')
+  })
+
+  it('does not call an army home when the danger is smaller than what it has at home', () => {
+    const s = pincer('hard')
+    s.armies![1].units = units({ infantry: 1 })
+    expect(step(s).state.armies!.find((a) => a.id === 'ours')!.phase).toBe('outbound')
+  })
+
+  it('holds back a planned attack while its own country is about to be overrun', () => {
+    const planned = (difficulty: 'easy' | 'hard') => {
+      const s = pincer(difficulty)
+      s.armies = [s.armies![1]]
+      s.wars.push('r1|r2')
+      s.launches = [{ id: 'l1', at: 1, order: { type: 'attack', nationId: 'r1', target: 'r2', commit: 'main', stance: 'assault' } }]
+      return s
+    }
+    const hard = step(planned('hard'))
+    expect(hard.events.some((e) => e.kind === 'launched')).toBe(false)
+    expect(hard.state.launches).toHaveLength(0)
+    expect(step(planned('easy')).events.some((e) => e.kind === 'launched')).toBe(true)
+  })
+
+  it('answers the same way every time', () => {
+    expect(JSON.stringify(step(pincer('hard')).state)).toBe(JSON.stringify(step(pincer('hard')).state))
+  })
 })

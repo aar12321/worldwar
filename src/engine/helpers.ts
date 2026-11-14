@@ -208,7 +208,8 @@ export function canUseUnit(n: Nation, unit: UnitType): boolean {
 }
 
 export function addLog(s: GameState, kind: LogKind, text: string, nations: NationId[]) {
-  s.log.push({ turn: s.turn, kind, text, nations })
+  // A live game also records the day, so the news can say when. A turn game's entries are exactly what they were.
+  s.log.push(s.day === undefined ? { turn: s.turn, kind, text, nations } : { turn: s.turn, day: s.day, kind, text, nations })
   if (s.log.length > 300) s.log.splice(0, s.log.length - 300)
 }
 

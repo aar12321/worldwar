@@ -4,6 +4,8 @@ import { SECTORS, SECTOR_IDS } from '../data/business'
 import { TECHS } from '../data/techTree'
 import { BUILDING_SPECS, UNIT_SPECS, buildingCost, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from './arms'
+import { incomingArmies } from './armies'
+import { clockOf } from './calendar'
 import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
 import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
@@ -18,7 +20,7 @@ import { netWarScore } from './warscore'
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'; region?: RegionId }
-  | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' }
+  | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
   | { desk: 'warRoom'; region: RegionId }
@@ -54,6 +56,20 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   const myPower = militaryPower(s, nationId)
   const myUnits = totalUnits(n.military.units)
   const capital = s.regions[n.capital]?.owner === nationId ? n.capital : Object.values(s.regions).find((r) => r.owner === nationId)?.id
+
+  // Live games: armies marching on you, and what you can still do about them.
+  for (const army of incomingArmies(s, nationId).filter((a) => a.nationId !== nationId)) {
+    const days = Math.max(0, Math.ceil(army.end - clockOf(s)))
+    const home = totalUnits(n.military.units)
+    const theirs = totalUnits(army.units)
+    add('now', 120 - Math.min(60, days * 6), {
+      id: `incoming-${army.id}`,
+      title: `${s.nations[army.nationId]?.name ?? 'An enemy'} is marching on ${name(army.target)}`,
+      detail: `${theirs.toFixed(1)} divisions arrive in ${days} ${days === 1 ? 'day' : 'days'}, against ${home.toFixed(1)} at home. Call your armies back, raise a shield, fire missiles, or make peace to turn them round.`,
+      action: 'See the armies',
+      target: { desk: 'military', tab: 'armies' },
+    })
+  }
 
   // Food
   if (n.foodShortage) {

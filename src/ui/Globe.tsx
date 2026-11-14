@@ -78,6 +78,8 @@ interface Marker {
   city?: boolean
   /** A live battle's pin, with its Defense Line bar. */
   battle?: BattleOverlay
+  /** A short note floating up over the place, such as "+2 Infantry". */
+  pop?: string
 }
 
 /** The pin for a live battle: its name, a Defense Line bar that drains from before to after, and who won. */
@@ -109,6 +111,12 @@ function paintBattle(b: BattleOverlay, reduced: boolean): HTMLElement {
 function paintMarker(d: object): HTMLElement {
   const m = d as Marker
   if (m.battle) return paintBattle(m.battle, useGame.getState().settings.reducedMotion)
+  if (m.pop) {
+    const el = document.createElement('div')
+    el.className = 'unit-pop'
+    el.textContent = m.pop
+    return el
+  }
   const el = document.createElement('div')
   el.style.pointerEvents = 'none'
   el.style.whiteSpace = 'nowrap'
@@ -142,6 +150,7 @@ export function WorldGlobe() {
   const fxQueue = useGame((s) => s.fxQueue)
   const rings = useFx((s) => s.rings)
   const battles = useFx((s) => s.battles)
+  const pops = useFx((s) => s.pops)
   const revealedBattleId = useFx((s) => s.revealedBattleId)
   const ref = useRef<GlobeMethods | undefined>(undefined)
   const [hover, setHover] = useState<RegionId | null>(null)
@@ -304,13 +313,14 @@ export function WorldGlobe() {
     pinsRef.current = { key, list: out }
     return out
   }, [game])
-  const battlePins = useRef(new Map<string, Marker>())
+  const overlayPins = useRef(new Map<string, Marker>())
   const markers = useMemo<Marker[]>(() => {
     const kept = new Map<string, Marker>()
-    for (const b of battles) kept.set(b.id, battlePins.current.get(b.id) ?? { key: `battle:${b.id}`, lat: b.lat, lng: b.lng, title: b.place, yours: true, battle: b })
-    battlePins.current = kept
+    for (const b of battles) kept.set(`battle:${b.id}`, overlayPins.current.get(`battle:${b.id}`) ?? { key: `battle:${b.id}`, lat: b.lat, lng: b.lng, title: b.place, yours: true, battle: b })
+    for (const p of pops) kept.set(`pop:${p.id}`, overlayPins.current.get(`pop:${p.id}`) ?? { key: `pop:${p.id}`, lat: p.lat, lng: p.lng, title: p.text, yours: true, pop: p.text })
+    overlayPins.current = kept
     return kept.size ? [...pins, ...kept.values()] : pins
-  }, [pins, battles])
+  }, [pins, battles, pops])
 
   const army = useArmyLayer(ref, reducedMotion)
   const allRings = useMemo(() => (army.threatRings.length ? [...rings, ...army.threatRings] : rings), [rings, army.threatRings])

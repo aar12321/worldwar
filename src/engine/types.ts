@@ -420,6 +420,8 @@ export type LogKind = 'news' | 'info' | 'war' | 'battle' | 'tech' | 'economy' | 
 
 export interface LogEntry {
   turn: number
+  /** Live games: the day of the month it happened. */
+  day?: number
   kind: LogKind
   text: string
   nations: NationId[]

@@ -28,7 +28,16 @@ export interface BattleOverlay {
   mine: boolean
 }
 
+/** A short note that floats up over a place, such as "+2 Infantry" when training finishes. */
+export interface Pop {
+  id: number
+  lat: number
+  lng: number
+  text: string
+}
+
 interface FxState {
+  pops: Pop[]
   rings: FxRing[]
   battles: BattleOverlay[]
   /** Countries that keep their old color for a moment after they were taken, so the capture lands when the fight is over. */
@@ -39,6 +48,7 @@ interface FxState {
   revealedBattleId: string | null
   addRing(ring: Omit<FxRing, 'id'>, ttlMs: number): void
   addBattle(battle: BattleOverlay, ttlMs: number): void
+  addPop(pop: Omit<Pop, 'id'>, ttlMs: number): void
   hold(regionId: string, color: string, ms: number): void
   shake(strength: number): void
   reveal(battleId: string | null): void
@@ -49,6 +59,7 @@ let ringId = 1
 export const useFx = create<FxState>((set) => ({
   rings: [],
   battles: [],
+  pops: [],
   held: {},
   shakeKey: 0,
   shakeStrength: 1,
@@ -60,6 +71,11 @@ export const useFx = create<FxState>((set) => ({
     const id = ringId++
     set((s) => ({ rings: [...s.rings, { ...ring, id }] }))
     setTimeout(() => set((s) => ({ rings: s.rings.filter((r) => r.id !== id) })), ttlMs)
+  },
+  addPop(pop, ttlMs) {
+    const id = ringId++
+    set((s) => ({ pops: [...s.pops, { ...pop, id }] }))
+    setTimeout(() => set((s) => ({ pops: s.pops.filter((p) => p.id !== id) })), ttlMs)
   },
   hold(regionId, color, ms) {
     set((s) => ({ held: { ...s.held, [regionId]: color } }))
@@ -76,3 +92,4 @@ export const useFx = create<FxState>((set) => ({
 
 // A handle for browser tests, in development only.
 if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __globeBridge: typeof globeBridge }).__globeBridge = globeBridge
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __fx: typeof useFx }).__fx = useFx

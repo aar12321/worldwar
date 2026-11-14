@@ -1,4 +1,4 @@
-import { isLive } from '../engine/calendar'
+import { dayDate, isLive } from '../engine/calendar'
 import { useState } from 'react'
 import { turnDate } from '../engine/helpers'
 import type { LogKind } from '../engine/types'
@@ -41,7 +41,7 @@ export function LogPanel() {
         {entries.length === 0 && <p className="text-sm text-slate-500">No dispatches yet.</p>}
         {entries.map((l, i) => (
           <div key={i} className="text-sm border-l-2 border-slate-700 pl-2">
-            <span className="text-[10px] text-slate-500 font-display mr-2">{turnDate(l.turn)}</span>
+            <span className="text-[10px] text-slate-500 font-display mr-2">{l.day !== undefined ? dayDate(l.turn, l.day) : turnDate(l.turn)}</span>
             <span className={KIND_COLOR[l.kind]}>{l.text}</span>
           </div>
         ))}
