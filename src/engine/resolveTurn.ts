@@ -1,12 +1,12 @@
 import { TECH_BY_ID } from '../data/techTree'
+import { DIRECTIVES } from '../data/companies'
 import { FOCUS } from '../data/cities'
 import { JUSTIFY } from '../data/war'
 import { ACTION_LABELS } from '../data/crises'
 import { DOMESTIC_OPS, FOREIGN_OPS } from '../data/agencies'
 import { fundAgency, runDomestic, runOperation } from './agencies'
 import { GOVERNOR_LABELS, governorOrders } from './governors'
-import { COMPANY_BY_ID } from '../data/companies'
-import { buyShares, runStocks, sellShares } from './stocks'
+import { buyShares, runStocks, sellShares, setDirective } from './stocks'
 import { SYSTEM_SPECS } from '../data/systems'
 import { fundSystem, runStrike, runSystems } from './systems'
 import { INVEST, SECTORS } from '../data/business'
@@ -101,13 +101,15 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'domestic':
       return DOMESTIC_OPS[o.op].name
     case 'buyShares':
-      return `Buy ${o.shares} shares of ${COMPANY_BY_ID[o.company]?.name ?? o.company}`
+      return `Buy ${o.shares} shares of ${s.stocks.meta[o.company]?.name ?? o.company}`
     case 'sellShares':
-      return `Sell ${o.shares} shares of ${COMPANY_BY_ID[o.company]?.name ?? o.company}`
+      return `Sell ${o.shares} shares of ${s.stocks.meta[o.company]?.name ?? o.company}`
+    case 'setDirective':
+      return `Tell ${s.stocks.meta[o.company]?.name ?? o.company}: ${DIRECTIVES[o.directive]?.name ?? o.directive}`
     case 'fundSystem':
       return `Raise ${SYSTEM_SPECS[o.system].name}${(o.levels ?? 1) > 1 ? ` by ${o.levels} levels` : ''}`
     case 'strike':
-      return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Hypersonic strike on ${region(o.target)}`
+      return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Fire ${o.count ?? 1} missile${(o.count ?? 1) === 1 ? '' : 's'} at ${region(o.target)}`
     case 'setGovernor':
       return `Governor of ${region(o.regionId)}: ${GOVERNOR_LABELS[o.governor]}`
     case 'fundAgency':
@@ -140,7 +142,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 
 const PHASES: Order['type'][][] = [
   ['respond'],
-  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor'],
+  ['setPolicy', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor', 'setDirective'],
   ['cancelDeal', 'leaveAlliance'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose'],
   ['cancelTrain'],
@@ -190,7 +192,7 @@ export function resolveTurn(prev: GameState, map: WorldMap, orders: Order[]): Ga
   // Each nation's one attack for the turn. The AI goes in a seeded order.
   for (const o of live) {
     if (o.type !== 'attack' || validateOrder(s, map, o)) continue
-    resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance)
+    resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles)
   }
   resolveRebels(s, map, rng)
   // Armies that fought this turn are back at their posts for the next one.
@@ -240,7 +242,7 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
   n.resources.steel -= cost.steel
   const rng = createRng(s.seed, s.turn * 31 + s.nextId)
   if (o.type === 'attack') {
-    const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance)
+    const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles)
     s.outcome = checkOutcome(s, map)
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
   }
@@ -416,6 +418,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'strike':
       runStrike(s, map, o)
+      break
+    case 'setDirective':
+      setDirective(s, o.company, o.directive)
       break
     case 'buyShares':
       buyShares(s, o.nationId, o.company, o.shares)

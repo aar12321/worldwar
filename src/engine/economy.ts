@@ -7,6 +7,7 @@ import { NO_EFFECTS, type PolicyEffects } from '../data/government'
 import { TRAITS, traitOf } from '../data/traits'
 import { agencyUpkeep } from './agencies'
 import { systemUpkeep } from './systems'
+import { companyEffects } from './stocks'
 import { addLog, clamp, enemiesOf, nationModifiers, pairKey, sanctionersOf } from './helpers'
 import type { Rng } from './rng'
 import { checkDefault, type CreditReport, creditReport, dividendsFor, growSectors, sectorYield, subsidyBill } from './business'
@@ -186,6 +187,9 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const stabilityFactor = 0.6 + (0.4 * n.stability) / 100
   const pol = policyEffects(n)
   for (const k of Object.keys(traitEff) as (keyof PolicyEffects)[]) pol[k] += traitEff[k]
+  // Companies the nation controls and has put to work.
+  const firms = companyEffects(s, nationId)
+  for (const k of Object.keys(traitEff) as (keyof PolicyEffects)[]) if (k !== 'research') pol[k] += firms[k]
   const outputMult = stabilityFactor * (1 + mods.allOutput + pol.output)
   const atWarCount = enemiesOf(s, nationId).length
   const botBonus = n.isPlayer ? 0 : difficultyOf(s.settings.difficulty).botIncomeBonus
@@ -234,8 +238,10 @@ export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId):
   const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce * (1 + pol.foodUse) + armyFood
 
   const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn + pol.influence + land.pp
+  // Technology companies lift all of the nation's research, not only what its universities make.
   const tpGain =
-    0.5 + workforce * 0.04 + sy.research * outputMult + workingUniversities * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput + pol.research) * outputMult + land.tp
+    (1 + firms.research) *
+    (0.5 + workforce * 0.04 + sy.research * outputMult + workingUniversities * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput + pol.research) * outputMult + land.tp)
 
   const highTax = Math.max(0, n.taxRate - 0.2) * 150 * Math.max(0.2, 1 + pol.taxSensitivity)
   const lowTax = Math.max(0, 0.2 - n.taxRate) * 50
@@ -324,7 +330,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
     r.food = Math.min(r.food, e.workforce * ECON.foodCapPerWorkforce)
   }
   // Materials: steel only piles up, oil and goods can run out.
-  growSectors(n, e.workforce, policyEffects(n), enemiesOf(s, nationId).length > 0)
+  growSectors(n, e.workforce, policyEffects(n), enemiesOf(s, nationId).length > 0, companyEffects(s, nationId).expand)
   r.steel += e.steelProduction
   r.oil += e.netOil
   r.goods += e.netGoods

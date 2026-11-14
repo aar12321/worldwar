@@ -192,19 +192,19 @@ describe('strikes from afar', () => {
     s.nations.r0.resources.capital = 500
     s.nations.r0.resources.pp = 100
     s.regions.r0.buildings.factory = 1
-    s.regions.r3.line = 10
+    s.regions.r3.line = 6
     return s
   }
   it('a hypersonic salvo needs batteries and a war, and cuts the line and the factories', () => {
     const s = setup()
-    const order = { type: 'strike', nationId: 'r0', target: 'r3', weapon: 'missile' } as const
-    expect(validateOrder(s, map, order)).toMatch(/hypersonic battery/)
+    const order = { type: 'strike', nationId: 'r0', target: 'r3', weapon: 'missile', count: 4 } as const
+    expect(validateOrder(s, map, order)).toMatch(/hypersonic missiles/)
     setMilitary(s, 'r0', { infantry: 10, missile: 4 })
     expect(validateOrder(s, map, order)).toBeNull()
     const next = resolveTurn(s, map, [order])
-    expect(next.regions.r3.line).toBeLessThan(10)
+    expect(next.regions.r3.line).toBeLessThan(6)
     expect(next.regions.r3.sabotaged).toBeGreaterThan(0)
-    expect(next.log.some((l) => l.text.includes('Hypersonic missiles'))).toBe(true)
+    expect(next.log.some((l) => l.text.includes('hypersonic missiles'))).toBe(true)
     expect(validateOrder({ ...s, nations: { ...s.nations } }, map, { ...order, target: 'r1' })).toMatch(/at war/)
   })
 
@@ -226,7 +226,7 @@ describe('strikes from afar', () => {
     s.nations.r0.systems.orbital = 2
     expect(validateOrder(s, map, order)).toBeNull()
     const next = resolveTurn(s, map, [order])
-    expect(next.regions.r3.line).toBeLessThan(10 - FRONTIER.orbitalLine + 1)
+    expect(next.regions.r3.line).toBeLessThan(6 - FRONTIER.orbitalLine + 1)
     expect(next.regions.r3.buildings.factory).toBe(2)
     expect(next.infamy.r0).toBeGreaterThan(0)
     expect(validateOrder(next, map, order)).toMatch(/recharges/)
@@ -239,5 +239,95 @@ describe('strikes from afar', () => {
     s.nations.r0.systems.orbital = 1
     const next = resolveTurn(s, map, [])
     expect((next.intel['r0|r3'] ?? 0) >= next.turn).toBe(true)
+  })
+})
+
+describe('firing missiles as many times as you have them', () => {
+  const map = lineMap(4)
+  const world = () => {
+    const s = startState(map)
+    s.wars.push('r0|r3')
+    s.nations.r0.resources.capital = 1000
+    s.regions.r0.buildings.factory = 1
+    s.regions.r3.line = 6.4
+    s.wars.push('r0|r1')
+    s.regions.r1.line = 5
+    setMilitary(s, 'r0', { infantry: 10, missile: 10 })
+    return s
+  }
+  const fire = (count: number, target = 'r3') => ({ type: 'strike', nationId: 'r0', target, weapon: 'missile', count }) as const
+
+  it('costs a little more than before', () => {
+    expect(UNIT_SPECS.missile.capitalCost).toBe(55)
+    expect(UNIT_SPECS.missile.steel).toBe(7)
+  })
+
+  it('lets you choose how many to fire, and uses up exactly those', () => {
+    const s = world()
+    const next = resolveTurn(s, map, [fire(4)])
+    expect(next.nations.r0.military.units.missile).toBeCloseTo(6, 5)
+    expect(next.regions.r3.line).toBeLessThan(20)
+    expect(next.log.some((l) => l.text.startsWith('4 hypersonic missiles'))).toBe(true)
+    // More missiles do more damage.
+    const one = resolveTurn(world(), map, [fire(1)])
+    const many = resolveTurn(world(), map, [fire(6)])
+    expect(many.regions.r3.line).toBeLessThan(one.regions.r3.line)
+  })
+
+  it('allows several strikes in one month, up to the missiles you have', () => {
+    const s = world()
+    expect(validateOrder(s, map, fire(4))).toBeNull()
+    expect(validateOrder(s, map, fire(4), [fire(4)])).toBeNull()
+    expect(validateOrder(s, map, fire(4), [fire(4), fire(4)])).toMatch(/Only 2 missiles left/)
+    expect(validateOrder(s, map, fire(1), [fire(5), fire(5)])).toMatch(/No missiles left/)
+    const next = resolveTurn(s, map, [fire(4), fire(3), fire(3)])
+    expect(next.nations.r0.military.units.missile).toBeCloseTo(0, 5)
+    expect(next.regions.r3.line).toBeLessThan(resolveTurn(world(), map, [fire(4)]).regions.r3.line)
+  })
+
+  it('rejects a bad number of missiles', () => {
+    const s = world()
+    expect(validateOrder(s, map, fire(0))).toMatch(/how many/)
+    expect(validateOrder(s, map, fire(1.5))).toMatch(/how many/)
+    expect(validateOrder(s, map, fire(11))).toMatch(/Only 10/)
+  })
+
+  it('lets you choose how many to fire in a battle, and uses them up', () => {
+    const s = world()
+    s.regions.r1.line = 5
+    setMilitary(s, 'r1', { infantry: 4 })
+    const few = structuredClone(s)
+    const lots = structuredClone(s)
+    const a = applyOrderNow(few, map, { type: 'attack', nationId: 'r0', target: 'r1', commit: 'main', stance: 'assault', missiles: 2 })
+    const b = applyOrderNow(lots, map, { type: 'attack', nationId: 'r0', target: 'r1', commit: 'main', stance: 'assault', missiles: 9 })
+    expect(a.error).toBeNull()
+    expect(b.error).toBeNull()
+    expect(few.nations.r0.military.units.missile).toBeCloseTo(8, 0)
+    expect(lots.nations.r0.military.units.missile).toBeLessThan(2)
+    expect(a.battle?.modifiers.some((m) => m.startsWith('Fired 2 hypersonic'))).toBe(true)
+    expect(b.battle?.modifiers.some((m) => m.startsWith('Fired 9 hypersonic'))).toBe(true)
+    // Nine missiles cut the line further than two.
+    expect(b.battle?.lineAfter ?? 99).toBeLessThanOrEqual(a.battle?.lineAfter ?? 0)
+  })
+
+  it('cannot fire more in a battle than you hold, or more than other strikes have left', () => {
+    const s = world()
+    const attack = (missiles: number) => ({ type: 'attack', nationId: 'r0', target: 'r1', commit: 'main', stance: 'assault', missiles }) as const
+    expect(validateOrder(s, map, attack(11))).toMatch(/only have 10/)
+    expect(validateOrder(s, map, attack(6), [fire(5)])).toMatch(/only have 5/)
+    expect(validateOrder(s, map, attack(0))).toBeNull()
+    expect(validateOrder(s, map, attack(-1))).toMatch(/how many/)
+  })
+
+  it('fires none when you choose none, and the forecast follows the choice', () => {
+    const s = world()
+    s.regions.r1.line = 6
+    setMilitary(s, 'r1', { infantry: 4 })
+    const none = forecastAttack(s, map, 'r0', 'r1', 'main', 'assault', 16, 0)!
+    const all = forecastAttack(s, map, 'r0', 'r1', 'main', 'assault', 16, 10)!
+    expect(all.lineDamage).toBeGreaterThan(none.lineDamage)
+    const real = structuredClone(s)
+    applyOrderNow(real, map, { type: 'attack', nationId: 'r0', target: 'r1', commit: 'main', stance: 'assault', missiles: 0 })
+    expect(real.nations.r0.military.units.missile).toBe(10)
   })
 })

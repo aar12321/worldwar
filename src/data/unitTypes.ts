@@ -44,7 +44,7 @@ export const UNIT_SPECS: Record<UnitType, UnitSpec> = {
   naval: { name: 'Warships', role: 'Fights only on coasts. A port lets you attack across the sea.', attack: 1.6, defense: 1.4, capitalCost: 35, manpowerCost: 4, upkeep: 1.6, food: 0.15, steel: 5, oil: 0.2, requiresBuilding: 'port' },
   drone: { name: 'Drone Swarms', role: 'Cheap and expendable, they take the first losses so your soldiers live. Deadly to tanks and guns. Interceptor shields and enemy fighters shoot them down; Cyber Command can jam them.', attack: 1.8, defense: 0.6, capitalCost: 12, manpowerCost: 0, upkeep: 0.4, food: 0, steel: 1, oil: 0.05, requiresBuilding: 'factory' },
   robot: { name: 'Robot Infantry', role: 'A line unit that needs no soldiers, strong in cities and mountains, and its losses never tire your people. Stronger Cyber Command on the other side can hack it.', attack: 1.6, defense: 2.2, capitalCost: 30, manpowerCost: 0, upkeep: 1.2, food: 0, steel: 4, oil: 0.1, requiresBuilding: 'factory' },
-  missile: { name: 'Hypersonic Batteries', role: 'Strikes first, before the air war, and cracks the Defense Line directly. Can also hit a country far away. An Interceptor Shield stops a share of every salvo.', attack: 3, defense: 0.4, capitalCost: 45, manpowerCost: 0, upkeep: 1.8, food: 0, steel: 6, oil: 0.05, requiresBuilding: 'factory' },
+  missile: { name: 'Hypersonic Batteries', role: 'Strikes first, before the air war, and cracks the Defense Line directly. You choose how many to fire in a battle or a strike from afar, and each one fired is used up. An Interceptor Shield stops a share of every salvo.', attack: 3, defense: 0.4, capitalCost: 55, manpowerCost: 0, upkeep: 1.8, food: 0, steel: 7, oil: 0.05, requiresBuilding: 'factory' },
 }
 
 export interface BuildingSpec {

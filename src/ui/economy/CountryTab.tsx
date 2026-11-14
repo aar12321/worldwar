@@ -11,16 +11,98 @@ import { regionsOf } from '../../engine/helpers'
 import { BUILDING_TYPES } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
+import { useMemo, useState } from 'react'
+import { planBulk, type BulkTarget } from '../../engine/bulk'
 import { Pips } from '../bits'
 import { usePlayerView } from '../hooks'
 import { OrderButton } from '../panel'
 import { Card } from './parts'
+
+/** Upgrade every country at once: one kind of building, every city, or a little of everything, with the exact cost shown first. */
+function BulkUpgrade({ owned }: { owned: string[] }) {
+  const view = usePlayerView()!
+  const issueBatch = useGame((s) => s.issueBatch)
+  const { game, player } = view
+  const { map } = getWorld()
+  const [target, setTarget] = useState<BulkTarget>('factory')
+  const [levels, setLevels] = useState(1)
+  const [settledOnly, setSettledOnly] = useState(false)
+  const [keepReserve, setKeepReserve] = useState(true)
+  const plan = useMemo(
+    () => planBulk(game, map, player.id, { target, levels, settledOnly, reserve: keepReserve ? EMPIRE.governorReserve : 0 }),
+    [game, map, player.id, target, levels, settledOnly, keepReserve],
+  )
+  const reasons = [plan.skipped.atMax > 0 && `${plan.skipped.atMax} already at their highest level`, plan.skipped.noMoney > 0 && `${plan.skipped.noMoney} not affordable`].filter(Boolean)
+  return (
+    <div className="rounded-xl bg-white/5 p-3 space-y-2.5">
+      <div>
+        <div className="text-[15px] font-semibold">Upgrade everything at once</div>
+        <p className="text-[12px] text-white/65">Spreads the money evenly: the lowest-level countries go first, and one level is added everywhere before a second is added anywhere.</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="block text-[13px]">
+          <span className="label block mb-1">Upgrade</span>
+          <select className="field w-full px-2 py-1.5" value={target} onChange={(e) => setTarget(e.target.value as BulkTarget)} aria-label="What to upgrade">
+            {BUILDING_TYPES.map((b) => (
+              <option key={b} value={b}>
+                {BUILDING_SPECS[b].name}
+              </option>
+            ))}
+            <option value="cities">Every city</option>
+            <option value="all">A little of everything</option>
+          </select>
+        </label>
+        <label className="block text-[13px]">
+          <span className="label block mb-1">Levels in each country</span>
+          <select className="field w-full px-2 py-1.5" value={levels} onChange={(e) => setLevels(+e.target.value)} aria-label="Levels in each country">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>
+                {n === 1 ? 'One level' : `Up to ${n} levels`}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={settledOnly} onChange={(e) => setSettledOnly(e.target.checked)} /> Only countries that have settled
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={keepReserve} onChange={(e) => setKeepReserve(e.target.checked)} /> Keep {EMPIRE.governorReserve} money in reserve
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-[13px] text-white/80" aria-live="polite">
+          {plan.upgrades > 0 ? (
+            <>
+              <strong>{plan.upgrades}</strong> upgrade{plan.upgrades === 1 ? '' : 's'} in <strong>{plan.countries}</strong> of {owned.length} countries for <strong>{Math.round(plan.cost)} money</strong>.
+            </>
+          ) : (
+            'Nothing can be upgraded with these settings.'
+          )}
+          {reasons.length > 0 && <span className="block text-white/60">Skipped: {reasons.join(', ')}.</span>}
+        </div>
+        <button
+          className="btn btn-primary"
+          disabled={plan.upgrades === 0}
+          onClick={() => {
+            const r = issueBatch(plan.orders)
+            if (r.done > 0) useGame.getState().toast(`${r.done} upgrade${r.done === 1 ? '' : 's'} made`, 'success', 3000)
+          }}
+        >
+          Upgrade all
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /** Every country you hold, in one list: its trait, how settled it is, and a governor who develops it for you. */
 function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
   const view = usePlayerView()!
   const setPicked = useGame((s) => s.setEconomyRegion)
   const issueOrder = useGame((s) => s.issueOrder)
+  const issueBatch = useGame((s) => s.issueBatch)
   const { game, player } = view
   const { map } = getWorld()
   const unsettled = owned.filter((id) => game.regions[id].integration < 1).length
@@ -31,6 +113,26 @@ function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
         <span className="text-[13px] text-white/70">
           {owned.length} countries{unsettled > 0 ? ` · ${unsettled} still settling` : ''}. A governor upgrades a country each month and never spends your last {EMPIRE.governorReserve} money.
         </span>
+      </div>
+      <BulkUpgrade owned={owned} />
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-3 py-2">
+        <span className="text-[13px] text-white/80">Set a governor for every country</span>
+        <select
+          className="field px-2 py-1.5 text-[13px]"
+          aria-label="Governor for every country"
+          value=""
+          onChange={(e) => {
+            if (!e.target.value) return
+            issueBatch(owned.map((id) => ({ type: 'setGovernor' as const, nationId: player.id, regionId: id, governor: e.target.value as Governor })))
+          }}
+        >
+          <option value="">Choose a plan for all…</option>
+          {(Object.keys(GOVERNOR_LABELS) as Governor[]).map((g) => (
+            <option key={g} value={g}>
+              {GOVERNOR_LABELS[g]}
+            </option>
+          ))}
+        </select>
       </div>
       <ul className="space-y-1.5">
         {owned.map((id) => {

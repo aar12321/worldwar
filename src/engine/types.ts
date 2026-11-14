@@ -353,7 +353,7 @@ export type Order =
   | { type: 'marketBuy'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'marketSell'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'setAutoBuy'; nationId: NationId; resources: TradeResource[] }
-  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance }
+  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many missiles to fire in this battle. Left out, a share of them fire with the force sent. */ missiles?: number }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'buildCase'; nationId: NationId; target: NationId }
@@ -367,11 +367,12 @@ export type Order =
   | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
   | { type: 'fundSystem'; nationId: NationId; system: SystemId; levels?: number }
-  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital' }
+  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital'; /** Missiles to fire in a hypersonic strike. */ count?: number }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId; /** How many levels to buy at once. One if left out. */ levels?: number }
   | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
   | { type: 'buyShares'; nationId: NationId; company: string; shares: number }
   | { type: 'sellShares'; nationId: NationId; company: string; shares: number }
+  | { type: 'setDirective'; nationId: NationId; company: string; directive: Directive }
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
@@ -446,15 +447,33 @@ export interface Crisis {
   answered: NationId[]
 }
 
+/** What a company has been told to do by the nation that controls it. */
+export type Directive = 'payout' | 'expand' | 'focus'
+
+export interface CompanyInfo {
+  name: string
+  sector: SectorId
+  /** The country (region) it is based in. Whoever holds that country can invest in it. */
+  home: RegionId
+  /** That country's name, for messages. */
+  country: string
+  /** The price a share started at. Prices stay in a range around it. */
+  base: number
+}
+
 export interface StockState {
+  /** Every listed company: who it is, where it is based. */
+  meta: Record<string, CompanyInfo>
   /** Share price of each listed company. */
   price: Record<string, number>
   /** Last month's price, to show the change. */
   last: Record<string, number>
   /** The home sector's size last month, to see whether it grew. */
   size: Record<string, number>
-  /** Shares each nation holds: nation -> company -> shares. */
+  /** Shares each nation holds: nation -> company -> shares. Only the nation that holds a company's country can hold its shares. */
   held: Record<NationId, Record<string, number>>
+  /** What each company is doing. A company that is not listed here pays dividends. */
+  directive: Record<string, Directive>
   /** The market's mood: a crash or boom that fades. */
   mood: number
   /** The whole exchange as one number, starting at 100. */

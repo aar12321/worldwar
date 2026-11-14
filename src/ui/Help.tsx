@@ -30,9 +30,9 @@ const TERMS: [string, string][] = [
   ['Reputation', 'Starting wars and taking land make other nations uneasy about you. It fades over a couple of years.'],
   ['Reach', 'You attack across a border or a short sea lane. A port plus warships reaches any coast in the world, and fighters or strike aircraft with a factory as a base reach anything within 7000 km. Overseas attacks fight with a penalty.'],
   ['Agencies', 'An intelligence service works abroad (intelligence, cases for war, sabotage, rebels, coups, theft) and a security service works at home. Each level adds a team. Odds are shown first.'],
-  ['Frontier weapons', 'Drone Swarms take the first losses and shred tanks. Robot Infantry need no soldiers and never tire your people. Hypersonic Batteries strike first and crack the Defense Line. Each has a counter: shields, fighters, and Cyber Command.'],
+  ['Frontier weapons', 'Drone Swarms take the first losses and shred tanks. Robot Infantry need no soldiers and never tire your people. Hypersonic missiles strike first and crack the Defense Line. You choose how many to fire in a battle or a strike, as often as you have missiles, and each one fired is used up. Each has a counter: shields, fighters, and Cyber Command.'],
   ['Systems', 'Cyber Command, Interceptor Shield, AI Battle Command, Quantum Codebreaking, Orbital Network and Nano-armor are programs you buy in three levels. They cost upkeep and each has a weakness.'],
-  ['Stocks', 'Made-up companies whose prices follow their home country. They pay dividends, and shares in a country you go to war with are seized.'],
+  ['Stocks', 'Made-up companies in the countries you hold, at most two in a very developed one. Buy shares to take a stake: a board seat at 25% lets you tell a company what to do (pay dividends, expand its sector, or specialize for research, cheaper units, income and more), at full strength from 51%. If another nation takes the country, it takes your shares.'],
   ['Empire and governors', 'Every country you hold is listed together in Economy. A governor upgrades a country each month on a plan you pick.'],
 ]
 

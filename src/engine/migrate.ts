@@ -1,3 +1,4 @@
+import { addLog } from './helpers'
 import { newStocks } from './stocks'
 import { EVENT_BY_ID } from '../data/events'
 import { startingCities } from './cities'
@@ -59,10 +60,22 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   game.infamy ??= {}
   game.cases ??= []
   game.intel ??= {}
-  game.stocks ??= newStocks(map)
-  // Prices from before shares were made affordable are scaled down to the new range.
-  for (const [id, p] of Object.entries(game.stocks.price)) if (p > 100) game.stocks.price[id] = Math.max(0.2, (p * 5) / 100)
-  for (const id of Object.keys(game.stocks.last)) if (game.stocks.last[id] > 100) game.stocks.last[id] = game.stocks.price[id] ?? 5
+  // The first exchange let any nation buy anywhere. Today only the country's holder can invest, so old holdings are cashed out at their old prices and the new exchange opens.
+  if (!game.stocks?.meta) {
+    const old = game.stocks
+    for (const [nationId, book] of Object.entries(old?.held ?? {})) {
+      const nation = game.nations[nationId]
+      if (!nation) continue
+      let refund = 0
+      for (const [company, shares] of Object.entries(book)) refund += shares * (old?.price?.[company] ?? 0) * 0.99
+      if (refund > 0) {
+        nation.resources.capital += refund
+        if (nation.isPlayer) addLog(game, 'economy', `The exchange was reorganized: you can now invest only in companies in your own territory. Your old shares were sold for ${Math.round(refund)} money.`, [nationId])
+      }
+    }
+    game.stocks = newStocks(map)
+  }
+  game.stocks.directive ??= {}
   game.crises ??= []
   game.sanctions ??= []
   game.guarantees ??= []

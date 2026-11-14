@@ -50,7 +50,7 @@ export function growthClimate(n: Nation, pol: Pick<PolicyEffects, 'growth'>): nu
 const WAR_MULT: Record<SectorId, number> = { farming: 0.9, energy: 1, manufacturing: 1.1, arms: 1.3, technology: 0.9, finance: 0.7 }
 
 /** One month of growth for every sector. Pure on the nation; the caller supplies workforce and policy. */
-export function growSectors(n: Nation, workforce: number, pol: Pick<PolicyEffects, 'growth'>, atWarNow: boolean) {
+export function growSectors(n: Nation, workforce: number, pol: Pick<PolicyEffects, 'growth'>, atWarNow: boolean, extra: Partial<Record<SectorId, number>> = {}) {
   const cap = sectorCap(workforce)
   const climate = growthClimate(n, pol)
   for (const id of SECTOR_IDS) {
@@ -60,7 +60,7 @@ export function growSectors(n: Nation, workforce: number, pol: Pick<PolicyEffect
     } else {
       const subsidy = n.subsidies.includes(id) ? 1 + BUSINESS.subsidyGrowth : 1
       const war = atWarNow ? WAR_MULT[id] : 1
-      const rate = BUSINESS.growth * climate * subsidy * war
+      const rate = BUSINESS.growth * climate * subsidy * war + (extra[id] ?? 0)
       size += rate * size * Math.max(0, 1 - size / cap) + (size < cap ? BUSINESS.seed * cap * climate * subsidy : 0)
     }
     n.sectors[id] = Math.min(cap * 1.5, Math.max(0, size))

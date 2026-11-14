@@ -1,14 +1,14 @@
-import { SYSTEM_IDS, SYSTEM_MAX, SYSTEM_SPECS, systemsCost, type SystemId } from '../data/systems'
+import { SYSTEM_IDS, SYSTEM_MAX, SYSTEM_SPECS, type SystemId } from '../data/systems'
 import { TECH_BY_ID } from '../data/techTree'
 import { hasTech } from '../engine/helpers'
-import { systemUpkeep } from '../engine/systems'
+import { fundSystemCost, systemUpkeep } from '../engine/systems'
 import { fmt, usePlayerView } from './hooks'
 import { Pips } from './bits'
 import { OrderButton } from './panel'
 
 function SystemCard({ id }: { id: SystemId }) {
   const view = usePlayerView()!
-  const { player } = view
+  const { player, game } = view
   const spec = SYSTEM_SPECS[id]
   const level = player.systems[id] ?? 0
   const unlocked = hasTech(player, spec.tech)
@@ -43,7 +43,7 @@ function SystemCard({ id }: { id: SystemId }) {
                 key={levels}
                 order={{ type: 'fundSystem', nationId: player.id, system: id, levels }}
                 label={`Raise to level ${level + levels}`}
-                cost={`${fmt(systemsCost(id, level, levels), 0)} money`}
+                cost={`${fmt(fundSystemCost(game, { type: 'fundSystem', nationId: player.id, system: id, levels }), 0)} money`}
                 effect={levels === 1 ? 'Takes effect at once.' : `${levels} levels at once.`}
               />
             ))}
