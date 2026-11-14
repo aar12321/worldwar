@@ -414,6 +414,8 @@ export interface BattleReport {
   lineMax?: number
   /** Live mode: the army that fought it. */
   armyId?: string
+  /** Set by the screen on a battle watched again from the list, so the globe does not treat it as news. */
+  replay?: boolean
 }
 
 export type LogKind = 'news' | 'info' | 'war' | 'battle' | 'tech' | 'economy' | 'event' | 'spy' | 'diplomacy'
@@ -565,6 +567,8 @@ export interface GameState {
   launches?: PlannedLaunch[]
   /** Live mode only: hypersonic salvos in the air. */
   flights?: MissileFlight[]
+  /** Live mode only: the absolute day whose business waits until the player answers a decision that came with the new month. */
+  pendingDay?: number
 }
 
 /** How an army gets to its target. Over water or air it fights with the amphibious penalty. */
@@ -600,8 +604,16 @@ export interface Army {
   end: number
   launched: number
   battleId?: string
-  outcome?: 'captured' | 'won' | 'repulsed' | 'recalled' | 'peace' | 'taken'
+  outcome?: ArmyOutcome
+  /** The nation that held the target when the army set out. Older saves do not have it. */
+  foe?: NationId
 }
+
+/**
+ * How an army's march ended. `taken`: the country was already its own. `changed`: another nation now holds it.
+ * `peace`: the war is over. `cut`: the country it set out from was lost, so it could not be supplied.
+ */
+export type ArmyOutcome = 'captured' | 'won' | 'repulsed' | 'recalled' | 'peace' | 'taken' | 'changed' | 'cut'
 
 /** Live mode: an attack the AI means to launch on a given day. */
 export interface PlannedLaunch {
@@ -621,4 +633,6 @@ export interface MissileFlight {
   launched: number
   /** Absolute day it lands. */
   lands: number
+  /** Who held the target when it was fired. */
+  foe?: NationId
 }

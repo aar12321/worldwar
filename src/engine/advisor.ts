@@ -5,11 +5,11 @@ import { TECHS } from '../data/techTree'
 import { BUILDING_SPECS, UNIT_SPECS, buildingCost, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from './arms'
 import { incomingArmies } from './armies'
-import { clockOf } from './calendar'
+import { absDate, clockOf } from './calendar'
 import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
 import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
-import { militaryPower, militarySheet } from './militaryStats'
+import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { validateOrder } from './orders'
 import { monthsToElection } from './politics'
 import type { BuildingType, GameState, Milestone, NationId, Order, RegionId, WorldMap } from './types'
@@ -59,13 +59,14 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
 
   // Live games: armies marching on you, and what you can still do about them.
   for (const army of incomingArmies(s, nationId).filter((a) => a.nationId !== nationId)) {
+    // The date, not a countdown: the advice is worked out on quiet days only, and a date stays true while the clock runs.
     const days = Math.max(0, Math.ceil(army.end - clockOf(s)))
     const home = totalUnits(n.military.units)
     const theirs = totalUnits(army.units)
     add('now', 120 - Math.min(60, days * 6), {
       id: `incoming-${army.id}`,
       title: `${s.nations[army.nationId]?.name ?? 'An enemy'} is marching on ${name(army.target)}`,
-      detail: `${theirs.toFixed(1)} divisions arrive in ${days} ${days === 1 ? 'day' : 'days'}, against ${home.toFixed(1)} at home. Call your armies back, raise a shield, fire missiles, or make peace to turn them round.`,
+      detail: `${theirs.toFixed(1)} divisions arrive on ${absDate(Math.ceil(army.end))}, against ${home.toFixed(1)} at home. Call your armies back, raise a shield, fire missiles, or offer peace: they answer within a day.`,
       action: 'See the armies',
       target: { desk: 'military', tab: 'armies' },
     })
@@ -317,7 +318,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       const owner = r.owner
       if (owner === nationId || !s.nations[owner]?.alive || isAllied(s, nationId, owner) || hasPact(s, nationId, owner)) continue
       if (!canAttackRegion(s, map, nationId, r.id).ok) continue
-      const defense = militaryPower(s, owner) + garrisonStrength(s, map, r.id) * 1.2
+      const defense = homePower(s, owner) + garrisonStrength(s, map, r.id) * 1.2
       const ratio = myPower / Math.max(0.5, defense)
       if (!target || ratio > target.ratio) target = { region: r.id, owner, ratio }
     }

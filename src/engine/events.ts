@@ -164,13 +164,13 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         if (region && region.owner === nationId) region.rebels += e.strength
         break
       case 'loseBuilding':
-        if (region && region.buildings[e.building] > 0) region.buildings[e.building]--
+        if (region && region.owner === nationId && region.buildings[e.building] > 0) region.buildings[e.building]--
         break
       case 'addBuilding':
         if (region && region.owner === nationId) region.buildings[e.building]++
         break
       case 'popLoss':
-        if (region) region.population *= 1 - e.fraction
+        if (region && region.owner === nationId) region.population *= 1 - e.fraction
         break
       case 'warWeariness':
         n.warWeariness = clamp(n.warWeariness + e.amount, 0, 60)

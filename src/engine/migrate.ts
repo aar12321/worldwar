@@ -100,9 +100,33 @@ function cleanLive(game: GameState, map: WorldMap) {
   const point = (p: { lat?: unknown; lng?: unknown } | undefined) => !!p && finite(p.lat) && finite(p.lng)
   const lastDay = daysInMonth(game.turn) - 1
   game.day = finite(game.day) ? Math.min(lastDay, Math.max(0, Math.floor(game.day as number))) : 0
+  const VIAS = ['land', 'lane', 'fleet', 'air']
+  const PHASES = ['outbound', 'fighting', 'returning']
   game.armies = (Array.isArray(game.armies) ? game.armies : []).filter(
-    (a) => !!a && game.nations[a.nationId]?.alive && !!map.regions[a.target] && !!map.regions[a.home] && finite(a.start) && finite(a.end) && point(a.from) && point(a.to) && !!a.units && UNIT_TYPES.every((k) => finite(a.units[k]) && a.units[k] >= 0),
+    (a) =>
+      !!a &&
+      typeof a.id === 'string' &&
+      game.nations[a.nationId]?.alive &&
+      !!map.regions[a.target] &&
+      !!map.regions[a.home] &&
+      VIAS.includes(a.via) &&
+      PHASES.includes(a.phase) &&
+      finite(a.share) &&
+      a.share >= 0 &&
+      a.share <= 1 &&
+      finite(a.start) &&
+      finite(a.end) &&
+      point(a.from) &&
+      point(a.to) &&
+      !!a.units &&
+      UNIT_TYPES.every((k) => finite(a.units[k]) && a.units[k] >= 0),
   )
+  for (const a of game.armies) {
+    a.commit = ['probe', 'main', 'allin'].includes(a.commit) ? a.commit : 'main'
+    a.stance = ['assault', 'blitz', 'siege'].includes(a.stance) ? a.stance : 'assault'
+    a.bySea = !!a.bySea
+  }
+  if (game.pendingDay !== undefined && (!finite(game.pendingDay) || !game.pendingEvent)) delete game.pendingDay
   const armyIds = new Set(game.armies.map((a) => a.id))
   game.launches = (Array.isArray(game.launches) ? game.launches : []).filter((l) => !!l && finite(l.at) && !!l.order && !!game.nations[l.order.nationId]?.alive && !!game.regions[l.order.target] && !armyIds.has(l.id))
   game.flights = (Array.isArray(game.flights) ? game.flights : []).filter((f) => !!f && finite(f.lands) && finite(f.count) && !!game.nations[f.nationId]?.alive && !!map.regions[f.target])

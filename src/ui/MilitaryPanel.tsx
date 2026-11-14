@@ -73,7 +73,7 @@ function UnitCard({ line }: { line: UnitStatLine }) {
           order={{ type: 'queueTrain', nationId: player.id, unit: line.unit }}
           label="Train one"
           cost={`${orderCost(game, { type: 'queueTrain', nationId: player.id, unit: line.unit }).capital} money${spec.steel > 0 ? ` · ${spec.steel} steel` : ''}`}
-          effect={`${spec.manpowerCost > 0 ? `${spec.manpowerCost}k soldiers` : 'no soldiers needed'} · ready in ${months} ${months === 1 ? 'turn' : 'turns'}${spec.oil > 0 ? ` · burns ${spec.oil} oil a month` : ''}`}
+          effect={`${spec.manpowerCost > 0 ? `${spec.manpowerCost}k soldiers` : 'no soldiers needed'} · ready in ${months} ${months === 1 ? 'month' : 'months'}${spec.oil > 0 ? ` · burns ${spec.oil} oil a month` : ''}`}
           tone="btn-primary"
         />
         <OrderButton
@@ -142,7 +142,7 @@ function Forces() {
           <div key={j.id} className="flex items-center justify-between gap-3 text-[14px]">
             <span className="flex items-center gap-2">
               <UnitIcon unit={j.unit} size={18} />
-              {UNIT_SPECS[j.unit].name} <span className="text-white/70">· {i < sheet.trainingSlots ? `${j.remaining} ${j.remaining === 1 ? 'turn' : 'turns'} left` : 'waiting for a slot'}</span>
+              {UNIT_SPECS[j.unit].name} <span className="text-white/70">· {i < sheet.trainingSlots ? `${j.remaining} ${j.remaining === 1 ? 'month' : 'months'} left` : 'waiting for a slot'}</span>
             </span>
             <OrderButton order={{ type: 'cancelTrain', nationId: player.id, jobId: j.id }} label="Cancel" tone="btn-quiet" />
           </div>
@@ -159,7 +159,7 @@ function Forces() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-[16px] font-semibold">Commander</div>
-            <div className="text-[13px] text-white/70">{commander ? `${commander.name} drills your least-trained unit every turn, for free.` : 'A commander drills your least-trained unit every turn, for free.'}</div>
+            <div className="text-[13px] text-white/70">{commander ? `${commander.name} drills your least-trained unit every month, for free.` : 'A commander drills your least-trained unit every month, for free.'}</div>
           </div>
           <select
             className="field px-3 py-2 text-[14px]"

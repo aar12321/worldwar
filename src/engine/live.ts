@@ -1,13 +1,13 @@
 import { armiesToRecall, holdsBackLaunch } from '../ai/liveBot'
 import { LIVE } from '../data/live'
-import { bringHome, sendHome, turnBack, launchArmy } from './armies'
+import { bringHome, calledOff, sendHome, turnBack, launchArmy } from './armies'
 import { absDay, clockOf, daysInMonth, isLive } from './calendar'
 import { atWar, newId, totalUnits } from './helpers'
-import { validateOrder } from './orders'
+import { orderCost, validateOrder } from './orders'
 import { runMonth } from './resolveTurn'
 import { createRng } from './rng'
 import { strikeHits } from './systems'
-import type { Army, AttackOrder, BattleReport, GameState, MissileFlight, Order, TrainingJob, WorldMap } from './types'
+import type { Army, ArmyOutcome, AttackOrder, BattleReport, GameState, MissileFlight, Order, TrainingJob, WorldMap } from './types'
 import { checkOutcome } from './victory'
 import { resolveAttack } from './warfare'
 
@@ -24,9 +24,10 @@ export interface LiveInput {
 export type LiveEvent =
   | { kind: 'launched'; army: Army }
   | { kind: 'battle'; report: BattleReport; armyId: string; destroyed: boolean }
-  | { kind: 'turnedBack'; army: Army; why: NonNullable<Army['outcome']> }
+  | { kind: 'turnedBack'; army: Army; why: ArmyOutcome }
   | { kind: 'home'; army: Army }
-  | { kind: 'missile'; flight: MissileFlight; landed: boolean }
+  /** `why` says what happened to a salvo that did not land on an enemy: the country was already its own, changed hands, or the war ended. */
+  | { kind: 'missile'; flight: MissileFlight; landed: boolean; why?: 'taken' | 'changed' | 'peace' }
   | { kind: 'trained'; jobs: TrainingJob[] }
 
 export interface LiveStep {
@@ -62,10 +63,7 @@ function dueToday(s: GameState, map: WorldMap, today: number): boolean {
   if (s.flights?.some((f) => f.lands <= today)) return true
   for (const a of s.armies ?? []) {
     if (a.end <= today) return true
-    if (a.phase === 'outbound') {
-      const owner = s.regions[a.target]?.owner
-      if (!owner || owner === a.nationId || !atWar(s, a.nationId, owner)) return true
-    }
+    if (a.phase === 'outbound' && calledOff(s, a)) return true
   }
   // A rival that sees an army marching on it, even one the player sent between ticks, acts today.
   return armiesToRecall(s, map, today).length > 0
@@ -85,16 +83,19 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
       if (!s.nations[l.order.nationId]?.alive || validateOrder(s, map, l.order)) continue
       // A rival that is about to be attacked keeps its army at home.
       if (holdsBackLaunch(s, map, l.order.nationId)) continue
+      // The AI pays for its stance, as the player does.
+      const cost = orderCost(s, l.order).capital
       const army = launchArmy(s, map, l.order, today)
-      if (army) events.push({ kind: 'launched', army: snapshot(army) })
+      if (!army) continue
+      s.nations[l.order.nationId].resources.capital -= cost
+      events.push({ kind: 'launched', army: snapshot(army) })
     }
   }
 
-  // 2. An army whose reason has gone turns back: the war ended, or the country is already its own.
+  // 2. An army whose reason has gone turns back: the war ended, the country is already its own, or someone else took it.
   for (const a of [...(s.armies ?? [])].sort((x, y) => byDue(x, y, 0, 0))) {
     if (a.phase !== 'outbound') continue
-    const owner = s.regions[a.target]?.owner
-    const why = owner === a.nationId ? 'taken' : !owner || !atWar(s, a.nationId, owner) ? 'peace' : null
+    const why = calledOff(s, a)
     if (!why) continue
     const before = snapshot(a)
     turnBack(s, map, a, today, why)
@@ -115,13 +116,16 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
   for (const a of arriving) {
     // An earlier fight today may have ended this army's nation.
     if (!s.armies?.some((x) => x.id === a.id)) continue
-    const result = resolveAttack(s, map, a.nationId, a.target, rng, a.commit, a.stance, undefined, a)
+    // An earlier army may have taken the country today, or the country it set out from may have fallen while it marched.
+    const why: ArmyOutcome | null = calledOff(s, a) ?? (s.regions[a.home]?.owner !== a.nationId ? 'cut' : null)
+    const result = why ? null : resolveAttack(s, map, a.nationId, a.target, rng, a.commit, a.stance, undefined, a)
     if (!result) {
       // It cannot fight after all: it marches back from where it stands.
+      const reason = why ?? 'peace'
       const before = snapshot(a)
-      a.outcome = 'peace'
+      a.outcome = reason
       sendHome(s, map, a, today)
-      events.push({ kind: 'turnedBack', army: before, why: 'peace' })
+      events.push({ kind: 'turnedBack', army: { ...before, outcome: reason }, why: reason })
       continue
     }
     fought = true
@@ -160,8 +164,11 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
       if (hits) {
         strikeHits(s, map, f.nationId, f.target, f.count)
         fought = true
+        events.push({ kind: 'missile', flight: { ...f }, landed: true })
+      } else {
+        const why = owner === f.nationId ? 'taken' : !owner || !s.nations[owner]?.alive || (f.foe && owner !== f.foe) ? 'changed' : 'peace'
+        events.push({ kind: 'missile', flight: { ...f }, landed: false, why })
       }
-      events.push({ kind: 'missile', flight: { ...f }, landed: hits })
     }
   }
 
@@ -180,6 +187,16 @@ export function advanceDay(prev: GameState, map: WorldMap, input: LiveInput = {}
   const day = prev.day ?? 0
   const events: LiveEvent[] = []
 
+  // The 1st of the month waited for a decision. Now that it is made, the day's business runs before the clock moves on.
+  if (prev.pendingDay !== undefined) {
+    const s = structuredClone(prev)
+    const at = s.pendingDay!
+    delete s.pendingDay
+    s.battles = []
+    processDay(s, map, at, events)
+    return { state: s, events, monthEnded: false }
+  }
+
   if (day >= daysInMonth(prev.turn) - 1) {
     const s = structuredClone(prev)
     // For the month's work the clock already reads the 1st of the next month, so missiles fired by the AI count from then.
@@ -189,6 +206,12 @@ export function advanceDay(prev: GameState, map: WorldMap, input: LiveInput = {}
     s.day = 0
     planLaunches(s, attacks)
     if (trained.length) events.push({ kind: 'trained', jobs: trained })
+    // A game won or lost at the month's end stays that way, and a decision that came with the month is answered first.
+    if (s.outcome !== 'playing') return { state: s, events, monthEnded: true }
+    if (s.pendingEvent) {
+      s.pendingDay = clockOf(s)
+      return { state: s, events, monthEnded: true }
+    }
     processDay(s, map, clockOf(s), events)
     return { state: s, events, monthEnded: true }
   }

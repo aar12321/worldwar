@@ -216,11 +216,12 @@ export function GameOver() {
   const youWon = win && champion.id === game.playerId
   const p = youWon || !win ? game.nations[game.playerId] : champion
   const taken = countriesTaken(game, p.id)
+  const when = isLive(game) ? dayDate(game.turn, game.day ?? 0) : turnDate(game.turn)
   const reason = win
-    ? `${p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${turnDate(game.turn)}.`
+    ? `${p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${when}.`
     : game.humans.length > 1 || online
-      ? `Every player's nation has fallen, as of ${turnDate(game.turn)}.`
-      : `${p.name} fell in ${turnDate(game.turn)}. The nation is gone, so the game is lost.`
+      ? `Every player's nation has fallen, as of ${when}.`
+      : `${p.name} fell ${isLive(game) ? 'on' : 'in'} ${when}. The nation is gone, so the game is lost.`
   return (
     <Modal
       title={youWon ? 'You won' : win ? `${champion.name} won` : game.humans.length > 1 || online ? 'Every nation has fallen' : 'Your nation has fallen'}

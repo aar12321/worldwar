@@ -220,7 +220,7 @@ export function HUD() {
             {econ.corporateIncome !== 0 && <Row k="Business tax and banks" v={signed(econ.corporateIncome)} />}
             {econ.interest > 0 && <Row k="Interest on bonds" v={signed(-econ.interest)} warn />}
             {econ.warBills.length > 0 && <Row k={`War bills (${econ.warBills.length} of ${warLimit})`} v={signed(-econ.warBillTotal)} warn />}
-            <Row k="Waiting for next turn" v={fmt(-committed.capital)} />
+            <Row k={live ? 'Waiting for the 1st' : 'Waiting for next turn'} v={fmt(-committed.capital)} />
             {player.inDebt && <p className="text-[13px] text-[#ff6961]">In debt. Stability is falling.</p>}
           </Resource>
           <Resource label="Food" amount={player.resources.food} delta={signed(econ.netFood)} warn={player.foodShortage || econ.netFood < 0}>

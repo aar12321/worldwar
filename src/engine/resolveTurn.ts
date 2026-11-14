@@ -244,6 +244,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runSystems(s)
 
   s.turn++
+  // A live clock reads the 1st of the new month from here on, so the news below carries the right date.
+  if (isLive(s)) s.day = 0
   expireDiplomacy(s)
   // Surprise decisions are for single-player games. Online, everyone plans the same month, with no interruptions.
   const player = s.nations[s.humans[0] ?? s.playerId]

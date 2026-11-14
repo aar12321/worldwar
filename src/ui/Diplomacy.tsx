@@ -9,6 +9,7 @@ import { PACT_TURNS, describeProposal, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
 import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, regionsOf, turnDate } from '../engine/helpers'
 import { warCost } from '../engine/orders'
+import { isLive } from '../engine/calendar'
 import { CRISIS } from '../data/crises'
 import { EMPIRE, JUSTIFY } from '../data/war'
 import { validateOrder } from '../engine/orders'
@@ -126,7 +127,7 @@ function InboxCard({ p }: { p: Proposal }) {
       <div className="flex items-center justify-between gap-2">
         <span className={`text-[11px] ${left <= 0 ? 'text-rose-300' : 'text-slate-500'}`}>{left <= 0 ? 'Last month to answer' : `${left + 1} months to answer`}</span>
         <div className="flex gap-2">
-          <button className={`btn ${answer === true ? 'bg-emerald-400/25 border-emerald-300/70 text-emerald-100' : ''}`} disabled={!!acceptErr && answer !== true} title={acceptErr ?? 'Accept at the end of this month'} onClick={() => answerWith(true)}>
+          <button className={`btn ${answer === true ? 'bg-emerald-400/25 border-emerald-300/70 text-emerald-100' : ''}`} disabled={!!acceptErr && answer !== true} title={acceptErr ?? (isLive(game) ? 'Accept now' : 'Accept at the end of this month')} onClick={() => answerWith(true)}>
             {answer === true ? 'Accepting' : 'Accept'}
           </button>
           <button className={`btn btn-red ${answer === false ? 'bg-rose-500/25' : ''}`} onClick={() => answerWith(false)}>

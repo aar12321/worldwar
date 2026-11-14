@@ -24,12 +24,15 @@ import { recallProblem } from './armies'
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
 export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
 
+/** Orders that happen at once in a live game, though a turn game waits for the month to end. */
+const LIVE_NOW = new Set<Order['type']>(['strike', 'respond', 'propose'])
+
 /**
- * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, and an answer
- * to an offer counts at once, so that accepting peace turns armies back before they arrive.
+ * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, an answer to an offer
+ * counts at once, and an offer reaches a rival at once and is answered the same day, so peace can turn armies back before they arrive.
  */
 export function isMonthEndOrder(s: Pick<GameState, 'settings'>, type: Order['type']): boolean {
-  if (isLive(s) && (type === 'strike' || type === 'respond')) return false
+  if (isLive(s) && LIVE_NOW.has(type)) return false
   return MONTH_END_ORDERS.has(type)
 }
 

@@ -2,7 +2,7 @@ import { UNIT_SPECS } from '../data/unitTypes'
 import { absDate } from '../engine/calendar'
 import { lineMax } from '../engine/economy'
 import type { LiveEvent, LiveStep } from '../engine/live'
-import type { BattleReport, GameState, NationId } from '../engine/types'
+import type { Army, BattleReport, GameState, NationId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { battleLine, scenesFor } from './battleText'
 import { useFx } from './globeBridge'
@@ -30,6 +30,14 @@ interface Args {
 }
 
 const LOG_SIZE = 12
+
+/** Why an army turned back, finishing "Your army heading for X turned back: ...". */
+export const TURN_BACK: Partial<Record<NonNullable<Army['outcome']>, string>> = {
+  peace: 'the war is over',
+  taken: 'it is already yours',
+  changed: 'another nation holds it now',
+  cut: 'the country it set out from was lost, so it could not be supplied',
+}
 
 /** Rings and a shake where a fight happens, one burst for each round. */
 function battleFx(b: BattleReport, mine: boolean, color: string, reduced: boolean) {
@@ -94,7 +102,7 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
         if (e.army.nationId !== player && game.regions[e.army.target]?.owner === player) say('error', `${nation(e.army.nationId)} has sent an army against ${place(e.army.target)}. It arrives ${absDate(e.army.end)}.`)
         break
       case 'turnedBack':
-        if (e.army.nationId === player && e.why !== 'recalled') say('info', e.why === 'peace' ? `Your army heading for ${place(e.army.target)} turned back: the war is over.` : `Your army heading for ${place(e.army.target)} turned back: it is already yours.`)
+        if (e.army.nationId === player && e.why !== 'recalled') say(e.why === 'cut' ? 'error' : 'info', `Your army heading for ${place(e.army.target)} turned back: ${TURN_BACK[e.why] ?? 'its reason to fight is gone'}.`)
         break
       case 'home':
         if (e.army.nationId === player) say('info', `Your army is back from ${place(e.army.target)}.`)
@@ -106,7 +114,7 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
           useFx.getState().addRing({ lat: impact.lat, lng: impact.lng, color: '#ff9f0a', maxRadius: 2.6 }, 1600)
           if (e.flight.nationId === player) say('success', `Your missiles hit ${place(target)}.`)
           else if (game.regions[target]?.owner === player) say('error', `Missiles from ${nation(e.flight.nationId)} hit ${place(target)}.`)
-        } else if (e.flight.nationId === player) say('error', `Your missiles were wasted: the war ended before they landed.`)
+        } else if (e.flight.nationId === player) say('error', `Your missiles were wasted: ${e.why === 'taken' ? `${place(target)} was already yours when they landed` : e.why === 'changed' ? `${place(target)} changed hands before they landed` : 'the war ended before they landed'}.`)
         break
       }
       case 'trained': {

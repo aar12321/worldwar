@@ -1,4 +1,5 @@
 import { dayDate, isLive } from '../engine/calendar'
+import { shortcutsFor } from './shortcuts'
 import { useState } from 'react'
 import { turnDate } from '../engine/helpers'
 import type { LogKind } from '../engine/types'
@@ -7,7 +8,6 @@ import { usePlayerView } from './hooks'
 import { PanelShell } from './panel'
 
 /** One list of shortcuts, shown in Settings and in the help window. */
-export const SHORTCUTS = 'Enter: next turn. Esc: close. B briefing, E economy, M military, W wars, D diplomacy, R research, N news, A War Room for the selected country, ? help.'
 
 const KIND_COLOR: Record<LogKind, string> = {
   news: 'text-amber-200',
@@ -88,10 +88,12 @@ export function SettingsPanel() {
           <option value={2}>2×</option>
         </select>
       </label>
-      <label className="flex items-center justify-between text-[15px]">
-        <span>Monthly report after each turn</span>
-        <input type="checkbox" checked={settings.monthlyReport} onChange={(e) => update({ monthlyReport: e.target.checked })} />
-      </label>
+      {!live && (
+        <label className="flex items-center justify-between text-[15px]">
+          <span>Monthly report after each turn</span>
+          <input type="checkbox" checked={settings.monthlyReport} onChange={(e) => update({ monthlyReport: e.target.checked })} />
+        </label>
+      )}
       <label className="flex items-center justify-between text-[15px]">
         <span>First-steps checklist in the Briefing</span>
         <input type="checkbox" checked={settings.showGuide} onChange={(e) => update({ showGuide: e.target.checked })} />
@@ -107,7 +109,7 @@ export function SettingsPanel() {
         Leave game
       </button>
       <div className="label pt-2">Shortcuts</div>
-      <p className="text-[14px] text-white/70">{live ? SHORTCUTS.replace('Enter: next turn. ', 'Space: play or pause. 1, 2, 3: speed. ') : SHORTCUTS}</p>
+      <p className="text-[14px] text-white/70">{shortcutsFor(live)}</p>
     </PanelShell>
   )
 }

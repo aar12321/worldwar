@@ -428,14 +428,16 @@ function buildReport(before: GameState, after: GameState, player: NationId, batt
 /** Why a live game's clock is held other than the player's own pause, or null when nothing holds it. */
 export type Hold = 'online' | 'over' | 'event' | 'battle' | 'report' | 'planning' | 'help'
 
+/** The reason is the one the player sees: help sits on top of everything, a battle hides the report, the report hides a decision. */
 export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'>): Hold | null {
   if (st.online) return 'online'
-  if (!st.game || st.game.outcome !== 'playing') return 'over'
-  if (st.game.pendingEvent) return 'event'
-  if (st.fxQueue.length > 0) return 'battle'
-  if (st.summary) return 'report'
-  if (st.warRoom) return 'planning'
+  if (!st.game) return 'over'
   if (st.helpOpen) return 'help'
+  if (st.fxQueue.length > 0) return 'battle'
+  if (st.game.outcome !== 'playing') return 'over'
+  if (st.summary) return 'report'
+  if (st.game.pendingEvent) return 'event'
+  if (st.warRoom) return 'planning'
   return null
 }
 
@@ -741,12 +743,15 @@ export const useGame = create<GameStore>((set, get) => ({
     // Online, an attack waits for the month to end like every other country's, so nobody wins by clicking fast.
     if (!isMonthEndOrder(game, order.type) && !(playing && order.type === 'attack')) {
       const next = structuredClone(game)
+      const seen = game.dispatches.length
       const result = applyOrderNow(next, map, order, orders)
       if (result.error) {
         get().toast(result.error, 'error')
         return false
       }
       set({ game: next })
+      // An offer a rival answered on the spot (live games) says how it went.
+      for (const d of next.dispatches.slice(seen)) if (d.to === game.playerId || d.from === game.playerId) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
       if (playing) {
         immediate = [...immediate, order]
         sendPlan(orders)
@@ -903,8 +908,8 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   setSpeed(speed) {
+    // Choosing a speed does not start a paused clock.
     get().updateSettings({ liveSpeed: speed })
-    get().play()
   },
 
   stepDay() {
@@ -915,21 +920,25 @@ export const useGame = create<GameStore>((set, get) => ({
     const step = advanceDay(game, map, { monthOrders: orders, planner: botPlanner })
     if (step.state === game) return
     const shown = presentLiveStep({ step, player: game.playerId, before: game, fxQueue: st.fxQueue, recentBattles: st.recentBattles, settings: st.settings, toast: st.toast })
-    monthBattles.push(...shown.mine)
     const patch: Partial<GameStore> = { game: step.state, recentBattles: shown.recentBattles, fxQueue: shown.fxQueue, fxTotal: shown.fxQueue.length }
     // An army that has gone home or been lost no longer has a card.
     if (st.selectedArmy && !step.state.armies?.some((a) => a.id === st.selectedArmy)) patch.selectedArmy = null
     if (step.monthEnded) {
-      // Uprisings are fought as the month turns over.
+      // Uprisings are fought as the month turns over and belong to the month that ended. Battles on the 1st belong to the new one.
       monthBattles.push(...step.state.battles.filter((b) => b.attacker.nationId === 'rebels' && b.defender.nationId === game.playerId))
       const report = buildReport(monthStart ?? game, step.state, game.playerId, monthBattles)
       monthStart = step.state
-      monthBattles = []
+      monthBattles = shown.mine.filter((b) => b.attacker.nationId !== 'rebels')
       patch.orders = []
       if (st.settings.liveReport === 'pause') patch.summary = report
       else patch.liveNote = report
+      // The month's diplomacy still gets a line while the clock runs: wars declared on you, offers, answers.
+      const news = step.state.dispatches.filter((d) => d.to === game.playerId || d.from === game.playerId)
+      for (const d of news.slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
+      const failed = step.state.log.filter((e) => e.turn === game.turn && e.text.startsWith('Order failed') && e.nations.includes(game.playerId))
+      if (failed.length) st.toast(failed.length === 1 ? failed[0].text : `${failed.length} orders failed at the month's end. See the report.`, 'error', 7000)
       save(step.state, [])
-    }
+    } else monthBattles.push(...shown.mine)
     set(patch)
   },
 
@@ -947,7 +956,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   openBattle(id) {
     const b = get().recentBattles.find((x) => x.id === id)
-    if (b) set({ fxQueue: [b], fxTotal: 1 })
+    if (b) set({ fxQueue: [{ ...b, replay: true }], fxTotal: 1 })
   },
 
   openNote() {

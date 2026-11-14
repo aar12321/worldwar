@@ -89,7 +89,7 @@ export function ArmiesTab() {
           )
         })}
       </section>
-      <p className="text-[12px] text-white/55">A month is about {Math.round((LIVE.msPerDay * 30) / 1000)} seconds at normal speed. Armies take 2 to 18 days to arrive, by land, sea lane, fleet or air.</p>
+      <p className="text-[12px] text-white/55">A month is about {Math.round((LIVE.msPerDay * 30) / 1000)} seconds at normal speed. Armies take {Math.min(...Object.values(LIVE.travel).map((t) => t.min))} to {Math.max(...Object.values(LIVE.travel).map((t) => t.max))} days to arrive, by land, sea lane, fleet or air.</p>
     </div>
   )
 }

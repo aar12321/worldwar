@@ -1,7 +1,7 @@
 import { isLive } from '../engine/calendar'
 import { useGame } from '../store'
 import { Modal } from './Modal'
-import { SHORTCUTS } from './SidePanels'
+import { shortcutsFor } from './shortcuts'
 
 const TURN = [
   { title: 'Read the Briefing', body: 'Your advisor lists what needs you this month, most urgent first. Every item has a button that takes you to the fix.' },
@@ -94,7 +94,7 @@ export function Help() {
         ))}
       </dl>
       <h3 className="text-[16px] font-semibold mt-5 mb-1">Keys</h3>
-      <p className="text-[14px] text-white/75">{SHORTCUTS}</p>
+      <p className="text-[14px] text-white/75">{shortcutsFor(isLive(game))}</p>
     </Modal>
   )
 }
