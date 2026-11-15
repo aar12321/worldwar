@@ -14,6 +14,8 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * Re-pinned when nations got more project slots (two, not one, at the start): the bots build more at once. Checked before pinning:
  * with the old slot counts put back, the old hashes matched, so everything else added then (project levels, projects in a country,
  * social programs, campaigns) changes nothing for a nation that does not use it.
+ * The Hard-bot world was pinned again when Hard bots learned to use social programs, campaigns, the new projects and projects in
+ * their countries: a deliberate change of what they decide. The Normal-bot world did not move.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -81,7 +83,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('16a85fdb053f6a')
+    expect(hash(JSON.stringify(s))).toBe('a88eaedb47c33')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { generateAllBotOrders } from './ai/bot'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
-import type { AdviceTarget } from './engine/advisor'
+import type { AdviceTarget, PeopleSection } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
 import { maxAttacks, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
@@ -35,8 +35,7 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 /** The five desks, plus News and Settings which open from the top bar. */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
 export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
-/** The parts of the People tab. */
-export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'family' | 'safety' | 'campaigns'
+export type { PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
@@ -964,6 +963,7 @@ export const useGame = create<GameStore>((set, get) => ({
     switch (target.desk) {
       case 'economy':
         get().openEconomy(target.tab, target.region)
+        if (target.section) set({ peopleSection: target.section })
         break
       case 'military':
         get().openMilitary(target.tab)

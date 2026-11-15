@@ -12,19 +12,24 @@ import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { validateOrder } from './orders'
 import { monthsToElection } from './politics'
-import { ACADEMY, PROJECTS, programCost } from '../data/projects'
+import { ACADEMY, PROJECT_LEVELS, PROJECTS, programCost } from '../data/projects'
 import { TIERS } from '../data/empire'
 import { empireCount, tierOf } from './empire'
-import { academyCost, activeProjects, projectProblem } from './industry'
+import { academyCost, activeProjects, levelCost, levelMonths, projectLevel, projectProblem } from './industry'
+import { campaignPrice, campaignProblem } from './society'
+import { activeLocal, localLevel, localProblem } from './works'
 import { electionNeed } from './people'
-import type { BuildingType, GameState, Milestone, NationId, Order, RegionId, WorldMap } from './types'
+import type { BuildingType, GameState, Milestone, NationId, Order, ProjectId, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 import { canAttackRegion, forecastAttack, garrisonStrength } from './warfare'
 import { netWarScore } from './warscore'
 
+/** The parts of the People tab. */
+export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'family' | 'safety' | 'campaigns'
+
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
-  | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'; region?: RegionId }
+  | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
   | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' }
   | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
@@ -121,9 +126,16 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
 
   // Order at home
   if (n.stability < 35) {
-    add('now', 70, { id: 'unrest', title: 'The country is close to revolt', detail: `Stability is ${Math.round(n.stability)}%. Below 30% rebels rise. See what your people are missing.`, action: 'See your people', target: { desk: 'economy', tab: 'people' } })
+    add('now', 70, { id: 'unrest', title: 'The country is close to revolt', detail: `Stability is ${Math.round(n.stability)}%. Below 30% rebels rise. See what is pulling it down, then pick a lever: lower taxes, programs for calm, a celebration.`, action: 'See why', target: { desk: 'economy', tab: 'people', section: 'overview' } })
   } else if (econ.stabilityTarget < 40 && econ.stabilityTarget < n.stability - 3) {
-    add('soon', 40, { id: 'sliding', title: 'Stability is sliding', detail: `It is ${Math.round(n.stability)}% and heading to ${Math.round(econ.stabilityTarget)}%.`, action: 'See your people', target: { desk: 'economy', tab: 'people' } })
+    add('soon', 40, { id: 'sliding', title: 'Stability is sliding', detail: `It is ${Math.round(n.stability)}% and heading to ${Math.round(econ.stabilityTarget)}%. See what is pulling it down.`, action: 'See why', target: { desk: 'economy', tab: 'people', section: 'overview' } })
+  }
+  // Care for the people: programs for calm, and a celebration when it is needed now.
+  if (n.stability < 55 && econ.society.bill === 0 && econ.netCapital > 10 && money > 150 && n.resources.pp >= 5) {
+    add('idea', 38, { id: 'calm-programs', title: 'Spend on calm', detail: `Stability is ${Math.round(n.stability)}%. Festivals, fair wages and community policing buy calm for a few coins a month each. Look under Safety and Work.`, action: 'Open Safety', target: { desk: 'economy', tab: 'people', section: 'safety' } })
+  }
+  if (n.stability < 45 && !campaignProblem(n, 'celebration') && money > campaignPrice(s, n, 'celebration') + 100) {
+    add('idea', 41, { id: 'celebration', title: 'A national celebration would steady the country', detail: `It costs ${campaignPrice(s, n, 'celebration')} money and lifts stability at once and for six months.`, action: 'Open Campaigns', target: { desk: 'economy', tab: 'people', section: 'campaigns' } })
   }
   const rebel = Object.values(s.regions)
     .filter((r) => r.owner === nationId && r.rebels > 0)
@@ -204,6 +216,20 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   if (activeProjects(n).length < slots && econ.netCapital > 8 && money > 200) {
     const open = (Object.keys(PROJECTS) as (keyof typeof PROJECTS)[]).find((id) => !n.projects[id] && projectProblem(s, map, n, id) === null)
     if (open) add('idea', 33, { id: 'project', title: `You can start the ${PROJECTS[open].name.toLowerCase()}`, detail: `${PROJECTS[open].effect} It takes about ${PROJECTS[open].months} months and ${PROJECTS[open].cost} money.`, action: 'Open Projects', target: { desk: 'economy', tab: 'projects' } })
+    else {
+      // Everything open is built: the next level of something is the next best use of the money.
+      const up = (Object.keys(PROJECTS) as ProjectId[]).find((id) => projectLevel(n, id) === 1 && projectProblem(s, map, n, id) === null && money > levelCost(id, 2) * 1.5)
+      if (up) add('idea', 27, { id: 'project-up', title: `Build up the ${PROJECTS[up].name.toLowerCase()}`, detail: `A second level is worth ${PROJECT_LEVELS.power[2]} times the first. It takes about ${levelMonths(up, 2)} months and ${levelCost(up, 2)} money.`, action: 'Open Projects', target: { desk: 'economy', tab: 'projects' } })
+    }
+  }
+  // Projects in the countries it holds: a cultural centre for land still settling.
+  if (activeLocal(s, nationId).length < tierOf(n).localSlots && money > 150 && econ.netCapital > 6) {
+    const loose = Object.values(s.regions)
+      .filter((r) => r.owner === nationId && r.integration < 0.7 && localLevel(r, 'culturalCentre') === 0 && !r.works?.culturalCentre)
+      .sort((a, b) => a.integration - b.integration || (a.id < b.id ? -1 : 1))[0]
+    if (loose && localProblem(s, map, n, 'culturalCentre', loose.id) === null) {
+      add('idea', 34, { id: 'cultural-centre', title: `A cultural centre would settle ${name(loose.id)} faster`, detail: 'Conquered land produces little until it settles. A cultural centre there makes it settle half again as fast, and rebels rarer.', action: 'Open Projects', target: { desk: 'economy', tab: 'projects', region: loose.id } })
+    }
   }
   const techLeft = TECHS.some((t) => !n.techs.includes(t.id) && t.requires.every((r) => n.techs.includes(r)))
   if (!techLeft && n.resources.tp >= programCost(Math.min(n.research2.productivity, 9))) {

@@ -6,11 +6,16 @@ import { enemiesOf } from '../engine/helpers'
 import type { Rng } from '../engine/rng'
 import type { CityFocus, GameState, LawId, Nation, NationId, Order, Programs, SchoolFocus, SectorId, Spending } from '../engine/types'
 import { BANKING } from '../data/banking'
-import { PROJECT_IDS, PROJECTS, programCost, ACADEMY } from '../data/projects'
+import { programCost, ACADEMY } from '../data/projects'
 import { STANDARD_SPENDING } from '../data/people'
 import { TECHS } from '../data/techTree'
 import { tierOf } from '../engine/empire'
-import { activeProjects } from '../engine/industry'
+import { activeProjects, levelCost, monthlyCost, projectLevel } from '../engine/industry'
+import { LOCAL } from '../data/localProjects'
+import { SOCIAL } from '../data/society'
+import { socialLevel } from '../engine/society'
+import { activeLocal, localLevel } from '../engine/works'
+import type { ProjectId, SocialId } from '../engine/types'
 
 const spend = (schools: number, health: number, works: number, pensions: number, jobless: number, housing: number): Spending => ({ schools, health, works, pensions, jobless, housing })
 
@@ -167,15 +172,31 @@ function manageStatecraft(s: GameState, nationId: NationId, econ: EconomyReport,
   // A Hard bot at war with an empty treasury prints, as far as its tier lets it.
   if (skill === 2 && atWar && n.resources.capital < 0 && n.bank.inflation < 15) tryAdd({ type: 'printMoney', nationId, share: Math.min(spec.printCap, 0.1) })
 
-  // National projects: one at a time when the money is there.
+  // National projects: one at a time when the money is there. Hard bots go on to the new ones, and build the best of them up.
   if (budget - spent > 150 && activeProjects(n).length < spec.projectSlots && econ.netCapital > 6 && rng.chance(skill === 2 ? 0.25 : 0.12)) {
-    const order: typeof PROJECT_IDS = ['rail', 'grid', 'medCentre', 'sciencePark', 'ports', 'digitalGov', 'spaceComplex']
+    const order: ProjectId[] = ['rail', 'grid', 'medCentre', 'sciencePark', 'ports', 'digitalGov', 'spaceComplex', 'waterNetwork', 'broadband']
+    if (skill === 2) order.push('openUniversity', 'aiLab', 'fusion', 'expo', 'plannedCity', 'marsMission')
+    let started = false
     for (const id of order) {
       if (n.projects[id]) continue
-      if (econ.netCapital < PROJECTS[id].cost / PROJECTS[id].months) continue
-      if (tryAdd({ type: 'startProject', nationId, project: id })) break
+      if (econ.netCapital < monthlyCost(id, 1)) continue
+      if (tryAdd({ type: 'startProject', nationId, project: id })) {
+        started = true
+        break
+      }
+    }
+    // With everything open built, a rich Hard bot builds the next level of what it has.
+    if (!started && skill === 2 && n.resources.capital > 500) {
+      for (const id of order) {
+        const level = projectLevel(n, id)
+        if (level < 1 || level >= 2 || n.projects[id]?.done === false) continue
+        if (n.resources.capital < levelCost(id, level + 1) * 1.5 || econ.netCapital < monthlyCost(id, level + 1)) continue
+        if (tryAdd({ type: 'startProject', nationId, project: id })) break
+      }
     }
   }
+
+  spent += manageSociety(s, nationId, econ, skill, rng, tryAdd, budget - spent)
 
   // Hospitals where the doctors can staff them.
   if (budget - spent > 80 && econ.coverage.doctors > 1.1 && n.people.health < 0.75 && rng.chance(0.15)) {
@@ -216,6 +237,61 @@ function manageStatecraft(s: GameState, nationId: NationId, econ: EconomyReport,
     else {
       const foe = enemiesOf(s, nationId).sort()[0]
       if (foe) tryAdd({ type: 'resolution', nationId, kind: 'sanctions', target: foe })
+    }
+  }
+  return spent
+}
+
+/**
+ * The people's side of a country: programs for calm and growth, a campaign in a crisis, and projects in the countries it holds.
+ * Medium bots add stability programs when calm is low; Hard bots also invest in growth when rich, run campaigns and build in their
+ * countries. A bot never takes a program to a level it cannot keep paying for, and a democracy never spies on its own people.
+ */
+function manageSociety(s: GameState, nationId: NationId, econ: EconomyReport, skill: 1 | 2, rng: Rng, tryAdd: (o: Order) => boolean, budget: number): number {
+  const n = s.nations[nationId]
+  const spec = tierOf(n)
+  let spent = 0
+  const monthly = (id: SocialId) => SOCIAL[id].cost * econ.workforce
+  // A program is worth taking up only if the budget stays in the black after it.
+  const keeps = (id: SocialId) => econ.netCapital - monthly(id) > 4
+
+  const raise = (ids: SocialId[], cap: number): boolean => {
+    for (const id of ids) {
+      const level = socialLevel(n, id)
+      if (level >= cap || !keeps(id)) continue
+      if (tryAdd({ type: 'setSocial', nationId, policy: id, level: level + 1 })) return true
+    }
+    return false
+  }
+
+  if (n.stability < 48 && budget > 60 && rng.chance(0.5)) {
+    const calm: SocialId[] = ['festivals', 'workerRights', 'minimumWage', 'mentalHealth', 'policing', 'libraries', 'elderCare']
+    if (n.government !== 'democracy' && n.stability < 35) calm.unshift('surveillance')
+    raise(calm, 2)
+  } else if (skill === 2 && budget > 260 && n.resources.capital > 260 && econ.netCapital > econ.gross * 0.15 && rng.chance(0.25)) {
+    raise(['courts', 'transit', 'smallLoans', 'apprenticeships', 'clinics', 'scholarships'], 2)
+  }
+
+  // A campaign when calm is shaken and the money is there.
+  if (skill === 2 && n.stability < 38 && n.resources.capital > 150 && !n.campaigns?.celebration && rng.chance(0.4)) {
+    if (tryAdd({ type: 'campaign', nationId, campaign: 'celebration' })) spent += 40
+  } else if (skill === 2 && n.people.epidemic > 0.2 && n.resources.capital > 120 && !n.campaigns?.vaccination && tryAdd({ type: 'campaign', nationId, campaign: 'vaccination' })) spent += 50
+
+  // Projects in the countries it holds. One a month, where it helps most.
+  if (skill === 2 && budget - spent > 200 && activeLocal(s, nationId).length < spec.localSlots && econ.netCapital > 6 && rng.chance(0.2)) {
+    const owned = Object.values(s.regions).filter((r) => r.owner === nationId).sort((a, b) => b.population - a.population || (a.id < b.id ? -1 : 1))
+    const loose = owned.filter((r) => r.integration < 0.7).sort((a, b) => a.integration - b.integration)
+    const tries: { id: keyof typeof LOCAL; region: string }[] = []
+    for (const r of loose) tries.push({ id: 'culturalCentre', region: r.id })
+    if (econ.netFood < 0 && owned[0]) tries.push({ id: 'irrigation', region: owned[0].id })
+    for (const r of [...owned].sort((a, b) => b.buildings.factory - a.buildings.factory)) if (r.buildings.factory >= 3) tries.push({ id: 'industrialPark', region: r.id })
+    for (const r of owned.slice(0, 3)) {
+      tries.push({ id: 'resort', region: r.id })
+      tries.push({ id: 'sez', region: r.id })
+    }
+    for (const t of tries) {
+      if (localLevel(s.regions[t.region], t.id) > 0 || s.regions[t.region].works?.[t.id]) continue
+      if (tryAdd({ type: 'startProject', nationId, project: t.id, regionId: t.region })) break
     }
   }
   return spent
