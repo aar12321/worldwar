@@ -70,6 +70,8 @@ describe('sending an army', () => {
 
   it('fights on arrival, rests a day, marches home, and the survivors rejoin the military', () => {
     const s = war()
+    // No doctors, so no wounded come back and the units add up exactly.
+    s.nations.r0.people.skills.doctors = 0
     const start = total(s)
     const launched = applyOrderNow(s, map, attack({ missiles: 4 })).army!
     expect(launched.units.missile).toBe(4)

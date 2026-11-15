@@ -441,9 +441,9 @@ export function resolveAttack(
   if (firedMissiles > 0) mine.missile = Math.max(0, mine.missile - Math.max(0, firedMissiles - outcome.attackerLosses.missile))
   const savedA = reviveLosses(attackerNation, outcome.attackerLosses, mine)
   const savedD = reviveLosses(defenderNation, defMilLosses)
-  // Doctors return part of the wounded infantry to the ranks (more with modern surgery).
-  const healedA = treatWounded(attackerNation, outcome.attackerLosses, mine)
-  const healedD = treatWounded(defenderNation, defMilLosses)
+  // Doctors return part of the wounded infantry to the ranks (more with modern surgery). A force that was wiped out has nobody to carry them back.
+  const healedA = totalUnits(mine) >= 0.05 ? treatWounded(attackerNation, outcome.attackerLosses, mine) : 0
+  const healedD = totalUnits(defenderNation.military.units) >= 0.05 ? treatWounded(defenderNation, defMilLosses) : 0
   if (!army) {
     const m = attackerNation.military
     m.attacksThisTurn = m.lastAttackTurn === s.turn ? m.attacksThisTurn + 1 : 1
