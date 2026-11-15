@@ -7,6 +7,7 @@ import { atWar, formatDivisions, hasPact, isAllied, justificationOf } from '../e
 import { warCost } from '../engine/orders'
 import { JUSTIFY } from '../data/war'
 import { militaryPower } from '../engine/militaryStats'
+import { powerView, showPower } from '../engine/intel'
 import { validateOrder } from '../engine/orders'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
 import { garrisonStrength } from '../engine/warfare'
@@ -46,7 +47,8 @@ export function CountryPanel() {
   const max = lineMax(game, map, selected)
   const line = Math.min(region.line, max)
   const myPower = militaryPower(game, player.id)
-  const theirPower = mine ? myPower : militaryPower(game, owner.id)
+  const theirView = mine ? { value: myPower, exact: true } : powerView(game, player.id, owner.id)
+  const theirPower = theirView.value
   const settling = region.integration < 1
   const purpose = mine
     ? settling
@@ -91,10 +93,10 @@ export function CountryPanel() {
             <div className="flex items-baseline justify-between text-[14px]">
               <span className="font-semibold">Military strength</span>
               <span className="tabular-nums text-white/80">
-                You {myPower.toFixed(0)} · them {theirPower.toFixed(0)}
+                You {myPower.toFixed(0)} · them {showPower(theirView)}
               </span>
             </div>
-            <div className="h-2.5 rounded-full bg-[#ff453a]/70 overflow-hidden" role="img" aria-label={`Your strength ${myPower.toFixed(0)} against ${theirPower.toFixed(0)}`}>
+            <div className="h-2.5 rounded-full bg-[#ff453a]/70 overflow-hidden" role="img" aria-label={`Your strength ${myPower.toFixed(0)} against ${showPower(theirView)}`}>
               <div className="h-full bg-[#0a84ff]" style={{ width: `${(myPower / Math.max(1, myPower + theirPower)) * 100}%` }} />
             </div>
             <div className="flex flex-wrap gap-1.5 pt-0.5">

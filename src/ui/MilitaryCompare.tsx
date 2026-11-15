@@ -2,13 +2,16 @@ import { militarySheet } from '../engine/militaryStats'
 import { UNIT_TYPES } from '../engine/types'
 import type { GameState, NationId } from '../engine/types'
 import { formatDivisions } from '../engine/helpers'
+import { hasIntel, powerView, showPower } from '../engine/intel'
 import { UnitIcon } from './icons'
 
 /** Two militaries side by side: how many of each unit, their effective attack and defense, and total strength. */
 export function MilitaryCompare({ game, mine, theirs }: { game: GameState; mine: NationId; theirs: NationId }) {
   const a = militarySheet(game, mine)
   const b = militarySheet(game, theirs)
-  const total = Math.max(1, a.totalPower + b.totalPower)
+  const known = hasIntel(game, mine, theirs)
+  const seen = powerView(game, mine, theirs, b.totalPower)
+  const total = Math.max(1, a.totalPower + seen.value)
   return (
     <div className="inset-card p-3.5 space-y-3">
       <div className="flex items-baseline justify-between text-[14px]">
@@ -18,10 +21,10 @@ export function MilitaryCompare({ game, mine, theirs }: { game: GameState; mine:
       </div>
       <div className="flex items-center gap-3 text-[16px] font-semibold tabular-nums">
         <span className="w-14 text-left">{a.totalPower.toFixed(0)}</span>
-        <div className="flex-1 h-2.5 rounded-full bg-[#ff453a]/70 overflow-hidden" role="img" aria-label={`Strength ${a.totalPower.toFixed(0)} against ${b.totalPower.toFixed(0)}`}>
+        <div className="flex-1 h-2.5 rounded-full bg-[#ff453a]/70 overflow-hidden" role="img" aria-label={`Strength ${a.totalPower.toFixed(0)} against ${showPower(seen)}`}>
           <div className="h-full bg-[#0a84ff]" style={{ width: `${(a.totalPower / total) * 100}%` }} />
         </div>
-        <span className="w-14 text-right">{b.totalPower.toFixed(0)}</span>
+        <span className="w-14 text-right">{showPower(seen)}</span>
       </div>
       <table className="w-full text-[13px] tabular-nums">
         <thead>
@@ -37,7 +40,7 @@ export function MilitaryCompare({ game, mine, theirs }: { game: GameState; mine:
           {UNIT_TYPES.map((u, i) => {
             const x = a.units[i]
             const y = b.units[i]
-            if (x.count < 0.05 && y.count < 0.05) return null
+            if (known ? x.count < 0.05 && y.count < 0.05 : x.count < 0.05) return null
             return (
               <tr key={u} className="border-t border-white/10">
                 <td className="py-1 text-left">
@@ -50,15 +53,14 @@ export function MilitaryCompare({ game, mine, theirs }: { game: GameState; mine:
                 <td className="text-center text-white/70">
                   {x.attack.toFixed(1)} / {x.defense.toFixed(1)}
                 </td>
-                <td className="text-center">{formatDivisions(y.count)}</td>
-                <td className="text-right text-white/70">
-                  {y.attack.toFixed(1)} / {y.defense.toFixed(1)}
-                </td>
+                <td className="text-center">{known ? formatDivisions(y.count) : '?'}</td>
+                <td className="text-right text-white/70">{known ? `${y.attack.toFixed(1)} / ${y.defense.toFixed(1)}` : '?'}</td>
               </tr>
             )
           })}
         </tbody>
       </table>
+      {!known && <p className="text-[12px] text-white/65">Their units are hidden, and their strength is a guess. Gather intelligence, ally with them, or go to war to see the real numbers.</p>}
     </div>
   )
 }

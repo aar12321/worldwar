@@ -250,7 +250,7 @@ interface GameStore {
   setPolicy(patch: PolicyPatch): void
   /** Queues changes to the nation's programs (schools, immigration, occupation...) and interest rate for the end of the month. */
   setPrograms(programs: Partial<Programs>, rate?: number): void
-  attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number): boolean
+  attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number, share?: number): boolean
   openWarRoom(target: RegionId | null): void
   endTurn(): void
   /** Live games: start or stop the clock. */
@@ -1053,7 +1053,7 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ warRoom: target })
   },
 
-  attack(target, commit = 'main', stance = 'assault', missiles) {
+  attack(target, commit = 'main', stance = 'assault', missiles, share) {
     const { game, settings, online } = get()
     if (!game) return false
     const { map } = getWorld()
@@ -1063,7 +1063,7 @@ export const useGame = create<GameStore>((set, get) => ({
         get().toast(`Your military can plan ${maxAttacks(game, game.playerId)} attacks a month`, 'error')
         return false
       }
-      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles })
+      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}) })
       if (ok) {
         set({ warRoom: null })
         get().toast(`Attack on ${map.regions[target].name} planned. It plays out when the month ends.`, 'info', 4500)
@@ -1071,7 +1071,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return ok
     }
     const next = structuredClone(game)
-    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, missiles }, get().orders)
+    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}) }, get().orders)
     // In a live game the army sets out and fights when it arrives.
     if (result.army) {
       const a = result.army

@@ -442,7 +442,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const live = isLive(s)
       if (n.military.lastAttackTurn === (live ? clockMonth(s) : s.turn) && n.military.attacksThisTurn >= maxAttacks(s, o.nationId)) return live ? `You have already sent ${maxAttacks(s, o.nationId)} armies this month` : `Your military has already attacked ${maxAttacks(s, o.nationId)} times this turn`
       if (totalUnits(n.military.units) < 0.1) return live ? 'No troops at home to send' : 'You have no military to attack with'
-      if (commitShare(n, o.commit ?? 'main') < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
+      if (o.share !== undefined && (!Number.isFinite(o.share) || o.share < 0.05 || o.share > 1)) return 'Send between 5% and 100% of your military'
+      if (commitShare(n, o.commit ?? 'main', o.share) < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
       if (!canAttackRegion(s, map, o.nationId, o.target).ok) return reachProblem(s, map, o.nationId, o.target)
       if (o.missiles !== undefined) {
         if (!Number.isInteger(o.missiles) || o.missiles < 0) return 'Choose how many missiles to fire'

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { AGENCY, AGENCY_ROLE, DOMESTIC_OPS, FOREIGN_OPS, agencyName, levelsCost, type AgencyId, type DomesticOp, type ForeignOp } from '../data/agencies'
 import { operationOdds } from '../engine/agencies'
 import { atWar, nationModifiers } from '../engine/helpers'
-import { militaryPower } from '../engine/militaryStats'
+import { hasIntel, powerView } from '../engine/intel'
 import { getWorld } from '../map/world'
 import { nationNeighbors } from '../ai/opinion'
 import { useGame } from '../store'
@@ -69,7 +69,7 @@ export function AgenciesTab() {
     if (!game || !me) return []
     const near = nationNeighbors(game, map, me)
     // Each nation's strength is worked out once, not at every comparison.
-    const power = new Map(Object.values(game.nations).map((n) => [n.id, n.alive ? militaryPower(game, n.id) : 0] as const))
+    const power = new Map(Object.values(game.nations).map((n) => [n.id, n.alive ? powerView(game, me, n.id).value : 0] as const))
     return Object.values(game.nations)
       .filter((n) => n.alive && n.id !== me)
       .sort((a, b) => Number(near.has(b.id)) - Number(near.has(a.id)) || Number(atWar(game, me, b.id)) - Number(atWar(game, me, a.id)) || (power.get(b.id) ?? 0) - (power.get(a.id) ?? 0))
@@ -80,7 +80,7 @@ export function AgenciesTab() {
   const bonus = nationModifiers(player).agencyBonus
   const chosen = target && game.nations[target]?.alive && target !== me ? target : list[0]?.id
   const t = chosen ? game.nations[chosen] : null
-  const seen = chosen ? (game.intel[`${me}|${chosen}`] ?? -1) >= game.turn : false
+  const seen = chosen ? hasIntel(game, me, chosen) : false
   const rebelRegions = Object.values(game.regions).filter((r) => r.owner === me && r.rebels > 0)
 
   return (
@@ -117,7 +117,7 @@ export function AgenciesTab() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                   <div>
                     <div className="label">Military</div>
-                    <div className="font-semibold tabular-nums">{fmt(militaryPower(game, t.id), 0)}</div>
+                    <div className="font-semibold tabular-nums">{fmt(powerView(game, me, t.id).value, 0)}</div>
                   </div>
                   <div>
                     <div className="label">Money</div>

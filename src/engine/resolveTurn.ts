@@ -265,7 +265,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
       continue
     }
     if (validateOrder(s, map, o)) continue
-    resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles)
+    resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles, undefined, o.share)
   }
   resolveRebels(s, map, rng)
   // Armies that fought this turn are back at their posts for the next one.
@@ -339,7 +339,7 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
       const army = launchArmy(s, map, o, clockOf(s))
       return army ? { error: null, army } : { error: 'The attack could not be made' }
     }
-    const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles)
+    const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles, undefined, o.share)
     s.outcome = checkOutcome(s, map)
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
   }

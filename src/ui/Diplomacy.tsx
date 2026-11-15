@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { perceivedPower } from '../ai/diplomat'
+import { powerView, showPower } from '../engine/intel'
 import { coalitionActive, nationNeighbors, opinionLabel, opinionReport, type OpinionReport } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
 import { COSTS, DIPLOMACY, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS } from '../data/unitTypes'
@@ -436,7 +436,8 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const theirCb = hasCasusBelli(game, id, player.id)
   const borders = ctx.neighbors.has(id)
   const report = useMemo(() => opinionReport(game, map, id, player.id, { borders, coalition: ctx.coalition }), [game, map, id, player.id, borders, ctx.coalition])
-  const power = perceivedPower(game, map, player.id, id)
+  const seen = powerView(game, player.id, id)
+  const power = seen.value
   const persona = PERSONALITIES[n.personality]
   const bloc = blocOf(game, id)
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
@@ -462,7 +463,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
         </span>
         {bloc && <span className="chip chip-blue">{bloc.name}</span>}
         <span>
-          {regionsOf(game, id).length === 1 ? '1 country' : `${regionsOf(game, id).length} countries`} · strength {power.toFixed(0)} ({power > ctx.myPower ? 'stronger than you' : 'weaker than you'})
+          {regionsOf(game, id).length === 1 ? '1 country' : `${regionsOf(game, id).length} countries`} · strength {showPower(seen)} ({power > ctx.myPower ? 'stronger than you' : 'weaker than you'})
         </span>
       </div>
       {(cb || theirCb) && (
@@ -648,7 +649,7 @@ export function DiplomacyPanel() {
   const closeList = [...close].filter((id) => game.nations[id]?.alive).sort((a, b) => Number(atWar(game, me, b)) - Number(atWar(game, me, a)) || Number(isAllied(game, me, b)) - Number(isAllied(game, me, a)) || game.nations[a].name.localeCompare(game.nations[b].name))
   const majors = Object.values(game.nations)
     .filter((n) => n.alive && n.id !== me && !close.has(n.id))
-    .sort((a, b) => regionsOf(game, b.id).length - regionsOf(game, a.id).length || militaryPower(game, b.id) - militaryPower(game, a.id))
+    .sort((a, b) => regionsOf(game, b.id).length - regionsOf(game, a.id).length || powerView(game, me, b.id).value - powerView(game, me, a.id).value)
     .slice(0, 6)
 
   return (

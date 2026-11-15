@@ -3,7 +3,7 @@ import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
 import { mapColor } from '../data/mapColors'
 import { TERRAIN } from '../data/terrain'
-import { militaryPower } from '../engine/militaryStats'
+import { powerView, showPower } from '../engine/intel'
 import { lineMax } from '../engine/economy'
 import { atWar, hasPact, isAllied, totalUnits } from '../engine/helpers'
 import type { GameState, RegionId } from '../engine/types'
@@ -285,7 +285,7 @@ export function WorldGlobe() {
       const yours = owner?.id === game.playerId
       const rebels = game.regions[id].rebels
       const war = !yours && owner && atWar(game, game.playerId, owner.id)
-      const power = owner ? militaryPower(game, owner.id).toFixed(0) : '0'
+      const power = owner ? showPower(powerView(game, game.playerId, owner.id)) : '0'
       return `<div class="globe-tip"><b>${escapeHtml(mr.name)}</b><div style="color:${escapeHtml(owner?.color ?? '#fff')}">${yours ? 'Your country' : escapeHtml(owner?.name ?? 'Unknown')}${war ? ' · at war' : ''}</div><div>${TERRAIN[mr.terrain].name}</div><div>Military strength ${power}</div><div>Defense Line ${Math.min(game.regions[id].line, lineMax(game, map, id)).toFixed(1)} of ${lineMax(game, map, id).toFixed(1)}</div>${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
     },
     [],

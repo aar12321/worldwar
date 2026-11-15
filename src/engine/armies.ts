@@ -120,7 +120,7 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
   const commit = o.commit ?? 'main'
   const stance = o.stance ?? 'assault'
   // A live army is away for days or weeks, so even an all-in attack leaves a guard at home.
-  const share = Math.min(commitShare(n, commit), 1 - LIVE.homeGuard)
+  const share = Math.min(commitShare(n, commit, o.share), 1 - LIVE.homeGuard)
   const units = emptyUnits()
   for (const k of UNIT_TYPES) {
     const take = n.military.units[k] * share

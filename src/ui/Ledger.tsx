@@ -3,7 +3,7 @@ import { nationNeighbors, opinionLabel, opinionOf } from '../ai/opinion'
 import { tierSpec } from '../data/empire'
 import { computeEconomy } from '../engine/economy'
 import { atWar, hasPact, isAllied } from '../engine/helpers'
-import { militaryPower } from '../engine/militaryStats'
+import { powerView, showPower, type PowerView } from '../engine/intel'
 import type { GameState, NationId } from '../engine/types'
 import { getWorld } from '../map/world'
 
@@ -18,7 +18,7 @@ interface Row {
   name: string
   color: string
   countries: number
-  power: number
+  power: PowerView
   income: number
   opinion: number
   relation: Relation
@@ -40,7 +40,7 @@ function rowsFor(game: GameState): Row[] {
       name: n.name,
       color: n.color,
       countries: counts.get(n.id) ?? 0,
-      power: militaryPower(game, n.id),
+      power: powerView(game, me, n.id),
       income: computeEconomy(game, map, n.id).gross,
       opinion: opinionOf(game, map, n.id, me, { borders: near.has(n.id), coalition: false }),
       relation: n.overlord === me ? 'puppet' : atWar(game, me, n.id) ? 'war' : isAllied(game, me, n.id) ? 'ally' : hasPact(game, me, n.id) ? 'pact' : 'peace',
@@ -70,7 +70,7 @@ export function Ledger({ game, onOpen }: { game: GameState; onOpen: (id: NationI
     const q = query.trim().toLowerCase()
     const list = rows.filter((r) => (!q || r.name.toLowerCase().includes(q)) && (filter === 'all' || (filter === 'neighbors' && r.neighbor) || (filter === 'war' && r.relation === 'war') || (filter === 'ally' && r.relation === 'ally') || (filter === 'big' && r.tier >= 3)))
     list.sort((a, b) => {
-      const v = sort.key === 'name' ? a.name.localeCompare(b.name) : sort.key === 'relation' ? RELATION_ORDER[a.relation] - RELATION_ORDER[b.relation] : a[sort.key] - b[sort.key]
+      const v = sort.key === 'name' ? a.name.localeCompare(b.name) : sort.key === 'relation' ? RELATION_ORDER[a.relation] - RELATION_ORDER[b.relation] : sort.key === 'power' ? a.power.value - b.power.value : a[sort.key] - b[sort.key]
       return (v || a.name.localeCompare(b.name)) * sort.dir
     })
     return list
@@ -119,7 +119,7 @@ export function Ledger({ game, onOpen }: { game: GameState; onOpen: (id: NationI
                   </span>
                 </td>
                 <td className="px-2 py-1.5 text-right">{r.countries}</td>
-                <td className="px-2 py-1.5 text-right">{r.power.toFixed(0)}</td>
+                <td className="px-2 py-1.5 text-right">{showPower(r.power)}</td>
                 <td className="px-2 py-1.5 text-right">{r.income.toFixed(0)}</td>
                 <td className="px-2 py-1.5 text-right" title={opinionLabel(r.opinion)}>
                   {r.opinion > 0 ? '+' : ''}

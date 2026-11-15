@@ -278,8 +278,8 @@ function defendingShare(s: GameState, n: Nation, target: RegionId, notes: string
 }
 
 /** Share of the military an attack by `n` would commit right now, or 0 if it is spent. */
-export function commitShare(n: Nation, commit: Commit): number {
-  return Math.max(0, Math.min(COMMITS[commit].share, 1 - n.military.exposed))
+export function commitShare(n: Nation, commit: Commit, custom?: number): number {
+  return Math.max(0, Math.min(custom ?? COMMITS[commit].share, 1 - n.military.exposed))
 }
 
 export interface AttackResult {
@@ -308,7 +308,7 @@ interface Setup {
 
 /** Builds both sides of an attack, or null if it is not allowed. Shared by the real fight and the forecast. */
 /** `army` is a live-mode army that is fighting: its own units attack, and nothing is taken from the national military. */
-function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, missiles?: number, army?: Army): Setup | null {
+function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, missiles?: number, army?: Army, custom?: number): Setup | null {
   const attackerNation = s.nations[nationId]
   const targetRegion = s.regions[target]
   const mr = map.regions[target]
@@ -317,7 +317,7 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const defenderNation = s.nations[defenderId]
   if (defenderId === nationId || !defenderNation?.alive || !atWar(s, nationId, defenderId)) return null
   const reach = army ? { ok: true, bySea: army.bySea } : canAttackRegion(s, map, nationId, target)
-  const share = army ? army.share : commitShare(attackerNation, commit)
+  const share = army ? army.share : commitShare(attackerNation, commit, custom)
   if (army ? totalUnits(army.units) < 0.05 : !reach.ok || share < 0.05 || totalUnits(attackerNation.military.units) < 0.1) return null
 
   const spec = blitzSpec(attackerNation, stance)
@@ -361,8 +361,8 @@ export interface AttackForecast {
 }
 
 /** Plays the attack out several times on fixed seeds, so the War Room can show honest odds without changing the game. */
-export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs?: number, missiles?: number): AttackForecast | null {
-  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles)
+export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs?: number, missiles?: number, custom?: number): AttackForecast | null {
+  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, undefined, custom)
   if (!setup) return null
   // AI Battle Command plays the fight many more times, so its odds are exact.
   const exact = (s.nations[nationId]?.systems?.ai ?? 0) > 0
@@ -415,8 +415,10 @@ export function resolveAttack(
   missiles?: number,
   /** Live mode: the army that arrived. Its units fight and take the losses, and the bookkeeping of a month's attacks is skipped. */
   army?: Army,
+  /** Turn mode: a chosen share of the military, in place of the preset the commit names. */
+  custom?: number,
 ): AttackResult | null {
-  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, army)
+  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, army, custom)
   if (!setup) return null
   const { attacker, defender, garrison, share } = setup
   const attackerNation = s.nations[nationId]
@@ -484,7 +486,7 @@ export function resolveAttack(
     rounds: outcome.rounds,
     winner: outcome.winner,
     captured,
-    modifiers: [...outcome.modifiers, `${spec.name} with ${COMMITS[commit].name.toLowerCase()} (${Math.round(share * 100)}% of the military)`],
+    modifiers: [...outcome.modifiers, `${spec.name} with ${custom !== undefined && !army ? 'a chosen force' : COMMITS[commit].name.toLowerCase()} (${Math.round(share * 100)}% of the military)`],
     commit,
     stance,
     lineBefore,
