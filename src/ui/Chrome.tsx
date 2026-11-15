@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { turnDate } from '../engine/helpers'
 import { describeOrder } from '../engine/resolveTurn'
-import { controlled, countriesTaken, populationShare } from '../engine/victory'
+import { controlled, countriesTaken, goalSentence, populationShare } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { useGame, type Panel, type ReportDelta } from '../store'
 import { AdviceList } from './Briefing'
@@ -222,7 +222,9 @@ export function GameOver() {
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const quit = useGame((s) => s.quitToMenu)
   const abandon = useGame((s) => s.abandonGame)
-  const online = useGame((s) => !!s.online)
+  const rematch = useGame((s) => s.rematchOnline)
+  const room = useGame((s) => s.online)
+  const online = !!room
   if (!game || game.outcome === 'playing' || fxBusy) return null
   const win = game.outcome === 'victory'
   // Who won. Single-player saves from before this was recorded have no winner, so the player is it.
@@ -231,14 +233,27 @@ export function GameOver() {
   const p = youWon || !win ? game.nations[game.playerId] : champion
   const taken = countriesTaken(game, p.id)
   const when = isLive(game) ? dayDate(game.turn, game.day ?? 0) : turnDate(game.turn)
+  // In a room, the winner is a person: say who.
+  const players = (room?.lobby?.players ?? []).filter((x) => x.nationId)
+  const winnerName = win ? players.find((x) => x.nationId === champion.id)?.name : undefined
+  const classic = game.settings.goal === 'classic'
   const reason = win
-    ? `${p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${when}.`
+    ? classic
+      ? `${winnerName ? `${winnerName} (${p.name})` : p.name} was first to ${goalSentence(game)}, as of ${when}.`
+      : `${winnerName ? `${winnerName} (${p.name})` : p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${when}.`
     : game.humans.length > 1 || online
       ? `Every player's nation has fallen, as of ${when}.`
       : `${p.name} fell ${isLive(game) ? 'on' : 'in'} ${when}. The nation is gone, so the game is lost.`
+  const standings = players
+    .map((x) => {
+      const n = game.nations[x.nationId as string]
+      const last = (game.history ?? []).filter((h) => h.nation === x.nationId).at(-1)
+      return { name: x.name, nation: n, countries: controlled(game, x.nationId as string), people: populationShare(game, x.nationId as string), power: last?.power ?? 0, out: !n?.alive || game.eliminated.includes(x.nationId as string), won: game.winner === x.nationId }
+    })
+    .sort((a, b) => Number(b.won) - Number(a.won) || Number(a.out) - Number(b.out) || b.countries - a.countries)
   return (
     <Modal
-      title={youWon ? 'You won' : win ? `${champion.name} won` : game.humans.length > 1 || online ? 'Every nation has fallen' : 'Your nation has fallen'}
+      title={youWon ? 'You won' : win ? `${winnerName ?? champion.name} won` : game.humans.length > 1 || online ? 'Every nation has fallen' : 'Your nation has fallen'}
       kicker={youWon ? 'Victory' : win ? 'Game over' : 'Defeat'}
       tone={youWon ? '#30d158' : '#ff453a'}
       footer={
@@ -251,28 +266,63 @@ export function GameOver() {
               New game
             </button>
           )}
+          {online && room?.host && (
+            <button className="btn btn-primary px-5 py-2.5 text-[15px]" data-autofocus onClick={rematch} title="Everyone goes back to the lobby, with a new world">
+              Rematch
+            </button>
+          )}
         </>
       }
     >
       <p className="text-[16px] text-white/85">{reason}</p>
-      <dl className="mt-6 grid grid-cols-3 gap-3 text-center">
-        <div className="inset-card py-3">
-          <dt className="label">Countries taken</dt>
-          <dd className="text-[26px] font-semibold">{taken}</dd>
+      {standings.length > 1 ? (
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full text-[14px] border-separate border-spacing-y-1" aria-label="Final standings">
+            <thead>
+              <tr className="text-left text-[12px] text-white/60">
+                <th className="font-medium pb-1">Player</th>
+                <th className="font-medium pb-1 text-right">Countries</th>
+                <th className="font-medium pb-1 text-right">World's people</th>
+                <th className="font-medium pb-1 text-right">Strength</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((r) => (
+                <tr key={r.name + r.nation?.id} className="bg-white/6">
+                  <td className="rounded-l-lg px-3 py-2">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-middle" style={{ background: r.nation?.color }} />
+                    <span className="font-semibold">{r.name}</span> <span className="text-white/65">· {r.nation?.name}</span>
+                    {r.won && <span className="ml-2 text-[12px] font-semibold text-[#6eeb8a]">Winner</span>}
+                    {r.out && <span className="ml-2 text-[12px] text-[#ff8a84]">Out</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.countries}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{(r.people * 100).toFixed(1)}%</td>
+                  <td className="rounded-r-lg px-3 py-2 text-right tabular-nums">{fmt(r.power, 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="inset-card py-3">
-          <dt className="label">World population</dt>
-          <dd className="text-[26px] font-semibold">{(populationShare(game, p.id) * 100).toFixed(1)}%</dd>
-        </div>
-        <div className="inset-card py-3">
-          <dt className="label">Nations left</dt>
-          <dd className="text-[26px] font-semibold">{Object.values(game.nations).filter((n) => n.alive).length}</dd>
-        </div>
-      </dl>
+      ) : (
+        <dl className="mt-6 grid grid-cols-3 gap-3 text-center">
+          <div className="inset-card py-3">
+            <dt className="label">Countries taken</dt>
+            <dd className="text-[26px] font-semibold">{taken}</dd>
+          </div>
+          <div className="inset-card py-3">
+            <dt className="label">World population</dt>
+            <dd className="text-[26px] font-semibold">{(populationShare(game, p.id) * 100).toFixed(1)}%</dd>
+          </div>
+          <div className="inset-card py-3">
+            <dt className="label">Nations left</dt>
+            <dd className="text-[26px] font-semibold">{Object.values(game.nations).filter((n) => n.alive).length}</dd>
+          </div>
+        </dl>
+      )}
       {(game.history ?? []).filter((h) => h.nation === game.playerId).length >= 2 && (
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <Spark label="Countries over the game" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.countries)} color="#0a84ff" />
-          <Spark label="Military strength" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.power)} color="#ff9f0a" />
+          <Spark label="Your countries over the game" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.countries)} color="#0a84ff" />
+          <Spark label="Your military strength" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.power)} color="#ff9f0a" />
         </div>
       )}
     </Modal>

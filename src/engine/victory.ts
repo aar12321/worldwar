@@ -107,3 +107,19 @@ export function checkOutcome(s: GameState, map?: WorldMap): GameState['outcome']
   }
   return 'playing'
 }
+
+/** The win condition in plain words, from the game's own rules. */
+export function goalSentence(s: GameState): string {
+  if (s.settings.goal !== 'classic') return 'hold every country in the world, yours or puppets of yours'
+  return `take ${conquestGoal(s.settings.victoryShare)} countries, hold ${Math.round(s.settings.victoryShare * 100)}% of the world's people, or reach ${Math.round(economicGoal(s.settings.victoryShare) * 100)}% of its output`
+}
+
+/** How close a nation is to winning, 0 to 1: the nearest of the goals that count in this game. */
+export function goalProgress(s: GameState, map: WorldMap, id: NationId): number {
+  if (s.settings.goal !== 'classic') {
+    const lands = Object.keys(s.regions).length
+    return lands > 0 ? Math.min(1, controlled(s, id) / lands) : 0
+  }
+  const share = s.settings.victoryShare
+  return Math.min(1, Math.max(countriesTaken(s, id) / conquestGoal(share), populationShare(s, id) / share, economicShare(s, map, id) / Math.max(0.0001, economicGoal(share))))
+}

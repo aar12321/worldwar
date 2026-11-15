@@ -67,11 +67,11 @@ export function scheduleEvent(s: GameState, map: WorldMap, nationId: NationId, r
   return null
 }
 
-export function fillEventText(text: string, s: GameState, map: WorldMap, ev: PendingEvent): string {
+export function fillEventText(text: string, s: GameState, map: WorldMap, ev: PendingEvent, nationId: NationId = s.playerId): string {
   return text
     .replaceAll('{region}', ev.regionId ? map.regions[ev.regionId].name : 'the provinces')
     .replaceAll('{rival}', ev.rivalId ? s.nations[ev.rivalId].name : 'a rival nation')
-    .replaceAll('{nation}', s.nations[s.playerId].name)
+    .replaceAll('{nation}', s.nations[nationId].name)
 }
 
 export function effectAmount(e: Extract<EventEffect, { type: 'resource' }>, workforce: number): number {
@@ -131,16 +131,33 @@ export function describeEffect(e: EventEffect, workforce: number, s: GameState, 
   }
 }
 
-export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: number): GameState {
+/** A small stable number from a nation's id, so each human's decision rolls its own dice in a multiplayer game. */
+function idSalt(id: string): number {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0
+  return Math.abs(h) % 9973
+}
+
+/**
+ * Answers the decision waiting for a nation. In a one-player game that is `pendingEvent` and the answer is the player's; in a
+ * multiplayer game it is that human's entry in `pendingEvents`, which is cleared without touching anyone else's.
+ */
+export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: number, forNation?: NationId): GameState {
   const s = structuredClone(state)
-  const ev = s.pendingEvent
-  if (!ev) return state
+  if (!resolveEvent(s, map, optionIndex, forNation ?? s.playerId, false)) return state
+  return s
+}
+
+/** Plays out a decision on a state the caller owns. `byDefault` says the nation's ministers chose because the player did not. Returns false when nothing was waiting. */
+export function resolveEvent(s: GameState, map: WorldMap, optionIndex: number, nationId: NationId, byDefault: boolean): boolean {
+  const multi = !!s.multiplayer
+  const ev = multi ? s.pendingEvents?.[nationId] : s.pendingEvent
+  if (!ev) return false
   const def = EVENT_BY_ID[ev.eventId]
-  const option = def.options[optionIndex]
-  if (!option) return state
-  const nationId = s.playerId
+  const option = def?.options[optionIndex]
+  if (!option) return false
   const n = s.nations[nationId]
-  const rng = createRng(s.seed, s.turn * 977 + 13)
+  const rng = createRng(s.seed, s.turn * 977 + 13 + (multi ? idSalt(nationId) : 0))
   const workforce = computeEconomy(s, map, nationId).workforce
   const region = ev.regionId ? s.regions[ev.regionId] : null
 
@@ -236,7 +253,28 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         break
     }
   }
-  addLog(s, 'event', `${def.title}: you chose "${option.label}".`, [nationId])
-  s.pendingEvent = null
-  return s
+  addLog(s, 'event', byDefault ? `${def.title}: nobody decided, so your ministers chose "${option.label}".` : `${def.title}: you chose "${option.label}".`, [nationId])
+  if (multi) delete s.pendingEvents![nationId]
+  else s.pendingEvent = null
+  return true
+}
+
+/** Multiplayer, once a month's orders are in: every decision nobody answered takes its first option, and a fallen nation's is dropped. */
+export function settleUnanswered(s: GameState, map: WorldMap) {
+  if (!s.multiplayer || !s.pendingEvents) return
+  for (const id of Object.keys(s.pendingEvents).sort()) {
+    if (!s.nations[id]?.alive) delete s.pendingEvents[id]
+    else resolveEvent(s, map, 0, id, true)
+  }
+}
+
+/** Multiplayer: each living human gets a decision of their own, drawn with their own dice. Nobody waits for anybody. */
+export function scheduleHumanEvents(s: GameState, map: WorldMap, rng: Rng) {
+  s.pendingEvents ??= {}
+  for (const id of [...s.humans].sort()) {
+    if (!s.nations[id]?.alive || s.eliminated.includes(id)) continue
+    const ev = scheduleEvent(s, map, id, rng)
+    if (ev) s.pendingEvents[id] = ev
+  }
+  s.nextEventTurn = s.turn + EVENT_GAP_TURNS
 }

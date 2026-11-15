@@ -1,4 +1,4 @@
-import { PLAYER_COLOR, mapColor } from './mapColors'
+import { humanColor, mapColor } from './mapColors'
 import { OIL_DEPOSITS, STEEL_DEPOSITS } from './deposits'
 import { SECTOR_IDS, SECTORS } from './business'
 import { sectorCap } from '../engine/business'
@@ -40,6 +40,8 @@ export interface NewGameOptions {
   victoryShare?: number
   goal?: 'world' | 'classic'
   difficulty?: Difficulty
+  /** A game people play together online: decisions come to each player separately and never stop the month. Always on with two or more humans. */
+  online?: boolean
   /** 'live': time flows and armies march. Turns, the default, is the game as it has always played. */
   mode?: 'turns' | 'live'
 }
@@ -96,6 +98,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     crises: [],
     dispatches: [],
     pendingEvent: null,
+    ...(opts.online || (opts.humans && new Set([opts.playerRegionId, ...opts.humans]).size > 1) ? { multiplayer: true, pendingEvents: {} } : {}),
     nextEventTurn: FIRST_EVENT_TURN,
     battles: [],
     log: [],
@@ -166,7 +169,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     const nation: Nation = {
       id,
       name: mr.name,
-      color: isPlayer ? PLAYER_COLOR : nationColor(index),
+      color: isPlayer ? humanColor(Math.max(0, state.humans.indexOf(id))) : nationColor(index),
       capital: id,
       originalCapital: id,
       isPlayer,

@@ -14,7 +14,7 @@ import { garrisonStrength } from '../engine/warfare'
 import { netWarScore } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { usePlayerView } from './hooks'
+import { useHumanName, usePlayerView } from './hooks'
 import { UnitIcon } from './icons'
 import { MilitaryCompare } from './MilitaryCompare'
 import { OrderButton } from './panel'
@@ -42,6 +42,7 @@ export function CountryPanel() {
   const pact = !mine && hasPact(game, player.id, owner.id)
   const allied = !mine && isAllied(game, player.id, owner.id)
   const opinion = mine ? 0 : opinionOf(game, map, owner.id, player.id)
+  const humanName = useHumanName(owner.id)
   const built = BUILDING_TYPES.filter((b) => region.buildings[b] > 0)
   const attackErr = war ? validateOrder(game, map, { type: 'attack', nationId: player.id, target: selected }, orders) : null
   const max = lineMax(game, map, selected)
@@ -190,10 +191,16 @@ export function CountryPanel() {
             )}
             {!mine && (
               <>
-                <p className="text-[13px] text-white/75" title={PERSONALITIES[owner.personality].description}>
-                  {owner.name} is {PERSONALITIES[owner.personality].name.toLowerCase()} and {opinionLabel(opinion).toLowerCase()} toward you ({opinion > 0 ? '+' : ''}
-                  {opinion}).{war ? ` War score ${netWarScore(game, player.id, owner.id)}.` : ''}
-                </p>
+                {humanName ? (
+                  <p className="text-[13px] text-white/75">
+                    {owner.name} is played by <span className="font-semibold">{humanName}</span>, not the AI.{war ? ` War score ${netWarScore(game, player.id, owner.id)}.` : ''}
+                  </p>
+                ) : (
+                  <p className="text-[13px] text-white/75" title={PERSONALITIES[owner.personality].description}>
+                    {owner.name} is {PERSONALITIES[owner.personality].name.toLowerCase()} and {opinionLabel(opinion).toLowerCase()} toward you ({opinion > 0 ? '+' : ''}
+                    {opinion}).{war ? ` War score ${netWarScore(game, player.id, owner.id)}.` : ''}
+                  </p>
+                )}
                 <MilitaryCompare game={game} mine={player.id} theirs={owner.id} />
                 <button className="btn btn-magenta" onClick={() => openAgencies(owner.id)}>
                   Send the agency

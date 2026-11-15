@@ -1,10 +1,12 @@
 import { motion } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DIFFICULTY } from '../data/difficulty'
+import { turnDate } from '../engine/helpers'
 import type { Difficulty } from '../engine/types'
 import { conquestGoal, economicGoal } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { MAX_PLAYERS, type RoomSettings } from '../net/protocol'
+import { deleteOnlineSave, listOnlineSaves } from '../net/saves'
 import { supabaseConfigured } from '../net/transport'
 import { rememberedName, useGame } from '../store'
 import { globeBridge } from './globeBridge'
@@ -50,7 +52,10 @@ export function ConnectionNote({ kind }: { kind: 'supabase' | 'browser' | 'memor
 export function OnlineEntry({ onClose }: { onClose: () => void }) {
   const create = useGame((s) => s.createOnline)
   const join = useGame((s) => s.joinOnline)
+  const resume = useGame((s) => s.resumeOnline)
   const lastRoom = useGame((s) => s.lastRoom)
+  const { map } = getWorld()
+  const [saves, setSaves] = useState(() => listOnlineSaves())
   const [name, setName] = useState(rememberedName)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -111,6 +116,43 @@ export function OnlineEntry({ onClose }: { onClose: () => void }) {
           )}
         </section>
 
+        {saves.length > 0 && (
+          <section className="inset-card p-4 space-y-3">
+            <div>
+              <div className="text-[16px] font-semibold tracking-tight">Saved games</div>
+              <p className="text-[14px] text-white/70 mt-0.5">Every player keeps the game on their own device after each month. Open one again here, then your friends join with the same code and take their seats back.</p>
+            </div>
+            {saves.map((sv) => (
+              <div key={sv.code} className="rounded-xl bg-white/5 p-3 space-y-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[16px] font-semibold tracking-[0.16em]">{sv.code}</span>
+                  <span className="text-[12px] text-white/65">{turnDate(sv.turn)} · saved {new Date(sv.savedAt).toLocaleDateString()}</span>
+                </div>
+                <div className="text-[12px] text-white/65">Open it as:</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {sv.seats.map((seat) => (
+                    <button key={seat.nationId} className="btn btn-quiet" disabled={!ready || busy} onClick={() => void run(() => resume(name, sv.code, seat.nationId))}>
+                      {map.regions[seat.nationId]?.name ?? seat.nationId} <span className="text-white/55">({seat.name})</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="text-[12px] text-white/55 underline underline-offset-2 hover:text-white/80"
+                  onClick={() => {
+                    if (window.confirm(`Delete the saved game ${sv.code} from this device?`)) {
+                      deleteOnlineSave(sv.code)
+                      setSaves(listOnlineSaves())
+                    }
+                  }}
+                >
+                  Delete this save
+                </button>
+              </div>
+            ))}
+            {!ready && <p className="text-[12px] text-white/60">Type your name first.</p>}
+          </section>
+        )}
+
         {configured ? <p className="text-[13px] text-white/65">Rooms are relayed through the game server, so friends can be anywhere.</p> : <ConnectionNote kind="browser" />}
       </div>
     </Modal>
@@ -139,6 +181,8 @@ export function Lobby() {
   const update = useGame((s) => s.updateOnlineSettings)
   const start = useGame((s) => s.startOnline)
   const leave = useGame((s) => s.leaveOnline)
+  const kick = useGame((s) => s.kickOnlinePlayer)
+  const takeSeat = useGame((s) => s.takeOnlineSeat)
   const toast = useGame((s) => s.toast)
   const { map } = getWorld()
   const [query, setQuery] = useState('')
@@ -162,10 +206,30 @@ export function Lobby() {
   }
 
   if (!lobby) {
+    const seats = online.seats
     return (
       <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
         <div className="glass pointer-events-auto rounded-[22px] p-6 text-center space-y-3 w-[min(420px,90vw)]">
-          <p className="text-[16px] font-semibold">Joining room {online.code}…</p>
+          {seats === null ? (
+            <p className="text-[16px] font-semibold">Joining room {online.code}…</p>
+          ) : seats.length === 0 ? (
+            <>
+              <p className="text-[16px] font-semibold">Room {online.code} is full</p>
+              <p className="text-[14px] text-white/70">The game has started and every seat has a player in it.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-[16px] font-semibold">Room {online.code} is already playing</p>
+              <p className="text-[14px] text-white/70">Take over a seat whose player is away:</p>
+              <div className="space-y-1.5">
+                {seats.map((seat) => (
+                  <button key={seat.nationId} className="btn btn-primary w-full py-2.5" onClick={() => takeSeat(seat.nationId)}>
+                    {map.regions[seat.nationId]?.name ?? seat.nationId} <span className="opacity-70">· was {seat.name}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <button className="btn" onClick={leave}>
             Cancel
           </button>
@@ -209,6 +273,11 @@ export function Lobby() {
                     <span className="block text-[13px] text-white/70 truncate">{p.nationId ? map.regions[p.nationId].name : 'Choosing a nation…'}</span>
                   </span>
                   <span className="sr-only">{here ? 'Here' : 'Away'}</span>
+                  {online.host && p.clientId !== online.clientId && (
+                    <button className="btn btn-quiet text-[12px] shrink-0" aria-label={`Remove ${p.name} from the room`} onClick={() => kick(p.clientId)}>
+                      Remove
+                    </button>
+                  )}
                 </li>
               )
             })}
@@ -304,19 +373,35 @@ export function ReadyDots() {
   )
 }
 
-/** The line under the Ready button: how many are done and how long is left. */
+/** The line under the Ready button: how many are done, who the month is waiting on, how long is left, and whether the line is up. */
 export function OnlineStatus() {
   const online = useGame((s) => s.online)
   const seconds = useCountdown(online?.deadline ?? null)
   if (!online?.lobby) return null
-  const players = online.lobby.players.filter((p) => p.nationId)
+  const lobby = online.lobby
+  const players = lobby.players.filter((p) => p.nationId)
+  const waitingOn = players.filter((p) => !online.ready.includes(p.nationId as string) && (p.clientId === online.clientId || online.peers.includes(p.clientId))).map((p) => (p.clientId === online.clientId ? 'you' : p.name))
+  const hostAway = lobby.phase === 'playing' && lobby.host !== online.clientId && !online.peers.includes(lobby.host)
   return (
-    <span className="inline-flex items-center justify-center gap-2">
-      <ReadyDots />
-      <span>
-        {online.ready.length} of {players.length} ready
-        {seconds !== null && <span className={seconds <= 10 ? 'text-[#ff8a84] font-semibold' : ''}> · {clock(seconds)}</span>}
+    <span className="inline-flex flex-col items-center justify-center gap-0.5">
+      <span className="inline-flex items-center justify-center gap-2">
+        <ReadyDots />
+        <span>
+          {online.ready.length} of {players.length} ready
+          {seconds !== null && <span className={seconds <= 10 ? 'text-[#ff8a84] font-semibold' : ''}> · {clock(seconds)}</span>}
+        </span>
       </span>
+      {online.connection !== 'connected' ? (
+        <span className="text-[#ffd60a] font-semibold" role="status">
+          Reconnecting…
+        </span>
+      ) : hostAway ? (
+        <span className="text-[#ffd60a]" role="status">
+          The host is away. Someone takes over in a moment.
+        </span>
+      ) : waitingOn.length > 0 && online.ready.length > 0 ? (
+        <span className="text-white/60 max-w-[160px] truncate">Waiting on {waitingOn.join(', ')}</span>
+      ) : null}
     </span>
   )
 }
@@ -329,6 +414,7 @@ export function OnlinePeople() {
   const send = useGame((s) => s.sendChat)
   const markRead = useGame((s) => s.markChatRead)
   const leave = useGame((s) => s.leaveOnline)
+  const kick = useGame((s) => s.kickOnlinePlayer)
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const log = useRef<HTMLUListElement>(null)
@@ -378,9 +464,21 @@ export function OnlinePeople() {
                     <span aria-hidden className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: nation?.color ?? '#fff' }} />
                     <span className="min-w-0 flex-1 truncate">
                       <span className="font-semibold">{p.name}</span>
+                      {p.clientId === online.lobby!.host && <span className="ml-1 text-[11px] font-semibold text-[#64a8ff]">Host</span>}
                       <span className="text-white/65"> · {nation?.name}</span>
                     </span>
                     <span className="text-[12px] shrink-0 text-white/70">{out ? 'Out' : !here ? 'Away (AI plays)' : done ? 'Ready' : 'Planning'}</span>
+                    {online.host && p.clientId !== online.clientId && (
+                      <button
+                        className="text-[12px] shrink-0 text-white/55 underline underline-offset-2 hover:text-white/85"
+                        aria-label={`Remove ${p.name}`}
+                        onClick={() => {
+                          if (window.confirm(`Remove ${p.name} from the game? Their nation is played by the AI, and the seat is free for someone else.`)) kick(p.clientId)
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
                   </li>
                 )
               })}

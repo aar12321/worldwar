@@ -1,4 +1,5 @@
 import { TECH_BY_ID } from '../data/techTree'
+import { EVENT_BY_ID } from '../data/events'
 import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, DIPLOMACY, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
 import { CITY_RULES, FOCUS } from '../data/cities'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS } from '../data/business'
@@ -29,7 +30,7 @@ import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike', 'eventChoice'])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
 const LIVE_NOW = new Set<Order['type']>(['strike', 'respond', 'propose'])
@@ -258,6 +259,12 @@ export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Or
 function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
   switch (o.type) {
+    case 'eventChoice': {
+      const ev = s.pendingEvents?.[o.nationId]
+      if (!ev) return 'No decision is waiting'
+      if (!Number.isInteger(o.index) || o.index < 0 || o.index >= (EVENT_BY_ID[ev.eventId]?.options.length ?? 0)) return 'Choose one of the options'
+      return null
+    }
     case 'setPolicy': {
       const maxDraft = n.laws.includes('conscription_act') ? DRAFT_LIMITS.maxWithConscription : DRAFT_LIMITS.max
       if (o.taxRate < TAX_LIMITS.min || o.taxRate > TAX_LIMITS.max) return 'Tax rate out of range'

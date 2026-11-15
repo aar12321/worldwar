@@ -28,7 +28,8 @@ import { recordHistory, runWorld, spendingFromBudget } from './statecraft'
 import { runEpidemics } from './epidemics'
 import { updateTiers } from './empire'
 import { nationNeighborMap } from './helpers'
-import { EVENT_GAP_TURNS, scheduleEvent } from './events'
+import { EVENT_BY_ID } from '../data/events'
+import { EVENT_GAP_TURNS, resolveEvent, scheduleEvent, scheduleHumanEvents, settleUnanswered } from './events'
 import { addLog, forceUnits, reach, regionsOf } from './helpers'
 import { clockOf, isLive } from './calendar'
 import { launchArmy, launchStrike, turnBack } from './armies'
@@ -186,10 +187,16 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Repeal ${LAW_SPECS[o.law].name}`
     case 'suppressRebels':
       return `Suppress rebels in ${region(o.regionId)}`
+    case 'eventChoice': {
+      const ev = s.pendingEvents?.[o.nationId]
+      const def = ev ? EVENT_BY_ID[ev.eventId] : null
+      return def ? `Decide: ${def.title} (${def.options[o.index]?.label ?? 'option'})` : 'Answer a decision'
+    }
   }
 }
 
 const PHASES: Order['type'][][] = [
+  ['eventChoice'],
   ['respond'],
   ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor', 'setDirective', 'moveCapital'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
@@ -253,6 +260,9 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
     }
   }
 
+  // Online, a decision nobody answered is made by the nation's ministers, so no month ever waits on one.
+  settleUnanswered(s, map)
+
   const trained = tickTraining(s)
   drillWithCommanders(s)
 
@@ -307,11 +317,15 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   // A live clock reads the 1st of the new month from here on, so the news below carries the right date.
   if (isLive(s)) s.day = 0
   expireDiplomacy(s)
-  // Surprise decisions are for single-player games. Online, everyone plans the same month, with no interruptions.
-  const player = s.nations[s.humans[0] ?? s.playerId]
-  if (s.humans.length === 1 && player?.alive && s.turn >= s.nextEventTurn) {
-    s.pendingEvent = scheduleEvent(s, map, player.id, rng)
-    s.nextEventTurn = s.turn + EVENT_GAP_TURNS
+  // Surprise decisions. A one-player game stops for its player. Online, each human gets their own and the month never waits.
+  if (s.multiplayer) {
+    if (s.turn >= s.nextEventTurn) scheduleHumanEvents(s, map, rng)
+  } else {
+    const player = s.nations[s.humans[0] ?? s.playerId]
+    if (s.humans.length === 1 && player?.alive && s.turn >= s.nextEventTurn) {
+      s.pendingEvent = scheduleEvent(s, map, player.id, rng)
+      s.nextEventTurn = s.turn + EVENT_GAP_TURNS
+    }
   }
   s.worldGross = worldGross(s, map)
   s.outcome = checkOutcome(s, map)
@@ -350,6 +364,9 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
 function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typeof createRng>) {
   const n = s.nations[o.nationId]
   switch (o.type) {
+    case 'eventChoice':
+      resolveEvent(s, map, o.index, o.nationId, false)
+      break
     case 'respond':
       respond(s, map, o.nationId, o.proposalId, o.accept, rng)
       break

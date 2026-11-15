@@ -21,7 +21,7 @@ import { TRADE_RESOURCES } from '../engine/types'
 import { MAX_REPARATIONS, netWarScore, puppetValue, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { usePlayerView } from './hooks'
+import { useHumanName, usePlayerView } from './hooks'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import { Ledger } from './Ledger'
 
@@ -208,6 +208,7 @@ function TradeComposer({ target }: { target: NationId }) {
   const view = usePlayerView()!
   const { game, player } = view
   const them = game.nations[target]
+  const human = useHumanName(target)
   const [give, setGive] = useState(ZERO)
   const [receive, setReceive] = useState(ZERO)
   const [months, setMonths] = useState(0)
@@ -251,7 +252,7 @@ function TradeComposer({ target }: { target: NationId }) {
         Market value: you give <span className="text-white">{gv.toFixed(0)}</span>, you get <span className="text-white">{rv.toFixed(0)}</span> money.{' '}
         {rv > 0 && gv / rv < 1 && 'They will want more for it, unless they are short of what you offer.'}
       </div>
-      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label="Offer deal" cost={`${PROPOSAL_COSTS.trade} influence`} effect="They answer when the month ends" tone="btn-primary" />
+      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label="Offer deal" cost={`${PROPOSAL_COSTS.trade} influence`} effect={human ? `${human} sees it when the next month begins` : 'They answer when the month ends'} tone="btn-primary" />
     </div>
   )
 }
@@ -279,6 +280,7 @@ function PeaceComposer({ target }: { target: NationId }) {
   const view = usePlayerView()!
   const { game, player } = view
   const { map } = getWorld()
+  const human = useHumanName(target)
   const [cede, setCede] = useState<RegionId[]>([])
   const [reparations, setReparations] = useState(0)
   const [puppet, setPuppet] = useState(false)
@@ -348,7 +350,7 @@ function PeaceComposer({ target }: { target: NationId }) {
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
         label={live.length === 0 && reparations === 0 && !puppet && !terms.general ? 'Offer peace with no terms' : 'Send terms'}
         cost={`${PROPOSAL_COSTS.peace} influence`}
-        effect="They answer when the month ends"
+        effect={human ? `${human} sees it when the next month begins` : 'They answer when the month ends'}
         tone="btn-primary"
       />
     </div>
@@ -439,6 +441,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const seen = powerView(game, player.id, id)
   const power = seen.value
   const persona = PERSONALITIES[n.personality]
+  const human = useHumanName(id)
   const bloc = blocOf(game, id)
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
   const sanctionedByMe = game.sanctions.some((x) => x.from === player.id && x.to === id && x.until >= game.turn)
@@ -458,9 +461,15 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
         <span className={`text-[12px] font-medium whitespace-nowrap ${statusColor}`}>{status}</span>
       </div>
       <div className="flex items-center gap-2 text-[12px] text-white/70">
-        <span className="chip" title={persona.description}>
-          {persona.name}
-        </span>
+        {human ? (
+          <span className="chip chip-blue" title="Another player runs this nation, not the AI. Offers wait in their inbox.">
+            Played by {human}
+          </span>
+        ) : (
+          <span className="chip" title={persona.description}>
+            {persona.name}
+          </span>
+        )}
         {bloc && <span className="chip chip-blue">{bloc.name}</span>}
         <span>
           {regionsOf(game, id).length === 1 ? '1 country' : `${regionsOf(game, id).length} countries`} · strength {showPower(seen)} ({power > ctx.myPower ? 'stronger than you' : 'weaker than you'})
@@ -641,6 +650,8 @@ export function DiplomacyPanel() {
   const { player } = view
   const me = player.id
   const inbox = game.proposals.filter((p) => p.to === me)
+  // Offers that stay in the game after a month ended are ones to another player, who has not answered yet.
+  const sent = game.proposals.filter((p) => p.from === me)
   const deals = game.deals.filter((d) => d.from === me || d.to === me)
   const mine = game.dispatches.filter((d) => d.from === me || d.to === me)
   const world = game.dispatches.filter((d) => d.from !== me && d.to !== me)
@@ -656,7 +667,7 @@ export function DiplomacyPanel() {
     .slice(0, 6)
 
   return (
-    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. ${isLive(game) ? 'Rivals answer offers the same day.' : 'Offers are answered when the month ends.'}`} panel="diplomacy" wide={!focus && tab === 'ledger'} tabs={<Tabs value={focus ? 'nations' : tab} onChange={(t) => { if (focus) openDiplomacy(null); setTab(t) }} options={[['nations', 'Nations'], ['ledger', 'Ledger']] as const} />}>
+    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. ${isLive(game) ? 'Rivals answer offers the same day.' : game.multiplayer ? 'AI nations answer when the month ends; players see offers when the next month begins.' : 'Offers are answered when the month ends.'}`} panel="diplomacy" wide={!focus && tab === 'ledger'} tabs={<Tabs value={focus ? 'nations' : tab} onChange={(t) => { if (focus) openDiplomacy(null); setTab(t) }} options={[['nations', 'Nations'], ['ledger', 'Ledger']] as const} />}>
       {!focus && tab === 'ledger' && <Ledger game={game} onOpen={(id) => { setTab('nations'); openDiplomacy(id) }} />}
       {(focus || tab === 'nations') && <>
       {ctx.coalition && (
@@ -665,6 +676,19 @@ export function DiplomacyPanel() {
         </div>
       )}
       <CrisisCards game={game} me={me} />
+      {sent.length > 0 && (
+        <section className="space-y-1.5" aria-label="Offers you sent">
+          <div className="label">Waiting on other players</div>
+          {sent.map((p) => (
+            <div key={p.id} className="rounded-lg border border-white/12 bg-white/5 px-3 py-2 text-[13px] flex items-center justify-between gap-3">
+              <span className="min-w-0 truncate">
+                <span className="font-semibold">{game.nations[p.to]?.name}</span> <span className="text-white/70">· {PROPOSAL_LABELS[p.kind]}</span>
+              </span>
+              <span className="text-white/55 whitespace-nowrap">{Math.max(0, p.expires - game.turn) + 1} months left</span>
+            </div>
+          ))}
+        </section>
+      )}
       <AnimatePresence initial={false}>
         {inbox.length > 0 && (
           <motion.section key="inbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">

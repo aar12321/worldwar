@@ -536,6 +536,8 @@ export type Order =
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
+  /** Online: this player's answer to the decision waiting for them (`GameState.pendingEvents`). */
+  | { type: 'eventChoice'; nationId: NationId; index: number }
   /** Live mode: calls an army that is still on its way out back home. */
   | { type: 'recall'; nationId: NationId; armyId: string }
 
@@ -715,6 +717,10 @@ export interface GameState {
   /** Diplomatic outcomes from the most recent turn. */
   dispatches: Dispatch[]
   pendingEvent: PendingEvent | null
+  /** True in a game people play together online. Everyone gets their own decisions, and none of them stops the month. */
+  multiplayer?: boolean
+  /** Multiplayer: the decision waiting for each human. An answer is an `eventChoice` order; an unanswered one takes the first option. */
+  pendingEvents?: Record<NationId, PendingEvent>
   /** Turn when the next surprise decision may appear. New games wait until turn 8 (FIRST_EVENT_TURN). */
   nextEventTurn: number
   battles: BattleReport[]

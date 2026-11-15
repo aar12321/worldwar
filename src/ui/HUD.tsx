@@ -2,13 +2,15 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { maxWars, turnDate } from '../engine/helpers'
 import { worldTension } from '../engine/crises'
-import { controlled } from '../engine/victory'
+import { controlled, goalProgress, goalSentence } from '../engine/victory'
+import { getWorld } from '../map/world'
 import { Tip } from './bits'
 import { tierSpec } from '../data/empire'
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
 import { IncomingChip, LiveControls, LiveDate, MonthBar } from './LiveControls'
+import { EventChip } from './EventModal'
 import { OnlinePeople, OnlineStatus } from './Online'
 import { isLive } from '../engine/calendar'
 
@@ -161,6 +163,8 @@ export function HUD() {
   const live = isLive(game)
   const held = controlled(game, player.id)
   const lands = Object.keys(game.regions).length
+  const classic = game.settings.goal === 'classic'
+  const goalFill = goalProgress(game, getWorld().map, player.id)
   const tension = worldTension(game)
   const standing = Math.round(game.infamy[player.id] ?? 0)
   const warLimit = maxWars(game, player.id)
@@ -217,7 +221,7 @@ export function HUD() {
                     {tierSpec(player.tier).name}
                   </button>{' '}
                   ·{' '}
-                  <Tip text={`Win by holding all ${lands} countries, yours or puppets of yours. World tension ${tension}: wars, crises and aggression raise it. Your reputation for aggression is ${standing}; it fades with time. You lose if ${player.name} is wiped out.`}>
+                  <Tip text={`${classic ? `Win by being first to ${goalSentence(game)}.` : `Win by holding all ${lands} countries, yours or puppets of yours.`} World tension ${tension}: wars, crises and aggression raise it. Your reputation for aggression is ${standing}; it fades with time. You lose if ${player.name} is wiped out.`}>
                     World {held}/{lands}
                   </Tip>{' '}
                   · Wars {econ.warBills.length}/{warLimit}
@@ -225,7 +229,7 @@ export function HUD() {
                 <span className={tension >= 50 ? 'text-[#ff8a84]' : ''}>Tension {tension}</span>
               </div>
               <div className="h-1 w-full min-w-24 rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full bg-[#0a84ff] transition-[width] duration-700 ease-out" style={{ width: `${Math.min(100, (held / lands) * 100)}%` }} />
+                <div className="h-full bg-[#0a84ff] transition-[width] duration-700 ease-out" style={{ width: `${Math.min(100, goalFill * 100)}%` }} />
               </div>
             </div>
           </div>
@@ -305,6 +309,7 @@ export function HUD() {
         )}
       </div>
       <div className="pill-stack">
+        {online && <EventChip />}
         {live && <IncomingChip />}
         {top && top.urgency === 'now' && panel === 'none' && !(live && top.id.startsWith('incoming-')) && (
           <button className="advice-pill pointer-events-auto" onClick={() => setPanel('briefing')} title="Open the Briefing (B)">
