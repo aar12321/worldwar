@@ -55,13 +55,19 @@ export function localTransport(code: string, clientId: ClientId): Transport {
   }
 }
 
-export const supabaseConfigured = () => !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+
+export const supabaseConfigured = () => !!(supabaseUrl && supabaseKey)
 
 /** One client for the whole page: each room is only a channel on it, so a second room does not open a second socket. */
 let sharedClient: Promise<SupabaseClient> | null = null
 function supabaseClient(): Promise<SupabaseClient> {
   sharedClient ??= import('@supabase/supabase-js').then(({ createClient }) =>
-    createClient(import.meta.env.VITE_SUPABASE_URL as string, import.meta.env.VITE_SUPABASE_ANON_KEY as string, {
+    createClient(supabaseUrl as string, supabaseKey as string, {
       auth: { persistSession: false, autoRefreshToken: false },
       realtime: { params: { eventsPerSecond: 30 } },
     }),

@@ -98,11 +98,11 @@ On the main menu press **Play with friends online**, type a name, and **Create a
 
 ### Connecting players
 
-The room code is shared through [Supabase Realtime](https://supabase.com/docs/guides/realtime) broadcast. No tables or accounts are needed, only a project's URL and public ("anon") key, which the browser reads at build time:
+The room code is shared through [Supabase Realtime](https://supabase.com/docs/guides/realtime) broadcast. No app server, database tables or accounts are needed, only a project's URL and public publishable key, which the browser reads at build time:
 
 1. Create a free project at supabase.com. Realtime broadcast is on by default.
-2. Copy **Project URL** and the **anon public** key from *Project Settings, API*.
-3. For local use put them in `.env.local` (see `.env.example`). For a deployed site set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` where the site is built, then build again: Vite bakes them in.
+2. Copy **Project URL** and the **publishable key** from *Project Settings, API*.
+3. For local use put them in `.env.local` (see `.env.example`). For a deployed site set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` where the site is built, then rebuild and republish. The app also accepts `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Vite bakes these public values into the browser bundle.
 
 ```bash
 cp .env.example .env.local   # then edit the two values
