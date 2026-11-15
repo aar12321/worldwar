@@ -2,6 +2,7 @@ import { COVERAGE, DEMAND, FOCUSES, IMMIGRATION, MEDICINE, PEOPLE, SKILL_TARGETS
 import { PROGRAM_RULES } from '../data/projects'
 import { BANKING } from '../data/banking'
 import { tierOf } from './empire'
+import { projectPower, scaleBonus } from './industry'
 import { societyEffects } from './society'
 import { clamp } from './helpers'
 import type { GameState, MapRegion, Nation, NationId, People, RegionState, SkillKey, Spending, WorldMap } from './types'
@@ -98,7 +99,7 @@ export function healthTarget(n: Nation, b: PeopleBasis, doctorCoverage: number):
   let med = 0
   for (const t of n.techs) med += MEDICINE[t]?.health ?? 0
   const program = (n.research2?.medicine ?? 0) * PROGRAM_RULES.health
-  const centre = n.projects?.medCentre?.done ? 0.05 : 0
+  const centre = scaleBonus(0.05, projectPower(n, 'medCentre'))
   return clamp(PEOPLE.healthBase + PEOPLE.healthPerLevel * sp.health + hospitals + PEOPLE.healthPerHousing * sp.housing + med + program + centre + 0.2 * b.development + societyEffects(n).social.health, 0, 0.98)
 }
 
@@ -206,7 +207,7 @@ export function runPeople(s: GameState, n: Nation, b: PeopleBasis) {
   p.skills = normalize(next)
   // Specialization grows in the chosen field, up to what the tier allows; a science park doubles the pace.
   if ((n.programs?.focus ?? 'balanced') !== 'balanced') {
-    const months = PEOPLE.specializationMonths / (n.projects?.sciencePark?.done ? 2 : 1)
+    const months = PEOPLE.specializationMonths / (1 + projectPower(n, 'sciencePark'))
     p.specialization = Math.min(tierOf(n).specializationCap, p.specialization + 1 / months)
   } else p.specialization = 0
   const d = demandOf(n, b)

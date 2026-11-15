@@ -25,7 +25,8 @@ import { ACADEMY, ARMS_EXPORTS, ENTERPRISE, GENERAL_TRAITS } from '../data/proje
 import { bankCredit, inflationStability, interestOf, policyRate, realIncomeFactor, runBank, seigniorage } from './bank'
 import { accordTrade } from './council'
 import { adminReport, combineTraits, occupationFloor, settleSpeed, type AdminReport } from './empire'
-import { activeProjects, armsExportIncome, doneProject, enterpriseIncome, industryCapMult, powerMult, programEffects, projectBill, runArmsExports, runProjects, worksEffects } from './industry'
+import { activeProjects, armsExportIncome, enterpriseIncome, industryCapMult, powerMult, programEffects, projectBill, projectPower, projectSpeed, runArmsExports, runProjects, scaleBonus, scaleFactor, worksEffects } from './industry'
+import { activeLocal, localBill, localEffects, runLocalProjects } from './works'
 import { societyBill, societyEffects, runSociety, type SocietySource } from './society'
 import { coverageMult, coverageOf, demandOf, peopleStability, populationGrowth, runPeople, spendingBill, type Demand, type PeopleBasis } from './people'
 import { commanderTrait } from './generals'
@@ -77,7 +78,7 @@ export function lineMax(s: GameState, map: WorldMap, regionId: string): number {
   const r = s.regions[regionId]
   const owner = s.nations[r.owner]
   const capital = owner?.capital === regionId ? WAR.lineCapital : owner?.regionalCapitals?.includes(regionId) ? EMPIRE_RULES.regionalCapitalLine : 0
-  return (TRAITS[traitOf(regionId, map.regions[regionId])].line ?? 0) + cityEffects(r).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
+  return (TRAITS[traitOf(regionId, map.regions[regionId])].line ?? 0) + cityEffects(r).line + localEffects(r, map.regions[regionId]).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
 }
 
 /** Share of a country's output that counts, rising as conquered land is integrated. The occupation policy sets the floor. */
@@ -221,6 +222,8 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
   let cityResearch = 0
   let cityTrade = 0
   let cityCredit = 0
+  let localPower = 0
+  let localStability = 0
   let devWeight = 0
   const traitParts: Partial<PolicyEffects>[] = []
   for (const r of owned) {
@@ -235,22 +238,26 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     workingFarms += r.buildings.farm * eff
     workingUniversities += r.buildings.university * eff
     const ce = cityEffects(r)
+    // Projects built in this country: an industrial park, a dam, a resort and the rest.
+    const le = localEffects(r, mr)
     // A city's factory bonus works on its own country's factories, not the whole empire's.
     if (r.sabotaged <= 0) {
       activeFactories += r.buildings.factory * eff
-      factoryWork += r.buildings.factory * eff * (1 + ce.factory)
+      factoryWork += r.buildings.factory * eff * (1 + ce.factory + le.factory)
     }
     if (r.rebels > 0) rebelRegions++
     if (r.integration < 1) occupied++
-    oilProduction += (OIL_DEPOSITS[r.id] ?? 0) * eff
-    steelProduction += ((STEEL_DEPOSITS[r.id] ?? 0) + r.buildings.factory * MATERIALS.steelPerFactory) * eff
+    oilProduction += (OIL_DEPOSITS[r.id] ?? 0) * eff * (1 + le.deposits)
+    steelProduction += ((STEEL_DEPOSITS[r.id] ?? 0) * (1 + le.deposits) + r.buildings.factory * MATERIALS.steelPerFactory) * eff
     goodsProduction += (w * MATERIALS.goodsPerWorkforce + r.buildings.factory * MATERIALS.goodsPerFactory) * eff
     portLevels += r.buildings.port * eff
-    cityFood += ce.food * eff
-    cityMoney += ce.money * eff
-    cityResearch += ce.research * eff
-    steelProduction += ce.steel * eff
-    cityTrade += ce.tradeCapacity * eff
+    cityFood += (ce.food + le.food) * eff
+    cityMoney += (ce.money + le.money) * eff
+    cityResearch += (ce.research + le.research) * eff
+    steelProduction += (ce.steel + le.steel) * eff
+    cityTrade += (ce.tradeCapacity + le.trade) * eff
+    localPower += le.power * eff
+    localStability += le.stability * eff
     cityCredit += ce.credit * eff
     // What makes this country special helps the whole nation, more as it settles in, and less for each country beyond the strongest.
     const trait = TRAITS[traitOf(r.id, mr)]
@@ -283,7 +290,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     development: workforce > 0 ? devWeight / workforce : 0.3,
     occupiedShare: owned.length ? occupied / owned.length : 0,
     systemLevels: Object.values(n.systems ?? {}).reduce((a, b) => a + (b ?? 0), 0),
-    activeProjects: activeProjects(n).length,
+    activeProjects: activeProjects(n).length + activeLocal(s, nationId).length,
   }
   const demand = demandOf(n, basis)
   const coverage = coverageOf(n, demand)
@@ -300,22 +307,25 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
   const epidemic = n.people?.epidemic ?? 0
   const sickness = 1 - EPIDEMIC.output * epidemic - (n.programs?.quarantine ? EPIDEMIC.quarantineOutput : 0)
   const realIncome = realIncomeFactor(n)
-  const rail = doneProject(n, 'rail')
+  // What each finished project is worth: 0 if not built, 1 at its first level, more at the next two.
+  const rail = projectPower(n, 'rail')
+  const gridPower = projectPower(n, 'grid')
+  const portsPower = projectPower(n, 'ports')
 
-  const outputMult = stabilityFactor * (1 + mods.allOutput + pol.output + prog.output + (doneProject(n, 'grid') ? 0.03 : 0) - admin.output) * sickness * realIncome
+  const outputMult = stabilityFactor * (1 + mods.allOutput + pol.output + prog.output + scaleBonus(0.03, gridPower) - admin.output) * sickness * realIncome
   const atWarCount = enemiesOf(s, nationId).length
   const botBonus = n.isPlayer ? 0 : difficultyOf(s.settings.difficulty).botIncomeBonus
   const embargoed = (n.embargoedUntil ?? 0) >= s.turn
   // Only people with jobs pay tax. The base rate assumes the usual 5% out of work.
   const employed = (1 - (n.people?.unemployment ?? PEOPLE.jobsBase)) / (1 - PEOPLE.jobsBase)
 
-  const taxIncome = n.taxRate * civilianWorkforce * ECON.taxPerWorkforce * employed * outputMult * (1 + botBonus) * (doneProject(n, 'digitalGov') ? 1.03 : 1)
-  const factoryBonus = 1 + mods.factoryOutput + pol.factory + works.factory + (rail ? 0.06 : 0) + (focus === 'trades' ? 0.05 * spec : 0)
-  const factoryIncome = factoryWork * ECON.factoryOutput * laborRatio * factoryBonus * outputMult * factoryStaff * powerMult(n, activeFactories, oilProduction) * (1 + botBonus)
+  const taxIncome = n.taxRate * civilianWorkforce * ECON.taxPerWorkforce * employed * outputMult * (1 + botBonus) * scaleFactor(1.03, projectPower(n, 'digitalGov'))
+  const factoryBonus = 1 + mods.factoryOutput + pol.factory + works.factory + scaleBonus(0.06, rail) + (focus === 'trades' ? 0.05 * spec : 0)
+  const factoryIncome = factoryWork * ECON.factoryOutput * laborRatio * factoryBonus * outputMult * factoryStaff * powerMult(n, activeFactories, oilProduction, localPower) * (1 + botBonus)
   const sanctionMult = Math.max(DIPLOMACY.sanctions.minFloor, 1 - DIPLOMACY.sanctions.tradeCut * sanctionersOf(s, nationId).length)
   const currency = n.bank?.currency ?? 1
   const tradeIncome =
-    buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1) * sanctionMult * (1 + Math.max(0, 1 - currency) * 10 * BANKING.weakCurrencyTrade) * (doneProject(n, 'ports') ? 1.25 : 1)
+    buildings.port * ECON.portTrade * outputMult * (atWarCount > 0 ? 0.7 : 1) * (embargoed ? ECON.embargoTradeMult : 1) * sanctionMult * (1 + Math.max(0, 1 - currency) * 10 * BANKING.weakCurrencyTrade) * scaleFactor(1.25, portsPower)
   const biz = sy
   // State sectors pay the state their profit directly; only private ones pay business tax.
   const stateProfit = (n.stateOwned ?? []).reduce((sum, id) => sum + (n.sectors[id] ?? 0) * SECTORS[id].profit, 0)
@@ -339,7 +349,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
   // Armies in the field still cost money, food and oil.
   const force = forceUnits(s, nationId)
   for (const k of UNIT_TYPES) {
-    unitUpkeep += force[k] * UNIT_SPECS[k].upkeep * (k === 'naval' && doneProject(n, 'ports') ? 0.85 : 1)
+    unitUpkeep += force[k] * UNIT_SPECS[k].upkeep * (k === 'naval' ? scaleFactor(0.85, portsPower) : 1)
     armyFood += force[k] * UNIT_SPECS[k].food
     oilUse += force[k] * UNIT_SPECS[k].oil
     divisions += force[k]
@@ -358,24 +368,27 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
   const trait = commanderTrait(n)
   const upkeepMult = Math.max(0.3, 1 + pol.upkeep + (trait === 'logistician' ? GENERAL_TRAITS.logistician.upkeep : 0))
   // Units, public works (the buildings' upkeep, scaled by its level), agencies, Frontier systems and the academy, all eased by policy.
-  const systems = systemUpkeep(n) * (doneProject(n, 'grid') ? 0.75 : 1)
+  const systems = systemUpkeep(n) * scaleFactor(0.75, gridPower)
   const upkeep = (unitUpkeep + spending.works + agencyUpkeep(n) + systems + (n.academy ?? 0) * ACADEMY.upkeep) * upkeepMult
   const projects = projectBill(n)
+  const localCosts = localBill(s, nationId)
+  projects.building += localCosts.building
+  projects.upkeep += localCosts.upkeep
   const governors = admin.governors * EMPIRE_RULES.governorSalary
   const settle = OCCUPATION[n.programs?.occupation ?? 'standard'].cost * occupied
   const quarantine = n.programs?.quarantine ? EPIDEMIC.quarantineCost * workforce : 0
   const badLoans = n.programs?.creditSector && n.stability < BANKING.badLoanStability ? BANKING.badLoanCost * Math.max(1, n.sectors[n.programs.creditSector] ?? 0) * 0.5 : 0
 
   const foodProduction =
-    (sy.food + baseFood + owned.length * ECON.subsistencePerRegion + workingFarms * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food) * (rail ? 1.05 : 1)
+    (sy.food + baseFood + owned.length * ECON.subsistencePerRegion + workingFarms * ECON.foodPerFarm * laborRatio * (1 + mods.foodOutput) + land.food) * scaleFactor(1.05, rail)
   const foodConsumption = workforce * ECON.foodConsumptionPerWorkforce * (1 + pol.foodUse) + armyFood
 
   const ppGain = 1.5 + n.stability / 50 + mods.ppPerTurn + pol.influence + land.pp - n.laws.length * EMPIRE_RULES.lawUpkeep
   // Technology companies lift all of the nation's research, not only what its universities make.
   const tpGain =
     (1 + firms.research) *
-    (doneProject(n, 'sciencePark') ? 1.12 : 1) *
-    (doneProject(n, 'spaceComplex') ? 1.05 : 1) *
+    scaleFactor(1.12, projectPower(n, 'sciencePark')) *
+    scaleFactor(1.05, projectPower(n, 'spaceComplex')) *
     (0.5 + workforce * 0.04 + sy.research * outputMult + workingUniversities * ECON.tpPerUniversity * laborRatio * (1 + mods.researchOutput + pol.research) * outputMult * researchStaff + land.tp)
 
   const highTax = Math.max(0, n.taxRate - 0.2) * 150 * Math.max(0.2, 1 + pol.taxSensitivity)
@@ -402,6 +415,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'Conquered land', value: -(OCCUPATION[n.programs?.occupation ?? 'standard'].stability * occupied) },
     { label: 'Immigration', value: IMMIGRATION[n.programs?.immigration ?? 'normal'].stability },
     { label: 'Programs for the people', value: soc.stability },
+    { label: 'Projects in your countries', value: localStability },
   ]
   const stabilityTarget = clamp(
     stabilityParts.reduce((sum, p) => sum + p.value, 0),
@@ -472,7 +486,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     goodsProduction,
     goodsUse,
     netGoods: goodsProduction - goodsUse,
-    tradeCapacity: (MATERIALS.tradeBase + portLevels * MATERIALS.tradePerPort + cityTrade) * Math.max(0.3, 1 + pol.trade + works.trade + accordTrade(s, nationId) + (rail ? 0.1 : 0)) * (doneProject(n, 'ports') ? 1.3 : 1) * sanctionMult,
+    tradeCapacity: (MATERIALS.tradeBase + portLevels * MATERIALS.tradePerPort + cityTrade) * Math.max(0.3, 1 + pol.trade + works.trade + accordTrade(s, nationId) + scaleBonus(0.1, rail)) * scaleFactor(1.3, portsPower) * sanctionMult,
     ppGain,
     tpGain,
     militaryRegen: workforce * n.draftRate * ECON.militaryRegenPerWorkforce * (1 - EPIDEMIC.recruits * epidemic),
@@ -569,14 +583,15 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   const growth = n.people ? populationGrowth(n) : n.foodShortage ? -0.003 : 0.0008
   const occ = OCCUPATION[n.programs?.occupation ?? 'standard']
   const soc = societyEffects(n).social
-  const heal = 1 + worksEffects(n).heal + (doneProject(n, 'rail') ? 0.15 : 0)
+  const heal = 1 + worksEffects(n).heal + scaleBonus(0.15, projectPower(n, 'rail'))
   for (const region of owned) {
     region.population *= 1 + growth
     if (region.sabotaged > 0) region.sabotaged--
     if (region.integration < 1) {
-      region.integration = Math.min(1, region.integration + (settleSpeed(s, map, n, region.id) * (1 + soc.settle)) / WAR.integrationTurns)
-      // Unrest in land you have not yet won over. Good policing and a tour of the provinces make it rarer.
-      if (rng.chance(0.07 * occ.rebels * (1 - region.integration) * (1 - soc.order))) region.rebels += 0.4 + e.workforce * 0.02
+      const here = localEffects(region, map.regions[region.id])
+      region.integration = Math.min(1, region.integration + (settleSpeed(s, map, n, region.id) * (1 + soc.settle + here.settle)) / WAR.integrationTurns)
+      // Unrest in land you have not yet won over. Good policing, a tour of the provinces and a cultural centre make it rarer.
+      if (rng.chance(0.07 * occ.rebels * (1 - region.integration) * Math.max(0, 1 - soc.order - here.order))) region.rebels += 0.4 + e.workforce * 0.02
     }
     // A country heals its Defense Line in months nobody attacks it.
     if (region.attackedTurn < s.turn) {
@@ -600,6 +615,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   runSociety(n)
   if (n.bank) runBank(s, n, e.gross, e.credit.score, e.credit.room, e.credit.rate, e.credit.locked)
   if (n.projects) r.capital += runProjects(s, n, e.coverage.engineers)
+  r.capital += runLocalProjects(s, n, projectSpeed(n, e.coverage.engineers))
   runArmsExports(s, n)
   return e
 }

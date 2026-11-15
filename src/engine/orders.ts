@@ -1,6 +1,8 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { EVENT_BY_ID } from '../data/events'
 import { campaignPrice, campaignProblem, socialCost, socialProblem } from './society'
+import { isLocalProject } from '../data/localProjects'
+import { localProblem, rushCost, rushProblem } from './works'
 import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, DIPLOMACY, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
 import { CITY_RULES, FOCUS } from '../data/cities'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS } from '../data/business'
@@ -189,6 +191,9 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'enactLaw':
       c.pp = LAW_SPECS[o.law].cost
       break
+    case 'rushProject':
+      c.capital = rushCost(s, s.nations[o.nationId], o.project, o.regionId)
+      break
     case 'setSocial':
       c.pp = s.nations[o.nationId] ? socialCost(s.nations[o.nationId], o.policy, o.level) : 0
       break
@@ -295,12 +300,14 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'setStateOwned':
       return enterpriseProblem(s, n, o.sector, o.mode)
     case 'startProject':
-      return projectProblem(s, map, n, o.project)
+      return isLocalProject(o.project) ? localProblem(s, map, n, o.project, o.regionId) : projectProblem(s, map, n, o.project)
     case 'pauseProject': {
-      const p = n.projects?.[o.project]
+      const p = isLocalProject(o.project) ? (o.regionId && s.regions[o.regionId]?.owner === n.id ? s.regions[o.regionId].works?.[o.project] : undefined) : n.projects?.[o.project]
       if (!p || p.done) return 'That project is not under way'
       return null
     }
+    case 'rushProject':
+      return rushProblem(s, n, o.project, o.regionId)
     case 'moveCapital': {
       const gate = tierOf(n).moveCapital ? null : tierGate(s, o.nationId, 3)
       if (gate) return gate

@@ -1,5 +1,6 @@
 import { EPIDEMIC, MEDICINE } from '../data/people'
 import { addLog, clamp } from './helpers'
+import { projectPower, scaleBonus } from './industry'
 import { createRng } from './rng'
 import { societyEffects } from './society'
 import type { GameState, NationId, WorldMap } from './types'
@@ -14,7 +15,7 @@ export function recoveryRate(s: GameState, id: NationId, doctorCoverage: number)
     EPIDEMIC.recoveryHealth * n.people.health +
     EPIDEMIC.recoveryDoctors * Math.min(1.5, doctorCoverage) +
     (n.programs?.quarantine ? EPIDEMIC.recoveryQuarantine : 0) +
-    (n.projects?.medCentre?.done ? EPIDEMIC.recoveryCentre : 0) +
+    scaleBonus(EPIDEMIC.recoveryCentre, projectPower(n, 'medCentre')) +
     vaccines +
     // Clinics, clean water and vaccination drives help a sick country mend sooner.
     societyEffects(n).social.epidemic * 0.25

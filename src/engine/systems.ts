@@ -3,6 +3,7 @@ import { FRONTIER, SYSTEM_IDS, SYSTEM_MAX, SYSTEM_SPECS, systemsCost, type Syste
 import { TECH_BY_ID } from '../data/techTree'
 import { addOpinion } from '../ai/opinion'
 import { interceptFactor } from './combat'
+import { projectPower, scaleBonus, scaleFactor } from './industry'
 import { addInfamy, addLog, atWar, distanceKm, hasTech } from './helpers'
 import type { GameState, NationId, Order, RegionId, WorldMap } from './types'
 
@@ -37,7 +38,7 @@ export function validateFundSystem(s: GameState, o: Fund, pending: Order[]): str
 export function fundSystemCost(s: GameState, o: Fund): number {
   const full = systemsCost(o.system, s.nations[o.nationId]?.systems?.[o.system] ?? 0, o.levels ?? 1)
   // A space launch complex makes the Orbital Network 30% cheaper.
-  const space = o.system === 'orbital' && s.nations[o.nationId]?.projects?.spaceComplex?.done ? 0.7 : 1
+  const space = o.system === 'orbital' ? scaleFactor(0.7, projectPower(s.nations[o.nationId], 'spaceComplex')) : 1
   return Math.round(full * space * (1 - (s.nations[o.nationId] ? companyEffects(s, o.nationId).systemDiscount : 0)))
 }
 
@@ -62,7 +63,7 @@ export function validateStrike(s: GameState, map: WorldMap, o: Strike, pending: 
   if (o.weapon === 'orbital') {
     if (pending.some((p) => p.type === 'strike' && p.weapon === 'orbital')) return 'Only one orbital strike a month'
     if ((n.systems?.orbital ?? 0) < 1) return 'Needs an Orbital Network'
-    const cooldown = FRONTIER.orbitalCooldown - (n.projects?.spaceComplex?.done ? 3 : 0)
+    const cooldown = FRONTIER.orbitalCooldown - Math.round(scaleBonus(3, projectPower(n, 'spaceComplex')))
     if (s.turn - n.lastOrbital < cooldown) return `The orbital weapon recharges in ${cooldown - (s.turn - n.lastOrbital)} months`
     return null
   }

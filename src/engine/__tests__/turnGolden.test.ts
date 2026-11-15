@@ -11,6 +11,9 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * Pins exactly how turn-based months resolve, so a change that was not meant to alter the rules (a refactor, a cache) shows up here.
  * First pinned before the live mode was added. Re-pinned after the review's rule fixes (combat, coups, money, diplomacy, markets),
  * which change results on purpose. If a rule is changed on purpose, play the scenarios again and pin the new values.
+ * Re-pinned when nations got more project slots (two, not one, at the start): the bots build more at once. Checked before pinning:
+ * with the old slot counts put back, the old hashes matched, so everything else added then (project levels, projects in a country,
+ * social programs, campaigns) changes nothing for a nation that does not use it.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -72,13 +75,13 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('18f74dd48298d5')
+    expect(hash(JSON.stringify(s))).toBe('1d71ef7fbf0dc5')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('1cac8201a01d77')
+    expect(hash(JSON.stringify(s))).toBe('16a85fdb053f6a')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {

@@ -8,7 +8,7 @@ import type { Nation } from './types'
 const FIELDS = Object.keys(NO_EFFECTS) as (keyof PolicyEffects)[]
 
 /** All the ways a nation's government, laws and technology change its economy, added together. Laws buy less calm than they once did. */
-export function policyEffects(n: Pick<Nation, 'government' | 'laws' | 'techs'> & Partial<Pick<Nation, 'social' | 'campaigns'>>): PolicyEffects {
+export function policyEffects(n: Pick<Nation, 'government' | 'laws' | 'techs'> & Partial<Pick<Nation, 'social' | 'campaigns' | 'projects'>>): PolicyEffects {
   const out: PolicyEffects = { ...NO_EFFECTS }
   const add = (e: Partial<PolicyEffects> | undefined) => {
     if (!e) return

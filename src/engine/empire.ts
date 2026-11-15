@@ -2,6 +2,7 @@ import { CITY_CREDIT_CAP, EMPIRE_RULES, LAW_CONFLICTS, OCCUPATION, TIERS, TRAIT_
 import type { PolicyEffects } from '../data/government'
 import { LAW_SPECS } from '../data/unitTypes'
 import { addLog, distanceKm } from './helpers'
+import { projectPower, scaleBonus } from './industry'
 import { societyEffects } from './society'
 import type { GameState, LawId, Nation, NationId, RegionId, Tier, WorldMap } from './types'
 
@@ -149,7 +150,7 @@ export function adminReport(s: GameState, map: WorldMap, id: NationId, skilledSh
     spec.adminBase +
     civic * EMPIRE_RULES.adminPerCivic +
     skilledShare * EMPIRE_RULES.adminPerSkilled +
-    (n.projects?.digitalGov?.done ? EMPIRE_RULES.adminDigitalGov : 0) +
+    scaleBonus(EMPIRE_RULES.adminDigitalGov, projectPower(n, 'digitalGov')) +
     Math.max(0, caps.length - 1) * EMPIRE_RULES.adminRegionalCapital +
     // Honest courts and clear rules let the same officials run more.
     societyEffects(n).social.admin

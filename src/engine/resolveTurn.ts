@@ -23,6 +23,8 @@ import { PROJECTS, RESEARCH_PROGRAMS, programCost } from '../data/projects'
 import { issueBond, moveFund, newBondRate, printMoney, repayBonds } from './bank'
 import { runResolution } from './council'
 import { setStateOwned, startProject } from './industry'
+import { LOCAL, isLocalProject } from '../data/localProjects'
+import { applyRush, startLocal } from './works'
 import { cleanSpending } from './people'
 import { recordHistory, runWorld, spendingFromBudget } from './statecraft'
 import { runEpidemics } from './epidemics'
@@ -46,6 +48,9 @@ import { tickTraining, trainMonths } from './training'
 import { UNIT_TYPES, type Army, type AttackOrder, type BattleReport, type GameState, type Order, type TrainingJob, type WorldMap } from './types'
 import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
+
+/** A project's name, whether it is a nation's or a country's. */
+const projectName = (id: string) => (isLocalProject(id) ? LOCAL[id].name : PROJECTS[id as keyof typeof PROJECTS].name)
 
 export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
   const region = (id: string) => map.regions[id]?.name ?? id
@@ -72,9 +77,11 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'setStateOwned':
       return `${o.mode === 'buy' ? 'Buy' : o.mode === 'seize' ? 'Seize' : 'Sell'} the ${SECTORS[o.sector].name.toLowerCase()} business`
     case 'startProject':
-      return `Start the ${PROJECTS[o.project].name.toLowerCase()}`
+      return `Start the ${projectName(o.project).toLowerCase()}${o.regionId ? ` in ${region(o.regionId)}` : ''}`
     case 'pauseProject':
-      return `${o.paused ? 'Pause' : 'Resume'} the ${PROJECTS[o.project].name.toLowerCase()}`
+      return `${o.paused ? 'Pause' : 'Resume'} the ${projectName(o.project).toLowerCase()}${o.regionId ? ` in ${region(o.regionId)}` : ''}`
+    case 'rushProject':
+      return `Rush the ${projectName(o.project).toLowerCase()}${o.regionId ? ` in ${region(o.regionId)}` : ''}`
     case 'moveCapital':
       return `Move the capital to ${region(o.regionId)}`
     case 'setRegionalCapital':
@@ -210,7 +217,7 @@ const PHASES: Order['type'][][] = [
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy', 'sellShares', 'buyShares'],
   ['issueBonds', 'repayDebt', 'printMoney', 'wealthFund', 'setStateOwned', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
-  ['research', 'researchProgram', 'build', 'startProject', 'pauseProject', 'setRegionalCapital', 'fundAcademy', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
+  ['research', 'researchProgram', 'build', 'startProject', 'pauseProject', 'rushProject', 'setRegionalCapital', 'fundAcademy', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['fundAgency', 'fundSystem'],
   ['operation', 'domestic', 'strike'],
@@ -414,14 +421,22 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       setStateOwned(s, n, o.sector, o.mode)
       break
     case 'startProject':
-      startProject(n, o.project)
-      if (n.isPlayer) addLog(s, 'economy', `Work began on the ${PROJECTS[o.project].name.toLowerCase()}. It takes about ${PROJECTS[o.project].months} months.`, [o.nationId])
+      if (isLocalProject(o.project)) {
+        startLocal(s, n, o.project, o.regionId!)
+        if (n.isPlayer) addLog(s, 'economy', `Work began on a ${LOCAL[o.project].name.toLowerCase()} in ${map.regions[o.regionId!].name}.`, [o.nationId])
+      } else {
+        startProject(n, o.project)
+        if (n.isPlayer) addLog(s, 'economy', `Work began on the ${PROJECTS[o.project].name.toLowerCase()}. It takes about ${PROJECTS[o.project].months} months.`, [o.nationId])
+      }
       break
     case 'pauseProject': {
-      const p = n.projects[o.project]
+      const p = isLocalProject(o.project) ? s.regions[o.regionId!]?.works?.[o.project] : n.projects[o.project]
       if (p) p.paused = o.paused
       break
     }
+    case 'rushProject':
+      applyRush(s, n, o.project, o.regionId)
+      break
     case 'moveCapital':
       n.regionalCapitals = (n.regionalCapitals ?? []).filter((id) => id !== o.regionId)
       n.capital = o.regionId

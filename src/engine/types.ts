@@ -37,7 +37,11 @@ export type SchoolFocus = 'balanced' | 'trades' | 'engineering' | 'medicine' | '
 export type ImmigrationPolicy = 'closed' | 'normal' | 'selective' | 'open'
 export type OccupationPolicy = 'standard' | 'autonomy' | 'assimilate' | 'settle'
 export type ArmsExports = 'off' | 'friends' | 'anyone'
-export type ProjectId = 'rail' | 'grid' | 'ports' | 'sciencePark' | 'medCentre' | 'digitalGov' | 'spaceComplex'
+export type ProjectId =
+  | 'rail' | 'grid' | 'ports' | 'sciencePark' | 'medCentre' | 'digitalGov' | 'spaceComplex'
+  | 'waterNetwork' | 'stadium' | 'broadband' | 'grainReserve' | 'openUniversity' | 'expo' | 'aiLab' | 'fusion' | 'plannedCity' | 'marsMission'
+/** A project built in one country of an empire, not by the nation as a whole. */
+export type LocalProjectId = 'industrialPark' | 'techHub' | 'irrigation' | 'dam' | 'resort' | 'culturalCentre' | 'fortress' | 'sez' | 'mine'
 export type ResearchTrack = 'productivity' | 'medicine' | 'weapons'
 /** The standing programs a government runs for its people (see `data/society.ts`). */
 export type SocialId =
@@ -134,10 +138,17 @@ export interface CampaignState {
 }
 
 export interface ProjectState {
-  /** Months of work done. */
+  /** Months of work done on the level being built. */
   progress: number
+  /** True once the level being built is finished. While an upgrade is under way it is false, and the earlier levels keep working. */
   done: boolean
   paused?: boolean
+  /** Levels finished, once there is more than one or an upgrade has begun. Missing means 1 when `done`, 0 otherwise. */
+  level?: number
+  /** The month a rush last bought time on this project: one rush a month. */
+  rushed?: number
+  /** Projects in a country: the nation that began it, so a half-built project is not inherited by a conqueror. */
+  by?: NationId
 }
 
 /** What everyone can see about the world economy, worked out once a month. */
@@ -228,6 +239,8 @@ export interface RegionState {
   owner: NationId
   population: number
   buildings: Buildings
+  /** Projects built in this country (industrial parks, dams, resorts...). They stay with the land if it is conquered. */
+  works?: Partial<Record<LocalProjectId, ProjectState>>
   /** Turns of remaining sabotage (factories produce nothing). */
   sabotaged: number
   /** Strength of a rebel insurgency (in infantry divisions). */
@@ -510,8 +523,11 @@ export type Order =
   | { type: 'printMoney'; nationId: NationId; share: number }
   | { type: 'wealthFund'; nationId: NationId; amount: number }
   | { type: 'setStateOwned'; nationId: NationId; sector: SectorId; mode: 'buy' | 'seize' | 'sell' }
-  | { type: 'startProject'; nationId: NationId; project: ProjectId }
-  | { type: 'pauseProject'; nationId: NationId; project: ProjectId; paused: boolean }
+  /** Starts a project, or the next level of a built one. A project of a country (`LocalProjectId`) says which with `regionId`. */
+  | { type: 'startProject'; nationId: NationId; project: ProjectId | LocalProjectId; regionId?: RegionId }
+  | { type: 'pauseProject'; nationId: NationId; project: ProjectId | LocalProjectId; paused: boolean; regionId?: RegionId }
+  /** Pays extra to finish the level under way sooner. Once a month for each project. */
+  | { type: 'rushProject'; nationId: NationId; project: ProjectId | LocalProjectId; regionId?: RegionId }
   | { type: 'moveCapital'; nationId: NationId; regionId: RegionId }
   | { type: 'setRegionalCapital'; nationId: NationId; regionId: RegionId; on: boolean }
   | { type: 'fundAcademy'; nationId: NationId }

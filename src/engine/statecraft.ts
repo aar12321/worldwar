@@ -3,6 +3,7 @@ import { STANDARD_SPENDING } from '../data/people'
 import { startingBank, startingWorldStats, syncDebt, updateWorldStats } from './bank'
 import { countRegions, empireCount, tierFor } from './empire'
 import { activeProjects } from './industry'
+import { activeLocal } from './works'
 import { militaryPower } from './militaryStats'
 import { cleanSpending, developmentOf, livingStandard, runMigration, startingPeople, type PeopleBasis } from './people'
 import type { Budget, GameState, Nation, NationId, Programs, Spending, WorldMap } from './types'
@@ -47,7 +48,7 @@ export function peopleBasis(s: GameState, map: WorldMap, id: NationId): PeopleBa
     development: developmentOf(s, map, id, (r, m) => Math.pow(Math.max(0.05, r.population), 0.6) * (0.3 + 0.7 * m.development)),
     occupiedShare: regions > 0 ? occupied / regions : 0,
     systemLevels: Object.values(n?.systems ?? {}).reduce((a, b) => a + (b ?? 0), 0),
-    activeProjects: n ? activeProjects(n).length : 0,
+    activeProjects: n ? activeProjects(n).length + activeLocal(s, id).length : 0,
   }
 }
 

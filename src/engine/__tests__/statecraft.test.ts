@@ -306,7 +306,9 @@ describe('industry and projects', () => {
   it('a project costs money each month, progresses with engineers, and finishes', () => {
     let s = base()
     ok(s, { type: 'startProject', nationId: P, project: 'rail' })
-    expect(applyOrderNow(s, map, { type: 'startProject', nationId: P, project: 'grid' }).error).toMatch(/1 project at once/)
+    // A Nation builds two at once; a third waits.
+    ok(s, { type: 'startProject', nationId: P, project: 'grid' })
+    expect(applyOrderNow(s, map, { type: 'startProject', nationId: P, project: 'waterNetwork' }).error).toMatch(/2 projects at once/)
     const cash = s.nations[P].resources.capital
     for (let i = 0; i < 14 && !s.nations[P].projects.rail?.done; i++) s = resolveTurn(s, map, [])
     expect(s.nations[P].projects.rail?.done).toBe(true)

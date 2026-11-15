@@ -1,4 +1,5 @@
 import { NO_EFFECTS, type PolicyEffects } from '../data/government'
+import { PROJECT_IDS, PROJECT_LEVELS, PROJECTS } from '../data/projects'
 import { CAMPAIGNS, CAMPAIGN_IDS, LEVEL_NAMES, MAX_LEVEL, NO_SOCIAL, SOCIAL, SOCIAL_FIELDS, SOCIAL_IDS, SOCIAL_RULES, campaignCost, powerOf, type SocialEffect, type SocialEffects } from '../data/society'
 import { tierGate } from './empire'
 import { addLog, clamp } from './helpers'
@@ -36,7 +37,7 @@ export function softCap(raw: number): number {
   return cap * (1 - Math.exp(-raw / cap))
 }
 
-type Held = Pick<Nation, 'social' | 'campaigns'>
+type Held = Pick<Nation, 'social' | 'campaigns'> & Partial<Pick<Nation, 'projects'>>
 
 /** Everything a nation's programs and running campaigns do, added up. A nation with none gets the same zeros every time, at no cost. */
 export function societyEffects(n: Held): SocietyReport {
@@ -60,6 +61,14 @@ export function societyEffects(n: Held): SocietyReport {
     const c = n.campaigns?.[id]
     if (c && c.left > 0) add(CAMPAIGNS[id].effects, 1, `campaign:${id}`, CAMPAIGNS[id].name)
   }
+  // National projects whose effects are written as data (the seven older ones have theirs in the economy itself).
+  for (const id of PROJECT_IDS) {
+    const spec = PROJECTS[id]
+    const p = n.projects?.[id]
+    if (!spec.effects || !p) continue
+    const level = p.level ?? (p.done ? 1 : 0)
+    if (level >= 1) add(spec.effects, PROJECT_LEVELS.power[level], `project:${id}`, spec.name)
+  }
   return { policy, social, stability: softCap(raw), rawStability: raw, sources }
 }
 
@@ -67,7 +76,8 @@ export function societyEffects(n: Held): SocietyReport {
 export function hasSociety(n: Held): boolean {
   const programs = n.social ? Object.keys(n.social).length : 0
   const campaigns = n.campaigns ? Object.keys(n.campaigns).length : 0
-  return programs + campaigns > 0
+  if (programs + campaigns > 0) return true
+  return !!n.projects && PROJECT_IDS.some((id) => PROJECTS[id].effects && n.projects![id])
 }
 
 /** The level a program is set to. */
