@@ -196,7 +196,10 @@ describe('epidemics', () => {
         startEpidemic(s, 'r1', 0.8)
         s.nations[P].programs.quarantine = q
         runEpidemics(s, map, nationNeighborMap(s, map), new Map())
-        if (s.nations[P].people.epidemic > 0) q ? guarded++ : spread++
+        if (s.nations[P].people.epidemic > 0) {
+          if (q) guarded++
+          else spread++
+        }
       }
     }
     expect(spread).toBeGreaterThan(guarded)

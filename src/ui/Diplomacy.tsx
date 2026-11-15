@@ -9,6 +9,7 @@ import { PACT_TURNS, describeProposal, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
 import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, regionsOf, turnDate } from '../engine/helpers'
 import { annexCost, warCost } from '../engine/orders'
+import { tierOf } from '../engine/empire'
 import { isLive } from '../engine/calendar'
 import { CRISIS } from '../data/crises'
 import { EMPIRE, JUSTIFY } from '../data/war'
@@ -345,8 +346,10 @@ function MoneyComposer({ target }: { target: NationId }) {
   const { game, player } = view
   const [amount, setAmount] = useState(100)
   const [months, setMonths] = useState(12)
+  const [withPact, setWithPact] = useState(false)
   const [sector, setSector] = useState<SectorId>('manufacturing')
   const L = DIPLOMACY.loan
+  const lender = tierOf(player)
   const them = game.nations[target]
   return (
     <div className="space-y-3 rounded-lg bg-slate-950/50 p-2.5">
@@ -356,16 +359,26 @@ function MoneyComposer({ target }: { target: NationId }) {
           <span className="text-white/75">Amount</span>
           <span className="tabular-nums">{amount}</span>
         </div>
-        <input type="range" className="w-full" aria-label="Loan amount" min={L.min} max={L.max} step={10} value={amount} onChange={(e) => setAmount(+e.target.value)} />
+        <input type="range" className="w-full" aria-label="Loan amount" min={L.min} max={lender.loanMax} step={10} value={Math.min(amount, lender.loanMax)} onChange={(e) => setAmount(+e.target.value)} />
         <div className="flex justify-between text-[14px]">
           <span className="text-white/75">Repaid over</span>
           <span className="tabular-nums">{months} months</span>
         </div>
-        <input type="range" className="w-full" aria-label="Loan length" min={L.minMonths} max={L.maxMonths} step={1} value={months} onChange={(e) => setMonths(+e.target.value)} />
+        <input type="range" className="w-full" aria-label="Loan length" min={L.minMonths} max={lender.loanMonths} step={1} value={Math.min(months, lender.loanMonths)} onChange={(e) => setMonths(+e.target.value)} />
+        {lender.loanPact && (
+          <label className="flex items-center justify-between gap-3 text-[14px]">
+            <span>
+              World Bank terms
+              <span className="block text-[12px] text-white/65">They sign a non-aggression pact for as long as the loan runs, and think well of you for it.</span>
+            </span>
+            <input type="checkbox" checked={withPact} onChange={(e) => setWithPact(e.target.checked)} aria-label="Attach a non-aggression pact" />
+          </label>
+        )}
+        <p className="text-[12px] text-white/55">A {lender.name} lends up to {lender.loanMax} for {lender.loanMonths} months. A bigger empire lends more.</p>
         <p className="text-[13px] text-white/70">
           They pay {loanPayment(amount, months).toFixed(1)} a month, {(loanPayment(amount, months) * months - amount).toFixed(0)} more than you lend. Someone who cannot pay breaks the deal and loses your trust.
         </p>
-        <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'loan', amount, months } }} label="Offer the loan" cost={`${PROPOSAL_COSTS.loan} influence`} effect="Money moves when they accept" tone="btn-primary" />
+        <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'loan', amount: Math.min(amount, lender.loanMax), months: Math.min(months, lender.loanMonths), ...(withPact && lender.loanPact ? { pact: true } : {}) } }} label="Offer the loan" cost={`${PROPOSAL_COSTS.loan} influence`} effect="Money moves when they accept" tone="btn-primary" />
       </div>
       <div className="space-y-1.5 border-t border-white/10 pt-3">
         <div className="text-[15px] font-semibold">Invest in their business</div>
@@ -478,6 +491,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
               />
             )}
             {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label="Leave alliance" cost={`${COSTS.leaveAlliance} influence`} tone="btn-quiet" />}
+            {pact && !allied && <OrderButton order={{ type: 'breakPact', nationId: player.id, target: id }} label="Break the pact" cost={`${COSTS.breakPact} influence`} effect="They will remember it, and so will the world" tone="btn-quiet" />}
           </>
         )}
       </div>

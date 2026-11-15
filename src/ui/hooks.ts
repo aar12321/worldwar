@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { advise, type Advice } from '../engine/advisor'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { committedCost, type OrderCost } from '../engine/orders'
-import type { GameState, Nation, Order, Spending } from '../engine/types'
+import type { GameState, Nation, Order, Programs, Spending } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 
@@ -13,6 +13,9 @@ export interface PlayerView {
   committed: OrderCost
   orders: Order[]
   pendingPolicy: { taxRate: number; draftRate: number; corporateTax: number; spending: Spending }
+  /** The nation's programs and interest rate with any changes waiting for the month to end. */
+  pendingPrograms: Programs
+  pendingRate: number
 }
 
 /** What a live game changes on a quiet day. Nothing else is touched, so nothing that reads the rest needs to redo its work. */
@@ -75,7 +78,16 @@ function buildPlayerView(game: GameState, orders: Order[]): PlayerView {
   const projectedGame: GameState = policy
     ? { ...game, nations: { ...game.nations, [player.id]: { ...player, ...pendingPolicy } } }
     : game
+  let pendingPrograms: Programs = player.programs
+  let pendingRate = player.bank.rate
+  for (const o of orders) {
+    if (o.type !== 'setPrograms') continue
+    pendingPrograms = { ...pendingPrograms, ...o.programs }
+    if (o.rate !== undefined) pendingRate = o.rate
+  }
   return {
+    pendingPrograms,
+    pendingRate,
     game,
     player,
     econ: computeEconomy(projectedGame, map, player.id),

@@ -11,7 +11,7 @@ import { absDate, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
 import { applyOrderNow, resolveTurn } from './engine/resolveTurn'
-import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId, Spending } from './engine/types'
+import type { BattleReport, Dispatch, GameState, NationId, Order, Programs, RegionId, Spending } from './engine/types'
 import { getWorld } from './map/world'
 import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type Lobby, type RoomSettings } from './net/protocol'
 import { OnlineSession } from './net/session'
@@ -28,8 +28,9 @@ const SETTINGS_KEY = 'worlds-of-others-settings-v2'
 export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 /** The five desks, plus News and Settings which open from the top bar. */
-export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'log' | 'settings'
-export type EconomyTab = 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'
+export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
+export type EmpireTab = 'overview' | 'provinces' | 'world'
+export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts'
@@ -172,6 +173,9 @@ interface GameStore {
   /** Country shown in the Economy desk's upgrade list. Null means the capital. */
   economyRegion: RegionId | null
   militaryTab: MilitaryTab
+  empireTab: EmpireTab
+  setEmpireTab(tab: EmpireTab): void
+  openEmpire(tab?: EmpireTab): void
   /** The nation the agencies are looking at. */
   agencyTarget: NationId | null
   setAgencyTarget(id: NationId | null): void
@@ -222,8 +226,10 @@ interface GameStore {
   /** Issues several orders at once, one save and one summary. Returns how many went through. */
   issueBatch(orders: Order[]): { done: number; failed: number }
   removeOrder(index: number): void
-  /** Queues new tax, draft, business tax or budget settings for the end of the month. */
+  /** Queues new tax, draft, business tax or spending settings for the end of the month. */
   setPolicy(patch: PolicyPatch): void
+  /** Queues changes to the nation's programs (schools, immigration, occupation...) and interest rate for the end of the month. */
+  setPrograms(programs: Partial<Programs>, rate?: number): void
   attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number): boolean
   openWarRoom(target: RegionId | null): void
   endTurn(): void
@@ -629,6 +635,7 @@ export const useGame = create<GameStore>((set, get) => ({
   economyTab: 'country',
   economyRegion: null,
   militaryTab: 'forces',
+  empireTab: 'overview',
   agencyTarget: null,
   mapMode: 'political',
   diploFocus: null,
@@ -740,6 +747,14 @@ export const useGame = create<GameStore>((set, get) => ({
 
   setMilitaryTab(tab) {
     set({ militaryTab: tab })
+  },
+
+  setEmpireTab(tab) {
+    set({ empireTab: tab })
+  },
+
+  openEmpire(tab) {
+    set((st) => ({ panel: 'empire', empireTab: tab ?? st.empireTab, diploFocus: null }))
   },
 
   openMilitary(tab) {
@@ -872,6 +887,33 @@ export const useGame = create<GameStore>((set, get) => ({
     const same = (a: number, b: number) => Math.abs(a - b) < 1e-6
     const unchanged = same(n.taxRate, taxRate) && same(n.draftRate, draftRate) && same(n.corporateTax, corporateTax) && (Object.keys(spending) as (keyof Spending)[]).every((k) => spending[k] === n.spending[k])
     const next: Order[] = unchanged ? rest : [...rest, { type: 'setPolicy', nationId: game.playerId, taxRate, draftRate, corporateTax, spending }]
+    set({ orders: next })
+    writeOrders(next)
+  },
+
+  setPrograms(programs, rate) {
+    const { game, orders } = get()
+    if (!game) return
+    // One waiting order holds every change; choosing the current value again drops that change.
+    const was = orders.find((o) => o.type === 'setPrograms')
+    const merged: Partial<Programs> = { ...(was?.type === 'setPrograms' ? was.programs : {}), ...programs }
+    const n = game.nations[game.playerId]
+    for (const k of Object.keys(merged) as (keyof Programs)[]) if (merged[k] === n.programs[k]) delete merged[k]
+    let r = rate ?? (was?.type === 'setPrograms' ? was.rate : undefined)
+    if (r !== undefined && Math.abs(r - n.bank.rate) < 1e-9) r = undefined
+    const rest = orders.filter((o) => o.type !== 'setPrograms')
+    const order: Order = { type: 'setPrograms', nationId: game.playerId, programs: merged, ...(r !== undefined ? { rate: r } : {}) }
+    if (Object.keys(merged).length === 0 && r === undefined) {
+      set({ orders: rest })
+      writeOrders(rest)
+      return
+    }
+    const err = validateOrder(game, getWorld().map, order, rest)
+    if (err) {
+      get().toast(err, 'error')
+      return
+    }
+    const next = [...rest, order]
     set({ orders: next })
     writeOrders(next)
   },

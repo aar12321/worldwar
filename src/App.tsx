@@ -26,6 +26,7 @@ const DiplomacyPanel = lazy(() => import('./ui/Diplomacy').then((m) => ({ defaul
 const MilitaryPanel = lazy(() => import('./ui/MilitaryPanel').then((m) => ({ default: m.MilitaryPanel })))
 const EconomyDesk = lazy(() => import('./ui/EconomyDesk').then((m) => ({ default: m.EconomyDesk })))
 const TechTree = lazy(() => import('./ui/TechTree').then((m) => ({ default: m.TechTree })))
+const EmpireDesk = lazy(() => import('./ui/EmpireDesk').then((m) => ({ default: m.EmpireDesk })))
 
 function useShortcuts() {
   useEffect(() => {
@@ -63,7 +64,7 @@ function useShortcuts() {
         const key = e.key.toLowerCase()
         if (key === 'w') st.openMilitary('wars')
         else {
-          const desks: Record<string, Panel> = { b: 'briefing', e: 'economy', c: 'economy', m: 'military', d: 'diplomacy', r: 'tech', t: 'tech', n: 'log', l: 'log' }
+          const desks: Record<string, Panel> = { b: 'briefing', e: 'economy', c: 'economy', m: 'military', d: 'diplomacy', r: 'tech', t: 'tech', n: 'log', l: 'log', i: 'empire' }
           const panel = desks[key]
           if (panel) st.setPanel(panel)
         }
@@ -147,6 +148,7 @@ export default function App() {
             {panel === 'military' && <MilitaryPanel key="military" />}
             {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
             {panel === 'tech' && <TechTree key="tech" />}
+            {panel === 'empire' && <EmpireDesk key="empire" />}
           </Suspense>
           {panel === 'log' && <LogPanel key="log" />}
           {panel === 'settings' && <SettingsPanel key="settings" />}

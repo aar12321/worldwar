@@ -8,7 +8,7 @@ import { getWorld } from '../map/world'
 import { useGame, type Panel, type ReportDelta } from '../store'
 import { AdviceList } from './Briefing'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
-import { BriefingIcon, DiplomacyIcon, EconomyIcon, MilitaryIcon, ResearchIcon } from './icons'
+import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, MilitaryIcon, ResearchIcon } from './icons'
 import { Modal } from './Modal'
 
 const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
@@ -16,6 +16,7 @@ const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
   { panel: 'economy', label: 'Economy', key: 'E', icon: <EconomyIcon /> },
   { panel: 'military', label: 'Military', key: 'M', icon: <MilitaryIcon /> },
   { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <DiplomacyIcon /> },
+  { panel: 'empire', label: 'Empire', key: 'I', icon: <EmpireIcon /> },
   { panel: 'tech', label: 'Research', key: 'R', icon: <ResearchIcon /> },
 ]
 

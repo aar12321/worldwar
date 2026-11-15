@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { maxWars, turnDate } from '../engine/helpers'
 import { worldTension } from '../engine/crises'
 import { controlled } from '../engine/victory'
+import { tierSpec } from '../data/empire'
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
@@ -193,7 +194,12 @@ export function HUD() {
             </div>
             <div className="mt-1.5 space-y-1" title={`Win by holding all ${lands} countries, yours or puppets of yours. World tension ${tension}: wars, crises and aggression raise it. Your reputation for aggression is ${standing}; it fades with time. You lose if ${player.name} is wiped out.`}>
               <div className="flex items-center justify-between gap-3 text-[12px] text-white/70 tabular-nums">
-                <span>World {held}/{lands} · Wars {econ.warBills.length}/{warLimit}</span>
+                <span>
+                  <button className="underline-offset-2 hover:underline text-white/85" onClick={() => setPanel('empire')} title={`You are a ${tierSpec(player.tier).name}. Open the Empire desk to see what it opens up.`}>
+                    {tierSpec(player.tier).name}
+                  </button>{' '}
+                  · World {held}/{lands} · Wars {econ.warBills.length}/{warLimit}
+                </span>
                 <span className={tension >= 50 ? 'text-[#ff8a84]' : ''}>Tension {tension}</span>
               </div>
               <div className="h-1 w-full min-w-24 rounded-full bg-white/10 overflow-hidden">

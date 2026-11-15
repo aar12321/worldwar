@@ -1,4 +1,7 @@
 import { BRANCH_LABELS, TECHS, type Tech } from '../data/techTree'
+import { PROGRAM_RULES, RESEARCH_PROGRAMS, programCost } from '../data/projects'
+import type { ResearchTrack } from '../engine/types'
+import { OrderButton } from './panel'
 import { validateOrder } from '../engine/orders'
 import type { TechBranch } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -53,6 +56,38 @@ function TechNode({ tech }: { tech: Tech }) {
 }
 
 /** What the technologies you own give you, grouped, with where each bonus comes from. */
+/** What to do with research once the tree is done, or when there is more than the next technology needs. */
+function Programs() {
+  const view = usePlayerView()!
+  const { player, orders } = view
+  const queued = (t: ResearchTrack) => orders.some((o) => o.type === 'researchProgram' && o.track === t)
+  return (
+    <details className="inset-card p-4 mb-6">
+      <summary className="cursor-pointer text-[16px] font-semibold tracking-tight">Future programs: spare research with a lasting payoff</summary>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        {(Object.keys(RESEARCH_PROGRAMS) as ResearchTrack[]).map((t) => {
+          const level = player.research2[t] ?? 0
+          const done = level >= PROGRAM_RULES.maxLevel
+          return (
+            <div key={t} className="rounded-xl bg-white/5 p-3 space-y-1.5">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[15px] font-semibold">{RESEARCH_PROGRAMS[t].name}</span>
+                <span className="text-[13px] tabular-nums text-white/70">level {level} of {PROGRAM_RULES.maxLevel}</span>
+              </div>
+              <p className="text-[12px] text-white/65">{RESEARCH_PROGRAMS[t].blurb} {RESEARCH_PROGRAMS[t].perLevel}.</p>
+              {done ? (
+                <span className="chip">Complete</span>
+              ) : (
+                <OrderButton order={{ type: 'researchProgram', nationId: player.id, track: t }} label={queued(t) ? 'Queued' : 'Next level'} cost={`${programCost(level)} research`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </details>
+  )
+}
+
 function Bonuses() {
   const view = usePlayerView()!
   const groups = techBonuses(view.player)
@@ -109,6 +144,7 @@ export function TechTree() {
       </div>
       <div className="flex-1 min-h-0 overflow-auto scroll-thin p-6">
         <Bonuses />
+        <Programs />
         <div className="tech-grid">
           {BRANCHES.map((b) => (
             <div key={b} className="space-y-3">

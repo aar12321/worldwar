@@ -101,11 +101,14 @@ export function healthTarget(n: Nation, b: PeopleBasis, doctorCoverage: number):
   return clamp(PEOPLE.healthBase + PEOPLE.healthPerLevel * sp.health + hospitals + PEOPLE.healthPerHousing * sp.housing + med + program + centre + 0.2 * b.development, 0, 0.98)
 }
 
-/** Schooling the nation is heading toward: the stage sets the ceiling, spending how close it gets. */
-export function schoolingTarget(n: Nation): number {
+/**
+ * Schooling the nation is heading toward: the stage sets the ceiling, spending how close it gets, and a developed country with
+ * libraries, teachers and homes that help study gets further on the same money.
+ */
+export function schoolingTarget(n: Nation, development = 0.5): number {
   const stage = STAGES[n.programs?.stage ?? 'secondary']
   const level = clamp(Math.round(n.spending?.schools ?? 2), 0, 4)
-  return clamp(stage.cap * PEOPLE.schoolingByLevel[level], 0, 0.98)
+  return clamp(stage.cap * PEOPLE.schoolingByLevel[level] * (0.75 + 0.5 * development), 0, 0.98)
 }
 
 /** Unemployment the nation is heading toward. */
@@ -175,7 +178,8 @@ export function populationGrowth(n: Nation): number {
 
 /** A nation's people at the start of a game: schooled and healthy as its land is developed, and exactly staffed for what it has built. */
 export function startingPeople(n: Nation, b: PeopleBasis): People {
-  const schooling = clamp(0.25 + 0.55 * b.development, 0.15, 0.85)
+  // Everyone starts exactly where standard spending leads them, so nothing drifts in the first months.
+  const schooling = schoolingTarget({ ...n, spending: n.spending ?? STANDARD_SPENDING, programs: n.programs }, b.development)
   const people: People = { skills: { basic: 0.6, skilled: 0.3, engineers: 0.04, doctors: 0.02, scientists: 0.02 }, schooling, health: 0.5, unemployment: PEOPLE.jobsBase, specialization: 0, focusSince: 0, epidemic: 0, migration: 0 }
   const shell = { ...n, people } as Nation
   const d = demandOf(shell, b)
@@ -192,7 +196,7 @@ export function startingPeople(n: Nation, b: PeopleBasis): People {
 export function runPeople(s: GameState, n: Nation, b: PeopleBasis) {
   const p = n.people
   const stage = STAGES[n.programs?.stage ?? 'secondary']
-  p.schooling = clamp(p.schooling + (schoolingTarget(n) - p.schooling) * PEOPLE.schoolingRate * stage.speed, 0, 0.98)
+  p.schooling = clamp(p.schooling + (schoolingTarget(n, b.development) - p.schooling) * PEOPLE.schoolingRate * stage.speed, 0, 0.98)
   const target = skillTargets(n)
   const next = {} as Record<SkillKey, number>
   for (const k of SKILL_KEYS) next[k] = p.skills[k] + (target[k] - p.skills[k]) * PEOPLE.skillRate

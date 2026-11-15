@@ -133,6 +133,17 @@ export function DiplomacyIcon() {
   )
 }
 
+export function EmpireIcon() {
+  return (
+    <Frame>
+      <path d="M4 20h16" />
+      <path d="M6 20V10l6-6 6 6v10" />
+      <path d="M10 20v-5h4v5" />
+      <path d="M12 4V2" />
+    </Frame>
+  )
+}
+
 export function ResearchIcon() {
   return (
     <Frame>
