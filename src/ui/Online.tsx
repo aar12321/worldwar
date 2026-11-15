@@ -290,14 +290,14 @@ export function Lobby() {
 /** Who has pressed Ready, as one dot per player. */
 export function ReadyDots() {
   const online = useGame((s) => s.online)
-  const game = useGame((s) => s.game)
-  if (!online?.lobby || !game) return null
+  const nations = useGame((s) => s.game?.nations)
+  if (!online?.lobby || !nations) return null
   const players = online.lobby.players.filter((p) => p.nationId)
   return (
     <span className="inline-flex items-center gap-1" role="img" aria-label={`${online.ready.length} of ${players.length} players ready`}>
       {players.map((p) => {
         const done = online.ready.includes(p.nationId as string)
-        const color = game.nations[p.nationId as string]?.color ?? '#fff'
+        const color = nations[p.nationId as string]?.color ?? '#fff'
         return <span key={p.clientId} className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: done ? color : 'transparent', border: `1.5px solid ${color}` }} />
       })}
     </span>
@@ -324,7 +324,8 @@ export function OnlineStatus() {
 /** The players, a way to say something to them, and a way out. */
 export function OnlinePeople() {
   const online = useGame((s) => s.online)
-  const game = useGame((s) => s.game)
+  const nations = useGame((s) => s.game?.nations)
+  const eliminated = useGame((s) => s.game?.eliminated)
   const send = useGame((s) => s.sendChat)
   const markRead = useGame((s) => s.markChatRead)
   const leave = useGame((s) => s.leaveOnline)
@@ -340,7 +341,7 @@ export function OnlinePeople() {
     }
   }, [open, chatLength, markRead])
 
-  if (!online?.lobby || !game) return null
+  if (!online?.lobby || !nations || !eliminated) return null
   const unread = online.unread
 
   return (
@@ -368,10 +369,10 @@ export function OnlinePeople() {
             {online.lobby.players
               .filter((p) => p.nationId)
               .map((p) => {
-                const nation = game.nations[p.nationId as string]
+                const nation = nations[p.nationId as string]
                 const done = online.ready.includes(p.nationId as string)
                 const here = p.clientId === online.clientId || online.peers.includes(p.clientId)
-                const out = game.eliminated.includes(p.nationId as string)
+                const out = eliminated.includes(p.nationId as string)
                 return (
                   <li key={p.clientId} className="flex items-center gap-2 text-[14px]">
                     <span aria-hidden className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: nation?.color ?? '#fff' }} />

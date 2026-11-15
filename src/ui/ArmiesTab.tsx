@@ -51,34 +51,43 @@ export function ArmyRow({ army, game, compact = false }: { army: Army; game: Gam
   )
 }
 
+/**
+ * The game while it has an army the lists below would show (one of the player's own, or one marching on the player's
+ * countries), otherwise nothing. Those armies move every day; with none, a day changes nothing the lists show.
+ */
+const gameWithArmies = (s: { game: GameState | null }) => {
+  const g = s.game
+  return g && (g.armies ?? []).some((a) => a.nationId === g.playerId || (a.phase === 'outbound' && g.regions[a.target]?.owner === g.playerId)) ? g : null
+}
+
 /** Everything about armies for the Military desk: yours, the ones marching on you, and the fights you have had. */
 export function ArmiesTab() {
-  const game = useGame((s) => s.game)!
+  const game = useGame(gameWithArmies)
+  // The fights are worded from these alone, and they do not change from day to day.
+  const nations = useGame((s) => s.game?.nations)
+  const playerId = useGame((s) => s.game?.playerId)
   const recent = useGame((s) => s.recentBattles)
   const openBattle = useGame((s) => s.openBattle)
-  const yours = (game.armies ?? []).filter((a) => a.nationId === game.playerId)
-  const coming = incomingArmies(game, game.playerId).filter((a) => a.nationId !== game.playerId)
+  if (!nations || !playerId) return null
+  const yours = game ? (game.armies ?? []).filter((a) => a.nationId === playerId) : []
+  const coming = game ? incomingArmies(game, playerId).filter((a) => a.nationId !== playerId) : []
   return (
     <div className="space-y-4">
       <section className="inset-card p-3.5 space-y-2.5">
         <div className="text-[16px] font-semibold">Your armies</div>
         {yours.length === 0 && <p className="text-[14px] text-white/70">None in the field. Open the War Room on a country you are at war with and launch an army: it marches for days, fights when it arrives, and comes home.</p>}
-        {yours.map((a) => (
-          <ArmyRow key={a.id} army={a} game={game} />
-        ))}
+        {game && yours.map((a) => <ArmyRow key={a.id} army={a} game={game} />)}
       </section>
       <section className="inset-card p-3.5 space-y-2.5">
         <div className="text-[16px] font-semibold">Marching on you</div>
         {coming.length === 0 && <p className="text-[14px] text-white/70">No enemy army is on its way to your countries.</p>}
-        {coming.map((a) => (
-          <ArmyRow key={a.id} army={a} game={game} />
-        ))}
+        {game && coming.map((a) => <ArmyRow key={a.id} army={a} game={game} />)}
       </section>
       <section className="inset-card p-3.5 space-y-2.5">
         <div className="text-[16px] font-semibold">Recent battles</div>
         {recent.length === 0 && <p className="text-[14px] text-white/70">No fights yet.</p>}
         {recent.map((b) => {
-          const line = battleLine(b, game, game.playerId)
+          const line = battleLine(b, { nations }, playerId)
           return (
             <div key={b.id} className="flex items-center justify-between gap-3 text-[14px]">
               <span className={line.good ? 'text-[#6eeb8a]' : 'text-[#ff8a84]'}>{line.text}</span>
@@ -96,10 +105,10 @@ export function ArmiesTab() {
 
 /** A small panel over the globe with your armies and the ones marching on you, so you can react without opening a desk. */
 export function ArmiesDock() {
-  const game = useGame((s) => s.game)
+  const game = useGame(gameWithArmies)
   const panel = useGame((s) => s.panel)
-  if (!game?.armies?.length || panel !== 'none') return null
-  const yours = game.armies.filter((a) => a.nationId === game.playerId)
+  if (!game || panel !== 'none') return null
+  const yours = (game.armies ?? []).filter((a) => a.nationId === game.playerId)
   const coming = incomingArmies(game, game.playerId).filter((a) => a.nationId !== game.playerId)
   if (yours.length === 0 && coming.length === 0) return null
   return (
@@ -119,7 +128,8 @@ export function ArmiesDock() {
 
 /** The selected army, with its details. */
 export function ArmyCard() {
-  const game = useGame((s) => s.game)
+  // Its progress moves every day, but with no army picked there is nothing to move.
+  const game = useGame((s) => (s.selectedArmy ? s.game : null))
   const id = useGame((s) => s.selectedArmy)
   const select = useGame((s) => s.selectArmy)
   const army = game?.armies?.find((a) => a.id === id)
