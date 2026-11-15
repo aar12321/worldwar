@@ -484,7 +484,6 @@ input[type='range'] {
     right: 8px !important;
     width: min(320px, 42vw) !important;
     max-height: min(58vh, 480px);
-    overflow: auto;
   }
 }
 
@@ -503,21 +502,50 @@ input[type='range'] {
   .setup-title h1 {
     font-size: 26px !important;
   }
+  /* A short phone still shows a few nations: the list header is one slim row, and the card keeps the rest. */
   .setup-list {
     left: 8px !important;
     right: 8px !important;
     width: auto !important;
     top: 72px !important;
     bottom: auto !important;
-    height: 30vh !important;
+    height: max(34vh, 270px) !important;
+  }
+  .setup-head {
+    padding: 10px 12px !important;
+  }
+  .setup-head-title {
+    display: none;
+  }
+  .setup-head .field {
+    margin-top: 0 !important;
+  }
+  .setup-chips {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .setup-chips > button {
+    flex: none;
   }
   .setup-card {
     left: 8px !important;
     right: 8px !important;
     bottom: 8px !important;
     width: auto !important;
-    max-height: 56vh !important;
+    max-height: calc(100dvh - max(34vh, 270px) - 72px - 20px) !important;
   }
+  .setup-foot {
+    padding: 10px 12px !important;
+  }
+  .setup-foot > p {
+    display: none;
+  }
+}
+
+/* The start card never grows past the window: its body scrolls and the Start button stays in view. */
+:where(.setup-card) {
+  max-height: calc(100dvh - 3rem);
 }
 
 /* Readable by default: opaque surfaces, brighter secondary text, no tiny type. */

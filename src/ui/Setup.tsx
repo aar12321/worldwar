@@ -49,15 +49,15 @@ export function Setup() {
       </motion.div>
 
       <motion.div initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.05, ease: [0.22, 1, 0.36, 1] }} className="setup-list glass pointer-events-auto absolute left-6 top-36 bottom-6 w-[380px] rounded-[22px] flex flex-col overflow-hidden">
-        <div className="p-5 border-b border-white/10">
-          <div className="text-[17px] font-semibold tracking-tight">Choose a nation</div>
+        <div className="setup-head p-5 border-b border-white/10">
+          <div className="setup-head-title text-[17px] font-semibold tracking-tight">Choose a nation</div>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search, or click the globe"
             className="field mt-3 w-full px-3 py-2 text-[14px]"
           />
-          <div className="mt-2.5 flex flex-wrap gap-1" role="radiogroup" aria-label="How strong a start">
+          <div className="setup-chips mt-2.5 flex flex-wrap gap-1" role="radiogroup" aria-label="How strong a start">
             {(['all', 'Powerhouse', 'Strong start', 'Modest start', 'Small start'] as const).map((k) => (
               <button key={k} role="radio" aria-checked={size === k} className={`btn px-2 py-1 text-[12px] ${size === k ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setSize(k)}>
                 {k === 'all' ? 'All' : k.replace(' start', '')}
@@ -82,7 +82,8 @@ export function Setup() {
         </div>
       </motion.div>
 
-      <motion.div initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="setup-card glass pointer-events-auto absolute right-6 bottom-6 w-[400px] rounded-[22px] p-5 space-y-4">
+      <motion.div initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="setup-card glass pointer-events-auto absolute right-6 bottom-6 w-[400px] rounded-[22px] flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto scroll-thin p-5 space-y-4">
         {pick ? (
           <div>
             <div className="label">{tier(nationScore(pick))}</div>
@@ -169,6 +170,8 @@ export function Setup() {
             </button>
           </div>
         </details>
+        </div>
+        <div className="setup-foot border-t border-white/10 p-4 space-y-2.5">
         <div className="flex gap-2">
           {hasSave && (
             <button className="btn flex-1 py-3" onClick={loadGame}>
@@ -189,7 +192,8 @@ export function Setup() {
         <button className="btn w-full py-2.5 text-[14px]" onClick={() => setOnlineOpen(true)}>
           Play with friends online
         </button>
-        <p className="text-[13px] text-white/65">{mode === 'live' ? 'Every other nation is a rival, acting as the days pass. Live games are for one player; playing with friends online uses turns.' : 'Every other nation is a rival. They act when you press Next turn. Playing with friends? Everyone presses Ready instead.'}</p>
+        <p className="text-[12px] text-white/65 leading-snug">{mode === 'live' ? 'Every other nation is a rival, acting as the days pass. Live games are for one player; playing with friends online uses turns.' : 'Every other nation is a rival. They act when you press Next turn. Playing with friends? Everyone presses Ready instead.'}</p>
+        </div>
       </motion.div>
     </div>
       {onlineOpen && <OnlineEntry onClose={() => setOnlineOpen(false)} />}
