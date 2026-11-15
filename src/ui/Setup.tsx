@@ -6,7 +6,7 @@ import type { Difficulty } from '../engine/types'
 import { getWorld } from '../map/world'
 import { peekSave, useGame } from '../store'
 import { globeBridge } from './globeBridge'
-import { nationScore, nationTier, rankNations } from './nationList'
+import { difficultyHint, difficultyReason, nationScore, nationTier, rankNations, suggestedDifficulty } from './nationList'
 import { OnlineEntry } from './Online'
 
 export function Setup() {
@@ -36,6 +36,8 @@ export function Setup() {
     if (region) globeBridge.api?.pointOfView({ lat: region.lat, lng: region.lng, altitude: 1.8 }, 700)
   }, [selected, map])
   const tier = nationTier
+  const pickTier = pick ? nationTier(nationScore(pick)) : null
+  const suggested = pickTier ? suggestedDifficulty(pickTier) : null
 
   return (
     <>
@@ -134,7 +136,7 @@ export function Setup() {
         </div>
         <div>
           <div className="label mb-2">Rivals</div>
-          <div className="grid gap-1.5" role="radiogroup" aria-label="Rival skill">
+          <div className="grid gap-1.5" role="radiogroup" aria-label="Rival skill" aria-describedby={suggested ? 'difficulty-hint' : undefined}>
             {(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => (
               <button
                 key={d}
@@ -143,11 +145,19 @@ export function Setup() {
                 onClick={() => setDifficulty(d)}
                 className={`rounded-xl p-2.5 text-left border ${difficulty === d ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/8 hover:bg-white/12'}`}
               >
-                <div className="text-[14px] font-semibold">{DIFFICULTY[d].name}</div>
+                <div className="text-[14px] font-semibold">
+                  {DIFFICULTY[d].name}
+                  {suggested === d && <span className="chip chip-blue ml-2 !py-0 text-[11px]">Suggested</span>}
+                </div>
                 <div className="text-[12px] text-white/75 leading-snug">{DIFFICULTY[d].description}</div>
               </button>
             ))}
           </div>
+          {pickTier && suggested && (
+            <p id="difficulty-hint" className="mt-1.5 text-[12px] text-white/75 leading-snug" title={difficultyReason(pickTier)}>
+              {difficultyHint(pickTier, DIFFICULTY[suggested].name)}
+            </p>
+          )}
         </div>
         <details className="text-[13px] text-white/55">
           <summary className="cursor-pointer">Advanced</summary>

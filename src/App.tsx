@@ -18,6 +18,7 @@ import { HUD } from './ui/HUD'
 import { useLiveClock } from './ui/liveClock'
 import { MapModes } from './ui/MapModes'
 import { Setup } from './ui/Setup'
+import { mapModeForKey } from './ui/shortcuts'
 import { Lobby } from './ui/Online'
 import { LogPanel, SettingsPanel } from './ui/SidePanels'
 import { WarRoom } from './ui/WarRoom'
@@ -53,6 +54,7 @@ function useShortcuts() {
       if (!st.game) return
       // A dialog is open: it handles its own keys.
       if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom || st.confirm || st.paletteOpen) return
+      const mapMode = mapModeForKey(e.key)
       if (e.key === 'Escape') {
         if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
@@ -68,6 +70,9 @@ function useShortcuts() {
         st.togglePause()
       } else if ((e.key === '1' || e.key === '2' || e.key === '3') && isLive(st.game)) {
         st.setSpeed(([1, 2, 4] as const)[Number(e.key) - 1])
+      } else if (mapMode && st.panel === 'none') {
+        // The Map colors bar only shows with no desk open, so the keys only work there.
+        st.setMapMode(mapMode)
       } else if (e.key.toLowerCase() === 'a') {
         // Attack the selected country if your military can reach it.
         const target = st.selectedRegion
