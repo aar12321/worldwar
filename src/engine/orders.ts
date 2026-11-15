@@ -29,7 +29,7 @@ import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
 const LIVE_NOW = new Set<Order['type']>(['strike', 'respond', 'propose'])
@@ -166,9 +166,6 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     case 'breakPact':
       c.pp = COSTS.breakPact
-      break
-    case 'spy':
-      c.capital = COSTS.spy
       break
     case 'fundSystem':
       c.capital = fundSystemCost(s, o)
@@ -541,11 +538,6 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return validateDomestic(s, o, pending)
     case 'fundAgency':
       return validateFund(s, o, pending)
-    case 'spy': {
-      const r = s.regions[o.target]
-      if (!r || r.owner === o.nationId) return 'Choose a foreign region'
-      return null
-    }
     case 'enactLaw':
       if (pending.some((p) => p.type === 'enactLaw')) return 'One new law a month'
       return lawProblem(n, o.law)

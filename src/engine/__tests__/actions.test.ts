@@ -1,3 +1,4 @@
+import { FOREIGN_OPS } from '../../data/agencies'
 import { EMPIRE_RULES } from '../../data/empire'
 import { describe, expect, it } from 'vitest'
 import { storedOpinion } from '../../ai/opinion'
@@ -195,11 +196,6 @@ const ROWS: Row[] = [
     },
   },
   {
-    name: 'spy sabotage',
-    order: () => ({ type: 'spy', nationId: P, target: 'r1', mission: 'sabotage' }),
-    check: (n) => expect(n.regions.r1.sabotaged > 0 || (n.casusBelli['r1|r0'] ?? 0) > 0).toBe(true),
-  },
-  {
     name: 'enactLaw',
     order: () => ({ type: 'enactLaw', nationId: P, law: 'martial_law' }),
     check: (n) => expect(n.nations[P].laws).toContain('martial_law'),
@@ -222,7 +218,7 @@ const ROWS: Row[] = [
   },
 ]
 
-const COVERED: Order['type'][] = ['setPolicy', 'build', 'queueTrain', 'train', 'upgradeWeapons', 'research', 'attack', 'assignGeneral', 'declareWar', 'buildCase', 'propose', 'respond', 'cancelDeal', 'leaveAlliance', 'spy', 'enactLaw', 'repealLaw', 'suppressRebels']
+const COVERED: Order['type'][] = ['setPolicy', 'build', 'queueTrain', 'train', 'upgradeWeapons', 'research', 'attack', 'assignGeneral', 'declareWar', 'buildCase', 'propose', 'respond', 'cancelDeal', 'leaveAlliance', 'enactLaw', 'repealLaw', 'suppressRebels']
 
 describe('every order type', () => {
   it('has at least one row', () => {
@@ -260,7 +256,6 @@ describe('every order type', () => {
     expect(validateOrder(s, map, { type: 'declareWar', nationId: P, target: 'r1' })).toMatch(/influence/)
     expect(validateOrder(s, map, { type: 'propose', nationId: P, target: 'r1', proposal: { kind: 'alliance' } })).toMatch(/influence/)
     expect(validateOrder(s, map, { type: 'build', nationId: P, regionId: P, building: 'factory' })).toMatch(/money/)
-    expect(validateOrder(s, map, { type: 'spy', nationId: P, target: 'r1', mission: 'sabotage' })).toMatch(/money/)
   })
 
   it('a duplicate proposal in the same month is charged and sent only once', () => {
@@ -496,8 +491,8 @@ describe('country upgrades', () => {
     const s = base()
     const farm: Order = { type: 'build', nationId: P, regionId: P, building: 'farm' }
     const cost = orderCost(s, farm).capital
-    const held: Order = { type: 'spy', nationId: P, target: 'r1', mission: 'sabotage' } as Order
-    s.nations[P].resources.capital = cost + COSTS.spy - 1
+    const held: Order = { type: 'operation', nationId: P, op: 'sabotage', target: 'r1' }
+    s.nations[P].resources.capital = cost + FOREIGN_OPS.sabotage.money - 1
     expect(applyOrderNow(s, map, farm, [held]).error).toMatch(/Not enough money/)
     expect(s.regions[P].buildings.farm).toBe(base().regions[P].buildings.farm)
     expect(applyOrderNow(s, map, farm).error).toBeNull()

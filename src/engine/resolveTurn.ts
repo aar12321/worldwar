@@ -28,7 +28,6 @@ import { recordHistory, runWorld, spendingFromBudget } from './statecraft'
 import { runEpidemics } from './epidemics'
 import { updateTiers } from './empire'
 import { nationNeighborMap } from './helpers'
-import { runSpyMission } from './espionage'
 import { EVENT_GAP_TURNS, scheduleEvent } from './events'
 import { addLog, forceUnits, reach, regionsOf } from './helpers'
 import { clockOf, isLive } from './calendar'
@@ -181,8 +180,6 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Leave alliance with ${nation(o.target)}`
     case 'breakPact':
       return `Break the pact with ${nation(o.target)}`
-    case 'spy':
-      return `Sabotage ${region(o.target)}`
     case 'enactLaw':
       return `Enact ${LAW_SPECS[o.law].name}`
     case 'repealLaw':
@@ -203,7 +200,7 @@ const PHASES: Order['type'][][] = [
   ['research', 'researchProgram', 'build', 'startProject', 'pauseProject', 'setRegionalCapital', 'fundAcademy', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['fundAgency', 'fundSystem'],
-  ['spy', 'operation', 'domestic', 'strike'],
+  ['operation', 'domestic', 'strike'],
 ]
 
 /**
@@ -600,9 +597,6 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'sellShares':
       sellShares(s, o.nationId, o.company, o.shares)
-      break
-    case 'spy':
-      runSpyMission(s, map, o.nationId, o.target, o.mission, rng)
       break
     default:
       break

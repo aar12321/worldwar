@@ -132,7 +132,6 @@ export interface WorldStats {
   lastIndex: number
 }
 export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marshal' | 'stalwart'
-export type SpyMission = 'sabotage'
 
 export interface Agency {
   level: number
@@ -523,7 +522,6 @@ export type Order =
   | { type: 'leaveAlliance'; nationId: NationId; target: NationId }
   /** Tears up a non-aggression pact, at a cost in reputation. */
   | { type: 'breakPact'; nationId: NationId; target: NationId }
-  | { type: 'spy'; nationId: NationId; target: RegionId; mission: SpyMission }
   | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
   | { type: 'fundSystem'; nationId: NationId; system: SystemId; levels?: number }

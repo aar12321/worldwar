@@ -115,7 +115,6 @@ export const COSTS = {
   leaveAlliance: 10,
   breakPact: 25,
   suppressRebels: 10,
-  spy: 30,
 }
 
 export const PROPOSAL_COSTS: Record<ProposalKind, number> = {

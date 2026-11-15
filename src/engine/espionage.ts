@@ -1,39 +1,8 @@
-import { addOpinion } from '../ai/opinion'
-import { JUSTIFY } from '../data/war'
-import { addInfamy, addLog, grantJustification, hasTech } from './helpers'
-import type { Rng } from './rng'
-import type { GameState, NationId, RegionId, SpyMission, WorldMap } from './types'
-
+/** What an operation that is caught costs, and how long sabotage lasts. */
 export const SPY = {
-  baseSuccess: 0.65,
-  satellitePenalty: 0.2,
   sabotageTurns: 3,
   failureCasusBelliTurns: 12,
 }
 
+/** The opinion label an agent caught abroad leaves behind. The Spy Scandal event looks for it. */
 export const CAUGHT_SPYING = 'Caught our spies'
-
-export function spySuccessChance(s: GameState, nationId: NationId, target: RegionId): number {
-  const owner = s.nations[s.regions[target].owner]
-  let p = SPY.baseSuccess
-  if (hasTech(owner, 'air_satellites')) p -= SPY.satellitePenalty
-  if (hasTech(s.nations[nationId], 'air_satellites')) p += 0.1
-  return Math.max(0.1, Math.min(0.95, p))
-}
-
-export function runSpyMission(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, _mission: SpyMission, rng: Rng) {
-  const region = s.regions[target]
-  const ownerId = region.owner
-  const n = s.nations[nationId]
-  const owner = s.nations[ownerId]
-  const name = map.regions[target].name
-  if (rng.chance(spySuccessChance(s, nationId, target))) {
-    region.sabotaged = SPY.sabotageTurns
-    addLog(s, 'spy', `${n.name}'s agents sabotaged the factories of ${name}. Output halted for ${SPY.sabotageTurns} months.`, [nationId, ownerId])
-  } else {
-    grantJustification(s, ownerId, nationId, 'Caught spying', SPY.failureCasusBelliTurns)
-    addInfamy(s, nationId, JUSTIFY.infamyCaught)
-    addOpinion(s, ownerId, nationId, CAUGHT_SPYING, -25, 0.5)
-    addLog(s, 'spy', `${owner.name} caught ${n.name}'s spies in ${name}. ${owner.name} can now declare war more cheaply.`, [nationId, ownerId])
-  }
-}

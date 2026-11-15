@@ -455,7 +455,6 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'propose') return typeof order.target === 'string' && !!order.proposal && typeof order.proposal.kind === 'string'
   if (order.type === 'respond') return typeof order.proposalId === 'string' && typeof order.accept === 'boolean'
   if (order.type === 'research') return typeof order.techId === 'string'
-  if (order.type === 'spy') return typeof order.target === 'string' && order.mission === 'sabotage'
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance' || order.type === 'breakPact') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
