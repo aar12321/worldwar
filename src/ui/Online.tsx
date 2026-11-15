@@ -77,6 +77,43 @@ export function OnlineEntry({ onClose }: { onClose: () => void }) {
           <input data-autofocus value={name} maxLength={20} onChange={(e) => setName(e.target.value)} placeholder="What your friends will see" className="field mt-1.5 w-full px-3 py-2.5 text-[15px]" />
         </label>
 
+        {saves.length > 0 && (
+          <section className="inset-card p-4 space-y-3">
+            <div>
+              <div className="text-[16px] font-semibold tracking-tight">Saved games</div>
+              <p className="text-[14px] text-white/70 mt-0.5">Every player keeps the game on their own device after each month. Open one again here, then your friends join with the same code and take their seats back.</p>
+            </div>
+            {saves.map((sv) => (
+              <div key={sv.code} className="rounded-xl bg-white/5 p-3 space-y-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[16px] font-semibold tracking-[0.16em]">{sv.code}</span>
+                  <span className="text-[12px] text-white/65">{turnDate(sv.turn)} · saved {new Date(sv.savedAt).toLocaleDateString()}</span>
+                </div>
+                <div className="text-[12px] text-white/65">Open it as:</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {sv.seats.map((seat) => (
+                    <button key={seat.nationId} className="btn btn-quiet" disabled={!ready || busy} onClick={() => void run(() => resume(name, sv.code, seat.nationId))}>
+                      {map.regions[seat.nationId]?.name ?? seat.nationId} <span className="text-white/55">({seat.name})</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="text-[12px] text-white/55 underline underline-offset-2 hover:text-white/80"
+                  onClick={() => {
+                    if (window.confirm(`Delete the saved game ${sv.code} from this device?`)) {
+                      deleteOnlineSave(sv.code)
+                      setSaves(listOnlineSaves())
+                    }
+                  }}
+                >
+                  Delete this save
+                </button>
+              </div>
+            ))}
+            {!ready && <p className="text-[12px] text-white/60">Type your name first.</p>}
+          </section>
+        )}
+
         <section className="inset-card p-4 space-y-3">
           <div>
             <div className="text-[16px] font-semibold tracking-tight">Make a room</div>
@@ -115,43 +152,6 @@ export function OnlineEntry({ onClose }: { onClose: () => void }) {
             </button>
           )}
         </section>
-
-        {saves.length > 0 && (
-          <section className="inset-card p-4 space-y-3">
-            <div>
-              <div className="text-[16px] font-semibold tracking-tight">Saved games</div>
-              <p className="text-[14px] text-white/70 mt-0.5">Every player keeps the game on their own device after each month. Open one again here, then your friends join with the same code and take their seats back.</p>
-            </div>
-            {saves.map((sv) => (
-              <div key={sv.code} className="rounded-xl bg-white/5 p-3 space-y-2">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[16px] font-semibold tracking-[0.16em]">{sv.code}</span>
-                  <span className="text-[12px] text-white/65">{turnDate(sv.turn)} · saved {new Date(sv.savedAt).toLocaleDateString()}</span>
-                </div>
-                <div className="text-[12px] text-white/65">Open it as:</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {sv.seats.map((seat) => (
-                    <button key={seat.nationId} className="btn btn-quiet" disabled={!ready || busy} onClick={() => void run(() => resume(name, sv.code, seat.nationId))}>
-                      {map.regions[seat.nationId]?.name ?? seat.nationId} <span className="text-white/55">({seat.name})</span>
-                    </button>
-                  ))}
-                </div>
-                <button
-                  className="text-[12px] text-white/55 underline underline-offset-2 hover:text-white/80"
-                  onClick={() => {
-                    if (window.confirm(`Delete the saved game ${sv.code} from this device?`)) {
-                      deleteOnlineSave(sv.code)
-                      setSaves(listOnlineSaves())
-                    }
-                  }}
-                >
-                  Delete this save
-                </button>
-              </div>
-            ))}
-            {!ready && <p className="text-[12px] text-white/60">Type your name first.</p>}
-          </section>
-        )}
 
         {configured ? <p className="text-[13px] text-white/65">Rooms are relayed through the game server, so friends can be anywhere.</p> : <ConnectionNote kind="browser" />}
       </div>
