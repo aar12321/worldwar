@@ -2,7 +2,6 @@ import { levelCost } from '../data/agencies'
 import { systemCost, type SystemId } from '../data/systems'
 import { companiesOf, directiveOf, stakeShare, strengthOf } from '../engine/stocks'
 import { difficultyOf } from '../data/difficulty'
-import { BUDGET_KEYS } from '../data/government'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { TECHS } from '../data/techTree'
@@ -12,7 +11,7 @@ import { nextWeaponLevel } from '../engine/arms'
 import { recentlyProposed } from '../engine/diplomacy'
 import { computeEconomy, lineMax, type EconomyReport } from '../engine/economy'
 import { atWar, canUseUnit, clamp, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex, totalUnits } from '../engine/helpers'
-import { militaryPower } from '../engine/militaryStats'
+import { homePower, militaryPower } from '../engine/militaryStats'
 import { validateOrder } from '../engine/orders'
 import { clockMonth } from '../engine/calendar'
 import { createRng, type Rng } from '../engine/rng'
@@ -22,7 +21,7 @@ import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
 import { canAttackRegion, garrisonStrength } from '../engine/warfare'
 import { MAX_REPARATIONS, netWarScore, puppetValue, regionValue } from '../engine/warscore'
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
-import { manageCountry, wantedBudget, wantedCorporateTax } from './management'
+import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
 
 export const BOT = {
@@ -47,7 +46,10 @@ export const BOT = {
 
 /** Shared per-turn facts every bot reads, computed once instead of once per bot. */
 export interface TurnContext {
+  /** Each nation's whole force, armies in the field included. */
   power: Map<NationId, number>
+  /** What each nation has at home to defend with. The same as `power` in a turn game. */
+  home: Map<NationId, number>
   neighbors: Map<NationId, Set<NationId>>
   regions: Map<NationId, RegionId[]>
   enemies: Map<NationId, NationId[]>
@@ -83,13 +85,16 @@ export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
     }
   }
   const power = new Map<NationId, number>()
+  const home = new Map<NationId, number>()
   for (const n of Object.values(s.nations)) {
     if (!n.alive) continue
     power.set(n.id, militaryPower(s, n.id))
+    home.set(n.id, s.armies?.length ? homePower(s, n.id) : power.get(n.id)!)
   }
   const enemies = partnerIndex(s.wars)
   return {
     power,
+    home,
     neighbors,
     regions,
     enemies,
@@ -130,18 +135,19 @@ function counterUnit(units: UnitCounts | undefined): UnitType | null {
 
 function estimateDefense(s: GameState, map: WorldMap, ctx: TurnContext, regionId: RegionId): number {
   const owner = s.regions[regionId].owner
-  return ((ctx.power.get(owner) ?? 0) + garrisonStrength(s, map, regionId) * UNIT_SPECS.infantry.defense) * TERRAIN[map.regions[regionId].terrain].defense
+  // Only what is at home defends: an army away on its own campaign does not.
+  return ((ctx.home.get(owner) ?? 0) + garrisonStrength(s, map, regionId) * UNIT_SPECS.infantry.defense) * TERRAIN[map.regions[regionId].terrain].defense
 }
 
 const BRANCH_PRIORITY: Record<'aggressive' | 'builder', TechBranch[]> = {
-  aggressive: ['land', 'air', 'frontier', 'economy', 'infra', 'naval'],
-  builder: ['economy', 'infra', 'frontier', 'land', 'air', 'naval'],
+  aggressive: ['land', 'air', 'frontier', 'economy', 'infra', 'medicine', 'naval'],
+  builder: ['economy', 'infra', 'medicine', 'frontier', 'land', 'air', 'naval'],
 }
 
 /** Stock above which a nation considers a resource spare. */
 const SURPLUS: Record<TradeResource, number> = { capital: 80, food: 40, tp: 60, manpower: 180, oil: 30, steel: 40, goods: 50 }
 
-type Agenda = 'agency' | 'peace' | 'allies' | 'research' | 'economy' | 'military' | 'trade' | 'diplomacy' | 'war'
+type Agenda = 'agency' | 'peace' | 'allies' | 'research' | 'economy' | 'military' | 'trade' | 'diplomacy' | 'war' | 'crisis'
 
 export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer = false, context?: TurnContext): Order[] {
   const n = s.nations[nationId]
@@ -210,11 +216,11 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   tax = clamp(Math.round(tax * 100) / 100, 0.1, 0.4)
   const draft = atWarNow ? (n.warWeariness > 30 ? 0.07 : 0.1) : 0.05
   if (diff.skill >= 1) {
-    // Skilled bots set the budget and business tax as well.
-    const budgetWanted = wantedBudget(n, econ, atWarNow)
+    // Skilled bots set spending on the people and business tax as well.
+    const spending = wantedSpending(n, econ, atWarNow)
     const corp = wantedCorporateTax(n, econ)
-    const changed = Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6 || Math.abs(corp - n.corporateTax) > 0.02 || BUDGET_KEYS.some((k) => Math.abs(budgetWanted[k] - n.budget[k]) > 0.05)
-    if (changed) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft, corporateTax: corp, budget: budgetWanted })
+    const changed = Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6 || Math.abs(corp - n.corporateTax) > 0.02 || !sameSpending(spending, n.spending)
+    if (changed) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft, corporateTax: corp, spending })
   } else if (Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft })
 
   // The world market: sell what piles up when money is short, and the shortfall is bought on its own (auto-buy).
@@ -430,6 +436,24 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       return used
     },
 
+    /** Medium and Hard rivals answer the world's crises: aid for a friend in unrest, mediation or a stand in a dispute. */
+    crisis() {
+      if (diff.skill < 1 || n.resources.pp < 30) return false
+      for (const c of s.crises) {
+        if (c.stage < 1 || c.answered.includes(nationId) || c.nation === nationId || c.rival === nationId) continue
+        const victim = opinion(c.nation)
+        if (c.kind === 'unrest') {
+          if (victim >= 5 && n.resources.capital > 90 && tryAdd({ type: 'crisisAction', nationId, crisisId: c.id, action: 'aid' })) return true
+        } else if (c.rival) {
+          const aggressor = opinion(c.rival)
+          // The strongest tier stands with a friend against a rival it dislikes; the peaceful try to talk it down.
+          if (diff.skill === 2 && aggressor < -10 && victim >= 0 && tryAdd({ type: 'crisisAction', nationId, crisisId: c.id, action: 'support' })) return true
+          if ((n.personality === 'honorable' || n.personality === 'trader') && victim > -10 && aggressor > -25 && tryAdd({ type: 'crisisAction', nationId, crisisId: c.id, action: 'mediate' })) return true
+        }
+      }
+      return false
+    },
+
     allies() {
       for (const e of enemies) {
         if (myPower > perceived(e) * 1.2) continue
@@ -549,8 +573,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   }
 
   const plan: Agenda[] = atWarNow
-    ? ['peace', 'military', 'allies', ...shuffle<Agenda>(['agency', 'research', 'economy', 'trade', 'diplomacy', 'war'], rng)]
-    : shuffle<Agenda>(['agency', 'research', 'economy', 'military', 'trade', 'diplomacy', 'war'], rng)
+    ? ['peace', 'military', 'allies', ...shuffle<Agenda>(['agency', 'research', 'economy', 'trade', 'diplomacy', 'war', 'crisis'], rng)]
+    : shuffle<Agenda>(['agency', 'research', 'economy', 'military', 'trade', 'diplomacy', 'war', 'crisis'], rng)
   for (const item of plan) {
     if (attention <= 0) break
     if (agenda[item]()) attention--

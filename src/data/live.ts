@@ -11,6 +11,8 @@ export const LIVE = {
   musterDays: 1,
   /** Days an army stays at the battle after it arrives, for the show. */
   battleDays: 1,
+  /** Share of the military that stays at home whatever is sent, so an all-in attack does not leave the land empty for weeks. */
+  homeGuard: 0.1,
   /** Days a missile salvo takes to land. */
   missileDays: 1,
   /** The AI's attacks for the month leave on a day in this range (inclusive), counted from the 1st. */

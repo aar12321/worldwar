@@ -1,3 +1,5 @@
+import { FOREIGN_OPS } from '../../data/agencies'
+import { EMPIRE_RULES } from '../../data/empire'
 import { describe, expect, it } from 'vitest'
 import { storedOpinion } from '../../ai/opinion'
 import { EVENTS } from '../../data/events'
@@ -194,11 +196,6 @@ const ROWS: Row[] = [
     },
   },
   {
-    name: 'spy sabotage',
-    order: () => ({ type: 'spy', nationId: P, target: 'r1', mission: 'sabotage' }),
-    check: (n) => expect(n.regions.r1.sabotaged > 0 || (n.casusBelli['r1|r0'] ?? 0) > 0).toBe(true),
-  },
-  {
     name: 'enactLaw',
     order: () => ({ type: 'enactLaw', nationId: P, law: 'martial_law' }),
     check: (n) => expect(n.nations[P].laws).toContain('martial_law'),
@@ -221,7 +218,7 @@ const ROWS: Row[] = [
   },
 ]
 
-const COVERED: Order['type'][] = ['setPolicy', 'build', 'queueTrain', 'train', 'upgradeWeapons', 'research', 'attack', 'assignGeneral', 'declareWar', 'buildCase', 'propose', 'respond', 'cancelDeal', 'leaveAlliance', 'spy', 'enactLaw', 'repealLaw', 'suppressRebels']
+const COVERED: Order['type'][] = ['setPolicy', 'build', 'queueTrain', 'train', 'upgradeWeapons', 'research', 'attack', 'assignGeneral', 'declareWar', 'buildCase', 'propose', 'respond', 'cancelDeal', 'leaveAlliance', 'enactLaw', 'repealLaw', 'suppressRebels']
 
 describe('every order type', () => {
   it('has at least one row', () => {
@@ -243,7 +240,9 @@ describe('every order type', () => {
       // Upkeep and income from the order itself shift the totals slightly, so allow a small margin.
       if (cost.capital) expect(spent('capital')).toBeGreaterThanOrEqual(cost.capital - 0.01)
       if (cost.capital) expect(spent('capital')).toBeLessThan(cost.capital + 3)
-      if (cost.pp) expect(spent('pp')).toBeCloseTo(cost.pp, 5)
+      // A law in force costs a little influence every month to uphold.
+      const upkeep = order.type === 'enactLaw' ? EMPIRE_RULES.lawUpkeep : order.type === 'repealLaw' ? -EMPIRE_RULES.lawUpkeep : 0
+      if (cost.pp) expect(spent('pp')).toBeCloseTo(cost.pp + upkeep, 5)
       if (cost.tp) expect(spent('tp')).toBeCloseTo(cost.tp, 5)
       if (cost.manpower) expect(idle.nations[P].militaryPool - next.nations[P].militaryPool).toBeGreaterThan(cost.manpower * 0.5)
       row.check(next, s)
@@ -257,7 +256,6 @@ describe('every order type', () => {
     expect(validateOrder(s, map, { type: 'declareWar', nationId: P, target: 'r1' })).toMatch(/influence/)
     expect(validateOrder(s, map, { type: 'propose', nationId: P, target: 'r1', proposal: { kind: 'alliance' } })).toMatch(/influence/)
     expect(validateOrder(s, map, { type: 'build', nationId: P, regionId: P, building: 'factory' })).toMatch(/money/)
-    expect(validateOrder(s, map, { type: 'spy', nationId: P, target: 'r1', mission: 'sabotage' })).toMatch(/money/)
   })
 
   it('a duplicate proposal in the same month is charged and sent only once', () => {
@@ -493,8 +491,8 @@ describe('country upgrades', () => {
     const s = base()
     const farm: Order = { type: 'build', nationId: P, regionId: P, building: 'farm' }
     const cost = orderCost(s, farm).capital
-    const held: Order = { type: 'spy', nationId: P, target: 'r1', mission: 'sabotage' } as Order
-    s.nations[P].resources.capital = cost + COSTS.spy - 1
+    const held: Order = { type: 'operation', nationId: P, op: 'sabotage', target: 'r1' }
+    s.nations[P].resources.capital = cost + FOREIGN_OPS.sabotage.money - 1
     expect(applyOrderNow(s, map, farm, [held]).error).toMatch(/Not enough money/)
     expect(s.regions[P].buildings.farm).toBe(base().regions[P].buildings.farm)
     expect(applyOrderNow(s, map, farm).error).toBeNull()
@@ -508,7 +506,7 @@ describe('country upgrades', () => {
 })
 
 describe('the national military', () => {
-  it('trains each unit type on its own, and a commander drills for free', () => {
+  it('trains each unit type on its own, and a commander drills for free besides', () => {
     const s = base()
     const m = s.nations[P].military
     m.units = { infantry: 6, armor: 2, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 }
@@ -525,7 +523,10 @@ describe('the national military', () => {
 
     const withCommander = structuredClone(s)
     withCommander.nations[P].military.commanderId = generalId
-    expect(validateOrder(withCommander, map, { type: 'train', nationId: P, unit: 'infantry' })).toMatch(/commander/i)
+    // A commander with no trait that touches money, so the comparison is only about drill.
+    withCommander.nations[P].generals[0].trait = 'stalwart'
+    // Paid drill still works with a commander: the commander drills one more type for free.
+    expect(validateOrder(withCommander, map, { type: 'train', nationId: P, unit: 'infantry' })).toBeNull()
     const free = resolveTurn(withCommander, map, [])
     expect(free.nations[P].military.drill.infantry).toBe(1)
     expect(free.nations[P].resources.capital).toBe(idle.nations[P].resources.capital)
@@ -550,7 +551,7 @@ describe('the national military', () => {
     expect(orderCost(s, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' }).capital).toBe(weaponCost(0))
     s.nations[P].military.weapons.infantry = 2
     expect(orderCost(s, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' }).capital).toBe(weaponCost(2))
-    expect(validateOrder(s, map, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' })).toMatch(/factory level 3/)
+    expect(validateOrder(s, map, { type: 'upgradeWeapons', nationId: P, unit: 'infantry' })).toMatch(/factory of level 3/)
   })
 
   it('the stat sheet shows each source of a unit bonus', () => {

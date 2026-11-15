@@ -1,7 +1,7 @@
 import { isLive } from '../engine/calendar'
 import { useGame } from '../store'
 import { Modal } from './Modal'
-import { SHORTCUTS } from './SidePanels'
+import { shortcutsFor } from './shortcuts'
 
 const TURN = [
   { title: 'Read the Briefing', body: 'Your advisor lists what needs you this month, most urgent first. Every item has a button that takes you to the fix.' },
@@ -31,12 +31,23 @@ const TERMS: [string, string][] = [
   ['Oil, steel, goods', 'Oil fuels tanks, planes and warships. Steel builds them. Goods keep your people content. Buy what you lack on the Market in Economy.'],
   ['Cities', 'Each country has cities. Grow them for workers and give each a focus that boosts the whole country.'],
   ['Business', 'Six private sectors grow on their own. Lower business tax, calm people and new technology make them grow faster.'],
-  ['Bonds and credit', 'Borrow with bonds and pay interest. A nation in the red for 3 months with debt defaults, and nobody lends to it for two years.'],
-  ['Budget', 'Four shares of tax money: Military, Education, Health, Infrastructure. Leaning one way means leaning away from the rest.'],
-  ['Puppet state', 'Win a war big enough and you can make the loser a puppet: it keeps its land, pays you 12% of its income, and counts as one of your countries for the goal. After three months you can annex it.'],
+  ['Bonds and credit', 'Borrow with bonds and pay interest at the rate fixed when you sold them. A bond that comes due is rolled over while lenders still lend, or paid from the treasury. A nation in the red for 3 months with debt defaults: half of every bond is written off and nobody lends to it for two years.'],
+  ['Spending', 'Real money for schools, health and public works (levels 0 to 4) and for pensions, jobless support and housing (0 to 2). More costs more and buys a better life; less saves money and lets things slip.'],
+  ['People and skills', 'Your workers are basic workers, skilled workers, engineers, doctors and scientists. Factories need engineers, universities need scientists, hospitals need doctors. Schools, and the focus you give them, decide the mix. Only people with jobs pay tax.'],
+  ['Health and epidemics', 'Healthy people live longer, have more children and riot less. Poor health invites epidemics, which spread to neighbors and cost lives, output and calm. Doctors, health spending, a quarantine and medicine end them.'],
+  ['Medicine', 'A seventh research column: Sanitation, Vaccines, Surgery, Genomics and Longevity. Surgery lets doctors return wounded soldiers to the ranks. The last two need a Medical Research Centre or doctors for every need.'],
+  ['The bank', 'From a Regional power up you set the interest rate: higher cools prices, lower warms them. You can print money (money now, inflation later), sell bonds for 1, 3 or 5 years, sell war bonds in wartime, steer credit to one sector, and keep a wealth fund. A weak currency makes exports cheap and imports dear.'],
+  ['Projects and public works', 'Seven national projects (rail, power grid, ports, science park, medical centre, digital government, space complex) take many months and money, and engineers set their pace. Public works spending speeds projects, trade and factories, and makes building cheaper.'],
+  ['State enterprises', 'The state can buy or seize a business sector and keep most of its profit. It grows at half speed, and seizing one frightens investors.'],
+  ['Empire tiers', 'Holding 4, 10, 25 and 60 countries makes you a Regional power, Great power, Superpower and Hegemon. Each tier widens what you can do: interest rates, printing, bonds, projects, laws, the wealth fund, capitals, loans and the World Council. A puppet counts as half. You keep a tier until you fall a tenth below its line.'],
+  ['Administration', 'Your officials can run only so many countries at once. Beyond that, stability and output fall. Civic halls, governors, skilled workers, regional capitals and digital government raise the limit. Capitals carry no load.'],
+  ['Occupation policy', 'How you hold conquered land: Standard, Autonomy (slow, few rebels), Assimilate (fast, more rebels), or Settle (costly, quick and calm). Bigger empires have more choices.'],
+  ['World Council', 'A Superpower may put resolutions to every nation: sanctions on a target, a ceasefire between two others, recognition that clears its reputation, or a trade accord. Votes are weighted by income and you see the projected result first.'],
+  ['Academy and commander', 'A military academy sends recruits out already drilled, makes drill cheaper and sharpens combined arms. A commander has a trait: mountains, logistics, blitz, air power or defense.'],
+  ['Puppet state', 'Win a war big enough and you can make the loser a puppet: it keeps its land, pays you 12% of its income, and fights beside you in every war. After a year you can annex it: its land, army and treasury join yours.'],
   ['Reason for war', 'A war needs a reason: a border incident, an attack on your ally, a spy caught, sanctions, or a case you build in three months. Without one it costs far more, hurts stability and makes the world distrust you.'],
   ['Reputation', 'Starting wars and taking land make other nations uneasy about you. It fades over a couple of years.'],
-  ['Reach', 'You attack across a border or a short sea lane. A port plus warships reaches any coast in the world, and fighters or strike aircraft with a factory as a base reach anything within 7000 km. Overseas attacks fight with a penalty.'],
+  ['Reach', 'You attack across a border or a short sea lane. A port plus warships reaches any coast in the world, and fighters or strike aircraft with a factory as a base reach anything within 7000 km. Ships or planes must be at least a twentieth of your military to carry it. Overseas attacks fight with a penalty.'],
   ['Agencies', 'An intelligence service works abroad (intelligence, cases for war, sabotage, rebels, coups, theft) and a security service works at home. Each level adds a team. Odds are shown first.'],
   ['Frontier weapons', 'Drone Swarms take the first losses and shred tanks. Robot Infantry need no soldiers and never tire your people. Hypersonic missiles strike first and crack the Defense Line. You choose how many to fire in a battle or a strike, as often as you have missiles, and each one fired is used up. Each has a counter: shields, fighters, and Cyber Command.'],
   ['Systems', 'Cyber Command, Interceptor Shield, AI Battle Command, Quantum Codebreaking, Orbital Network and Nano-armor are programs you buy in three levels. They cost upkeep and each has a weakness.'],
@@ -47,7 +58,7 @@ const TERMS: [string, string][] = [
 export function Help() {
   const open = useGame((s) => s.helpOpen)
   const setHelp = useGame((s) => s.setHelp)
-  const game = useGame((s) => s.game)
+  const game = useGame((s) => (s.helpOpen ? s.game : null))
   const online = useGame((s) => s.online?.status === 'playing')
   if (!open || !game) return null
   const live = isLive(game)
@@ -94,7 +105,7 @@ export function Help() {
         ))}
       </dl>
       <h3 className="text-[16px] font-semibold mt-5 mb-1">Keys</h3>
-      <p className="text-[14px] text-white/75">{SHORTCUTS}</p>
+      <p className="text-[14px] text-white/75">{shortcutsFor(isLive(game))}</p>
     </Modal>
   )
 }

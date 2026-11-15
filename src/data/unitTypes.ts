@@ -65,7 +65,8 @@ export const BUILDING_SPECS: Record<BuildingType, BuildingSpec> = {
   university: { name: 'University', cost: 45, max: 5, effect: '+2.5 research a month per level.', description: 'Turns money into new technology.' },
   barracks: { name: 'Barracks', cost: 30, max: 5, effect: '+1 training slot and +0.75 defenders per level.', description: 'Trains infantry and tanks, and holds the border.' },
   port: { name: 'Port', cost: 35, max: 3, effect: '+3 money from trade per level. Warships and sea attacks need one.', description: 'Trade, warships, and attacks across the sea. Coastal countries only.', requiresCoast: true },
-  civic: { name: 'Civic Hall', cost: 30, max: 3, effect: '+0.6 influence and +0.3 research a month per level.', description: 'Offices and schools.' },
+  civic: { name: 'Civic Hall', cost: 30, max: 3, effect: '+0.6 influence and +0.3 research a month per level, and room for more officials.', description: 'Offices and schools.' },
+  hospital: { name: 'Hospital', cost: 40, max: 4, effect: 'Raises health while doctors staff it. Needs doctors to work.', description: 'Care for the sick and the wounded.' },
 }
 
 /** Money for the next level of a building. Level 0 costs the base price. */
@@ -82,6 +83,8 @@ export interface LawSpec {
   cost: number
   description: string
   effects: Partial<PolicyEffects>
+  /** No longer offered: older saves have it turned into something else. */
+  retired?: boolean
 }
 
 export const LAW_SPECS: Record<LawId, LawSpec> = {
@@ -90,7 +93,7 @@ export const LAW_SPECS: Record<LawId, LawSpec> = {
   conscription_act: { name: 'Conscription Act', cost: 20, description: 'Raises the maximum draft rate from 20% to 35%.', effects: {} },
   free_trade: { name: 'Free Trade', cost: 25, description: 'The market keeps 3% instead of 8%, ports move 25% more, and businesses grow faster. Stability -2.', effects: { trade: 0.25, growth: 0.15, stability: -2 } },
   rationing: { name: 'Rationing', cost: 15, description: 'People eat 15% less and use 20% fewer goods. Stability -6.', effects: { foodUse: -0.15, goodsUse: -0.2, stability: -6 } },
-  universal_healthcare: { name: 'Universal Healthcare', cost: 30, description: 'Stability +8. Costs 6% of your income.', effects: { stability: 8, money: -0.06 } },
+  universal_healthcare: { name: 'Universal Healthcare', cost: 30, description: 'Replaced by health spending in the Budget.', effects: {}, retired: true },
   industrial_policy: { name: 'Industrial Policy', cost: 25, description: 'Factory output +12% and businesses grow faster. Costs 4% of your income.', effects: { factory: 0.12, growth: 0.1, money: -0.04 } },
   press_control: { name: 'Press Control', cost: 20, description: 'Influence +0.8 a month and stability +4, but research -8%.', effects: { influence: 0.8, stability: 4, research: -0.08 } },
   austerity: { name: 'Austerity', cost: 20, description: 'Upkeep -12% and 4% more income. Stability -8.', effects: { upkeep: -0.12, money: 0.04, stability: -8 } },
@@ -98,7 +101,9 @@ export const LAW_SPECS: Record<LawId, LawSpec> = {
 }
 
 export const DIPLOMACY = {
-  loan: { min: 30, max: 400, minMonths: 3, maxMonths: 24, interest: 0.007 },
+  loan: { min: 30, max: 400, minMonths: 3, maxMonths: 24, interest: 0.007, defaultInfamy: 10, defaultLockMonths: 12 },
+  /** Reputation lost for tearing up a non-aggression pact. */
+  pactBreakInfamy: 12,
   sanctions: { cost: 15, months: 12, tradeCut: 0.2, minFloor: 0.2 },
   guarantee: { months: 36 },
   puppet: { tribute: 0.12, breakChance: 0.05, valueShare: 0.6, minValue: 20 },
@@ -108,8 +113,8 @@ export const COSTS = {
   declareWar: 25,
   declareWarWithCasusBelli: 10,
   leaveAlliance: 10,
+  breakPact: 25,
   suppressRebels: 10,
-  spy: 30,
 }
 
 export const PROPOSAL_COSTS: Record<ProposalKind, number> = {

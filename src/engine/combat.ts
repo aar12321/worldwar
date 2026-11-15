@@ -57,6 +57,10 @@ export const COMBAT = {
   combinedArmsBonus: 0.25,
   defenderCombinedArmsShare: 0.5,
   minPresence: 0.5,
+  /** Each arm (foot soldiers, tanks, planes) must be at least this share of the force for the combined arms bonus. */
+  combinedArmsShare: 0.12,
+  /** Drones are expendable: they take this many times their share of the losses, not all of them first. */
+  droneLossWeight: 1.5,
 }
 
 /** The opening round, fought only when either side has drones or hypersonic batteries. */
@@ -91,8 +95,10 @@ export function airSuperiority(own: Combatant, other: Combatant): number {
 
 const bomberFactor = (superiority: number) => Math.max(0.4, Math.min(1.6, 0.4 + 1.2 * superiority))
 
+/** Foot soldiers (infantry or robots), tanks and planes, each a real part of the force: a token tank does not make an army combined. */
 export function hasCombinedArms(u: UnitCounts): boolean {
-  return u.infantry >= COMBAT.minPresence && u.armor >= COMBAT.minPresence && u.air + u.fighter >= COMBAT.minPresence
+  const need = Math.max(COMBAT.minPresence, totalUnits(u) * COMBAT.combinedArmsShare)
+  return u.infantry + u.robot >= need && u.armor >= need && u.air + u.fighter >= need
 }
 
 /** Drones fly at 70% against enemy fighters that outmatch theirs, 85% when the enemy has some, and fully otherwise. */
@@ -152,9 +158,10 @@ function applyLosses(units: UnitCounts, losses: UnitCounts, damage: number, coas
   const total = eligible.reduce((s, k) => s + units[k], 0)
   if (total <= 0) return
   let dmg = Math.min(damage, total)
-  // Drone swarms are expendable: they take the first losses, so the soldiers behind them live.
+  // Drone swarms are expendable: they take more than their share of the losses, so the soldiers behind them live. They do not take all of them.
   if (units.drone > 0) {
-    const take = Math.min(units.drone, dmg)
+    const weight = units.drone * COMBAT.droneLossWeight
+    const take = Math.min(units.drone, dmg * (weight / (weight + total - units.drone)))
     units.drone -= take
     losses.drone += take
     if (round) round.drone += take
@@ -163,6 +170,7 @@ function applyLosses(units: UnitCounts, losses: UnitCounts, damage: number, coas
   const rest = eligible.filter((k) => k !== 'drone')
   const restTotal = rest.reduce((s, k) => s + units[k], 0)
   if (restTotal <= 0 || dmg <= 0) return
+  dmg = Math.min(dmg, restTotal)
   for (const k of rest) {
     const share = (units[k] / restTotal) * dmg
     units[k] -= share

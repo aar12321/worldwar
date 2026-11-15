@@ -24,7 +24,11 @@ export function Setup() {
 
   const nations = useMemo(() => rankNations(map), [map])
   const [onlineOpen, setOnlineOpen] = useState(false)
-  const filtered = nations.filter(({ r }) => r.name.toLowerCase().includes(query.toLowerCase()))
+  const [sort, setSort] = useState<'strength' | 'name'>('strength')
+  const [size, setSize] = useState<'all' | 'Powerhouse' | 'Strong start' | 'Modest start' | 'Small start'>('all')
+  const filtered = nations
+    .filter(({ r, score }) => r.name.toLowerCase().includes(query.toLowerCase()) && (size === 'all' || nationTier(score) === size))
+    .sort((a, b) => (sort === 'name' ? a.r.name.localeCompare(b.r.name) : b.score - a.score))
   const pick = selected ? map.regions[selected] : null
   useEffect(() => {
     // Turn the globe to the nation you picked, so you can see where you will play.
@@ -39,7 +43,7 @@ export function Setup() {
       <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="setup-title absolute top-8 left-1/2 -translate-x-1/2 text-center w-[min(640px,90vw)]">
         <p className="text-[13px] font-medium text-white/50">January 2026</p>
         <h1 className="text-[40px] font-semibold tracking-tight text-white mt-1">Worlds of Others</h1>
-        <p className="setup-blurb mt-2 text-[15px] text-white/65">Pick a nation, turn by turn or live. Win by taking countries, or by leading enough of the world’s people.</p>
+        <p className="setup-blurb mt-2 text-[15px] text-white/65">Pick a nation, turn by turn or live. You win by holding every country in the world, yours or puppets of yours.</p>
       </motion.div>
 
       <motion.div initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.05, ease: [0.22, 1, 0.36, 1] }} className="setup-list glass pointer-events-auto absolute left-6 top-36 bottom-6 w-[380px] rounded-[22px] flex flex-col overflow-hidden">
@@ -51,6 +55,16 @@ export function Setup() {
             placeholder="Search, or click the globe"
             className="field mt-3 w-full px-3 py-2 text-[14px]"
           />
+          <div className="mt-2.5 flex flex-wrap gap-1" role="radiogroup" aria-label="How strong a start">
+            {(['all', 'Powerhouse', 'Strong start', 'Modest start', 'Small start'] as const).map((k) => (
+              <button key={k} role="radio" aria-checked={size === k} className={`btn px-2 py-1 text-[12px] ${size === k ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setSize(k)}>
+                {k === 'all' ? 'All' : k.replace(' start', '')}
+              </button>
+            ))}
+            <button className="btn btn-quiet px-2 py-1 text-[12px] ml-auto" onClick={() => setSort(sort === 'strength' ? 'name' : 'strength')} title="Change the order of the list">
+              {sort === 'strength' ? 'Strongest first' : 'A to Z'}
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto scroll-thin p-2">
           {filtered.map(({ r, score }) => (
@@ -60,7 +74,7 @@ export function Setup() {
               className={`w-full text-left rounded-xl px-3 py-2 flex items-center justify-between transition-colors ${selected === r.id ? 'bg-white/12' : 'hover:bg-white/6'}`}
             >
               <span className="font-semibold">{r.name}</span>
-              <span className="text-xs text-slate-400">{tier(score)}</span>
+              <span className="text-xs text-white/70">{tier(score)}</span>
             </button>
           ))}
         </div>
@@ -85,7 +99,7 @@ export function Setup() {
                 <div className="font-semibold">{TERRAIN[pick.terrain].name}</div>
               </div>
             </div>
-            <div className="text-xs text-slate-400 mt-2">
+            <div className="text-xs text-white/70 mt-2">
               {pick.neighbors.length} land borders · {pick.seaLanes.length} sea lanes · {pick.coastal ? 'coastal' : 'landlocked'}
             </div>
           </div>
@@ -155,6 +169,8 @@ export function Setup() {
               if (!pick) return
               if (hasSave && !window.confirm(`Starting a new game replaces your saved game${saved ? ` (${saved.nation}, ${saved.date})` : ''}. Start anyway?`)) return
               newGame({ playerRegionId: pick.id, seed, difficulty, mode })
+              // The first game opens on how it works. Closing the window remembers that it was seen.
+              if (!useGame.getState().settings.seenHelp) useGame.getState().setHelp(true)
             }}
           >
             Start game

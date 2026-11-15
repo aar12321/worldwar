@@ -1,4 +1,10 @@
 import { addOpinion, forgetNation } from '../ai/opinion'
+import { BANKING } from '../data/banking'
+import { COMBAT_MEDICINE, DEMAND, MEDICINE } from '../data/people'
+import { GENERAL_TRAITS } from '../data/projects'
+import { updateTiers } from './empire'
+import { commanderTrait } from './generals'
+import { blendPeople } from './people'
 import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { MATERIALS } from '../data/deposits'
@@ -40,8 +46,10 @@ export function canAttackRegion(s: GameState, map: WorldMap, nationId: NationId,
   const n = s.nations[nationId]
   if (!n) return { ok: false, bySea: false }
   const u = n.military.units
-  const fleet = t.coastal && u.naval >= REACH.navalUnits
-  const air = u.fighter + u.air >= REACH.airUnits
+  // Ships and planes carry the army: a token squadron cannot lift a whole military across the ocean.
+  const lift = carryNeeded(u)
+  const fleet = t.coastal && u.naval >= Math.max(REACH.navalUnits, lift)
+  const air = u.fighter + u.air >= Math.max(REACH.airUnits, lift)
   if (!fleet && !air) return { ok: false, bySea: false }
   let by: Reach['via'] | null = null
   for (const r of Object.values(s.regions)) {
@@ -55,15 +63,22 @@ export function canAttackRegion(s: GameState, map: WorldMap, nationId: NationId,
   return by ? { ok: true, bySea: true, via: by } : { ok: false, bySea: false }
 }
 
+/** Warships, or fighters and strike aircraft, needed to carry a military this big across water or air. */
+export function carryNeeded(u: UnitCounts): number {
+  return totalUnits(u) * REACH.carryShare
+}
+
 /** Why a nation cannot reach a country, in words a player can act on. */
 export function reachProblem(s: GameState, map: WorldMap, nationId: NationId, target: RegionId): string {
   const t = map.regions[target]
   const u = s.nations[nationId]?.military.units
   const hasPort = Object.values(s.regions).some((r) => r.owner === nationId && r.buildings.port > 0)
-  const navy = u && u.naval >= REACH.navalUnits
-  const air = u && u.fighter + u.air >= REACH.airUnits
-  const sea = !t?.coastal ? 'ships cannot reach an inland country' : hasPort ? (navy ? '' : 'train warships to sail from your port') : navy ? 'build a port for your warships' : 'build a port and train warships'
-  const sky = air ? 'it is beyond your air range, and you need a factory close enough to use as an airbase' : 'or train fighters or strike aircraft and keep a factory as an airbase'
+  const lift = u ? carryNeeded(u) : 0
+  const navy = u && u.naval >= Math.max(REACH.navalUnits, lift)
+  const air = u && u.fighter + u.air >= Math.max(REACH.airUnits, lift)
+  const ships = Math.ceil(Math.max(REACH.navalUnits, lift))
+  const sea = !t?.coastal ? 'ships cannot reach an inland country' : hasPort ? (navy ? '' : `train warships to sail from your port (${ships} needed to carry your military)`) : navy ? 'build a port for your warships' : 'build a port and train warships'
+  const sky = air ? 'it is beyond your air range, and you need a factory close enough to use as an airbase' : `or train fighters or strike aircraft (${Math.ceil(Math.max(REACH.airUnits, lift))} needed) and keep a factory as an airbase`
   return `Out of reach: it is not on your border. To reach it, ${[sea, sky].filter(Boolean).join('; ')}.`
 }
 
@@ -114,6 +129,12 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
     const spoils = Math.max(0, n.resources.capital) * EMPIRE.spoilsShare
     conqueror.resources.capital += spoils
     n.resources.capital -= spoils
+    // And part of its wealth fund.
+    const fund = (n.bank?.fund ?? 0) * BANKING.fundSpoils
+    if (fund > 0) {
+      conqueror.resources.capital += fund
+      n.bank.fund -= fund
+    }
     const learn = n.techs.filter((t) => !conqueror.techs.includes(t) && TECH_BY_ID[t]?.requires.every((r) => conqueror.techs.includes(r))).sort()[0]
     if (learn) {
       conqueror.techs.push(learn)
@@ -138,6 +159,11 @@ function seize(s: GameState, map: WorldMap, regionId: RegionId, newOwner: Nation
 /** Hands a country to a new owner. Conquest razes the barracks; a negotiated cession keeps them. */
 export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, newOwner: NationId, raze = true) {
   const oldOwner = s.regions[regionId].owner
+  // The land's people come with it: the new owner's schooling, health and skills move toward theirs, by the land's share of its workforce.
+  const gained = regionWorkforce(s.regions[regionId], map.regions[regionId])
+  let had = 0
+  for (const r of Object.values(s.regions)) if (r.owner === newOwner) had += regionWorkforce(r, map.regions[r.id])
+  if (s.nations[newOwner] && s.nations[oldOwner]) blendPeople(s.nations[newOwner], s.nations[oldOwner], gained / Math.max(0.1, had + gained))
   seize(s, map, regionId, newOwner, raze)
   const old = s.nations[oldOwner]
   if (!old) return
@@ -163,6 +189,24 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
   }
 }
 
+/** A Blitz under a commander who knows the trade pushes further. */
+function blitzSpec(n: Nation | undefined, stance: Stance) {
+  const spec = STANCES[stance]
+  return stance === 'blitz' && commanderTrait(n) === 'blitz' ? { ...spec, advance: spec.advance * (1 + GENERAL_TRAITS.blitz.blitz) } : spec
+}
+
+/** Doctors return a share of infantry losses: more with good coverage and modern surgery, capped with nano-medicine. */
+function treatWounded(n: Nation, losses: UnitCounts, into: UnitCounts = n.military.units): number {
+  if (!n.people) return 0
+  const coverage = n.people.skills.doctors / Math.max(1e-4, DEMAND.doctorsBase + DEMAND.doctorsPerHealth * (n.spending?.health ?? 2))
+  const nano = NANO_REVIVE[Math.max(0, Math.min(3, n.systems?.nano ?? 0))]
+  const share = Math.max(0, Math.min(COMBAT_MEDICINE.cap - nano, COMBAT_MEDICINE.perCoverage * Math.min(1.5, coverage) + (n.techs.includes('med_surgery') ? (MEDICINE.med_surgery.combatMedicine ?? 0) : 0)))
+  if (share <= 0) return 0
+  const back = losses.infantry * share
+  into.infantry += back
+  return back
+}
+
 /** Nano-medicine returns part of a side's losses to its military. Returns the divisions saved. */
 function reviveLosses(n: Nation, losses: UnitCounts, into: UnitCounts = n.military.units): number {
   const share = NANO_REVIVE[Math.max(0, Math.min(3, n.systems?.nano ?? 0))]
@@ -174,6 +218,16 @@ function reviveLosses(n: Nation, losses: UnitCounts, into: UnitCounts = n.milita
     saved += back
   }
   return saved
+}
+
+/** The part of a side's losses its military took, leaving out the garrison's (local militia, who are not revived into the army). */
+function militaryLosses(units: UnitCounts, garrison: UnitCounts, losses: UnitCounts): UnitCounts {
+  const out = emptyUnits()
+  for (const k of UNIT_TYPES) {
+    const total = units[k] + garrison[k]
+    out[k] = total > 0 ? losses[k] * (units[k] / total) : 0
+  }
+  return out
 }
 
 /** Spreads a side's losses over its military and the garrison that stood beside it. */
@@ -209,16 +263,23 @@ function makeCombatant(n: Nation | null, military: Military | null, garrison: Un
   return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes, vehicleMult, sys: n ? { ...n.systems } : undefined }
 }
 
-/** Share of a nation's military that is free to defend: units committed to attacks this turn fight at half strength. */
-function defendingShare(n: Nation, notes: string[]): number {
+/**
+ * Share of a nation's military that is free to defend this country: units committed to attacks this month fight at half strength,
+ * and a military attacked on several fronts in one month cannot stand at full strength on each of them.
+ */
+function defendingShare(s: GameState, n: Nation, target: RegionId, notes: string[]): number {
   const tired = n.military.exposed * WAR.exposedDefenseLoss
   if (tired > 0.01) notes.push(`army committed abroad (-${Math.round(tired * 100)}% of the military)`)
-  return 1 - tired
+  let fronts = 1
+  for (const r of Object.values(s.regions)) if (r.owner === n.id && r.id !== target && r.attackedTurn === s.turn) fronts++
+  const spread = Math.max(WAR.minFrontShare, 1 / Math.sqrt(fronts))
+  if (spread < 0.99) notes.push(`attacked on ${fronts} fronts this month (${Math.round(spread * 100)}% of the military here)`)
+  return (1 - tired) * spread
 }
 
 /** Share of the military an attack by `n` would commit right now, or 0 if it is spent. */
-export function commitShare(n: Nation, commit: Commit): number {
-  return Math.max(0, Math.min(COMMITS[commit].share, 1 - n.military.exposed))
+export function commitShare(n: Nation, commit: Commit, custom?: number): number {
+  return Math.max(0, Math.min(custom ?? COMMITS[commit].share, 1 - n.military.exposed))
 }
 
 export interface AttackResult {
@@ -241,11 +302,13 @@ interface Setup {
   garrison: UnitCounts
   share: number
   bySea: boolean
+  /** Share of the defender's military standing in this fight. */
+  defendShare: number
 }
 
 /** Builds both sides of an attack, or null if it is not allowed. Shared by the real fight and the forecast. */
 /** `army` is a live-mode army that is fighting: its own units attack, and nothing is taken from the national military. */
-function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, missiles?: number, army?: Army): Setup | null {
+function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, missiles?: number, army?: Army, custom?: number): Setup | null {
   const attackerNation = s.nations[nationId]
   const targetRegion = s.regions[target]
   const mr = map.regions[target]
@@ -254,10 +317,10 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const defenderNation = s.nations[defenderId]
   if (defenderId === nationId || !defenderNation?.alive || !atWar(s, nationId, defenderId)) return null
   const reach = army ? { ok: true, bySea: army.bySea } : canAttackRegion(s, map, nationId, target)
-  const share = army ? army.share : commitShare(attackerNation, commit)
+  const share = army ? army.share : commitShare(attackerNation, commit, custom)
   if (army ? totalUnits(army.units) < 0.05 : !reach.ok || share < 0.05 || totalUnits(attackerNation.military.units) < 0.1) return null
 
-  const spec = STANCES[stance]
+  const spec = blitzSpec(attackerNation, stance)
   const attNotes: string[] = []
   let attPenalty = 1
   if (reach.bySea) {
@@ -275,8 +338,8 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const garrison = emptyUnits()
   garrison.infantry = garrisonStrength(s, map, target)
   const defNotes: string[] = []
-  const defender = makeCombatant(defenderNation, defenderNation.military, garrison, defNotes, 1, defendingShare(defenderNation, defNotes))
-  return { attacker, defender, garrison, share, bySea: reach.bySea }
+  const defender = makeCombatant(defenderNation, defenderNation.military, garrison, defNotes, 1, defendingShare(s, defenderNation, target, defNotes))
+  return { attacker, defender, garrison, share, bySea: reach.bySea, defendShare: defendingShare(s, defenderNation, target, []) }
 }
 
 export interface AttackForecast {
@@ -298,8 +361,8 @@ export interface AttackForecast {
 }
 
 /** Plays the attack out several times on fixed seeds, so the War Room can show honest odds without changing the game. */
-export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs?: number, missiles?: number): AttackForecast | null {
-  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles)
+export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs?: number, missiles?: number, custom?: number): AttackForecast | null {
+  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, undefined, custom)
   if (!setup) return null
   // AI Battle Command plays the fight many more times, so its odds are exact.
   const exact = (s.nations[nationId]?.systems?.ai ?? 0) > 0
@@ -307,7 +370,7 @@ export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, 
   const mr = map.regions[target]
   const max = lineMax(s, map, target)
   const before = Math.min(s.regions[target].line, max)
-  const spec = STANCES[stance]
+  const spec = blitzSpec(s.nations[nationId], stance)
   const missileCut = setup.attacker.units.missile * FRONTIER.missileLine * interceptFactor(s.nations[s.regions[target].owner]?.systems?.shield ?? 0)
   let wins = 0
   let damage = 0
@@ -321,7 +384,8 @@ export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, 
     if (out.winner !== 'attacker') continue
     wins++
     const ratio = Math.min(WAR.maxPowerRatio, Math.max(WAR.minPowerRatio, out.attackerPower / Math.max(0.1, out.defenderPower)))
-    const push = WAR.advanceBase * ratio * spec.advance
+    // The same push as the real fight, artillery included.
+    const push = WAR.advanceBase * ratio * spec.advance * gunBonus(setup.attacker.units, stance)
     damage += Math.min(before, push + missileCut)
     if (push + missileCut >= before) captures++
   }
@@ -351,8 +415,10 @@ export function resolveAttack(
   missiles?: number,
   /** Live mode: the army that arrived. Its units fight and take the losses, and the bookkeeping of a month's attacks is skipped. */
   army?: Army,
+  /** Turn mode: a chosen share of the military, in place of the preset the commit names. */
+  custom?: number,
 ): AttackResult | null {
-  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, army)
+  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, army, custom)
   if (!setup) return null
   const { attacker, defender, garrison, share } = setup
   const attackerNation = s.nations[nationId]
@@ -360,27 +426,36 @@ export function resolveAttack(
   const mr = map.regions[target]
   const defenderId = targetRegion.owner
   const defenderNation = s.nations[defenderId]
-  const spec = STANCES[stance]
+  const spec = blitzSpec(attackerNation, stance)
 
   const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
   const mine = army ? army.units : attackerNation.military.units
   applyLosses(mine, emptyUnits(), outcome.attackerLosses)
-  applyLosses(defenderNation.military.units, garrison, outcome.defenderLosses)
+  // Only the part of the defender's military that stood here (the rest held other fronts) and the garrison share the losses.
+  const standing = emptyUnits()
+  for (const k of UNIT_TYPES) standing[k] = defenderNation.military.units[k] * setup.defendShare
+  const defMilLosses = militaryLosses(standing, garrison, outcome.defenderLosses)
+  applyLosses(standing, garrison, outcome.defenderLosses)
+  for (const k of UNIT_TYPES) defenderNation.military.units[k] = defenderNation.military.units[k] * (1 - setup.defendShare) + standing[k]
   // Nano-medicine brings part of what a side lost back.
   // Every missile fired is used up, unless the fight already took it as a loss.
   const firedMissiles = attacker.units.missile
   if (firedMissiles > 0) mine.missile = Math.max(0, mine.missile - Math.max(0, firedMissiles - outcome.attackerLosses.missile))
   const savedA = reviveLosses(attackerNation, outcome.attackerLosses, mine)
-  const savedD = reviveLosses(defenderNation, outcome.defenderLosses)
+  const savedD = reviveLosses(defenderNation, defMilLosses)
+  // Doctors return part of the wounded infantry to the ranks (more with modern surgery). A force that was wiped out has nobody to carry them back.
+  const healedA = totalUnits(mine) >= 0.05 ? treatWounded(attackerNation, outcome.attackerLosses, mine) : 0
+  const healedD = totalUnits(defenderNation.military.units) >= 0.05 ? treatWounded(defenderNation, defMilLosses) : 0
   if (!army) {
     const m = attackerNation.military
     m.attacksThisTurn = m.lastAttackTurn === s.turn ? m.attacksThisTurn + 1 : 1
     m.lastAttackTurn = s.turn
     m.exposed = Math.min(1, m.exposed + share)
   }
-  // Machines do not tire a people: robot losses add no war weariness.
-  const attLoss = totalUnits(outcome.attackerLosses) - outcome.attackerLosses.robot
-  const defLoss = totalUnits(outcome.defenderLosses) - outcome.defenderLosses.robot
+  // Machines do not tire a people: robots, drones and missiles lost add no war weariness.
+  const machines = (l: UnitCounts) => l.robot + l.drone + l.missile
+  const attLoss = totalUnits(outcome.attackerLosses) - machines(outcome.attackerLosses)
+  const defLoss = totalUnits(outcome.defenderLosses) - machines(outcome.defenderLosses)
   attackerNation.warWeariness = Math.min(60, attackerNation.warWeariness + attLoss * 0.6)
   defenderNation.warWeariness = Math.min(60, defenderNation.warWeariness + defLoss * 0.6)
 
@@ -411,7 +486,7 @@ export function resolveAttack(
     rounds: outcome.rounds,
     winner: outcome.winner,
     captured,
-    modifiers: [...outcome.modifiers, `${spec.name} with ${COMMITS[commit].name.toLowerCase()} (${Math.round(share * 100)}% of the military)`],
+    modifiers: [...outcome.modifiers, `${spec.name} with ${custom !== undefined && !army ? 'a chosen force' : COMMITS[commit].name.toLowerCase()} (${Math.round(share * 100)}% of the military)`],
     commit,
     stance,
     lineBefore,
@@ -433,6 +508,8 @@ export function resolveAttack(
   if (firedMissiles >= 0.5) report.modifiers.push(`Fired ${Math.round(firedMissiles)} hypersonic missile${Math.round(firedMissiles) === 1 ? '' : 's'} (used up)`)
   if (missileHits > 0) report.modifiers.push(`Hypersonic batteries cut the Defense Line by ${missileHits.toFixed(1)}`)
   if (savedA + savedD > 0) report.modifiers.push(`Nano-medicine saved ${(savedA + savedD).toFixed(1)} divisions`)
+  if (healedA + healedD >= 0.05) report.modifiers.push(`Field hospitals returned ${(healedA + healedD).toFixed(1)} divisions of wounded infantry`)
+  if (captured) updateTiers(s)
   return { report }
 }
 
@@ -450,9 +527,13 @@ export function resolveRebels(s: GameState, map: WorldMap, rng: Rng) {
     const garrison = emptyUnits()
     garrison.infantry = garrisonStrength(s, map, region.id)
     const attacker: Combatant = { units: rebels, mods: null, penalty: 1, penaltyNotes: [] }
-    const defender = makeCombatant(owner, owner.military, garrison, [], 1)
+    // Rebels are fought by the garrison and a share of the army sent to the trouble, not the whole military.
+    const defender = makeCombatant(owner, owner.military, garrison, [], 1, WAR.rebelArmyShare)
     const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
-    applyLosses(owner.military.units, garrison, outcome.defenderLosses)
+    const sent = emptyUnits()
+    for (const k of UNIT_TYPES) sent[k] = owner.military.units[k] * WAR.rebelArmyShare
+    applyLosses(sent, garrison, outcome.defenderLosses)
+    for (const k of UNIT_TYPES) owner.military.units[k] = owner.military.units[k] * (1 - WAR.rebelArmyShare) + sent[k]
     region.rebels = Math.max(0, region.rebels - outcome.attackerLosses.infantry)
 
     let captured = false
@@ -495,8 +576,23 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
   } else {
     nationId = `free-${regionId}-${s.turn}`
     const base = existing ?? s.nations[oldOwner]
+    const parent = s.nations[oldOwner]
+    // A new nation starts clean: none of its old ruler's debts, ties, Frontier systems or companies, and only the basics of its knowledge.
+    const known = (parent?.techs ?? []).filter((t, _i, all) => (TECH_BY_ID[t]?.requires ?? []).every((r) => all.includes(r)) && (TECH_BY_ID[t]?.cost ?? 0) <= WAR.secedeTechCost)
     s.nations[nationId] = {
       ...structuredClone(base),
+      overlord: null,
+      overlordSince: undefined,
+      debt: 0,
+      redMonths: 0,
+      defaultedUntil: 0,
+      subsidies: [],
+      techs: known,
+      systems: { cyber: 0, shield: 0, ai: 0, quantum: 0, orbital: 0, nano: 0 },
+      agencies: { foreign: { level: 1, exp: 0 }, domestic: { level: 1, exp: 0 } },
+      sectors: Object.fromEntries(Object.entries(base.sectors).map(([k, v]) => [k, Math.min(v, 1)])) as Nation['sectors'],
+      milestones: undefined,
+      lastReform: -99,
       id: nationId,
       name: `Free ${mr.name}`,
       color: `hsl(${(s.turn * 47) % 360}, 70%, 55%)`,

@@ -1,5 +1,7 @@
-import { motion } from 'framer-motion'
 import { BRANCH_LABELS, TECHS, type Tech } from '../data/techTree'
+import { PROGRAM_RULES, RESEARCH_PROGRAMS, programCost } from '../data/projects'
+import type { ResearchTrack } from '../engine/types'
+import { OrderButton } from './panel'
 import { validateOrder } from '../engine/orders'
 import type { TechBranch } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -8,8 +10,8 @@ import { fmt, usePlayerView } from './hooks'
 import { techBonuses } from '../engine/techBonuses'
 import { speak } from './plain'
 
-const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy', 'frontier']
-const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2', economy: '#30d158', frontier: '#ff375f' }
+const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy', 'frontier', 'medicine']
+const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2', economy: '#30d158', frontier: '#ff375f', medicine: '#66d4cf' }
 
 function TechNode({ tech }: { tech: Tech }) {
   const view = usePlayerView()!
@@ -25,15 +27,14 @@ function TechNode({ tech }: { tech: Tech }) {
   const state = owned ? 'owned' : queuedIdx >= 0 ? 'queued' : available ? 'available' : 'locked'
 
   return (
-    <motion.button
-      whileHover={state === 'available' ? { y: -2 } : undefined}
+    <button
       onClick={() => {
         if (queuedIdx >= 0) removeOrder(queuedIdx)
         else if (available) issueOrder(order)
         else if (err) useGame.getState().toast(speak(err), 'error')
       }}
       disabled={state === 'owned'}
-      className={`relative w-full text-left rounded-2xl p-3 border transition-colors disabled:cursor-default ${state === 'locked' ? 'cursor-help border-white/10 bg-white/4' : 'border-white/10'}`}
+      className={`relative w-full text-left rounded-2xl p-3 border transition-[colors,transform] disabled:cursor-default ${state === 'available' ? 'hover:-translate-y-0.5' : ''} ${state === 'locked' ? 'cursor-help border-white/10 bg-white/4' : 'border-white/10'}`}
       style={{
         background: owned ? `${color}22` : state === 'queued' ? 'rgba(255,255,255,0.08)' : state === 'available' ? 'rgba(255,255,255,0.06)' : undefined,
         opacity: state === 'locked' ? 0.85 : 1,
@@ -50,11 +51,43 @@ function TechNode({ tech }: { tech: Tech }) {
       <div className="text-[12px] text-white/55 mt-1 leading-snug">{tech.description}</div>
       {tech.unlocks && <div className="text-[12px] text-[#ff8a9f] mt-1 font-medium">Unlocks: {tech.unlocks.join(', ')}</div>}
       {state === 'locked' && err && <div className="text-[12px] text-[#ff8a84] mt-1">{speak(err)}</div>}
-    </motion.button>
+    </button>
   )
 }
 
 /** What the technologies you own give you, grouped, with where each bonus comes from. */
+/** What to do with research once the tree is done, or when there is more than the next technology needs. */
+function Programs() {
+  const view = usePlayerView()!
+  const { player, orders } = view
+  const queued = (t: ResearchTrack) => orders.some((o) => o.type === 'researchProgram' && o.track === t)
+  return (
+    <details className="inset-card p-4 mb-6">
+      <summary className="cursor-pointer text-[16px] font-semibold tracking-tight">Future programs: spare research with a lasting payoff</summary>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        {(Object.keys(RESEARCH_PROGRAMS) as ResearchTrack[]).map((t) => {
+          const level = player.research2[t] ?? 0
+          const done = level >= PROGRAM_RULES.maxLevel
+          return (
+            <div key={t} className="rounded-xl bg-white/5 p-3 space-y-1.5">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[15px] font-semibold">{RESEARCH_PROGRAMS[t].name}</span>
+                <span className="text-[13px] tabular-nums text-white/70">level {level} of {PROGRAM_RULES.maxLevel}</span>
+              </div>
+              <p className="text-[12px] text-white/65">{RESEARCH_PROGRAMS[t].blurb} {RESEARCH_PROGRAMS[t].perLevel}.</p>
+              {done ? (
+                <span className="chip">Complete</span>
+              ) : (
+                <OrderButton order={{ type: 'researchProgram', nationId: player.id, track: t }} label={queued(t) ? 'Queued' : 'Next level'} cost={`${programCost(level)} research`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </details>
+  )
+}
+
 function Bonuses() {
   const view = usePlayerView()!
   const groups = techBonuses(view.player)
@@ -111,6 +144,7 @@ export function TechTree() {
       </div>
       <div className="flex-1 min-h-0 overflow-auto scroll-thin p-6">
         <Bonuses />
+        <Programs />
         <div className="tech-grid">
           {BRANCHES.map((b) => (
             <div key={b} className="space-y-3">

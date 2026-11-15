@@ -5,13 +5,13 @@ import type { AdviceTarget } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
 import { forceUnits, maxAttacks, totalUnits, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
+import { markSettled } from './engine/economy'
 import { MONTH_END_ORDERS, isMonthEndOrder, validateOrder } from './engine/orders'
 import { absDate, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
-import { applyOrderNow, resolveTurn } from './engine/resolveTurn'
-import { BUDGET_KEYS } from './data/government'
-import type { BattleReport, Budget, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
+import { applyOrderNow, describeOrder, resolveTurn } from './engine/resolveTurn'
+import type { BattleReport, Dispatch, GameState, NationId, Order, Programs, RegionId, Spending } from './engine/types'
 import { getWorld } from './map/world'
 import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type Lobby, type RoomSettings } from './net/protocol'
 import { OnlineSession } from './net/session'
@@ -20,16 +20,20 @@ import { globeBridge, useFx } from './ui/globeBridge'
 import { battleLine, scenesFor } from './ui/battleText'
 import { presentLiveStep } from './ui/livePresent'
 import { speak } from './ui/plain'
+import type { PendingConfirm } from './ui/confirmRules'
 
 const SAVE_KEY = 'worlds-of-others-save-v4'
 const ORDERS_KEY = 'worlds-of-others-orders-v4'
 const SETTINGS_KEY = 'worlds-of-others-settings-v2'
+const SLOT_KEY = (i: number) => `worlds-of-others-slot-${i}`
+export const SLOT_COUNT = 3
 /** Everything a crashed game may have left behind. */
 export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 /** The five desks, plus News and Settings which open from the top bar. */
-export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'log' | 'settings'
-export type EconomyTab = 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'
+export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
+export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
+export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts'
@@ -38,7 +42,8 @@ export interface PolicyPatch {
   taxRate?: number
   draftRate?: number
   corporateTax?: number
-  budget?: Budget
+  /** Changes to spending levels; levels not named keep what is queued or set. */
+  spending?: Partial<Spending>
 }
 
 export interface Settings {
@@ -171,6 +176,9 @@ interface GameStore {
   /** Country shown in the Economy desk's upgrade list. Null means the capital. */
   economyRegion: RegionId | null
   militaryTab: MilitaryTab
+  empireTab: EmpireTab
+  setEmpireTab(tab: EmpireTab): void
+  openEmpire(tab?: EmpireTab): void
   /** The nation the agencies are looking at. */
   agencyTarget: NationId | null
   setAgencyTarget(id: NationId | null): void
@@ -178,6 +186,8 @@ interface GameStore {
   openAgencies(target?: NationId): void
   mapMode: MapMode
   diploFocus: NationId | null
+  /** Opening Diplomacy from a war: the peace composer opens by itself on that nation. */
+  diploPeace: boolean
   /** Battles waiting to play in the battle window. The first one is showing. */
   fxQueue: BattleReport[]
   /** How many battles this batch started with, for "Battle 2 of 4". */
@@ -197,6 +207,24 @@ interface GameStore {
   recentBattles: BattleReport[]
   /** Live games: the month's report, waiting to be opened. */
   liveNote: MonthReport | null
+  /** When the game was last written to this device, and whether the last try failed. */
+  savedAt: number | null
+  saveFailed: boolean
+  paletteOpen: boolean
+  setPalette(open: boolean): void
+  /** Save slots, on this device. Each keeps a whole game and the month's waiting orders. */
+  saveSlot(slot: number): boolean
+  loadSlot(slot: number): boolean
+  /** The game as a file's text, to keep or to move to another device. */
+  exportSave(): string | null
+  importSave(text: string): boolean
+  /** A question waiting for yes or no before a big order goes through. */
+  confirm: PendingConfirm | null
+  askConfirm(c: PendingConfirm): void
+  closeConfirm(): void
+  /** What can be taken back: the games before each order that happened at once, newest last. */
+  undoStack: { game: GameState; label: string }[]
+  undo(): void
 
   newGame(opts: NewGameOptions): void
   loadGame(): void
@@ -213,14 +241,16 @@ interface GameStore {
   setMapMode(mode: MapMode): void
   /** Follows an advisor button to the desk, tab, country or window it points at. */
   goTo(target: AdviceTarget): void
-  openDiplomacy(nationId: NationId | null): void
+  openDiplomacy(nationId: NationId | null, opts?: { peace?: boolean }): void
   issueOrder(order: Order): boolean
   /** Issues several orders at once, one save and one summary. Returns how many went through. */
   issueBatch(orders: Order[]): { done: number; failed: number }
   removeOrder(index: number): void
-  /** Queues new tax, draft, business tax or budget settings for the end of the month. */
+  /** Queues new tax, draft, business tax or spending settings for the end of the month. */
   setPolicy(patch: PolicyPatch): void
-  attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number): boolean
+  /** Queues changes to the nation's programs (schools, immigration, occupation...) and interest rate for the end of the month. */
+  setPrograms(programs: Partial<Programs>, rate?: number): void
+  attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number, share?: number): boolean
   openWarRoom(target: RegionId | null): void
   endTurn(): void
   /** Live games: start or stop the clock. */
@@ -312,6 +342,30 @@ export function peekSave(): { nation: string; date: string; live: boolean } | nu
   }
 }
 
+export interface SlotInfo {
+  slot: number
+  nation: string
+  date: string
+  live: boolean
+  savedAt: number
+}
+
+/** What a save slot holds, or null when it is empty or damaged. */
+export function peekSlot(slot: number): SlotInfo | null {
+  try {
+    const raw = localStorage.getItem(SLOT_KEY(slot))
+    if (!raw) return null
+    const saved = JSON.parse(raw) as { savedAt: number; game: GameState }
+    const g = saved.game
+    const nation = g?.nations?.[g.playerId]?.name
+    if (!nation) return null
+    const live = g.settings?.mode === 'live'
+    return { slot, nation, live, date: live ? dayDate(g.turn, g.day ?? 0) : turnDate(g.turn), savedAt: saved.savedAt ?? 0 }
+  } catch {
+    return null
+  }
+}
+
 function hasStoredSave(): boolean {
   try {
     return !!localStorage.getItem(SAVE_KEY)
@@ -323,8 +377,8 @@ function hasStoredSave(): boolean {
 /** The live online session, if any. Online games are never saved to this device: the host holds the game. */
 let session: OnlineSession | null = null
 
-function save(game: GameState | null, orders?: Order[]) {
-  if (session) return
+/** Writes the game to this device now. Returns false when storage refused it (full, or private browsing). */
+function writeGame(game: GameState | null): boolean {
   try {
     // A finished game is not worth resuming, so it never stays as the save.
     if (game && game.outcome === 'playing') localStorage.setItem(SAVE_KEY, JSON.stringify(game))
@@ -332,11 +386,52 @@ function save(game: GameState | null, orders?: Order[]) {
       localStorage.removeItem(SAVE_KEY)
       localStorage.removeItem(ORDERS_KEY)
     }
+    return true
   } catch {
-    /* storage may be unavailable */
+    return false
   }
-  if (orders) writeOrders(orders)
 }
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+let queuedSave: { game: GameState | null } | null = null
+/** Only one warning about a failed save until saving works again. */
+let saveWarned = false
+
+/** Writes a save that is waiting, at once. The page calls this when it is hidden or closed. */
+export function flushSave() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = null
+  const q = queuedSave
+  queuedSave = null
+  if (!q) return
+  const ok = writeGame(q.game)
+  const st = useGame.getState()
+  if (ok) {
+    saveWarned = false
+    useGame.setState({ savedAt: Date.now(), saveFailed: false })
+  } else {
+    if (!saveWarned) st.toast('The game could not be saved on this device: storage is full or blocked. Export the save from Settings to keep it.', 'error', 9000)
+    saveWarned = true
+    useGame.setState({ saveFailed: true })
+  }
+}
+
+/**
+ * Saves the game. A save writes half a megabyte, so a burst of clicks is written once, a moment after the last one.
+ * `now` writes at once: leaving a game, or a game that ended.
+ */
+function save(game: GameState | null, orders?: Order[], now = false) {
+  if (session) return
+  if (orders) writeOrders(orders)
+  queuedSave = { game }
+  if (now || !game || game.outcome !== 'playing') {
+    flushSave()
+    return
+  }
+  if (!saveTimer) saveTimer = setTimeout(flushSave, SAVE_DELAY_MS)
+}
+
+const SAVE_DELAY_MS = 400
 
 function loadOrders(playerId: string): Order[] {
   try {
@@ -355,12 +450,15 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   const order = item as Order
   if (typeof order.type !== 'string' || order.nationId !== playerId || !MONTH_END_ORDERS.has(order.type)) return false
   if (order.type === 'setPolicy') return Number.isFinite(order.taxRate) && Number.isFinite(order.draftRate) && (order.corporateTax === undefined || Number.isFinite(order.corporateTax))
+  if (order.type === 'setPrograms') return !!order.programs && typeof order.programs === 'object' && (order.rate === undefined || Number.isFinite(order.rate))
+  if (order.type === 'moveCapital') return typeof order.regionId === 'string'
+  if (order.type === 'researchProgram') return ['productivity', 'medicine', 'weapons'].includes(order.track)
+  if (order.type === 'resolution') return ['sanctions', 'ceasefire', 'recognition', 'accord'].includes(order.kind)
   if (order.type === 'propose') return typeof order.target === 'string' && !!order.proposal && typeof order.proposal.kind === 'string'
   if (order.type === 'respond') return typeof order.proposalId === 'string' && typeof order.accept === 'boolean'
   if (order.type === 'research') return typeof order.techId === 'string'
-  if (order.type === 'spy') return typeof order.target === 'string' && order.mission === 'sabotage'
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
-  if (order.type === 'leaveAlliance') return typeof order.target === 'string'
+  if (order.type === 'leaveAlliance' || order.type === 'breakPact') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
   if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital') && (order.count === undefined || Number.isInteger(order.count))
   if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)
@@ -428,20 +526,23 @@ function buildReport(before: GameState, after: GameState, player: NationId, batt
 /** Why a live game's clock is held other than the player's own pause, or null when nothing holds it. */
 export type Hold = 'online' | 'over' | 'event' | 'battle' | 'report' | 'planning' | 'help'
 
-export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'>): Hold | null {
+/** The reason is the one the player sees: help sits on top of everything, a battle hides the report, the report hides a decision. */
+export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'> & Partial<Pick<GameStore, 'paletteOpen' | 'confirm'>>): Hold | null {
   if (st.online) return 'online'
-  if (!st.game || st.game.outcome !== 'playing') return 'over'
-  if (st.game.pendingEvent) return 'event'
-  if (st.fxQueue.length > 0) return 'battle'
-  if (st.summary) return 'report'
-  if (st.warRoom) return 'planning'
+  if (!st.game) return 'over'
   if (st.helpOpen) return 'help'
+  if (st.fxQueue.length > 0) return 'battle'
+  if (st.game.outcome !== 'playing') return 'over'
+  if (st.summary) return 'report'
+  if (st.game.pendingEvent) return 'event'
+  if (st.warRoom || st.paletteOpen || st.confirm) return 'planning'
   return null
 }
 
 /** The month as it began, and the player's battles in it, for the month's report. */
 let monthStart: GameState | null = null
 let monthBattles: BattleReport[] = []
+const UNDO_LIMIT = 10
 const botPlanner = (s: GameState, m: ReturnType<typeof getWorld>['map']) => generateAllBotOrders(s, m)
 
 // ---- online play ----
@@ -570,6 +671,18 @@ async function connect(name: string, code: string, role: 'create' | 'join', sett
   }
 }
 
+/** Makes a loaded game the one being played: slots and imports go through here. Waiting orders must be ones that wait for the month's end. */
+function enterGame(game: GameState, orders: Order[] | undefined): boolean {
+  if (session || useGame.getState().online) return false
+  monthStart = game
+  monthBattles = []
+  const kept = (orders ?? []).filter((o): o is Order => keptOrder(o, game.playerId))
+  save(game, kept, true)
+  useGame.setState({ running: false, undoStack: [], confirm: null, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: kept, selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: true })
+  useGame.getState().toast('Game loaded.', 'success', 2500)
+  return true
+}
+
 export const useGame = create<GameStore>((set, get) => ({
   game: null,
   orders: [],
@@ -578,9 +691,11 @@ export const useGame = create<GameStore>((set, get) => ({
   economyTab: 'country',
   economyRegion: null,
   militaryTab: 'forces',
+  empireTab: 'overview',
   agencyTarget: null,
   mapMode: 'political',
   diploFocus: null,
+  diploPeace: false,
   fxQueue: [],
   fxTotal: 0,
   summary: null,
@@ -593,17 +708,24 @@ export const useGame = create<GameStore>((set, get) => ({
   selectedArmy: null,
   recentBattles: [],
   liveNote: null,
+  savedAt: null,
+  saveFailed: false,
+  confirm: null,
+  paletteOpen: false,
+  undoStack: [],
   online: null,
   lastRoom: loadIdentity().code,
 
   newGame(opts) {
     const { map } = getWorld()
     const game = createInitialState(map, opts)
-    save(game, [])
+    save(game, [], true)
     monthStart = game
     monthBattles = []
     set({
       running: false,
+      undoStack: [],
+      confirm: null,
       selectedArmy: null,
       recentBattles: [],
       liveNote: null,
@@ -632,7 +754,7 @@ export const useGame = create<GameStore>((set, get) => ({
       const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
       monthStart = game
       monthBattles = []
-      set({ running: false, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
+      set({ running: false, undoStack: [], selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
@@ -644,7 +766,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return
     }
     const { game, orders } = get()
-    if (game) save(game, orders)
+    if (game) save(game, orders, true)
     set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
   },
 
@@ -655,6 +777,71 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     save(null)
     set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: false })
+  },
+
+  setPalette(open) {
+    set({ paletteOpen: open })
+  },
+
+  saveSlot(slot) {
+    const { game, orders } = get()
+    if (!game || session) return false
+    try {
+      localStorage.setItem(SLOT_KEY(slot), JSON.stringify({ savedAt: Date.now(), game, orders }))
+      get().toast(`Saved to slot ${slot}.`, 'success', 2500)
+      return true
+    } catch {
+      get().toast('Could not save: storage is full or blocked. Export the save instead.', 'error')
+      return false
+    }
+  },
+
+  loadSlot(slot) {
+    try {
+      const raw = localStorage.getItem(SLOT_KEY(slot))
+      if (!raw) return false
+      const saved = JSON.parse(raw) as { game: GameState; orders?: Order[] }
+      return enterGame(normalizeGame(saved.game, getWorld().map), saved.orders)
+    } catch {
+      get().toast('That save is damaged and could not be opened.', 'error')
+      return false
+    }
+  },
+
+  exportSave() {
+    const { game, orders } = get()
+    if (!game || session) return null
+    return JSON.stringify({ app: 'worlds-of-others', version: 1, exportedAt: Date.now(), game, orders })
+  },
+
+  importSave(text) {
+    try {
+      const data = JSON.parse(text) as { app?: string; game?: GameState; orders?: Order[] } & Partial<GameState>
+      // A file made by Export holds the game under `game`; a bare game is accepted too.
+      const raw = data.game ?? (data.nations ? (data as GameState) : null)
+      if (!raw) throw new Error('not a save')
+      return enterGame(normalizeGame(raw, getWorld().map), data.game ? data.orders : [])
+    } catch {
+      get().toast('That file is not a save of this game.', 'error')
+      return false
+    }
+  },
+
+  askConfirm(c) {
+    set({ confirm: c })
+  },
+
+  closeConfirm() {
+    set({ confirm: null })
+  },
+
+  undo() {
+    const { undoStack, game } = get()
+    const last = undoStack[undoStack.length - 1]
+    if (!last || !game) return
+    set({ game: last.game, undoStack: undoStack.slice(0, -1) })
+    save(last.game)
+    get().toast(`Undone: ${last.label}`, 'info', 2500)
   },
 
   selectRegion(id) {
@@ -689,6 +876,14 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ militaryTab: tab })
   },
 
+  setEmpireTab(tab) {
+    set({ empireTab: tab })
+  },
+
+  openEmpire(tab) {
+    set((st) => ({ panel: 'empire', empireTab: tab ?? st.empireTab, diploFocus: null }))
+  },
+
   openMilitary(tab) {
     set({ panel: 'military', militaryTab: tab, diploFocus: null })
   },
@@ -709,6 +904,9 @@ export const useGame = create<GameStore>((set, get) => ({
       case 'research':
         set({ panel: 'tech', diploFocus: null })
         break
+      case 'empire':
+        get().openEmpire(target.tab)
+        break
       case 'diplomacy':
         get().openDiplomacy(target.nation ?? null)
         break
@@ -725,8 +923,8 @@ export const useGame = create<GameStore>((set, get) => ({
     }
   },
 
-  openDiplomacy(nationId) {
-    set({ panel: 'diplomacy', diploFocus: nationId })
+  openDiplomacy(nationId, opts) {
+    set({ panel: 'diplomacy', diploFocus: nationId, diploPeace: !!opts?.peace })
   },
 
   issueOrder(order) {
@@ -741,12 +939,15 @@ export const useGame = create<GameStore>((set, get) => ({
     // Online, an attack waits for the month to end like every other country's, so nobody wins by clicking fast.
     if (!isMonthEndOrder(game, order.type) && !(playing && order.type === 'attack')) {
       const next = structuredClone(game)
+      const seen = game.dispatches.length
       const result = applyOrderNow(next, map, order, orders)
       if (result.error) {
         get().toast(result.error, 'error')
         return false
       }
-      set({ game: next })
+      set({ game: next, undoStack: [...get().undoStack, { game, label: describeOrder(game, map, order) }].slice(-UNDO_LIMIT) })
+      // An offer a rival answered on the spot (live games) says how it went.
+      for (const d of next.dispatches.slice(seen)) if (d.to === game.playerId || d.from === game.playerId) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
       if (playing) {
         immediate = [...immediate, order]
         sendPlan(orders)
@@ -790,7 +991,7 @@ export const useGame = create<GameStore>((set, get) => ({
         firstError ||= result.error
       } else done++
     }
-    set({ game: next })
+    set({ game: next, undoStack: done > 0 ? [...get().undoStack, { game, label: `${done} orders` }].slice(-UNDO_LIMIT) : get().undoStack })
     save(next)
     if (failed > 0) get().toast(`${done} done, ${failed} could not be made: ${firstError}`, 'error')
     return { done, failed }
@@ -812,10 +1013,37 @@ export const useGame = create<GameStore>((set, get) => ({
     const taxRate = patch.taxRate ?? was?.taxRate ?? n.taxRate
     const draftRate = patch.draftRate ?? was?.draftRate ?? n.draftRate
     const corporateTax = patch.corporateTax ?? was?.corporateTax ?? n.corporateTax
-    const budget = patch.budget ?? was?.budget ?? n.budget
+    const spending: Spending = { ...n.spending, ...(was?.spending ?? {}), ...(patch.spending ?? {}) }
     const same = (a: number, b: number) => Math.abs(a - b) < 1e-6
-    const unchanged = same(n.taxRate, taxRate) && same(n.draftRate, draftRate) && same(n.corporateTax, corporateTax) && BUDGET_KEYS.every((k) => same(n.budget[k], budget[k]))
-    const next: Order[] = unchanged ? rest : [...rest, { type: 'setPolicy', nationId: game.playerId, taxRate, draftRate, corporateTax, budget }]
+    const unchanged = same(n.taxRate, taxRate) && same(n.draftRate, draftRate) && same(n.corporateTax, corporateTax) && (Object.keys(spending) as (keyof Spending)[]).every((k) => spending[k] === n.spending[k])
+    const next: Order[] = unchanged ? rest : [...rest, { type: 'setPolicy', nationId: game.playerId, taxRate, draftRate, corporateTax, spending }]
+    set({ orders: next })
+    writeOrders(next)
+  },
+
+  setPrograms(programs, rate) {
+    const { game, orders } = get()
+    if (!game) return
+    // One waiting order holds every change; choosing the current value again drops that change.
+    const was = orders.find((o) => o.type === 'setPrograms')
+    const merged: Partial<Programs> = { ...(was?.type === 'setPrograms' ? was.programs : {}), ...programs }
+    const n = game.nations[game.playerId]
+    for (const k of Object.keys(merged) as (keyof Programs)[]) if (merged[k] === n.programs[k]) delete merged[k]
+    let r = rate ?? (was?.type === 'setPrograms' ? was.rate : undefined)
+    if (r !== undefined && Math.abs(r - n.bank.rate) < 1e-9) r = undefined
+    const rest = orders.filter((o) => o.type !== 'setPrograms')
+    const order: Order = { type: 'setPrograms', nationId: game.playerId, programs: merged, ...(r !== undefined ? { rate: r } : {}) }
+    if (Object.keys(merged).length === 0 && r === undefined) {
+      set({ orders: rest })
+      writeOrders(rest)
+      return
+    }
+    const err = validateOrder(game, getWorld().map, order, rest)
+    if (err) {
+      get().toast(err, 'error')
+      return
+    }
+    const next = [...rest, order]
     set({ orders: next })
     writeOrders(next)
   },
@@ -825,7 +1053,7 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ warRoom: target })
   },
 
-  attack(target, commit = 'main', stance = 'assault', missiles) {
+  attack(target, commit = 'main', stance = 'assault', missiles, share) {
     const { game, settings, online } = get()
     if (!game) return false
     const { map } = getWorld()
@@ -835,7 +1063,7 @@ export const useGame = create<GameStore>((set, get) => ({
         get().toast(`Your military can plan ${maxAttacks(game, game.playerId)} attacks a month`, 'error')
         return false
       }
-      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles })
+      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}) })
       if (ok) {
         set({ warRoom: null })
         get().toast(`Attack on ${map.regions[target].name} planned. It plays out when the month ends.`, 'info', 4500)
@@ -843,7 +1071,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return ok
     }
     const next = structuredClone(game)
-    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, missiles }, get().orders)
+    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}) }, get().orders)
     // In a live game the army sets out and fights when it arrives.
     if (result.army) {
       const a = result.army
@@ -882,7 +1110,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const next = resolveTurn(game, map, [...orders, ...botOrders])
     const shown = presentMonth(game, next, game.playerId)
     save(next, [])
-    set({ game: next, orders: [], ...shown })
+    set({ game: next, orders: [], undoStack: [], ...shown })
   },
 
   play() {
@@ -903,8 +1131,8 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   setSpeed(speed) {
+    // Choosing a speed does not start a paused clock.
     get().updateSettings({ liveSpeed: speed })
-    get().play()
   },
 
   stepDay() {
@@ -915,21 +1143,26 @@ export const useGame = create<GameStore>((set, get) => ({
     const step = advanceDay(game, map, { monthOrders: orders, planner: botPlanner })
     if (step.state === game) return
     const shown = presentLiveStep({ step, player: game.playerId, before: game, fxQueue: st.fxQueue, recentBattles: st.recentBattles, settings: st.settings, toast: st.toast })
-    monthBattles.push(...shown.mine)
-    const patch: Partial<GameStore> = { game: step.state, recentBattles: shown.recentBattles, fxQueue: shown.fxQueue, fxTotal: shown.fxQueue.length }
+    // A day that moved the world on cannot be taken back.
+    const patch: Partial<GameStore> = { game: step.state, recentBattles: shown.recentBattles, fxQueue: shown.fxQueue, fxTotal: shown.fxQueue.length, undoStack: [] }
     // An army that has gone home or been lost no longer has a card.
     if (st.selectedArmy && !step.state.armies?.some((a) => a.id === st.selectedArmy)) patch.selectedArmy = null
     if (step.monthEnded) {
-      // Uprisings are fought as the month turns over.
+      // Uprisings are fought as the month turns over and belong to the month that ended. Battles on the 1st belong to the new one.
       monthBattles.push(...step.state.battles.filter((b) => b.attacker.nationId === 'rebels' && b.defender.nationId === game.playerId))
       const report = buildReport(monthStart ?? game, step.state, game.playerId, monthBattles)
       monthStart = step.state
-      monthBattles = []
+      monthBattles = shown.mine.filter((b) => b.attacker.nationId !== 'rebels')
       patch.orders = []
       if (st.settings.liveReport === 'pause') patch.summary = report
       else patch.liveNote = report
+      // The month's diplomacy still gets a line while the clock runs: wars declared on you, offers, answers.
+      const news = step.state.dispatches.filter((d) => d.to === game.playerId || d.from === game.playerId)
+      for (const d of news.slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
+      const failed = step.state.log.filter((e) => e.turn === game.turn && e.text.startsWith('Order failed') && e.nations.includes(game.playerId))
+      if (failed.length) st.toast(failed.length === 1 ? failed[0].text : `${failed.length} orders failed at the month's end. See the report.`, 'error', 7000)
       save(step.state, [])
-    }
+    } else monthBattles.push(...shown.mine)
     set(patch)
   },
 
@@ -947,7 +1180,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   openBattle(id) {
     const b = get().recentBattles.find((x) => x.id === id)
-    if (b) set({ fxQueue: [b], fxTotal: 1 })
+    if (b) set({ fxQueue: [{ ...b, replay: true }], fxTotal: 1 })
   },
 
   openNote() {
@@ -1055,9 +1288,14 @@ export const useGame = create<GameStore>((set, get) => ({
 
   persist() {
     const { game, orders } = get()
-    save(game, orders)
+    save(game, orders, true)
   },
 }))
+
+// Every game the screen shows is finished and never changed again, so the economy can be worked out once for it.
+useGame.subscribe((st) => {
+  if (st.game) markSettled(st.game)
+})
 
 // A handle for browser tests, in development only.
 if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __store: typeof useGame }).__store = useGame

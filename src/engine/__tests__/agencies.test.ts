@@ -76,13 +76,27 @@ describe('agencies', () => {
     expect(justificationOf(s, 'r1', 'r0')?.reason).toBe('Caught agents')
   })
 
-  it('a coup on a shaky nation makes it a puppet and shames the sponsor', () => {
+  it('a coup on a shaky, smaller, weaker nation installs a friendly junta and shames the sponsor', () => {
     const s = setup()
     s.nations.r1.stability = 30
+    s.regions.r2.owner = 'r0'
+    s.nations.r0.military.units.infantry = s.nations.r1.military.units.infantry + 5
     expect(validateOrder(s, map, op('coup'))).toBeNull()
     runOperation(s, map, 'r0', 'coup', 'r1', { chance: () => true, int: () => 0 } as never)
-    expect(s.nations.r1.overlord).toBe('r0')
+    expect(s.nations.r1.overlord).toBeNull()
+    expect(s.nations.r1.government).toBe('junta')
+    expect(s.nations.r1.stability).toBe(30)
+    expect((s.opinions['r1>r0'] ?? []).some((m) => m.label === 'Put us in power')).toBe(true)
     expect(s.infamy.r0).toBeGreaterThan(10)
+  })
+
+  it('a coup needs a target that is smaller, weaker and at peace', () => {
+    const s = setup()
+    s.nations.r1.stability = 30
+    expect(validateOrder(s, map, op('coup'))).toMatch(/too big/)
+    s.regions.r2.owner = 'r0'
+    s.nations.r1.military.units.infantry = s.nations.r0.military.units.infantry + 5
+    expect(validateOrder(s, map, op('coup'))).toMatch(/too strong/)
   })
 
   it('rebels can be armed abroad and broken up at home', () => {

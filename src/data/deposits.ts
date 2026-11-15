@@ -109,4 +109,11 @@ export const MATERIALS = {
   /** The scarcity price curve is clamped to this range around each material's base price. */
   priceMin: 0.6,
   priceMax: 1.8,
+  /** Buying or selling this many units moves the world price by 10%. The push fades by `pressureFade` each month. */
+  pressureScale: 600,
+  pressureFade: 0.4,
+  pressureMin: -0.25,
+  pressureMax: 0.4,
+  /** Steel a nation on auto-buy keeps in store for building and training. */
+  steelReserve: 10,
 }

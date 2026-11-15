@@ -5,13 +5,18 @@ import { TECHS } from '../data/techTree'
 import { BUILDING_SPECS, UNIT_SPECS, buildingCost, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from './arms'
 import { incomingArmies } from './armies'
-import { clockOf } from './calendar'
+import { absDate, clockOf } from './calendar'
 import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
 import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
-import { militaryPower, militarySheet } from './militaryStats'
+import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { validateOrder } from './orders'
 import { monthsToElection } from './politics'
+import { ACADEMY, PROJECTS, programCost } from '../data/projects'
+import { TIERS } from '../data/empire'
+import { empireCount, tierOf } from './empire'
+import { academyCost, activeProjects, projectProblem } from './industry'
+import { electionNeed } from './people'
 import type { BuildingType, GameState, Milestone, NationId, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 import { canAttackRegion, forecastAttack, garrisonStrength } from './warfare'
@@ -19,7 +24,8 @@ import { netWarScore } from './warscore'
 
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
-  | { desk: 'economy'; tab: 'country' | 'budget' | 'market' | 'stocks' | 'business' | 'government' | 'people'; region?: RegionId }
+  | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'; region?: RegionId }
+  | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' }
   | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
@@ -59,13 +65,14 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
 
   // Live games: armies marching on you, and what you can still do about them.
   for (const army of incomingArmies(s, nationId).filter((a) => a.nationId !== nationId)) {
+    // The date, not a countdown: the advice is worked out on quiet days only, and a date stays true while the clock runs.
     const days = Math.max(0, Math.ceil(army.end - clockOf(s)))
     const home = totalUnits(n.military.units)
     const theirs = totalUnits(army.units)
     add('now', 120 - Math.min(60, days * 6), {
       id: `incoming-${army.id}`,
       title: `${s.nations[army.nationId]?.name ?? 'An enemy'} is marching on ${name(army.target)}`,
-      detail: `${theirs.toFixed(1)} divisions arrive in ${days} ${days === 1 ? 'day' : 'days'}, against ${home.toFixed(1)} at home. Call your armies back, raise a shield, fire missiles, or make peace to turn them round.`,
+      detail: `${theirs.toFixed(1)} divisions arrive on ${absDate(Math.ceil(army.end))}, against ${home.toFixed(1)} at home. Call your armies back, raise a shield, fire missiles, or offer peace: they answer within a day.`,
       action: 'See the armies',
       target: { desk: 'military', tab: 'armies' },
     })
@@ -134,8 +141,89 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   }
   // An election
   const election = monthsToElection(s, nationId)
-  if (election !== null && election <= 6 && n.stability < ELECTION.needed + 8) {
-    add('soon', 52, { id: 'election', title: `An election is ${election === 0 ? 'this month' : `${election} months away`}`, detail: `Stability is ${Math.round(n.stability)}% and you need ${ELECTION.needed}% to win. Lower taxes or spend more on health.`, action: 'Open Government', target: { desk: 'economy', tab: 'government' } })
+  const need = Math.round(electionNeed(n, ELECTION.needed))
+  if (election !== null && election <= 6 && n.stability < need + 8) {
+    add('soon', 52, { id: 'election', title: `An election is ${election === 0 ? 'this month' : `${election} months away`}`, detail: `Stability is ${Math.round(n.stability)}% and you need ${need}% to win. Lower taxes, or spend on pensions, housing and health. Unemployment raises the bar.`, action: 'Open Government', target: { desk: 'economy', tab: 'government' } })
+  }
+
+  // The people: staffing, health, schools, jobs, epidemics
+  const cov = econ.coverage
+  if (econ.buildings.factory > 0 && cov.engineers < 0.9) {
+    add(cov.engineers < 0.7 ? 'now' : 'soon', 48, { id: 'engineers', title: 'Your factories are short of engineers', detail: `They are ${Math.round(cov.engineers * 100)}% staffed, so factories run at ${Math.round(econ.factoryStaff * 100)}%. Switch the schools to an Engineering focus, or raise school spending.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+  }
+  if (econ.buildings.university > 0 && cov.scientists < 0.9) {
+    add('soon', 36, { id: 'scientists', title: 'Your universities are short of scientists', detail: `They run at ${Math.round(econ.researchStaff * 100)}%. A Science focus and university-level schools raise more.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+  }
+  if (econ.buildings.hospital > 0 && cov.doctors < 0.9) {
+    add('soon', 34, { id: 'doctors', title: 'Your hospitals lack doctors', detail: `Hospitals only help when doctors staff them (${Math.round(cov.doctors * 100)}% now). A Medicine focus trains more.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+  }
+  if (n.people.epidemic > 0.05) {
+    add('now', 78, { id: 'epidemic', title: 'An epidemic is spreading', detail: `Severity ${Math.round(n.people.epidemic * 100)}%. It costs lives, output and calm. ${n.programs.quarantine ? 'The quarantine is helping.' : 'A quarantine ends it sooner, at a price.'}`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+  } else if (!n.programs.quarantine) {
+    const sick = new Set<NationId>()
+    for (const r of Object.values(s.regions)) {
+      if (r.owner !== nationId) continue
+      for (const nb of map.regions[r.id]?.neighbors ?? []) {
+        const o = s.regions[nb]?.owner
+        if (o && o !== nationId && (s.nations[o]?.people?.epidemic ?? 0) > 0.2) sick.add(o)
+      }
+    }
+    if (sick.size > 0) add('soon', 42, { id: 'epidemic-near', title: 'An epidemic next door', detail: `${[...sick].map((id) => s.nations[id].name).join(', ')} ${sick.size === 1 ? 'has' : 'have'} an epidemic on your border. A quarantine makes it far less likely to cross.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+  }
+  if (n.people.unemployment > 0.1) {
+    add(n.people.unemployment > 0.18 ? 'now' : 'soon', 44, { id: 'jobs', title: `${Math.round(n.people.unemployment * 100)}% of people are out of work`, detail: 'The jobless pay no tax and are angry. More factories and farms, lower interest rates and generous jobless support help.', action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+  }
+  if (n.people.health < 0.4) {
+    add('soon', 40, { id: 'health', title: 'Your people are unwell', detail: `Health is ${Math.round(n.people.health * 100)}%: shorter lives, fewer children, weaker soldiers. Spend on health, build hospitals, research Sanitation.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+  }
+  if (n.people.schooling < 0.35 && econ.netCapital > 2) {
+    add('idea', 30, { id: 'schools', title: 'Few of your people are schooled', detail: 'Schools lift every skill, and research with them.', action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+  }
+
+  // Money and the bank
+  if (n.bank.inflation > 6) {
+    add(n.bank.inflation > 12 ? 'now' : 'soon', 56, { id: 'inflation', title: `Prices are rising ${n.bank.inflation.toFixed(1)}% a year`, detail: `Inflation eats ${Math.round((1 - econ.realIncome) * 100)}% of income and costs stability. ${tierOf(n).rate ? 'Raise the interest rate and stop printing.' : 'Stop printing and bring down war spending; a Regional power can raise rates.'}`, action: 'Open the Bank', target: { desk: 'economy', tab: 'bank' } })
+  }
+  if (n.bank.currency < 0.8) {
+    add('soon', 38, { id: 'currency', title: 'Your currency is weak', detail: `At ${n.bank.currency.toFixed(2)}, imports cost more. It follows high inflation, war, sanctions and weak credit.`, action: 'Open the Bank', target: { desk: 'economy', tab: 'bank' } })
+  }
+  const dueSoon = n.bonds.filter((b) => !b.war && b.due - s.turn <= 1 && b.due >= s.turn)
+  if (dueSoon.length > 0) {
+    const sum = dueSoon.reduce((a, b) => a + b.amount, 0)
+    add(money < sum && econ.credit.room < sum ? 'now' : 'soon', 46, { id: 'bonds-due', title: `${Math.round(sum)} in bonds come due ${dueSoon[0].due <= s.turn ? 'this month' : 'next month'}`, detail: econ.credit.room >= sum ? 'Lenders would roll them over. If your credit slips, they must be paid from the treasury.' : 'Lenders may not roll them over, so they would come out of the treasury.', action: 'Open the Bank', target: { desk: 'economy', tab: 'bank' } })
+  }
+  if (enemies.length > 0 && money < 60 && n.stability >= 40 && n.bank.warBonds < econ.gross) {
+    add('idea', 32, { id: 'war-bonds', title: 'Sell war bonds', detail: 'People will lend to their country in wartime at a low rate, and each issue calms the streets a little.', action: 'Open the Bank', target: { desk: 'economy', tab: 'bank' } })
+  }
+  if (tierOf(n).wealthFund && money > 600 && enemies.length === 0) {
+    add('idea', 22, { id: 'fund', title: 'Put spare money to work', detail: 'A wealth fund earns the world rate plus the exchange\'s gains, and lifts your credit.', action: 'Open the Bank', target: { desk: 'economy', tab: 'bank' } })
+  }
+
+  // Projects, research programs, the academy
+  const slots = tierOf(n).projectSlots
+  if (activeProjects(n).length < slots && econ.netCapital > 8 && money > 200) {
+    const open = (Object.keys(PROJECTS) as (keyof typeof PROJECTS)[]).find((id) => !n.projects[id] && projectProblem(s, map, n, id) === null)
+    if (open) add('idea', 33, { id: 'project', title: `You can start the ${PROJECTS[open].name.toLowerCase()}`, detail: `${PROJECTS[open].effect} It takes about ${PROJECTS[open].months} months and ${PROJECTS[open].cost} money.`, action: 'Open Projects', target: { desk: 'economy', tab: 'projects' } })
+  }
+  const techLeft = TECHS.some((t) => !n.techs.includes(t.id) && t.requires.every((r) => n.techs.includes(r)))
+  if (!techLeft && n.resources.tp >= programCost(Math.min(n.research2.productivity, 9))) {
+    add('idea', 31, { id: 'programs', title: 'Spare research has somewhere to go', detail: 'Future programs raise output, health or weapons a little with every level.', action: 'Open Research', target: { desk: 'research' } })
+  }
+  if (n.academy < tierOf(n).academyMax && n.people.schooling >= (ACADEMY.schooling[n.academy] ?? 1) && money > academyCost(n) + 100 && myUnits >= 3) {
+    add('idea', 24, { id: 'academy', title: 'Expand the military academy', detail: 'Recruits join already drilled, and drill and combined arms improve.', action: 'Open Military', target: { desk: 'military', tab: 'forces' } })
+  }
+
+  // The empire
+  if (econ.admin.over > 0.5) {
+    add(econ.admin.over > 3 ? 'now' : 'soon', 50, { id: 'admin', title: 'Your empire is stretched thin', detail: `Your officials can run ${econ.admin.capacity.toFixed(0)} countries' worth and you ask ${econ.admin.load.toFixed(0)} of them. Stability -${econ.admin.stability.toFixed(0)}, output -${Math.round(econ.admin.output * 100)}%. Civic halls, governors, regional capitals and digital government help.`, action: 'Open the Empire', target: { desk: 'empire', tab: 'provinces' } })
+  }
+  const count = empireCount(s, nationId)
+  const nextTier = TIERS.find((t) => t.id === tierOf(n).id + 1)
+  if (nextTier && nextTier.countries - count === 1) {
+    add('idea', 26, { id: 'next-tier', title: `One more country makes you a ${nextTier.name}`, detail: 'A bigger empire opens new powers: bank, projects, wealth fund, laws and more.', action: 'See what it opens', target: { desk: 'empire', tab: 'overview' } })
+  }
+  if (tierOf(n).regionalCapitals > n.regionalCapitals.length && econ.admin.load > econ.admin.capacity * 0.8) {
+    add('idea', 27, { id: 'regional-capital', title: 'Name a regional capital', detail: 'A regional capital carries no administration load and settles nearby land faster.', action: 'Open the Empire', target: { desk: 'empire', tab: 'provinces' } })
   }
 
   // Offers on the table
@@ -292,7 +380,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   }
   if (money > 250 && econ.netCapital > 5 && !n.inDebt) {
     const weakest = SECTOR_IDS.map((id) => ({ id, size: n.sectors[id] ?? 0 })).sort((a, b) => a.size - b.size)[0]
-    if (weakest) add('idea', 28, { id: 'business', title: `Back your ${SECTORS[weakest.id].name.toLowerCase()} sector`, detail: `It is your smallest industry at ${weakest.size.toFixed(1)}. A grant of 100 makes it ${SECTORS[weakest.id].yields.replace('+', 'produce ')}.`, action: 'Open Business', target: { desk: 'economy', tab: 'business' } })
+    if (weakest) add('idea', 28, { id: 'business', title: `Back your ${SECTORS[weakest.id].name.toLowerCase()} sector`, detail: `It is your smallest industry, at size ${weakest.size.toFixed(1)}. A grant makes it bigger, and each size it grows adds ${SECTORS[weakest.id].yields.replace(/^\+/, '')}.`, action: 'Open Business', target: { desk: 'economy', tab: 'business' } })
   }
 
   // Growth
@@ -317,7 +405,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       const owner = r.owner
       if (owner === nationId || !s.nations[owner]?.alive || isAllied(s, nationId, owner) || hasPact(s, nationId, owner)) continue
       if (!canAttackRegion(s, map, nationId, r.id).ok) continue
-      const defense = militaryPower(s, owner) + garrisonStrength(s, map, r.id) * 1.2
+      const defense = homePower(s, owner) + garrisonStrength(s, map, r.id) * 1.2
       const ratio = myPower / Math.max(0.5, defense)
       if (!target || ratio > target.ratio) target = { region: r.id, owner, ratio }
     }

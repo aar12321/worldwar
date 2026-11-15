@@ -1,4 +1,5 @@
 import { addLog } from './helpers'
+import { ensureStatecraft } from './statecraft'
 import { daysInMonth } from './calendar'
 import { newStocks } from './stocks'
 import { EVENT_BY_ID } from '../data/events'
@@ -23,7 +24,6 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     n.agencies ??= { foreign: { level: 1, exp: 0 }, domestic: { level: 1, exp: 0 } }
     n.secureUntil ??= 0
     n.systems ??= { cyber: 0, shield: 0, ai: 0, quantum: 0, orbital: 0, nano: 0 }
-    n.lastStrike ??= -99
     n.lastOrbital ??= -99
     n.sectors ??= { farming: 2, energy: 1, manufacturing: 2, arms: 0.5, technology: 0.5, finance: 0.5 }
     n.subsidies ??= []
@@ -31,10 +31,10 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     n.redMonths ??= 0
     n.defaultedUntil ??= 0
     n.government ??= 'monarchy'
-    n.budget ??= { military: 0.25, education: 0.25, health: 0.25, infrastructure: 0.25 }
     n.corporateTax ??= 0.15
     n.nextElection ??= 0
-    n.lastReform ??= 0
+    n.lastReform ??= -99
+    if (n.lastReform === 0) n.lastReform = -99
     n.resources.oil ??= 6
     n.resources.steel ??= 6
     n.resources.goods ??= 10
@@ -91,6 +91,9 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   }
   if (game.pendingEvent && !EVENT_BY_ID[game.pendingEvent.eventId]) game.pendingEvent = null
   if (game.settings.mode === 'live') cleanLive(game, map)
+  // Statecraft: spending levels from the old budget, bonds from old debt, people, the bank, tiers.
+  for (const r of Object.values(game.regions)) r.buildings.hospital ??= 0
+  ensureStatecraft(game, map)
   return game
 }
 
@@ -100,9 +103,33 @@ function cleanLive(game: GameState, map: WorldMap) {
   const point = (p: { lat?: unknown; lng?: unknown } | undefined) => !!p && finite(p.lat) && finite(p.lng)
   const lastDay = daysInMonth(game.turn) - 1
   game.day = finite(game.day) ? Math.min(lastDay, Math.max(0, Math.floor(game.day as number))) : 0
+  const VIAS = ['land', 'lane', 'fleet', 'air']
+  const PHASES = ['outbound', 'fighting', 'returning']
   game.armies = (Array.isArray(game.armies) ? game.armies : []).filter(
-    (a) => !!a && game.nations[a.nationId]?.alive && !!map.regions[a.target] && !!map.regions[a.home] && finite(a.start) && finite(a.end) && point(a.from) && point(a.to) && !!a.units && UNIT_TYPES.every((k) => finite(a.units[k]) && a.units[k] >= 0),
+    (a) =>
+      !!a &&
+      typeof a.id === 'string' &&
+      game.nations[a.nationId]?.alive &&
+      !!map.regions[a.target] &&
+      !!map.regions[a.home] &&
+      VIAS.includes(a.via) &&
+      PHASES.includes(a.phase) &&
+      finite(a.share) &&
+      a.share >= 0 &&
+      a.share <= 1 &&
+      finite(a.start) &&
+      finite(a.end) &&
+      point(a.from) &&
+      point(a.to) &&
+      !!a.units &&
+      UNIT_TYPES.every((k) => finite(a.units[k]) && a.units[k] >= 0),
   )
+  for (const a of game.armies) {
+    a.commit = ['probe', 'main', 'allin'].includes(a.commit) ? a.commit : 'main'
+    a.stance = ['assault', 'blitz', 'siege'].includes(a.stance) ? a.stance : 'assault'
+    a.bySea = !!a.bySea
+  }
+  if (game.pendingDay !== undefined && (!finite(game.pendingDay) || !game.pendingEvent)) delete game.pendingDay
   const armyIds = new Set(game.armies.map((a) => a.id))
   game.launches = (Array.isArray(game.launches) ? game.launches : []).filter((l) => !!l && finite(l.at) && !!l.order && !!game.nations[l.order.nationId]?.alive && !!game.regions[l.order.target] && !armyIds.has(l.id))
   game.flights = (Array.isArray(game.flights) ? game.flights : []).filter((f) => !!f && finite(f.lands) && finite(f.count) && !!game.nations[f.nationId]?.alive && !!map.regions[f.target])

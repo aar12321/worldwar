@@ -21,7 +21,9 @@ export function addUnitToMilitary(s: GameState, nationId: NationId, unit: UnitTy
   const m = s.nations[nationId].military
   // In a live game some of the force is out in armies; the recruit is green beside all of it.
   const have = forceUnits(s, nationId)[unit]
-  m.drill[unit] = Math.round((m.drill[unit] * have) / (have + 1))
+  // An academy sends recruits out already drilled to its level.
+  const academy = s.nations[nationId].academy ?? 0
+  m.drill[unit] = Math.round((m.drill[unit] * have + academy) / (have + 1))
   m.units[unit] += 1
 }
 

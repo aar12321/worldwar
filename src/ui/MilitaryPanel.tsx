@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingCost, trainingRank, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from '../engine/arms'
 import { enemiesOf, formatDivisions, maxWars } from '../engine/helpers'
@@ -12,6 +13,9 @@ import { OrderButton, PanelShell, Tabs } from './panel'
 import { AgenciesTab } from './AgenciesTab'
 import { ArmiesTab } from './ArmiesTab'
 import { isLive } from '../engine/calendar'
+import { ACADEMY, GENERAL_TRAITS } from '../data/projects'
+import { tierOf } from '../engine/empire'
+import { academyCost } from '../engine/industry'
 import { SystemsTab } from './SystemsTab'
 import { WarsTab } from './WarsPanel'
 
@@ -20,6 +24,9 @@ const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`
 function UnitCard({ line }: { line: UnitStatLine }) {
   const view = usePlayerView()!
   const { game, player } = view
+  const [batch, setBatch] = useState(1)
+  const issueBatch = useGame((st) => st.issueBatch)
+  const toast = useGame((st) => st.toast)
   const spec = UNIT_SPECS[line.unit]
   const weapons = nextWeaponLevel(game, player.id, line.unit)
   const bonusAttack = line.attack / line.baseAttack - 1
@@ -68,12 +75,34 @@ function UnitCard({ line }: { line: UnitStatLine }) {
         </span>
       </div>
 
+      <div className="flex items-center gap-1.5 text-[13px]" role="group" aria-label={`How many ${line.name} to train at once`}>
+        <span className="text-white/65">Train</span>
+        {[1, 5, 10].map((n) => (
+          <button key={n} className={`btn px-2.5 py-1 text-[13px] ${batch === n ? 'btn-primary' : 'btn-quiet'}`} aria-pressed={batch === n} onClick={() => setBatch(n)}>
+            {n}
+          </button>
+        ))}
+        {batch > 1 && (
+          <button
+            className="btn btn-primary px-3 py-1 text-[13px] ml-auto"
+            title={`Queue ${batch} ${line.name} until the queue is full or you run out of money, soldiers or steel`}
+            onClick={() => {
+              const order = { type: 'queueTrain' as const, nationId: player.id, unit: line.unit }
+              const { done, failed } = issueBatch(Array.from({ length: batch }, () => order))
+              if (done > 0 && failed > 0) toast(`${done} queued; the rest could not be: the queue, money, soldiers or steel ran out.`, 'info')
+            }}
+          >
+            Queue {batch}
+          </button>
+        )}
+      </div>
+
       <div className="unit-actions">
         <OrderButton
           order={{ type: 'queueTrain', nationId: player.id, unit: line.unit }}
           label="Train one"
           cost={`${orderCost(game, { type: 'queueTrain', nationId: player.id, unit: line.unit }).capital} money${spec.steel > 0 ? ` · ${spec.steel} steel` : ''}`}
-          effect={`${spec.manpowerCost > 0 ? `${spec.manpowerCost}k soldiers` : 'no soldiers needed'} · ready in ${months} ${months === 1 ? 'turn' : 'turns'}${spec.oil > 0 ? ` · burns ${spec.oil} oil a month` : ''}`}
+          effect={`${spec.manpowerCost > 0 ? `${spec.manpowerCost}k soldiers` : 'no soldiers needed'} · ready in ${months} ${months === 1 ? 'month' : 'months'}${spec.oil > 0 ? ` · burns ${spec.oil} oil a month` : ''}`}
           tone="btn-primary"
         />
         <OrderButton
@@ -142,7 +171,7 @@ function Forces() {
           <div key={j.id} className="flex items-center justify-between gap-3 text-[14px]">
             <span className="flex items-center gap-2">
               <UnitIcon unit={j.unit} size={18} />
-              {UNIT_SPECS[j.unit].name} <span className="text-white/70">· {i < sheet.trainingSlots ? `${j.remaining} ${j.remaining === 1 ? 'turn' : 'turns'} left` : 'waiting for a slot'}</span>
+              {UNIT_SPECS[j.unit].name} <span className="text-white/70">· {i < sheet.trainingSlots ? `${j.remaining} ${j.remaining === 1 ? 'month' : 'months'} left` : 'waiting for a slot'}</span>
             </span>
             <OrderButton order={{ type: 'cancelTrain', nationId: player.id, jobId: j.id }} label="Cancel" tone="btn-quiet" />
           </div>
@@ -159,7 +188,12 @@ function Forces() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-[16px] font-semibold">Commander</div>
-            <div className="text-[13px] text-white/70">{commander ? `${commander.name} drills your least-trained unit every turn, for free.` : 'A commander drills your least-trained unit every turn, for free.'}</div>
+            <div className="text-[13px] text-white/70">{commander ? `${commander.name} drills your least-trained unit every month, for free.` : 'A commander drills your least-trained unit every month, for free.'}</div>
+            {commander && (
+              <div className="text-[13px] text-[#6cb4ff] mt-0.5">
+                {GENERAL_TRAITS[commander.trait].name}: {GENERAL_TRAITS[commander.trait].blurb}
+              </div>
+            )}
           </div>
           <select
             className="field px-3 py-2 text-[14px]"
@@ -175,6 +209,19 @@ function Forces() {
             ))}
           </select>
         </div>
+      </section>
+
+      <section className="inset-card p-3.5 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[16px] font-semibold">Military academy · level {player.academy} of {tierOf(player).academyMax}</div>
+            <div className="text-[13px] text-white/70">
+              New recruits join already drilled to the academy's level, drill costs {Math.round(ACADEMY.drillDiscount * player.academy * 100)}% less, and combined arms fights {Math.round(ACADEMY.combinedArms * player.academy * 100)}% better. Higher weapon levels need less factory. It costs {ACADEMY.upkeep} a month a level.
+            </div>
+          </div>
+          {player.academy < 3 && <OrderButton order={{ type: 'fundAcademy', nationId: player.id }} label="Expand" cost={`${academyCost(player)} money`} tone="btn-primary" className="shrink-0" />}
+        </div>
+        <div className="text-[12px] text-white/60">Needs schooling of {Math.round(ACADEMY.schooling[Math.min(2, player.academy)] * 100)}% for the next level (yours is {Math.round(player.people.schooling * 100)}%). Doctors return part of the wounded infantry to the ranks after every battle.</div>
       </section>
     </>
   )

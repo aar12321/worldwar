@@ -5,6 +5,7 @@ import { BUILDING_SPECS } from '../data/unitTypes'
 import { computeEconomy, ECON } from './economy'
 import { addLog, clamp, grantJustification, regionsOf } from './helpers'
 import { createRng, type Rng } from './rng'
+import { startEpidemic } from './epidemics'
 import type { EventEffect, GameState, NationId, PendingEvent, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
@@ -114,6 +115,19 @@ export function describeEffect(e: EventEffect, workforce: number, s: GameState, 
       return `-${Math.round(e.fraction * 100)}% population in the region`
     case 'warWeariness':
       return `${sign(e.amount)} War Weariness`
+    case 'people': {
+      const pct = Math.round(e.amount * 100)
+      const what = { health: 'health', schooling: 'schooling', unemployment: 'unemployment', specialization: 'specialization' }[e.key]
+      return `${pct > 0 ? '+' : ''}${pct} points of ${what}`
+    }
+    case 'bank':
+      return e.key === 'inflation' ? `Inflation ${sign(e.amount)} points` : `Currency ${e.amount >= 0 ? 'stronger' : 'weaker'} by ${Math.round(Math.abs(e.amount) * 100)}%`
+    case 'epidemic':
+      return 'An epidemic breaks out'
+    case 'skills':
+      return `${Math.round(e.amount * 1000) / 10}% of workers move from ${e.from} to ${e.to}`
+    case 'projectProgress':
+      return e.months >= 0 ? `National projects advance ${e.months} months` : `National projects lose ${-e.months} months of work`
   }
 }
 
@@ -133,7 +147,8 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
   for (const e of option.effects) {
     switch (e.type) {
       case 'resource':
-        n.resources[e.key] = Math.max(0, n.resources[e.key] + effectAmount(e, workforce))
+        // Money can go into the red: a choice that costs money is not free for a nation that has none.
+        n.resources[e.key] = e.key === 'capital' ? n.resources.capital + effectAmount(e, workforce) : Math.max(0, n.resources[e.key] + effectAmount(e, workforce))
         break
       case 'stability':
         n.stability = clamp(n.stability + e.amount, 0, 100)
@@ -164,13 +179,13 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         if (region && region.owner === nationId) region.rebels += e.strength
         break
       case 'loseBuilding':
-        if (region && region.buildings[e.building] > 0) region.buildings[e.building]--
+        if (region && region.owner === nationId && region.buildings[e.building] > 0) region.buildings[e.building]--
         break
       case 'addBuilding':
         if (region && region.owner === nationId) region.buildings[e.building]++
         break
       case 'popLoss':
-        if (region) region.population *= 1 - e.fraction
+        if (region && region.owner === nationId) region.population *= 1 - e.fraction
         break
       case 'warWeariness':
         n.warWeariness = clamp(n.warWeariness + e.amount, 0, 60)
@@ -194,6 +209,30 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         break
       case 'embargo':
         n.embargoedUntil = Math.max(n.embargoedUntil ?? 0, s.turn + e.turns - 1)
+        break
+      case 'people': {
+        const p = n.people
+        if (e.key === 'unemployment') p.unemployment = clamp(p.unemployment + e.amount, 0.01, 0.45)
+        else if (e.key === 'specialization') p.specialization = clamp(p.specialization + e.amount, 0, 1)
+        else p[e.key] = clamp(p[e.key] + e.amount, 0, 0.98)
+        break
+      }
+      case 'bank':
+        if (e.key === 'inflation') n.bank.inflation = clamp(n.bank.inflation + e.amount, -5, 60)
+        else n.bank.currency = clamp(n.bank.currency + e.amount, 0.6, 1.6)
+        break
+      case 'epidemic':
+        startEpidemic(s, nationId, e.severity)
+        break
+      case 'skills': {
+        const sk = n.people.skills
+        const move = Math.min(sk[e.from], e.amount)
+        sk[e.from] -= move
+        sk[e.to] += move
+        break
+      }
+      case 'projectProgress':
+        for (const p of Object.values(n.projects ?? {})) if (p && !p.done) p.progress = Math.max(0, p.progress + e.months)
         break
     }
   }

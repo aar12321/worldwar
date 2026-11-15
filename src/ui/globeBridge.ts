@@ -55,6 +55,8 @@ interface FxState {
 }
 
 let ringId = 1
+let holdToken = 0
+const holdTokens = new Map<string, number>()
 
 export const useFx = create<FxState>((set) => ({
   rings: [],
@@ -78,8 +80,15 @@ export const useFx = create<FxState>((set) => ({
     setTimeout(() => set((s) => ({ pops: s.pops.filter((p) => p.id !== id) })), ttlMs)
   },
   hold(regionId, color, ms) {
+    // A newer hold on the same country replaces the older one and its timer, so the first cannot clear the second early.
+    const token = ++holdToken
+    holdTokens.set(regionId, token)
     set((s) => ({ held: { ...s.held, [regionId]: color } }))
-    setTimeout(() => set((s) => ({ held: Object.fromEntries(Object.entries(s.held).filter(([k]) => k !== regionId)) })), ms)
+    setTimeout(() => {
+      if (holdTokens.get(regionId) !== token) return
+      holdTokens.delete(regionId)
+      set((s) => ({ held: Object.fromEntries(Object.entries(s.held).filter(([k]) => k !== regionId)) }))
+    }, ms)
   },
   addBattle(battle, ttlMs) {
     set((s) => ({ battles: [...s.battles.filter((b) => b.id !== battle.id), battle] }))

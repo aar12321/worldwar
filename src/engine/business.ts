@@ -49,19 +49,31 @@ export function growthClimate(n: Nation, pol: Pick<PolicyEffects, 'growth'>): nu
 /** War helps the arms makers and hurts the bankers. */
 const WAR_MULT: Record<SectorId, number> = { farming: 0.9, energy: 1, manufacturing: 1.1, arms: 1.3, technology: 0.9, finance: 0.7 }
 
-/** One month of growth for every sector. Pure on the nation; the caller supplies workforce and policy. */
-export function growSectors(n: Nation, workforce: number, pol: Pick<PolicyEffects, 'growth'>, atWarNow: boolean, extra: Partial<Record<SectorId, number>> = {}) {
-  const cap = sectorCap(workforce)
+/**
+ * One month of growth for every sector. Pure on the nation; the caller supplies workforce and policy. `capMult` scales how big each
+ * sector can grow (the people's skills), `rateMult` how fast (a state enterprise grows at half speed).
+ */
+export function growSectors(
+  n: Nation,
+  workforce: number,
+  pol: Pick<PolicyEffects, 'growth'>,
+  atWarNow: boolean,
+  extra: Partial<Record<SectorId, number>> = {},
+  opts: { capMult?: Partial<Record<SectorId, number>>; rateMult?: Partial<Record<SectorId, number>> } = {},
+) {
+  const base = sectorCap(workforce)
   const climate = growthClimate(n, pol)
   for (const id of SECTOR_IDS) {
+    const cap = base * (opts.capMult?.[id] ?? 1)
+    const pace = opts.rateMult?.[id] ?? 1
     let size = n.sectors[id] ?? 0
     if (n.stability < BUSINESS.shrinkBelow) {
       size *= 0.99
     } else {
       const subsidy = n.subsidies.includes(id) ? 1 + BUSINESS.subsidyGrowth : 1
       const war = atWarNow ? WAR_MULT[id] : 1
-      const rate = BUSINESS.growth * climate * subsidy * war + (extra[id] ?? 0)
-      size += rate * size * Math.max(0, 1 - size / cap) + (size < cap ? BUSINESS.seed * cap * climate * subsidy : 0)
+      const rate = (BUSINESS.growth * climate * subsidy * war + (extra[id] ?? 0)) * pace
+      size += rate * size * Math.max(0, 1 - size / cap) + (size < cap ? BUSINESS.seed * cap * climate * subsidy * pace : 0)
     }
     n.sectors[id] = Math.min(cap * 1.5, Math.max(0, size))
   }
@@ -102,7 +114,9 @@ export function cleanInvestments(s: GameState) {
       if (b.isPlayer) addLog(s, 'economy', `${a.name}'s investment in your ${SECTORS[inv.sector].name.toLowerCase()} was lost in the war.`, [inv.investor, inv.target])
       continue
     }
-    kept.push(inv)
+    // An investment pays a steady income, not a free one forever: it runs down as it pays.
+    inv.amount *= 1 - INVEST.amortize
+    if (inv.amount >= 1) kept.push(inv)
   }
   s.investments = kept
 }
@@ -132,8 +146,12 @@ export function checkDefault(s: GameState, n: Nation) {
   if (n.inDebt && n.debt > 0) n.redMonths = (n.redMonths ?? 0) + 1
   else n.redMonths = 0
   if (n.redMonths < TREASURY.defaultAfter) return
-  const lost = n.debt * TREASURY.writeOff
-  n.debt -= lost
+  // Half of every bond is written off.
+  if (n.bonds?.length) {
+    for (const b of n.bonds) b.amount *= 1 - TREASURY.writeOff
+    n.bonds = n.bonds.filter((b) => b.amount > 0.01)
+    n.debt = n.bonds.reduce((sum, b) => sum + b.amount, 0)
+  } else n.debt -= n.debt * TREASURY.writeOff
   n.redMonths = 0
   n.stability = Math.max(0, n.stability - TREASURY.defaultStability)
   n.defaultedUntil = s.turn + TREASURY.lockout

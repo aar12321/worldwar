@@ -102,10 +102,32 @@ function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
   const view = usePlayerView()!
   const setPicked = useGame((s) => s.setEconomyRegion)
   const issueOrder = useGame((s) => s.issueOrder)
-  const issueBatch = useGame((s) => s.issueBatch)
   const { game, player } = view
   const { map } = getWorld()
   const unsettled = owned.filter((id) => game.regions[id].integration < 1).length
+  const [sort, setSort] = useState<'name' | 'population' | 'settling' | 'rebels'>('population')
+  const [filter, setFilter] = useState<'all' | 'settling' | 'rebels' | 'nogov' | string>('all')
+  const [query, setQuery] = useState('')
+  // A country's trait, to filter by.
+  const traits = [...new Set(owned.map((id) => traitOf(id, map.regions[id])))].sort()
+  const shownList = (() => {
+    const q = query.trim().toLowerCase()
+    const list = owned.filter((id) => {
+      const r = game.regions[id]
+      if (q && !map.regions[id].name.toLowerCase().includes(q)) return false
+      if (filter === 'settling') return r.integration < 1
+      if (filter === 'rebels') return r.rebels > 0
+      if (filter === 'nogov') return !r.governor || r.governor === 'off'
+      if (filter !== 'all') return traitOf(id, map.regions[id]) === filter
+      return true
+    })
+    return list.sort((a, b) => {
+      const ra = game.regions[a]
+      const rb = game.regions[b]
+      const v = sort === 'name' ? map.regions[a].name.localeCompare(map.regions[b].name) : sort === 'population' ? rb.population - ra.population : sort === 'settling' ? ra.integration - rb.integration : rb.rebels - ra.rebels
+      return v || (a < b ? -1 : 1)
+    })
+  })()
   return (
     <div className="span-all inset-card p-3.5 space-y-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -115,27 +137,32 @@ function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
         </span>
       </div>
       <BulkUpgrade owned={owned} />
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-3 py-2">
-        <span className="text-[13px] text-white/80">Set a governor for every country</span>
-        <select
-          className="field px-2 py-1.5 text-[13px]"
-          aria-label="Governor for every country"
-          value=""
-          onChange={(e) => {
-            if (!e.target.value) return
-            issueBatch(owned.map((id) => ({ type: 'setGovernor' as const, nationId: player.id, regionId: id, governor: e.target.value as Governor })))
-          }}
-        >
-          <option value="">Choose a plan for all…</option>
-          {(Object.keys(GOVERNOR_LABELS) as Governor[]).map((g) => (
-            <option key={g} value={g}>
-              {GOVERNOR_LABELS[g]}
-            </option>
-          ))}
-        </select>
-      </div>
+      <GovernorForAll owned={owned} />
+      {owned.length > 6 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input className="field px-3 py-1.5 text-[13px] flex-1 min-w-32" placeholder="Search your countries" aria-label="Search your countries" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className="field px-2 py-1.5 text-[13px]" aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="all">All countries</option>
+            <option value="settling">Still settling</option>
+            <option value="rebels">With rebels</option>
+            <option value="nogov">No governor</option>
+            {traits.map((t) => (
+              <option key={t} value={t}>
+                {TRAITS[t].name}
+              </option>
+            ))}
+          </select>
+          <select className="field px-2 py-1.5 text-[13px]" aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <option value="population">Biggest first</option>
+            <option value="name">A to Z</option>
+            <option value="settling">Least settled first</option>
+            <option value="rebels">Most rebels first</option>
+          </select>
+        </div>
+      )}
+      {shownList.length === 0 && <p className="text-[13px] text-white/60">No country matches.</p>}
       <ul className="space-y-1.5">
-        {owned.map((id) => {
+        {shownList.map((id) => {
           const r = game.regions[id]
           const tr = TRAITS[traitOf(id, map.regions[id])]
           return (
@@ -268,23 +295,62 @@ export function CountryTab() {
   )
 }
 
-function FocusPicker({ regionId, cityId, port, current }: { regionId: string; cityId: string; port: boolean; current: (typeof FOCUS_IDS)[number] }) {
-  const issueOrder = useGame((s) => s.issueOrder)
-  const view = usePlayerView()!
+/** One plan for all your countries: pick it, then press Apply, so a stray scroll never rewrites the whole empire. */
+function GovernorForAll({ owned }: { owned: string[] }) {
+  const issueBatch = useGame((s) => s.issueBatch)
+  const playerId = usePlayerView()!.player.id
+  const [plan, setPlan] = useState<Governor | ''>('')
   return (
-    <select
-      className="field px-2.5 py-1.5 text-[14px]"
-      aria-label="City focus"
-      value={current}
-      onChange={(e) => issueOrder({ type: 'setCityFocus', nationId: view.player.id, regionId, cityId, focus: e.target.value as (typeof FOCUS_IDS)[number] })}
-    >
-      {FOCUS_IDS.map((f) => (
-        <option key={f} value={f} disabled={FOCUS[f].needsPort && !port}>
-          {FOCUS[f].name}
-          {f !== current ? ` (${CITY_RULES.focusCost} money)` : ''}
-          {FOCUS[f].needsPort && !port ? ' - coast only' : ''}
-        </option>
-      ))}
-    </select>
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-3 py-2">
+      <span className="text-[13px] text-white/80">Set a governor for every country</span>
+      <span className="flex items-center gap-2">
+        <select className="field px-2 py-1.5 text-[13px]" aria-label="Governor for every country" value={plan} onChange={(e) => setPlan(e.target.value as Governor | '')}>
+          <option value="">Choose a plan for all…</option>
+          {(Object.keys(GOVERNOR_LABELS) as Governor[]).map((g) => (
+            <option key={g} value={g}>
+              {GOVERNOR_LABELS[g]}
+            </option>
+          ))}
+        </select>
+        <button
+          className="btn btn-primary"
+          disabled={!plan}
+          onClick={() => {
+            if (!plan) return
+            issueBatch(owned.map((id) => ({ type: 'setGovernor' as const, nationId: playerId, regionId: id, governor: plan })))
+            setPlan('')
+          }}
+        >
+          Apply to {owned.length}
+        </button>
+      </span>
+    </div>
+  )
+}
+
+function FocusPicker({ regionId, cityId, port, current }: { regionId: string; cityId: string; port: boolean; current: (typeof FOCUS_IDS)[number] }) {
+  const view = usePlayerView()!
+  const [pick, setPick] = useState<(typeof FOCUS_IDS)[number] | null>(null)
+  const chosen = pick ?? current
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <select className="field px-2.5 py-1.5 text-[14px]" aria-label="City focus" value={chosen} onChange={(e) => setPick(e.target.value as (typeof FOCUS_IDS)[number])}>
+        {FOCUS_IDS.map((f) => (
+          <option key={f} value={f} disabled={FOCUS[f].needsPort && !port}>
+            {FOCUS[f].name}
+            {FOCUS[f].needsPort && !port ? ' - coast only' : ''}
+          </option>
+        ))}
+      </select>
+      {chosen !== current && (
+        <OrderButton
+          order={{ type: 'setCityFocus', nationId: view.player.id, regionId, cityId, focus: chosen }}
+          label="Change focus"
+          cost={`${CITY_RULES.focusCost} money`}
+          tone="btn-primary"
+          onDone={() => setPick(null)}
+        />
+      )}
+    </span>
   )
 }

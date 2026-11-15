@@ -1,5 +1,5 @@
 import { PERSONALITIES } from '../data/personalities'
-import { loanPayment } from '../engine/diplomacy'
+import { generalPeaceTies, loanPayment } from '../engine/diplomacy'
 import { computeEconomy, militaryPower, type EconomyReport } from '../engine/economy'
 import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey } from '../engine/helpers'
 import type { Rng } from '../engine/rng'
@@ -76,7 +76,9 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       const started = s.warStarted[pairKey(p.from, botId)] ?? s.turn
       const fresh = s.turn - started < 3
       const bias = { expansionist: -12, opportunist: -4, turtle: 10, trader: 8, honorable: 0 }[me.personality ?? 'honorable']
-      const score = me.warWeariness * 1.1 + (ratio - 1) * 25 + net * 0.6 + concession - demand * 0.8 + op * 0.15 + bias - (fresh ? 12 : 0) - 8 + noise
+      // A general peace also stops the wars its friends are winning, so it is a harder sell.
+      const others = p.terms.general ? generalPeaceTies(s, p.from, botId).length : 0
+      const score = me.warWeariness * 1.1 + (ratio - 1) * 25 + net * 0.6 + concession - demand * 0.8 + op * 0.15 + bias - (fresh ? 12 : 0) - 8 - Math.min(10, others * 2.5) + noise
       if (p.terms.puppet && score <= 8) return verdict(false, 'we will never be your puppet')
       if (score > 0) {
         if (me.warWeariness > 25) return verdict(true, 'the war has bled us dry')

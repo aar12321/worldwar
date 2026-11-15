@@ -70,6 +70,8 @@ describe('sending an army', () => {
 
   it('fights on arrival, rests a day, marches home, and the survivors rejoin the military', () => {
     const s = war()
+    // No doctors, so no wounded come back and the units add up exactly.
+    s.nations.r0.people.skills.doctors = 0
     const start = total(s)
     const launched = applyOrderNow(s, map, attack({ missiles: 4 })).army!
     expect(launched.units.missile).toBe(4)
@@ -351,18 +353,20 @@ describe('what an army in the field costs and means', () => {
     s.regions.r3.owner = 'r0'
     setMilitary(s, 'r0', { infantry: 6 })
     applyOrderNow(s, map, attack({ commit: 'allin' }))
-    expect(totalUnits(s.nations.r0.military.units)).toBeLessThan(0.1)
+    // Only the home guard is left.
+    expect(totalUnits(s.nations.r0.military.units)).toBeCloseTo(0.6)
     expect(humanStatus(s, 'r0', map)).toBe('playing')
   })
 
-  it('units that are away do not defend the home country', () => {
+  it('units that are away do not defend the home country, but even all in leaves a guard', () => {
     const s = war()
     s.wars.push('r0|r2')
     setMilitary(s, 'r2', { infantry: 20, armor: 6 })
     setMilitary(s, 'r0', { infantry: 20 })
     const stay = structuredClone(s)
     applyOrderNow(s, map, attack({ commit: 'allin' }))
-    expect(s.nations.r0.military.units.infantry).toBe(0)
+    expect(s.nations.r0.military.units.infantry).toBeCloseTo(2)
+    expect(s.armies![0].units.infantry).toBeCloseTo(18)
     expect(stay.nations.r0.military.units.infantry).toBe(20)
   })
 })
@@ -442,13 +446,13 @@ describe('hypersonic missiles in a live game', () => {
 })
 
 describe('the advisor in a live game', () => {
-  it('warns about an enemy army marching on you, with the days left, and points to the armies', () => {
+  it('warns about an enemy army marching on you, with the day it arrives, and points to the armies', () => {
     const s = war()
     s.armies!.push({ id: 'in1', nationId: 'r1', units: { infantry: 9, armor: 2, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0 }, commit: 'main', stance: 'assault', share: 0.66, via: 'land', bySea: false, home: 'r1', target: 'r0', phase: 'outbound', from: { lat: 0, lng: 5 }, to: { lat: 0, lng: 0 }, start: 0, end: 4, launched: 0 })
     const item = advise(s, map, 'r0', [], 20).find((a) => a.id === 'incoming-in1')!
     expect(item).toBeTruthy()
     expect(item.urgency).toBe('now')
-    expect(item.detail).toMatch(/arrive in 4 days/)
+    expect(item.detail).toMatch(/arrive on 5 January 2026/)
     expect(item.target).toEqual({ desk: 'military', tab: 'armies' })
     // Your own armies are not a warning.
     expect(advise(startLive(startState(map)), map, 'r0', [], 20).some((a) => a.id.startsWith('incoming-'))).toBe(false)

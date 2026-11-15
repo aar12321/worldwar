@@ -49,22 +49,22 @@ describe('the live clock in the store', () => {
     expect(useGame.getState().running).toBe(false)
   })
 
-  it('names what holds the clock, in order', () => {
+  it('names what holds the clock: the one the player sees on top', () => {
     liveGame()
     const base = () => useGame.getState()
     expect(liveHold(base())).toBeNull()
-    useGame.setState({ helpOpen: true })
-    expect(liveHold(base())).toBe('help')
     useGame.setState({ warRoom: 'poland' })
     expect(liveHold(base())).toBe('planning')
-    useGame.setState({ summary: { turn: 1, deltas: [], battles: [], lines: [], world: [] } })
-    expect(liveHold(base())).toBe('report')
-    useGame.setState({ fxQueue: [{} as never] })
-    expect(liveHold(base())).toBe('battle')
     useGame.setState({ game: { ...base().game!, pendingEvent: { eventId: 'bread_riot', turn: 1, rivalId: null, regionId: null } } })
     expect(liveHold(base())).toBe('event')
+    useGame.setState({ summary: { turn: 1, deltas: [], battles: [], lines: [], world: [] } })
+    expect(liveHold(base())).toBe('report')
     useGame.setState({ game: { ...base().game!, outcome: 'defeat' } })
     expect(liveHold(base())).toBe('over')
+    useGame.setState({ fxQueue: [{} as never] })
+    expect(liveHold(base())).toBe('battle')
+    useGame.setState({ helpOpen: true })
+    expect(liveHold(base())).toBe('help')
     useGame.setState({ online: {} as never })
     expect(liveHold(base())).toBe('online')
   })
@@ -208,5 +208,118 @@ describe('what the globe draws', () => {
     let s = startLive(startState(small))
     for (let i = 0; i < 40; i++) s = advanceDay(s, small, { planner: (st, m) => generateAllBotOrders(st, m) }).state
     expect(s.turn).toBe(2)
+  })
+})
+
+describe('undo and confirm in the store', () => {
+  beforeEach(() => {
+    useGame.setState({ online: null, fxQueue: [], summary: null, warRoom: null, helpOpen: false, running: false })
+  })
+
+  it('an order that happens at once can be taken back, and a day that passes cannot', () => {
+    const g = liveGame()
+    const me = g.playerId
+    const farm = g.regions[me].buildings.farm
+    const money = g.nations[me].resources.capital
+    expect(useGame.getState().issueOrder({ type: 'build', nationId: me, regionId: me, building: 'farm' })).toBe(true)
+    expect(useGame.getState().game!.regions[me].buildings.farm).toBe(farm + 1)
+    expect(useGame.getState().undoStack).toHaveLength(1)
+    useGame.getState().undo()
+    expect(useGame.getState().game!.regions[me].buildings.farm).toBe(farm)
+    expect(useGame.getState().game!.nations[me].resources.capital).toBe(money)
+    expect(useGame.getState().undoStack).toHaveLength(0)
+    // After an order, a day of the clock clears the stack.
+    useGame.getState().issueOrder({ type: 'build', nationId: me, regionId: me, building: 'farm' })
+    useGame.getState().stepDay()
+    expect(useGame.getState().undoStack).toHaveLength(0)
+  })
+
+  it('keeps the last ten things only', () => {
+    const g = liveGame()
+    const me = g.playerId
+    for (let i = 0; i < 14; i++) useGame.getState().issueOrder({ type: 'build', nationId: me, regionId: me, building: i % 2 ? 'farm' : 'barracks' })
+    expect(useGame.getState().undoStack.length).toBeLessThanOrEqual(10)
+  })
+
+  it('big orders ask first, and small ones do not', async () => {
+    const { confirmFor } = await import('./confirmRules')
+    const g = liveGame()
+    const me = g.playerId
+    expect(confirmFor(g, map, { type: 'declareWar', nationId: me, target: 'france' })?.danger).toBe(true)
+    expect(confirmFor(g, map, { type: 'setGovernment', nationId: me, government: 'junta' })).toBeTruthy()
+    expect(confirmFor(g, map, { type: 'build', nationId: me, regionId: me, building: 'farm' })).toBeNull()
+    expect(confirmFor(g, map, { type: 'marketBuy', nationId: me, resource: 'food', amount: 5 })).toBeNull()
+  })
+})
+
+describe('saves: slots, export and import', () => {
+  const memory = new Map<string, string>()
+  beforeEach(() => {
+    memory.clear()
+    ;(globalThis as unknown as { localStorage: Storage }).localStorage = {
+      getItem: (k: string) => memory.get(k) ?? null,
+      setItem: (k: string, v: string) => void memory.set(k, v),
+      removeItem: (k: string) => void memory.delete(k),
+      clear: () => memory.clear(),
+      key: () => null,
+      length: 0,
+    } as Storage
+    useGame.setState({ online: null, fxQueue: [], summary: null, warRoom: null, helpOpen: false, running: false })
+  })
+
+  it('a slot keeps a game and brings it back, even after the game moved on', async () => {
+    const { peekSlot } = await import('../store')
+    const g = liveGame()
+    const me = g.playerId
+    expect(peekSlot(1)).toBeNull()
+    expect(useGame.getState().saveSlot(1)).toBe(true)
+    const info = peekSlot(1)!
+    expect(info.nation).toBe(g.nations[me].name)
+    expect(info.live).toBe(true)
+    useGame.getState().issueOrder({ type: 'build', nationId: me, regionId: me, building: 'farm' })
+    const farmed = useGame.getState().game!.regions[me].buildings.farm
+    expect(useGame.getState().loadSlot(1)).toBe(true)
+    expect(useGame.getState().game!.regions[me].buildings.farm).toBe(farmed - 1)
+    expect(useGame.getState().running).toBe(false)
+  })
+
+  it('an exported game imports as the same game, with its waiting orders', () => {
+    const g = liveGame()
+    const me = g.playerId
+    useGame.getState().setPolicy({ taxRate: 0.3 })
+    const text = useGame.getState().exportSave()!
+    useGame.getState().newGame({ playerRegionId: 'france', seed: 9, difficulty: 'normal' })
+    expect(useGame.getState().game!.playerId).toBe('france')
+    expect(useGame.getState().importSave(text)).toBe(true)
+    expect(useGame.getState().game!.playerId).toBe(me)
+    expect(useGame.getState().orders.some((o) => o.type === 'setPolicy')).toBe(true)
+    expect(useGame.getState().game!.settings.mode).toBe('live')
+  })
+
+  it('a file that is not a save is refused and nothing changes', () => {
+    const g = liveGame()
+    expect(useGame.getState().importSave('{"hello":1}')).toBe(false)
+    expect(useGame.getState().importSave('not json')).toBe(false)
+    expect(useGame.getState().game!.playerId).toBe(g.playerId)
+  })
+})
+
+describe('the capture color hold', () => {
+  it('a newer hold on the same country is not cleared by the older timer', async () => {
+    const { useFx } = await import('./globeBridge')
+    const vi = (await import('vitest')).vi
+    vi.useFakeTimers()
+    try {
+      useFx.getState().hold('poland', '#111111', 1000)
+      vi.advanceTimersByTime(600)
+      useFx.getState().hold('poland', '#222222', 1000)
+      vi.advanceTimersByTime(600)
+      // The first timer has fired by now, but the second hold is still in force.
+      expect(useFx.getState().held.poland).toBe('#222222')
+      vi.advanceTimersByTime(600)
+      expect(useFx.getState().held.poland).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

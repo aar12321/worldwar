@@ -48,17 +48,22 @@ export interface MilitarySheet {
   trainingUsed: number
 }
 
-/** The numbers battle uses, laid out unit by unit with the source of each bonus. */
+/**
+ * The numbers battle uses, laid out unit by unit with the source of each bonus. Counts cover the whole force: units at home and,
+ * in a live game, armies in the field, so a nation with its army abroad is not weaker for diplomacy or on the screens.
+ */
 export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
   const n = s.nations[nationId]
   const mods = combatMods(n)
   const base = nationModifiers(n)
+  // Armies in the field cost the same upkeep and food as when they are at home.
+  const force = forceUnits(s, nationId)
   const lines: UnitStatLine[] = UNIT_TYPES.map((unit) => {
     const spec = UNIT_SPECS[unit]
     const weaponLevel = n.military.weapons[unit] ?? 0
     const drillRank = n.military.drill[unit] ?? 0
     const drillBonus = drillRank * TRAINING.bonusPerLevel
-    const count = n.military.units[unit]
+    const count = force[unit]
     const attack = spec.attack * (1 + mods.unitAttack[unit]) * (1 + drillBonus)
     const defense = spec.defense * (1 + mods.unitDefense[unit]) * (1 + drillBonus)
     const sources: BonusSource[] = []
@@ -87,8 +92,6 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
     }
   })
   const units = n.military.units
-  // Armies in the field cost the same upkeep and food as when they are at home.
-  const force = forceUnits(s, nationId)
   return {
     units: lines,
     totalPower: lines.reduce((sum, l) => sum + l.power, 0),
@@ -96,15 +99,22 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
     inField: Math.max(0, totalUnits(force) - totalUnits(units)),
     upkeep: UNIT_TYPES.reduce((sum, k) => sum + force[k] * UNIT_SPECS[k].upkeep, 0),
     foodUse: UNIT_TYPES.reduce((sum, k) => sum + force[k] * UNIT_SPECS[k].food, 0),
-    combinedArms: hasCombinedArms(units),
+    combinedArms: hasCombinedArms(force),
     combinedArmsBonus: COMBAT.combinedArmsBonus + base.combinedArms,
     trainingSlots: trainingSlots(s, nationId),
     trainingUsed: (s.trainingQueue ?? []).filter((j) => j.nationId === nationId).length,
   }
 }
 
-/** Strength of a nation's whole military. Battles, the AI and the screens all read this. */
+/** Strength of a nation's whole military, armies in the field included. Diplomacy, the AI and the screens read this. */
 export function militaryPower(s: GameState, nationId: NationId): number {
   if (!s.nations[nationId]) return 0
   return militarySheet(s, nationId).totalPower
+}
+
+/** Strength of the units at home, the ones that would defend if a country were attacked today. The same as `militaryPower` in a turn game. */
+export function homePower(s: GameState, nationId: NationId): number {
+  if (!s.nations[nationId]) return 0
+  if (!s.armies?.some((a) => a.nationId === nationId)) return militaryPower(s, nationId)
+  return militarySheet({ ...s, armies: [] }, nationId).totalPower
 }

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { advise, type Advice } from '../engine/advisor'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { committedCost, type OrderCost } from '../engine/orders'
-import type { Budget, GameState, Nation, Order } from '../engine/types'
+import type { GameState, Nation, Order, Programs, Spending } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 
@@ -12,7 +12,10 @@ export interface PlayerView {
   econ: EconomyReport
   committed: OrderCost
   orders: Order[]
-  pendingPolicy: { taxRate: number; draftRate: number; corporateTax: number; budget: Budget }
+  pendingPolicy: { taxRate: number; draftRate: number; corporateTax: number; spending: Spending }
+  /** The nation's programs and interest rate with any changes waiting for the month to end. */
+  pendingPrograms: Programs
+  pendingRate: number
 }
 
 /** What a live game changes on a quiet day. Nothing else is touched, so nothing that reads the rest needs to redo its work. */
@@ -70,12 +73,21 @@ function buildPlayerView(game: GameState, orders: Order[]): PlayerView {
   const policy = orders.find((o) => o.type === 'setPolicy')
   const pendingPolicy =
     policy && policy.type === 'setPolicy'
-      ? { taxRate: policy.taxRate, draftRate: policy.draftRate, corporateTax: policy.corporateTax ?? player.corporateTax, budget: policy.budget ?? player.budget }
-      : { taxRate: player.taxRate, draftRate: player.draftRate, corporateTax: player.corporateTax, budget: player.budget }
+      ? { taxRate: policy.taxRate, draftRate: policy.draftRate, corporateTax: policy.corporateTax ?? player.corporateTax, spending: { ...player.spending, ...(policy.spending ?? {}) } }
+      : { taxRate: player.taxRate, draftRate: player.draftRate, corporateTax: player.corporateTax, spending: player.spending }
   const projectedGame: GameState = policy
     ? { ...game, nations: { ...game.nations, [player.id]: { ...player, ...pendingPolicy } } }
     : game
+  let pendingPrograms: Programs = player.programs
+  let pendingRate = player.bank.rate
+  for (const o of orders) {
+    if (o.type !== 'setPrograms') continue
+    pendingPrograms = { ...pendingPrograms, ...o.programs }
+    if (o.rate !== undefined) pendingRate = o.rate
+  }
   return {
+    pendingPrograms,
+    pendingRate,
     game,
     player,
     econ: computeEconomy(projectedGame, map, player.id),
@@ -85,25 +97,22 @@ function buildPlayerView(game: GameState, orders: Order[]): PlayerView {
   }
 }
 
-/** The advisor's list for the player's nation, worked out once per game state. */
+const adviceCache = new WeakMap<GameState, { orders: Order[]; list: Advice[] }>()
+
+/** The advisor's full list for a game state and order list, worked out once however many screens ask. */
+function adviceFor(game: GameState, orders: Order[]): Advice[] {
+  const hit = adviceCache.get(game)
+  if (hit && hit.orders === orders) return hit.list
+  const list = advise(game, getWorld().map, game.playerId, orders, 50)
+  adviceCache.set(game, { orders, list })
+  return list
+}
+
+/** The advisor's list for the player's nation. Each caller takes the first `limit` of one shared list. */
 export function useAdvice(limit = 6): Advice[] {
   const game = useSlowGame()
   const orders = useGame((s) => s.orders)
-  return useMemo(() => (game ? advise(game, getWorld().map, game.playerId, orders, limit) : []), [game, orders, limit])
-}
-
-/** Matches the CSS `@media (max-width)` breakpoints, including the boundary pixel. */
-export function useNarrow(max = 1100): boolean {
-  const query = `(max-width: ${max}px)`
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
-  useEffect(() => {
-    const media = window.matchMedia(query)
-    const onChange = () => setNarrow(media.matches)
-    onChange()
-    media.addEventListener('change', onChange)
-    return () => media.removeEventListener('change', onChange)
-  }, [query])
-  return narrow
+  return useMemo(() => (game ? adviceFor(game, orders).slice(0, limit) : []), [game, orders, limit])
 }
 
 export const fmt = (v: number, digits = 0) =>

@@ -89,6 +89,23 @@ export function partnerIndex(keys: string[]): Map<NationId, NationId[]> {
   return out
 }
 
+/** Every nation's neighbors by land or sea lane, built in one pass over the map. */
+export function nationNeighborMap(s: GameState, map: { regions: Record<RegionId, { neighbors: RegionId[]; seaLanes: RegionId[] }> }): Map<NationId, Set<NationId>> {
+  const out = new Map<NationId, Set<NationId>>()
+  for (const r of Object.values(s.regions)) {
+    const m = map.regions[r.id]
+    if (!m) continue
+    for (const nb of [...m.neighbors, ...m.seaLanes]) {
+      const o = s.regions[nb]?.owner
+      if (!o || o === r.owner) continue
+      let set = out.get(r.owner)
+      if (!set) out.set(r.owner, (set = new Set()))
+      set.add(o)
+    }
+  }
+  return out
+}
+
 export function regionsOf(s: GameState, id: NationId): RegionId[] {
   return Object.values(s.regions)
     .filter((r) => r.owner === id)

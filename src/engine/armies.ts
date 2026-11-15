@@ -1,10 +1,12 @@
 import { LIVE } from '../data/live'
+import { GENERAL_TRAITS } from '../data/projects'
+import { commanderTrait } from './generals'
 import { REACH } from '../data/war'
 import { FRONTIER } from '../data/systems'
-import { clamp, distanceKm, emptyUnits, newId, totalUnits } from './helpers'
+import { atWar, clamp, distanceKm, emptyUnits, newId, totalUnits } from './helpers'
 import { fireMissiles } from './systems'
 import { canAttackRegion, commitShare } from './warfare'
-import type { Army, AttackOrder, GameState, GeoPoint, MissileFlight, NationId, Order, RegionId, UnitCounts, UnitType, Via, WorldMap } from './types'
+import type { Army, ArmyOutcome, AttackOrder, GameState, GeoPoint, MissileFlight, NationId, Order, RegionId, UnitCounts, UnitType, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
 type Strike = Extract<Order, { type: 'strike' }>
@@ -98,7 +100,9 @@ export function planTrip(s: GameState, map: WorldMap, nationId: NationId, target
   const from = launchPoint(s, map, nationId, target, reach.via)
   if (!from) return null
   const km = distanceKm(map.regions[from], map.regions[target])
-  return { via: reach.via, bySea: reach.bySea, from, km, days: travelDays(km, reach.via) }
+  // A commander who knows logistics marches the army faster.
+  const quick = commanderTrait(s.nations[nationId]) === 'logistician' ? GENERAL_TRAITS.logistician.march : 1
+  return { via: reach.via, bySea: reach.bySea, from, km, days: Math.max(1, Math.round(travelDays(km, reach.via) * quick)) }
 }
 
 /** When an army launched on `today` would set out, arrive, and be home again, in absolute days. */
@@ -115,7 +119,8 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
   if (!n || !trip) return null
   const commit = o.commit ?? 'main'
   const stance = o.stance ?? 'assault'
-  const share = commitShare(n, commit)
+  // A live army is away for days or weeks, so even an all-in attack leaves a guard at home.
+  const share = Math.min(commitShare(n, commit, o.share), 1 - LIVE.homeGuard)
   const units = emptyUnits()
   for (const k of UNIT_TYPES) {
     const take = n.military.units[k] * share
@@ -149,6 +154,7 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
     start: leaves,
     end: arrives,
     launched: today,
+    foe: s.regions[o.target]?.owner,
   }
   ;(s.armies ??= []).push(army)
   return army
@@ -202,7 +208,7 @@ export function sendHome(s: GameState, map: WorldMap, a: Army, today: number) {
  * Calls an army off before it arrives, because it was recalled or the reason for the march is gone.
  * Still mustering, it is back at once. On the road it turns round and takes as long to get home as it has marched.
  */
-export function turnBack(s: GameState, map: WorldMap, a: Army, today: number, why: NonNullable<Army['outcome']>) {
+export function turnBack(s: GameState, map: WorldMap, a: Army, today: number, why: ArmyOutcome) {
   if (today < a.start) {
     bringHome(s, a)
     return
@@ -230,6 +236,18 @@ export const armiesOf = (s: Pick<GameState, 'armies'>, nationId?: NationId): Arm
 
 /** Armies on their way out to attack a country this nation holds. */
 export const incomingArmies = (s: GameState, nationId: NationId): Army[] => (s.armies ?? []).filter((a) => a.phase === 'outbound' && s.regions[a.target]?.owner === nationId)
+
+/**
+ * Why an army marching out should turn back now, or null while its reason holds: the country is already its own, another nation
+ * has taken it, or the war is over.
+ */
+export function calledOff(s: GameState, a: Army): ArmyOutcome | null {
+  const owner = s.regions[a.target]?.owner
+  if (owner === a.nationId) return 'taken'
+  if (!owner || !s.nations[owner]?.alive) return 'changed'
+  if (atWar(s, a.nationId, owner)) return null
+  return a.foe && owner !== a.foe ? 'changed' : 'peace'
+}
 
 /** Divisions a nation has in the field. */
 export function inTheField(s: Pick<GameState, 'armies'>, nationId: NationId): number {
@@ -260,7 +278,7 @@ export function launchStrike(s: GameState, map: WorldMap, o: Strike, today: numb
       bestKm = km
     }
   }
-  const flight: MissileFlight = { id: newId(s, 'f'), nationId: o.nationId, from: from ?? o.target, target: o.target, count: fired, launched: today, lands: today + LIVE.missileDays }
+  const flight: MissileFlight = { id: newId(s, 'f'), nationId: o.nationId, from: from ?? o.target, target: o.target, count: fired, launched: today, lands: today + LIVE.missileDays, foe: s.regions[o.target]?.owner }
   ;(s.flights ??= []).push(flight)
   return flight
 }

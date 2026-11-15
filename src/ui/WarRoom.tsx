@@ -61,6 +61,9 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const view = usePlayerView()
   const [commit, setCommit] = useState<Commit>(() => (view ? suggestedCommit(view.game, view.player.id, target) : 'main'))
   const [stance, setStance] = useState<Stance>('assault')
+  // A chosen share of the military, in percent. null means one of the three presets.
+  const [custom, setCustom] = useState<number | null>(null)
+  const customShare = custom === null ? undefined : custom / 100
   // null means the default: the share of the missiles that goes with the force sent.
   const [fire, setFire] = useState<number | null>(null)
   const [salvo, setSalvo] = useState(1)
@@ -68,17 +71,27 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const game = view?.game
   const player = view?.player
   const free = game && player ? missilesLeft(player.military.units.missile, view?.orders ?? [], player.id) : 0
-  const missiles = free > 0 ? Math.min(free, fire ?? Math.min(free, Math.ceil(free * COMMITS[commit].share))) : undefined
+  const missiles = free > 0 ? Math.min(free, fire ?? Math.min(free, Math.ceil(free * (customShare ?? COMMITS[commit].share)))) : undefined
   const forecasts = useMemo(() => {
     if (!game || !player) return null
-    return Object.fromEntries(STANCE_KEYS.map((st) => [st, forecastAttack(game, map, player.id, target, commit, st, undefined, missiles)])) as Record<Stance, ReturnType<typeof forecastAttack>>
-  }, [game, player, target, commit, map, missiles])
+    return Object.fromEntries(STANCE_KEYS.map((st) => [st, forecastAttack(game, map, player.id, target, commit, st, undefined, missiles, customShare)])) as Record<Stance, ReturnType<typeof forecastAttack>>
+  }, [game, player, target, commit, map, missiles, customShare])
+  // AI Battle Command level 3 also recommends how much to send: the smallest force that wins with good odds, or all in if that is the best hope.
+  const aiLevelNow = player?.systems?.ai ?? 0
+  const bestCommit = useMemo<Commit | null>(() => {
+    if (!game || !player || aiLevelNow < 3) return null
+    const odds = COMMIT_KEYS.map((c) => ({ c, f: forecastAttack(game, map, player.id, target, c, 'assault', undefined, undefined) })).filter((x) => x.f)
+    const good = odds.find((x) => x.f!.winChance >= 0.75)
+    if (good) return good.c
+    const best = odds.reduce<(typeof odds)[number] | null>((b, x) => (!b || x.f!.winChance > b.f!.winChance ? x : b), null)
+    return best && best.f!.winChance >= 0.4 ? best.c : null
+  }, [game, player, aiLevelNow, target, map])
   if (!view || !game || !player || !game.regions[target]) return null
 
   const region = game.regions[target]
   const mr = map.regions[target]
   const owner = game.nations[region.owner]
-  const order = { type: 'attack' as const, nationId: player.id, target, commit, stance, missiles }
+  const order = { type: 'attack' as const, nationId: player.id, target, commit, stance, missiles, ...(customShare !== undefined ? { share: customShare } : {}) }
   const err = validateOrder(game, map, order, view.orders)
   const f = forecasts?.[stance] ?? null
   const aiLevel = player.systems?.ai ?? 0
@@ -93,14 +106,15 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   ]
   const hasStrikeWeapons = player.military.units.missile >= 1 || (player.systems?.orbital ?? 0) > 0
   const bill = computeEconomy(game, map, player.id).warBills.find((b) => b.enemy === owner.id)?.amount ?? 0
-  const sent = totalUnits(player.military.units) * (f?.share ?? COMMITS[commit].share)
-  const away = Math.min(1, player.military.exposed + (f?.share ?? COMMITS[commit].share))
+  const nominal = customShare ?? COMMITS[commit].share
+  const sent = totalUnits(player.military.units) * (f?.share ?? nominal)
+  const away = Math.min(1, player.military.exposed + (f?.share ?? nominal))
   const lineNow = f?.lineBefore ?? region.line
   const lineMaxNow = f?.lineMax ?? lineNow
   const live = isLive(game)
   const trip = live ? planTrip(game, map, player.id, target) : null
   const when = trip ? tripSchedule(trip, today) : null
-  const share = f?.share ?? COMMITS[commit].share
+  const share = f?.share ?? nominal
   const sentAway = totalUnits(player.military.units) * share
   const stayHome = totalUnits(player.military.units) - sentAway
   const sentThisMonth = player.military.lastAttackTurn === game.turn ? player.military.attacksThisTurn : 0
@@ -117,8 +131,13 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           <button className="btn btn-quiet mr-auto" onClick={() => open(null)}>
             Cancel
           </button>
+          {f && !err && (
+            <span className="text-[13px] text-white/80 tabular-nums mr-1 hidden sm:inline" aria-live="polite">
+              {f.label} · {Math.round(f.winChance * 100)}% to win · lose about {f.yourLosses.toFixed(1)}
+            </span>
+          )}
           {err && <span className="text-[13px] text-white/80 max-w-[260px] text-right">{speak(err)}</span>}
-          <button className="btn btn-red px-5" data-autofocus disabled={!!err} onClick={() => attack(target, commit, stance, missiles)}>
+          <button className="btn btn-red px-5" data-autofocus disabled={!!err} onClick={() => attack(target, commit, stance, missiles, customShare)}>
             {live ? 'Launch army' : 'Launch attack'}
           </button>
         </>
@@ -152,18 +171,24 @@ function WarRoomDialog({ target }: { target: RegionId }) {
 
         <section className="space-y-2">
           <h3 className="text-[15px] font-semibold">How much to send</h3>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Force size">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Force size">
             {COMMIT_KEYS.map((c) => {
               const share = Math.min(COMMITS[c].share, 1 - player.military.exposed)
               return (
                 <button
                   key={c}
                   role="radio"
-                  aria-checked={commit === c}
-                  onClick={() => setCommit(c)}
-                  className={`rounded-xl p-2.5 text-left border ${commit === c ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/6 hover:bg-white/10'}`}
+                  aria-checked={commit === c && custom === null}
+                  onClick={() => {
+                    setCommit(c)
+                    setCustom(null)
+                  }}
+                  className={`rounded-xl p-2.5 text-left border ${commit === c && custom === null ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/6 hover:bg-white/10'}`}
                 >
-                  <div className="text-[14px] font-semibold">{COMMITS[c].name}</div>
+                  <div className="text-[14px] font-semibold">
+                    {COMMITS[c].name}
+                    {bestCommit === c && <span className="ml-1.5 rounded-full bg-[#30d158]/25 px-1.5 py-0.5 text-[10px] font-semibold text-[#6eeb8a]">AI recommends</span>}
+                  </div>
                   <div className="text-[12px] text-white/75 tabular-nums">{formatDivisions(totalUnits(player.military.units) * share)} divisions</div>
                   <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[12px] text-white/80 tabular-nums">
                     {UNIT_TYPES.filter((u) => player.military.units[u] * share >= 0.05).map((u) => (
@@ -176,9 +201,38 @@ function WarRoomDialog({ target }: { target: RegionId }) {
                 </button>
               )
             })}
+            <button
+              role="radio"
+              aria-checked={custom !== null}
+              onClick={() => setCustom((c) => c ?? Math.max(5, Math.min(100, Math.round(COMMITS[commit].share * 20) * 5)))}
+              className={`rounded-xl p-2.5 text-left border ${custom !== null ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/6 hover:bg-white/10'}`}
+            >
+              <div className="text-[14px] font-semibold">Choose</div>
+              <div className="text-[12px] text-white/75 tabular-nums">{custom !== null ? `${formatDivisions(totalUnits(player.military.units) * Math.min(custom / 100, 1 - player.military.exposed))} divisions` : 'Any amount'}</div>
+              <div className="mt-1 text-[12px] text-white/80">{custom !== null ? `${custom}% of your military` : 'Pick a share yourself'}</div>
+            </button>
           </div>
+          {custom !== null && (
+            <div className="rounded-xl bg-white/5 px-3 py-2">
+              <input
+                type="range"
+                className="w-full"
+                min={5}
+                max={100}
+                step={5}
+                value={custom}
+                onChange={(e) => setCustom(+e.target.value)}
+                aria-label="Share of your military to send"
+                aria-valuetext={`${custom} percent`}
+              />
+              <div className="flex justify-between text-[12px] text-white/65">
+                <span>5%</span>
+                <span>100%</span>
+              </div>
+            </div>
+          )}
           <p className="text-[13px] text-white/70">
-            {COMMITS[commit].blurb}{' '}
+            {custom !== null ? 'A force of your own choosing. Send little to keep home strong, or more to be sure of the win.' : COMMITS[commit].blurb}{' '}
             {live
               ? `${formatDivisions(sentAway)} divisions leave and ${formatDivisions(stayHome)} stay home to defend. The army is gone until it is back.`
               : away > 0

@@ -23,6 +23,10 @@ export const AGENCY = {
   /** How likely a failed operation is to be noticed, and what that costs. */
   caughtChance: 0.6,
   intelMonths: 12,
+  /** A friendly junta installed by a coup will not fight its patron for this long. */
+  coupPactMonths: 24,
+  /** Months for stolen money to build up again after a corruption sweep. */
+  sweepMonths: 12,
 }
 
 export interface OpSpec {
@@ -50,7 +54,7 @@ export const FOREIGN_OPS: Record<ForeignOp, OpSpec> = {
   rebels: { name: 'Arm rebels', effect: 'Stirs a revolt in one of their countries and shakes their stability.', money: 35, pp: 5, level: 2, hard: 0.2 },
   aid: { name: 'Help them keep order', effect: 'Calms their unrest. They will remember it fondly.', money: 25, pp: 0, level: 1, hard: 0, friendly: true },
   steal: { name: 'Steal technology', effect: 'Copy a technology they have that you can use.', money: 40, pp: 0, level: 3, hard: 0.2 },
-  coup: { name: 'Back a coup', effect: 'Install a friendly government. They become your puppet.', money: 80, pp: 20, level: 4, hard: 0.35, needsShaky: true },
+  coup: { name: 'Back a coup', effect: 'Install a friendly junta in a smaller, weaker nation at peace. It owes you: a 2-year pact and good relations, not a puppet.', money: 80, pp: 20, level: 4, hard: 0.35, needsShaky: true },
   cyber: { name: 'Cyber attack', effect: 'Cripple their economy and drain their treasury for a few months.', money: 45, pp: 0, level: 3, hard: 0.2, tech: 'cyber_warfare' },
 }
 
@@ -58,7 +62,7 @@ export const DOMESTIC_OPS: Record<DomesticOp, OpSpec> = {
   counter: { name: 'Hunt foreign agents', effect: 'For a year, foreign operations against you are much harder.', money: 15, pp: 0, level: 1, hard: 0 },
   calm: { name: 'Calm unrest', effect: 'Community policing and quiet talks. Stability +6.', money: 20, pp: 0, level: 1, hard: 0 },
   crackdown: { name: 'Break up rebels', effect: 'Dismantle the rebels in one of your countries.', money: 15, pp: 0, level: 2, hard: 0 },
-  corruption: { name: 'Root out corruption', effect: 'Recover stolen money and win back public trust.', money: 10, pp: 0, level: 2, hard: 0 },
+  corruption: { name: 'Root out corruption', effect: 'Recover stolen money and win back public trust. It takes a year for there to be as much to find again.', money: 10, pp: 0, level: 2, hard: 0 },
 }
 
 /** The agencies' names. The United States has the ones people know. */

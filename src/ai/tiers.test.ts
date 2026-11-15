@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EVEN_BUDGET } from '../data/government'
+import { STANDARD_SPENDING } from '../data/people'
 import { DIFFICULTY } from '../data/difficulty'
 import { createInitialState } from '../data/startingNations'
 import { blocOf, blocsOf } from '../engine/blocs'
@@ -11,7 +11,7 @@ import type { GameState, Order } from '../engine/types'
 import { lineMap, setMilitary, startState } from '../engine/__tests__/fixtures'
 import { getWorld } from '../map/world'
 import { buildTurnContext, generateAllBotOrders, generateBotOrders, peaceTerms } from './bot'
-import { manageCountry, wantedBudget, wantedCorporateTax } from './management'
+import { manageCountry, sameSpending, taylorRate, wantedCorporateTax, wantedSpending } from './management'
 
 const map = lineMap(6)
 
@@ -50,10 +50,13 @@ describe('bot management', () => {
     const s = startState(map)
     const n = s.nations.r1
     const econ = computeEconomy(s, map, 'r1')
-    expect(wantedBudget({ ...n, stability: 30 }, econ, false).health).toBeGreaterThan(0.4)
-    expect(wantedBudget(n, econ, true).military).toBeGreaterThan(0.4)
-    expect(wantedBudget(n, econ, false).education).toBeGreaterThan(wantedBudget(n, econ, true).education - 0.01)
-    const sum = Object.values(wantedBudget(n, econ, true)).reduce((a, b) => a + b, 0)
+    // An unhappy country spends on health and homes; a country at war trims its schools; a rich one spends more.
+    expect(wantedSpending({ ...n, stability: 30 }, econ, false).health).toBeGreaterThan(STANDARD_SPENDING.health)
+    expect(wantedSpending(n, econ, true).schools).toBeLessThan(STANDARD_SPENDING.schools)
+    expect(wantedSpending({ ...n, resources: { ...n.resources, capital: 1000 } }, { ...econ, netCapital: econ.gross }, false).schools).toBeGreaterThan(STANDARD_SPENDING.schools)
+    // A central bank raises the rate when prices run.
+    expect(taylorRate({ ...n, bank: { ...n.bank, inflation: 12 } })).toBeGreaterThan(taylorRate(n))
+    const sum = 1
     expect(sum).toBeCloseTo(1)
     expect(wantedCorporateTax({ ...n, resources: { ...n.resources, capital: 500 } }, econ)).toBeLessThan(wantedCorporateTax({ ...n, resources: { ...n.resources, capital: 10 } }, econ))
   })
@@ -140,7 +143,7 @@ describe('a world of tiers', () => {
     const cityLevels = Object.values(s.regions).filter((r) => !s.nations[r.owner]?.isPlayer).reduce((sum, r) => sum + r.cities.reduce((a, c) => a + c.level, 0), 0)
     return {
       cityLevels,
-      budgets: bots.filter((n) => BUDGETS.some((k) => Math.abs(n.budget[k] - EVEN_BUDGET[k]) > 0.04)).length,
+      budgets: bots.filter((n) => !sameSpending(n.spending, STANDARD_SPENDING)).length,
       laws: bots.reduce((sum, n) => sum + n.laws.length, 0),
       debt: bots.filter((n) => n.debt > 0).length,
       investments: s.investments.length,
@@ -149,7 +152,6 @@ describe('a world of tiers', () => {
       sanctions: s.sanctions.length,
     }
   }
-  const BUDGETS = ['military', 'education', 'health', 'infrastructure'] as const
 
   it('easy rivals leave their cities and budgets alone; medium and hard run them', () => {
     const easy = play('easy')

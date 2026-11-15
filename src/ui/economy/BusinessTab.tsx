@@ -6,9 +6,13 @@ import { policyEffects } from '../../engine/policy'
 import type { SectorId } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
+import { ENTERPRISE, ARMS_EXPORTS } from '../../data/projects'
+import { tierOf } from '../../engine/empire'
+import { enterpriseCost, enterpriseEfficiency } from '../../engine/industry'
 import { signed, usePlayerView } from '../hooks'
+import { Pending } from '../kit'
 import { OrderButton } from '../panel'
-import { Card, SliderRow } from './parts'
+import { Card, Line, SliderRow } from './parts'
 
 /** Private business: six sectors that grow on their own, and what you can do to help or tax them. */
 export function BusinessTab() {
@@ -16,6 +20,8 @@ export function BusinessTab() {
   const setPolicy = useGame((s) => s.setPolicy)
   const issueOrder = useGame((s) => s.issueOrder)
   const { game, player, econ } = view
+  const setPrograms = useGame((st) => st.setPrograms)
+  const spec0 = tierOf(player)
   const { map } = getWorld()
   const corp = view.pendingPolicy.corporateTax
   const cap = sectorCap(nationWorkforce(game, map, player.id))
@@ -49,6 +55,19 @@ export function BusinessTab() {
               <OrderButton order={fund(50)} label="Grant 50" cost="50 money" effect={`+${fundingGain(size, 50).toFixed(1)} size`} tone="btn-primary" />
               <OrderButton order={fund(150)} label="Grant 150" cost="150 money" effect={`+${fundingGain(size, 150).toFixed(1)} size`} tone="btn-primary" />
             </div>
+            {player.stateOwned.includes(id) ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-[#0a84ff]/10 p-2.5 text-[13px]">
+                <span>
+                  <b>State-owned.</b> The state keeps {Math.round(enterpriseEfficiency(player) * 100)}% of its profit ({signed(size * spec.profit * enterpriseEfficiency(player))} a month). It grows at half speed.
+                </span>
+                <OrderButton order={{ type: 'setStateOwned', nationId: player.id, sector: id, mode: 'sell' }} label="Sell" cost={`+${Math.round(ENTERPRISE.sellPerSize * size)}`} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <OrderButton order={{ type: 'setStateOwned', nationId: player.id, sector: id, mode: 'buy' }} label="Buy it" cost={`${enterpriseCost(player, id, 'buy')}`} effect="The state takes its profit" />
+                <OrderButton order={{ type: 'setStateOwned', nationId: player.id, sector: id, mode: 'seize' }} label="Seize it" effect={`Free, but stability -${ENTERPRISE.seizeStability} and investors flee`} className="btn-red" />
+              </div>
+            )}
             <label className="flex items-center justify-between gap-3 text-[14px]">
               <span>
                 Subsidize
@@ -62,7 +81,28 @@ export function BusinessTab() {
         )
       })}
 
-      <Card title="Investments" hint={`Put money into another nation's firms. They grow, you earn ${(INVEST.dividend * 100).toFixed(1)}% of it back every month, and they like you for it. A war seizes it.`}>
+      <Card title="Arms exports" hint="Sell weapons from your arms makers. Income is capped at a tenth of your earnings and it feeds the arms sector, but selling to anyone costs your reputation each month." right={<Pending show={view.pendingPrograms.armsExports !== player.programs.armsExports} />}>
+        <div className="grid grid-cols-3 gap-1.5">
+          {([['off', 'Off'], ['friends', 'Friends'], ['anyone', 'Anyone']] as const).map(([k, name]) => (
+            <button
+              key={k}
+              className={`btn px-2.5 py-2 text-[13px] ${view.pendingPrograms.armsExports === k ? 'btn-primary' : 'btn-quiet'}`}
+              disabled={k === 'anyone' && !spec0.armsToAnyone}
+              title={k === 'anyone' && !spec0.armsToAnyone ? 'Needs a Regional power (4 countries)' : undefined}
+              aria-pressed={view.pendingPrograms.armsExports === k}
+              onClick={() => setPrograms({ armsExports: k })}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+        <div className="text-[14px] space-y-1">
+          <Line k="Arms income now" v={signed(econ.armsExports)} />
+          <Line k="Arms sector grows" v={`+${(ARMS_EXPORTS.growth * 100).toFixed(1)}% a month faster`} />
+        </div>
+      </Card>
+
+      <Card title="Investments" hint={`Put money into another nation's firms. They grow, you earn ${(INVEST.dividend * 100).toFixed(1)}% of it back every month, and they like you for it. The money runs down as it pays, so it earns back a little more than you put in, over about 11 years. A war seizes it.`}>
         {mine.length === 0 && theirs.length === 0 && <p className="text-[14px] text-white/70">No investments yet. Open Diplomacy and pick a nation to invest in.</p>}
         {mine.map((i) => (
           <div key={i.id} className="flex justify-between text-[14px]">

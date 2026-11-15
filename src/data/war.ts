@@ -15,9 +15,9 @@ export const EMPIRE = {
   surrenderUnits: 3,
   /** Or when its army is under this share of a player conqueror's. */
   surrenderShare: 0.2,
-  /** Months a puppet must serve before it can be annexed, and the influence that costs per country. */
-  annexMonths: 3,
-  annexCost: 20,
+  /** Months a puppet must serve before it can be annexed (its people get used to the idea), and the influence that costs per country. */
+  annexMonths: 12,
+  annexCost: 15,
   /** One more attack a month for every this many countries you control, up to the cap. */
   attacksPerRegions: 6,
   /** One more training slot for every this many countries you control. */
@@ -112,6 +112,12 @@ export const WAR = {
   /** Conquered countries beyond this many each cost stability. */
   overextendFree: 2,
   overextendPenalty: 3,
+  /** A military attacked on several fronts in a month stands with 1/sqrt(fronts) of itself in each fight, but never less than this. */
+  minFrontShare: 0.45,
+  /** A breakaway nation keeps only the technologies up to this research cost from its old ruler. */
+  secedeTechCost: 70,
+  /** Share of the military that marches against rebels, with the garrison. */
+  rebelArmyShare: 0.25,
   /** Weariness each month, per war, plus a little more the longer it lasts. */
   weariness: 0.4,
   wearinessPerMonth: 0.03,
@@ -127,6 +133,8 @@ export const REACH = {
   /** Fighters and strike aircraft needed to cover an airlift, from a country with a factory to use as an airbase. */
   airUnits: 0.5,
   airKm: 7000,
+  /** Ships or planes needed to carry an army over water or air, as a share of the whole military. */
+  carryShare: 0.05,
 }
 
 /** What it takes to start a war, and what starting one costs your standing. */

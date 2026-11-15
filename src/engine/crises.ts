@@ -3,7 +3,7 @@ import { AREA_NAMES, areaOf } from '../data/areas'
 import { CRISIS, HEADLINES, OUTCOMES, type CrisisAction } from '../data/crises'
 import { JUSTIFY } from '../data/war'
 import { declareWar } from './diplomacy'
-import { addInfamy, addLog, atWar, grantJustification, hasPact, isAllied, newId, regionsOf } from './helpers'
+import { addInfamy, addLog, atWar, enemiesOf, grantJustification, hasPact, isAllied, maxWars, newId, regionsOf } from './helpers'
 import type { Rng } from './rng'
 import type { Crisis, GameState, NationId, WorldMap } from './types'
 
@@ -131,7 +131,9 @@ export function runCrises(s: GameState, map: WorldMap, rng: Rng) {
         addLog(s, 'news', fill(OUTCOMES.unrestBoils, s, c), involved)
       } else addLog(s, 'news', fill(OUTCOMES.unrestCalm, s, c), involved)
     } else if (c.rival) {
-      if (boils && !atWar(s, c.rival, c.nation)) {
+      // A dispute only boils over into war where war is possible: no pact, no alliance, and room for one more war on each side.
+      const canFight = !atWar(s, c.rival, c.nation) && !hasPact(s, c.rival, c.nation) && !isAllied(s, c.rival, c.nation) && enemiesOf(s, c.rival).length < maxWars(s, c.rival) && enemiesOf(s, c.nation).length < maxWars(s, c.nation)
+      if (boils && canFight) {
         addLog(s, 'news', fill(OUTCOMES.disputeBoils, s, c), involved)
         declareWar(s, map, c.rival, c.nation, rng)
       } else addLog(s, 'news', fill(OUTCOMES.disputeCalm, s, c), involved)

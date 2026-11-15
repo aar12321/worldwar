@@ -1,8 +1,8 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
-  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  --font-ui: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   --color-ink: #000000;
   --color-neon-cyan: #0a84ff;
   --color-neon-magenta: #bf5af2;
@@ -166,6 +166,35 @@ body,
   letter-spacing: -0.01em;
   padding: 6px 8px;
   cursor: pointer;
+}
+.segmented-wrap {
+  position: relative;
+}
+.segmented-wrap::before,
+.segmented-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 1;
+}
+.segmented-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, rgba(28, 28, 32, 0.95), transparent);
+  border-radius: 10px 0 0 10px;
+}
+.segmented-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, rgba(28, 28, 32, 0.95), transparent);
+  border-radius: 0 10px 10px 0;
+}
+.segmented-wrap.fade-left::before,
+.segmented-wrap.fade-right::after {
+  opacity: 1;
 }
 .segmented > button[aria-pressed='true'] {
   background: rgba(99, 99, 102, 0.92);
@@ -402,8 +431,7 @@ input[type='range'] {
   text-transform: none;
   pointer-events: none;
 }
-.group\/tip:hover .tip-bubble,
-.group\/tip:focus-within .tip-bubble {
+.tip-bubble.open {
   display: block;
 }
 
@@ -431,7 +459,7 @@ input[type='range'] {
 }
 @media (min-width: 1280px) {
   .tech-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 }
 
@@ -853,6 +881,10 @@ body:has(.drawer) .map-modes {
   .hud-resources {
     max-width: 100%;
   }
+  /* With a desk open the HUD keeps one row of numbers, so the desk gets the height. */
+  body:has(.drawer) .hud-resources > :nth-child(n + 7) {
+    display: none;
+  }
   .nav-dock {
     left: 8px;
     right: 8px;
@@ -1012,7 +1044,7 @@ body:has(.drawer) .armies-dock {
   background: rgba(21, 23, 28, 0.94);
   border: 1px solid rgba(255, 159, 10, 0.75);
   color: #fff;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: 'Inter Variable', Inter, system-ui, sans-serif;
   font-size: 12px;
 }
 .battle-pin-title {
@@ -1047,7 +1079,7 @@ body:has(.drawer) .armies-dock {
   border-radius: 999px;
   background: rgba(48, 209, 88, 0.95);
   color: #04210d;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: 'Inter Variable', Inter, system-ui, sans-serif;
   font-size: 13px;
   font-weight: 700;
   transform: translate(-50%, -140%);
@@ -1072,5 +1104,30 @@ body:has(.drawer) .armies-dock {
 @media (prefers-reduced-motion: reduce) {
   .unit-pop {
     animation: none;
+  }
+}
+
+/*
+ * Fingers are bigger than pointers: on a touch screen every button, tab and icon is at least 44 px each way (the usual minimum),
+ * and the small text links in the HUD get an invisible pad so they are easy to hit without moving anything.
+ */
+@media (pointer: coarse) {
+  .btn,
+  .segmented > button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .hud-icon,
+  .icon-close {
+    width: 44px;
+    height: 44px;
+  }
+  .field {
+    min-height: 44px;
+  }
+  .touch-pad {
+    display: inline-block;
+    padding: 13px 6px;
+    margin: -13px -6px;
   }
 }

@@ -1,8 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { AGENCY, AGENCY_ROLE, DOMESTIC_OPS, FOREIGN_OPS, agencyName, levelsCost, type AgencyId, type DomesticOp, type ForeignOp } from '../data/agencies'
 import { operationOdds } from '../engine/agencies'
 import { atWar, nationModifiers } from '../engine/helpers'
-import { militaryPower } from '../engine/militaryStats'
+import { hasIntel, powerView } from '../engine/intel'
 import { getWorld } from '../map/world'
 import { nationNeighbors } from '../ai/opinion'
 import { useGame } from '../store'
@@ -63,19 +63,24 @@ export function AgenciesTab() {
   const { map } = getWorld()
   const game = view?.game
   const me = view?.player.id
-  const list = useMemo(() => {
+  const [query, setQuery] = useState('')
+  const [breakdownOp, setBreakdownOp] = useState<ForeignOp>('sabotage')
+  const full = useMemo(() => {
     if (!game || !me) return []
     const near = nationNeighbors(game, map, me)
+    // Each nation's strength is worked out once, not at every comparison.
+    const power = new Map(Object.values(game.nations).map((n) => [n.id, n.alive ? powerView(game, me, n.id).value : 0] as const))
     return Object.values(game.nations)
       .filter((n) => n.alive && n.id !== me)
-      .sort((a, b) => Number(near.has(b.id)) - Number(near.has(a.id)) || Number(atWar(game, me, b.id)) - Number(atWar(game, me, a.id)) || militaryPower(game, b.id) - militaryPower(game, a.id))
+      .sort((a, b) => Number(near.has(b.id)) - Number(near.has(a.id)) || Number(atWar(game, me, b.id)) - Number(atWar(game, me, a.id)) || (power.get(b.id) ?? 0) - (power.get(a.id) ?? 0))
   }, [game, me, map])
+  const list = query.trim() ? full.filter((n) => n.name.toLowerCase().includes(query.trim().toLowerCase())) : full
   if (!view || !game || !me) return null
   const { player } = view
   const bonus = nationModifiers(player).agencyBonus
   const chosen = target && game.nations[target]?.alive && target !== me ? target : list[0]?.id
   const t = chosen ? game.nations[chosen] : null
-  const seen = chosen ? (game.intel[`${me}|${chosen}`] ?? -1) >= game.turn : false
+  const seen = chosen ? hasIntel(game, me, chosen) : false
   const rebelRegions = Object.values(game.regions).filter((r) => r.owner === me && r.rebels > 0)
 
   return (
@@ -93,13 +98,17 @@ export function AgenciesTab() {
         <h3 className="text-[16px] font-semibold tracking-tight">Abroad: {agencyName(player.name, 'foreign')}</h3>
         <label className="block">
           <span className="label">Target nation</span>
-          <select className="field mt-1.5 w-full px-3 py-2 text-[14px]" value={chosen ?? ''} onChange={(e) => setTarget(e.target.value)} aria-label="Target nation">
-            {list.map((n) => (
-              <option key={n.id} value={n.id}>
-                {n.name}
-              </option>
-            ))}
-          </select>
+          <div className="mt-1.5 flex gap-2">
+            <input className="field px-3 py-2 text-[14px] w-40" placeholder="Search nations" aria-label="Search for a target nation" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <select className="field flex-1 px-3 py-2 text-[14px]" value={chosen ?? ''} onChange={(e) => setTarget(e.target.value)} aria-label="Target nation">
+              {list.length === 0 && <option value="">No nation matches</option>}
+              {list.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </label>
         {t && (
           <>
@@ -108,7 +117,7 @@ export function AgenciesTab() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                   <div>
                     <div className="label">Military</div>
-                    <div className="font-semibold tabular-nums">{fmt(militaryPower(game, t.id), 0)}</div>
+                    <div className="font-semibold tabular-nums">{fmt(powerView(game, me, t.id).value, 0)}</div>
                   </div>
                   <div>
                     <div className="label">Money</div>
@@ -147,8 +156,15 @@ export function AgenciesTab() {
             {t && (
               <details className="text-[13px] text-white/70">
                 <summary className="cursor-pointer">What the odds are made of</summary>
+                <select className="field mt-2 px-2 py-1.5 text-[13px]" aria-label="Operation to explain" value={breakdownOp} onChange={(e) => setBreakdownOp(e.target.value as ForeignOp)}>
+                  {FOREIGN_ORDER.map((op) => (
+                    <option key={op} value={op}>
+                      {FOREIGN_OPS[op].name} ({Math.round(operationOdds(game, me, op, t.id).chance * 100)}%)
+                    </option>
+                  ))}
+                </select>
                 <ul className="mt-1.5 space-y-0.5">
-                  {operationOdds(game, me, 'sabotage', t.id).parts.map((p) => (
+                  {operationOdds(game, me, breakdownOp, t.id).parts.map((p) => (
                     <li key={p.label} className="flex justify-between">
                       <span>{p.label}</span>
                       <span className="tabular-nums">

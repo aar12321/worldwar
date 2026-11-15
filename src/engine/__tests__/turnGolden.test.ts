@@ -8,9 +8,9 @@ import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 
 /**
- * Turn mode must not change when the live mode is added. These hashes were taken from the game as it was before
- * the live mode, so any change to how a turn-based month resolves shows up here. If a rule is changed on purpose,
- * play the scenarios again and pin the new values.
+ * Pins exactly how turn-based months resolve, so a change that was not meant to alter the rules (a refactor, a cache) shows up here.
+ * First pinned before the live mode was added. Re-pinned after the review's rule fixes (combat, coups, money, diplomacy, markets),
+ * which change results on purpose. If a rule is changed on purpose, play the scenarios again and pin the new values.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -68,23 +68,23 @@ function smallWar() {
   return { state: cur, log }
 }
 
-describe('turn mode is unchanged by the live mode', () => {
+describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('3a443e620be73')
+    expect(hash(JSON.stringify(s))).toBe('18f74dd48298d5')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('ba5a5814cfbde')
+    expect(hash(JSON.stringify(s))).toBe('1cac8201a01d77')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('11db90ca554233')
-    expect(hash(JSON.stringify(log))).toBe('247536ba3819a')
+    expect(hash(JSON.stringify(state))).toBe('3c4c8c04b6064')
+    expect(hash(JSON.stringify(log))).toBe('1fcd1f01fd1956')
   })
 
   it('a turn game carries none of the live fields', () => {

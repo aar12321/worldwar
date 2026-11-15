@@ -36,7 +36,9 @@ export function validateFundSystem(s: GameState, o: Fund, pending: Order[]): str
 
 export function fundSystemCost(s: GameState, o: Fund): number {
   const full = systemsCost(o.system, s.nations[o.nationId]?.systems?.[o.system] ?? 0, o.levels ?? 1)
-  return Math.round(full * (1 - (s.nations[o.nationId] ? companyEffects(s, o.nationId).systemDiscount : 0)))
+  // A space launch complex makes the Orbital Network 30% cheaper.
+  const space = o.system === 'orbital' && s.nations[o.nationId]?.projects?.spaceComplex?.done ? 0.7 : 1
+  return Math.round(full * space * (1 - (s.nations[o.nationId] ? companyEffects(s, o.nationId).systemDiscount : 0)))
 }
 
 export function fundSystem(s: GameState, nationId: NationId, system: SystemId, levels = 1) {
@@ -60,7 +62,8 @@ export function validateStrike(s: GameState, map: WorldMap, o: Strike, pending: 
   if (o.weapon === 'orbital') {
     if (pending.some((p) => p.type === 'strike' && p.weapon === 'orbital')) return 'Only one orbital strike a month'
     if ((n.systems?.orbital ?? 0) < 1) return 'Needs an Orbital Network'
-    if (s.turn - n.lastOrbital < FRONTIER.orbitalCooldown) return `The orbital weapon recharges in ${FRONTIER.orbitalCooldown - (s.turn - n.lastOrbital)} months`
+    const cooldown = FRONTIER.orbitalCooldown - (n.projects?.spaceComplex?.done ? 3 : 0)
+    if (s.turn - n.lastOrbital < cooldown) return `The orbital weapon recharges in ${cooldown - (s.turn - n.lastOrbital)} months`
     return null
   }
   if (n.military.units.missile < 1) return 'Needs hypersonic missiles'
@@ -97,7 +100,6 @@ export function fireMissiles(s: GameState, o: Strike): number {
   const fired = Math.min(o.count ?? 1, Math.floor(n.military.units.missile + 1e-9))
   if (fired < 1) return 0
   n.military.units.missile -= fired
-  n.lastStrike = s.turn
   return fired
 }
 

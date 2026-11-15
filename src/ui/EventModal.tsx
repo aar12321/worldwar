@@ -37,14 +37,24 @@ function effectTone(e: EventEffect): 'good' | 'bad' | 'neutral' {
     case 'warWeariness':
       return e.amount > 0 ? 'bad' : 'good'
     case 'rivalResource':
+    case 'skills':
       return 'neutral'
+    case 'people':
+      return (e.key === 'unemployment' ? -e.amount : e.amount) >= 0 ? 'good' : 'bad'
+    case 'bank':
+      return (e.key === 'inflation' ? -e.amount : e.amount) >= 0 ? 'good' : 'bad'
+    case 'epidemic':
+      return 'bad'
+    case 'projectProgress':
+      return e.months >= 0 ? 'good' : 'bad'
   }
 }
 
-const TONE_CLASS = { good: 'text-emerald-300', bad: 'text-rose-300', neutral: 'text-white/75' }
+const TONE_CLASS = { good: 'text-[#6eeb8a]', bad: 'text-[#ff8a84]', neutral: 'text-white/75' }
 
 export function EventModal() {
-  const game = useGame((s) => s.game)
+  // Only read while a decision is waiting, so a running game does not re-render this every day.
+  const game = useGame((s) => (s.game?.pendingEvent ? s.game : null))
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const summaryOpen = useGame((s) => !!s.summary)
   const choose = useGame((s) => s.chooseEventOption)

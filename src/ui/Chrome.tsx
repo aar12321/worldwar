@@ -8,14 +8,16 @@ import { getWorld } from '../map/world'
 import { useGame, type Panel, type ReportDelta } from '../store'
 import { AdviceList } from './Briefing'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
-import { BriefingIcon, DiplomacyIcon, EconomyIcon, MilitaryIcon, ResearchIcon } from './icons'
+import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, MilitaryIcon, ResearchIcon } from './icons'
 import { Modal } from './Modal'
+import { Spark } from './Charts'
 
 const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
   { panel: 'briefing', label: 'Briefing', key: 'B', icon: <BriefingIcon /> },
   { panel: 'economy', label: 'Economy', key: 'E', icon: <EconomyIcon /> },
   { panel: 'military', label: 'Military', key: 'M', icon: <MilitaryIcon /> },
   { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <DiplomacyIcon /> },
+  { panel: 'empire', label: 'Empire', key: 'I', icon: <EmpireIcon /> },
   { panel: 'tech', label: 'Research', key: 'R', icon: <ResearchIcon /> },
 ]
 
@@ -57,13 +59,21 @@ export function NavRail() {
 export function OrdersTray() {
   const view = usePlayerView()
   const removeOrder = useGame((s) => s.removeOrder)
-  if (!view || view.orders.length === 0) return null
+  const undoStack = useGame((s) => s.undoStack)
+  const undo = useGame((s) => s.undo)
+  if (!view || (view.orders.length === 0 && undoStack.length === 0)) return null
   const { game, orders } = view
   const { map } = getWorld()
+  const last = undoStack[undoStack.length - 1]
   return (
     <div className="orders-tray absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
       <div className="surface rounded-full px-3 py-1.5 flex items-center gap-2 overflow-x-auto scroll-thin">
-        <span className="label whitespace-nowrap px-1">{isLive(game) ? `On ${dayDate(game.turn + 1, 0)}` : 'Next turn'}</span>
+        {last && (
+          <button className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-semibold bg-[#0a84ff]/25 text-[#9fd0ff] hover:bg-[#0a84ff]/40" onClick={undo} title={`Undo: ${last.label} (Ctrl+Z)`} aria-label={`Undo ${last.label}`}>
+            ↶ Undo
+          </button>
+        )}
+        {orders.length > 0 && <span className="label whitespace-nowrap px-1">{isLive(game) ? `On ${dayDate(game.turn + 1, 0)}` : 'Next turn'}</span>}
         <AnimatePresence initial={false}>
           {orders.map((o, i) => (
             <motion.button
@@ -96,11 +106,13 @@ export function Toasts() {
             initial={{ x: 40, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 40, opacity: 0 }}
-            onClick={() => dismiss(t.id)}
             role={t.tone === 'error' ? 'alert' : 'status'}
-            className={`pointer-events-auto surface rounded-2xl px-4 py-3 text-[14px] cursor-pointer max-w-sm ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
+            className={`pointer-events-auto surface rounded-2xl pl-4 pr-1.5 py-2.5 text-[14px] max-w-sm flex items-start gap-2 ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
           >
-            {t.text}
+            <span className="flex-1 min-w-0 py-0.5">{t.text}</span>
+            <button className="shrink-0 w-8 h-8 rounded-full text-white/60 hover:text-white hover:bg-white/10 text-[18px] leading-none" aria-label="Dismiss" onClick={() => dismiss(t.id)}>
+              ×
+            </button>
           </motion.div>
         ))}
       </AnimatePresence>
@@ -204,7 +216,8 @@ export function TurnSummary() {
 }
 
 export function GameOver() {
-  const game = useGame((s) => s.game)
+  // Only a finished game is read, so a running game does not re-render this every day.
+  const game = useGame((s) => (s.game && s.game.outcome !== 'playing' ? s.game : null))
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const quit = useGame((s) => s.quitToMenu)
   const abandon = useGame((s) => s.abandonGame)
@@ -216,11 +229,12 @@ export function GameOver() {
   const youWon = win && champion.id === game.playerId
   const p = youWon || !win ? game.nations[game.playerId] : champion
   const taken = countriesTaken(game, p.id)
+  const when = isLive(game) ? dayDate(game.turn, game.day ?? 0) : turnDate(game.turn)
   const reason = win
-    ? `${p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${turnDate(game.turn)}.`
+    ? `${p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${when}.`
     : game.humans.length > 1 || online
-      ? `Every player's nation has fallen, as of ${turnDate(game.turn)}.`
-      : `${p.name} fell in ${turnDate(game.turn)}. The nation is gone, so the game is lost.`
+      ? `Every player's nation has fallen, as of ${when}.`
+      : `${p.name} fell ${isLive(game) ? 'on' : 'in'} ${when}. The nation is gone, so the game is lost.`
   return (
     <Modal
       title={youWon ? 'You won' : win ? `${champion.name} won` : game.humans.length > 1 || online ? 'Every nation has fallen' : 'Your nation has fallen'}
@@ -254,6 +268,12 @@ export function GameOver() {
           <dd className="text-[26px] font-semibold">{Object.values(game.nations).filter((n) => n.alive).length}</dd>
         </div>
       </dl>
+      {(game.history ?? []).filter((h) => h.nation === game.playerId).length >= 2 && (
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Spark label="Countries over the game" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.countries)} color="#0a84ff" />
+          <Spark label="Military strength" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.power)} color="#ff9f0a" />
+        </div>
+      )}
     </Modal>
   )
 }

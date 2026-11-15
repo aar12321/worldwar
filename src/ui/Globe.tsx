@@ -3,9 +3,9 @@ import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
 import { mapColor } from '../data/mapColors'
 import { TERRAIN } from '../data/terrain'
-import { militaryPower } from '../engine/militaryStats'
+import { powerView, showPower } from '../engine/intel'
 import { lineMax } from '../engine/economy'
-import { atWar, hasPact, isAllied } from '../engine/helpers'
+import { atWar, hasPact, isAllied, totalUnits } from '../engine/helpers'
 import type { GameState, RegionId } from '../engine/types'
 import { attackableRegions } from '../engine/warfare'
 import { getWorld, type CountryFeature } from '../map/world'
@@ -208,7 +208,8 @@ export function WorldGlobe() {
     const out = new Map<RegionId, string>()
     if (!game) return out
     for (const b of [...fxQueue].reverse()) {
-      if (!b.captured || b.id === revealedBattleId) continue
+      // A battle watched again from the list is history: the map keeps today's colors.
+      if (!b.captured || b.replay || b.id === revealedBattleId) continue
       const prev = game.nations[b.defender.nationId]
       if (prev) out.set(b.regionId, prev.color)
     }
@@ -219,7 +220,9 @@ export function WorldGlobe() {
   // The set of countries you can attack keeps the same identity until it really changes, so the map is not repainted for nothing.
   const targetsRef = useRef<{ key: string; set: Set<RegionId> }>({ key: '', set: EMPTY_REGIONS })
   const targets = useMemo(() => {
-    if (!game || game.outcome !== 'playing' || game.nations[game.playerId].military.exposed >= 0.95) {
+    const me = game?.nations[game.playerId]
+    // Nothing left at home to send (a spent turn, or every unit away in a live game) lights no targets.
+    if (!game || !me || game.outcome !== 'playing' || me.military.exposed >= 0.95 || totalUnits(me.military.units) < 0.1) {
       targetsRef.current = { key: '', set: EMPTY_REGIONS }
       return EMPTY_REGIONS
     }
@@ -282,7 +285,7 @@ export function WorldGlobe() {
       const yours = owner?.id === game.playerId
       const rebels = game.regions[id].rebels
       const war = !yours && owner && atWar(game, game.playerId, owner.id)
-      const power = owner ? militaryPower(game, owner.id).toFixed(0) : '0'
+      const power = owner ? showPower(powerView(game, game.playerId, owner.id)) : '0'
       return `<div class="globe-tip"><b>${escapeHtml(mr.name)}</b><div style="color:${escapeHtml(owner?.color ?? '#fff')}">${yours ? 'Your country' : escapeHtml(owner?.name ?? 'Unknown')}${war ? ' · at war' : ''}</div><div>${TERRAIN[mr.terrain].name}</div><div>Military strength ${power}</div><div>Defense Line ${Math.min(game.regions[id].line, lineMax(game, map, id)).toFixed(1)} of ${lineMax(game, map, id).toFixed(1)}</div>${rebels > 0 ? `<div style="color:${NEON.red}">Rebels: ${rebels.toFixed(1)}</div>` : ''}</div>`
     },
     [],

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+import { MotionConfig } from 'framer-motion'
 import { isLive } from './engine/calendar'
 import { attackableRegions } from './engine/warfare'
 import { getWorld } from './map/world'
@@ -7,39 +8,57 @@ import { ArmiesDock, ArmyCard } from './ui/ArmiesTab'
 import { BattleFX } from './ui/BattleFX'
 import { Briefing } from './ui/Briefing'
 import { GameOver, NavRail, OrdersTray, Toasts, TurnSummary } from './ui/Chrome'
-import { Lobby } from './ui/Online'
+import { ConfirmDialog } from './ui/confirm'
+import { Palette } from './ui/Palette'
 import { CountryPanel } from './ui/CountryPanel'
-import { DiplomacyPanel } from './ui/Diplomacy'
 import { EventModal } from './ui/EventModal'
-import { WorldGlobe } from './ui/Globe'
 import { useFx } from './ui/globeBridge'
 import { Help } from './ui/Help'
 import { HUD } from './ui/HUD'
 import { useLiveClock } from './ui/liveClock'
 import { MapModes } from './ui/MapModes'
-import { MilitaryPanel } from './ui/MilitaryPanel'
 import { Setup } from './ui/Setup'
-import { EconomyDesk } from './ui/EconomyDesk'
+import { Lobby } from './ui/Online'
 import { LogPanel, SettingsPanel } from './ui/SidePanels'
-import { TechTree } from './ui/TechTree'
 import { WarRoom } from './ui/WarRoom'
+
+// The globe (three.js, about 2 MB) and the big desks load in their own files, so the start screen appears at once.
+const WorldGlobe = lazy(() => import('./ui/Globe').then((m) => ({ default: m.WorldGlobe })))
+const DiplomacyPanel = lazy(() => import('./ui/Diplomacy').then((m) => ({ default: m.DiplomacyPanel })))
+const MilitaryPanel = lazy(() => import('./ui/MilitaryPanel').then((m) => ({ default: m.MilitaryPanel })))
+const EconomyDesk = lazy(() => import('./ui/EconomyDesk').then((m) => ({ default: m.EconomyDesk })))
+const TechTree = lazy(() => import('./ui/TechTree').then((m) => ({ default: m.TechTree })))
+const EmpireDesk = lazy(() => import('./ui/EmpireDesk').then((m) => ({ default: m.EmpireDesk })))
 
 function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
+      // The command palette opens from anywhere, even with a desk open.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        const st = useGame.getState()
+        if (st.game) st.setPalette(!st.paletteOpen)
+        return
+      }
+      // Undo the last thing that happened at once.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey && target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+        e.preventDefault()
+        useGame.getState().undo()
+        return
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return
       if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') return
       const st = useGame.getState()
       if (!st.game) return
       // A dialog is open: it handles its own keys.
-      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom) return
+      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom || st.confirm || st.paletteOpen) return
       if (e.key === 'Escape') {
         if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
       } else if (e.key === 'Enter') {
-        // A focused button uses Enter for itself.
-        if (target.tagName === 'BUTTON' || e.repeat) return
+        // A focused button, a disclosure, a tab or a row uses Enter for itself.
+        if (target.tagName === 'BUTTON' || target.tagName === 'SUMMARY' || target.tagName === 'A' || target.closest('[role="button"], [role="tab"], [role="option"], [role="radio"], summary') || e.repeat) return
         e.preventDefault()
         st.endTurn()
       } else if (e.key === ' ' && isLive(st.game)) {
@@ -56,11 +75,14 @@ function useShortcuts() {
         else st.toast('Select an enemy country you are at war with and border, then press A', 'error')
       } else if (e.key === '?') {
         st.setHelp(true)
+      } else if (e.key === '/') {
+        e.preventDefault()
+        st.setPalette(true)
       } else {
         const key = e.key.toLowerCase()
         if (key === 'w') st.openMilitary('wars')
         else {
-          const desks: Record<string, Panel> = { b: 'briefing', e: 'economy', c: 'economy', m: 'military', d: 'diplomacy', r: 'tech', t: 'tech', n: 'log', l: 'log' }
+          const desks: Record<string, Panel> = { b: 'briefing', e: 'economy', c: 'economy', m: 'military', d: 'diplomacy', r: 'tech', t: 'tech', n: 'log', l: 'log', i: 'empire' }
           const panel = desks[key]
           if (panel) st.setPanel(panel)
         }
@@ -118,12 +140,16 @@ export default function App() {
   useShortcuts()
   useFlushOnExit()
   useLiveClock(live)
+  const reduced = useGame((s) => s.settings.reducedMotion)
 
   return (
+    <MotionConfig reducedMotion={reduced ? 'always' : 'user'}>
     <div className="relative w-full h-full select-none">
       <div className="starfield" />
       <ShakeLayer>
-        <WorldGlobe />
+        <Suspense fallback={null}>
+          <WorldGlobe />
+        </Suspense>
       </ShakeLayer>
       {!inGame && !online && <Setup />}
       {!inGame && online && <Lobby />}
@@ -131,27 +157,35 @@ export default function App() {
         <>
           <HUD />
           <NavRail />
-          <MapModes />
+          {/* A desk covers these, so they are not rendered (and do not redo their work every live day) while one is open. */}
+          {panel === 'none' && <MapModes />}
           {panel === 'briefing' && <Briefing key="briefing" />}
-          {panel === 'economy' && <EconomyDesk key="economy" />}
-          {panel === 'military' && <MilitaryPanel key="military" />}
-          {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
+          {/* Each desk that loads on first use waits on its own, so the rest of the screen stays put. */}
+          <Suspense fallback={null}>
+            {panel === 'economy' && <EconomyDesk key="economy" />}
+            {panel === 'military' && <MilitaryPanel key="military" />}
+            {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
+            {panel === 'tech' && <TechTree key="tech" />}
+            {panel === 'empire' && <EmpireDesk key="empire" />}
+          </Suspense>
           {panel === 'log' && <LogPanel key="log" />}
           {panel === 'settings' && <SettingsPanel key="settings" />}
-          {panel === 'tech' && <TechTree key="tech" />}
-          <CountryPanel />
+          {panel === 'none' && <CountryPanel />}
           <ArmyCard />
-          <ArmiesDock />
+          {panel === 'none' && <ArmiesDock />}
           <OrdersTray />
           <WarRoom />
           <BattleFX />
           <TurnSummary />
           <EventModal />
           <Help />
+          <ConfirmDialog />
+          <Palette />
           <GameOver />
         </>
       )}
       <Toasts />
     </div>
+    </MotionConfig>
   )
 }

@@ -11,7 +11,13 @@ export function runJustification(s: GameState, map: WorldMap, rng: Rng) {
   // Cases that have matured become reasons for war.
   const waiting = []
   for (const c of s.cases) {
-    if (!s.nations[c.holder]?.alive || !s.nations[c.target]?.alive || atWar(s, c.holder, c.target) || isAllied(s, c.holder, c.target) || hasPact(s, c.holder, c.target)) continue
+    if (!s.nations[c.holder]?.alive || !s.nations[c.target]?.alive) continue
+    const why = atWar(s, c.holder, c.target) ? 'you are already at war with them' : isAllied(s, c.holder, c.target) ? 'you are now allied' : hasPact(s, c.holder, c.target) ? 'a non-aggression pact is in force' : null
+    if (why) {
+      // The player hears why a case they paid for was dropped.
+      if (s.nations[c.holder].isPlayer) addLog(s, 'diplomacy', `Your case against ${nm(s, c.target)} was dropped: ${why}.`, [c.holder, c.target])
+      continue
+    }
     if (c.ready > s.turn) {
       waiting.push(c)
       continue

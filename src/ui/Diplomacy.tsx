@@ -1,14 +1,16 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { perceivedPower } from '../ai/diplomat'
+import { powerView, showPower } from '../engine/intel'
 import { coalitionActive, nationNeighbors, opinionLabel, opinionReport, type OpinionReport } from '../ai/opinion'
 import { PERSONALITIES } from '../data/personalities'
 import { COSTS, DIPLOMACY, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS } from '../data/unitTypes'
 import { blocOf, blocsOf } from '../engine/blocs'
-import { PACT_TURNS, describeProposal, loanPayment } from '../engine/diplomacy'
+import { PACT_TURNS, describeProposal, generalPeaceTies, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
 import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, regionsOf, turnDate } from '../engine/helpers'
-import { warCost } from '../engine/orders'
+import { annexCost, warCost } from '../engine/orders'
+import { tierOf } from '../engine/empire'
+import { isLive } from '../engine/calendar'
 import { CRISIS } from '../data/crises'
 import { EMPIRE, JUSTIFY } from '../data/war'
 import { validateOrder } from '../engine/orders'
@@ -20,7 +22,8 @@ import { MAX_REPARATIONS, netWarScore, puppetValue, REPARATION_MONTHS, regionVal
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { usePlayerView } from './hooks'
-import { OrderButton, PanelShell } from './panel'
+import { OrderButton, PanelShell, Tabs } from './panel'
+import { Ledger } from './Ledger'
 
 const opinionColor = (v: number) => (v >= 25 ? '#34d399' : v >= 5 ? '#a7f3d0' : v > -5 ? '#94a3b8' : v > -25 ? '#fbbf24' : '#fb7185')
 
@@ -32,8 +35,8 @@ function Dot({ color }: { color: string }) {
 function SignedBar({ value, color }: { value: number; color: string }) {
   const w = `${Math.min(100, Math.abs(value)) / 2}%`
   return (
-    <div className="relative h-1.5 rounded-full bg-slate-800 mt-1 overflow-hidden">
-      <div className="absolute inset-y-0 left-1/2 w-px bg-slate-500/70" />
+    <div className="relative h-1.5 rounded-full bg-white/10 mt-1 overflow-hidden">
+      <div className="absolute inset-y-0 left-1/2 w-px bg-white/30" />
       <motion.div
         className="absolute inset-y-0 rounded-full"
         style={{ background: color, boxShadow: `0 0 8px ${color}`, ...(value >= 0 ? { left: '50%' } : { right: '50%' }) }}
@@ -52,8 +55,8 @@ function OpinionMeter({ report }: { report: OpinionReport }) {
   return (
     <div>
       <button className="w-full text-left" onClick={() => setOpen((o) => !o)} title="Click for the reasons behind their opinion">
-        <div className="flex justify-between text-[11px]">
-          <span className="text-slate-400">{open ? 'Why they feel this way' : 'Opinion of you'}</span>
+        <div className="flex justify-between text-[12px]">
+          <span className="text-white/70">{open ? 'Why they feel this way' : 'Opinion of you'}</span>
           <span style={{ color }}>
             {opinionLabel(v)} ({v > 0 ? '+' : ''}
             {v})
@@ -63,12 +66,12 @@ function OpinionMeter({ report }: { report: OpinionReport }) {
       </button>
       <AnimatePresence initial={false}>
         {open && (
-          <motion.ul initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden text-[11px] mt-1.5 space-y-0.5">
-            {report.parts.length === 0 && <li className="text-slate-500">No strong feelings either way.</li>}
+          <motion.ul initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden text-[12px] mt-1.5 space-y-0.5">
+            {report.parts.length === 0 && <li className="text-white/55">No strong feelings either way.</li>}
             {report.parts.map((p) => (
               <li key={p.label} className="flex justify-between">
-                <span className="text-slate-400">{p.label}</span>
-                <span className={p.value > 0 ? 'text-emerald-300' : 'text-rose-300'}>
+                <span className="text-white/70">{p.label}</span>
+                <span className={p.value > 0 ? 'text-[#6eeb8a]' : 'text-[#ff8a84]'}>
                   {p.value > 0 ? '+' : ''}
                   {p.value}
                 </span>
@@ -87,8 +90,8 @@ function WarScoreBar({ target }: { target: NationId }) {
   const color = net >= 0 ? '#22d3ee' : '#f472b6'
   return (
     <div>
-      <div className="flex justify-between text-[11px]">
-        <span className="text-slate-400">War score</span>
+      <div className="flex justify-between text-[12px]">
+        <span className="text-white/70">War score</span>
         <span style={{ color }}>
           {net > 0 ? '+' : ''}
           {net} {net > 10 ? '(winning)' : net < -10 ? '(losing)' : '(stalemate)'}
@@ -114,7 +117,7 @@ function InboxCard({ p }: { p: Proposal }) {
   const left = p.expires - game.turn
   const answerWith = (accept: boolean) => (answer === accept ? removeOrder(idx) : issueOrder({ ...base, accept }))
   return (
-    <motion.div layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="rounded-lg border border-amber-400/50 bg-amber-400/5 p-3 space-y-2">
+    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="rounded-lg border border-[#ffd60a]/50 bg-[#ffd60a]/6 p-3 space-y-2">
       <div className="flex justify-between items-center gap-2">
         <span className="flex items-center gap-2 min-w-0">
           <Dot color={from.color} />
@@ -122,19 +125,19 @@ function InboxCard({ p }: { p: Proposal }) {
         </span>
         <span className="text-[12px] font-medium text-[#ffd60a] whitespace-nowrap">{PROPOSAL_LABELS[p.kind]}</span>
       </div>
-      <p className="text-sm text-slate-300">{describeProposal(game, map, p)}.</p>
+      <p className="text-sm text-white/80">{describeProposal(game, map, p)}.</p>
       <div className="flex items-center justify-between gap-2">
-        <span className={`text-[11px] ${left <= 0 ? 'text-rose-300' : 'text-slate-500'}`}>{left <= 0 ? 'Last month to answer' : `${left + 1} months to answer`}</span>
+        <span className={`text-[12px] ${left <= 0 ? 'text-[#ff8a84]' : 'text-white/55'}`}>{left <= 0 ? 'Last month to answer' : `${left + 1} months to answer`}</span>
         <div className="flex gap-2">
-          <button className={`btn ${answer === true ? 'bg-emerald-400/25 border-emerald-300/70 text-emerald-100' : ''}`} disabled={!!acceptErr && answer !== true} title={acceptErr ?? 'Accept at the end of this month'} onClick={() => answerWith(true)}>
+          <button className={`btn ${answer === true ? 'bg-[#30d158]/25 border-[#30d158]/70 text-[#6eeb8a]' : ''}`} disabled={!!acceptErr && answer !== true} title={acceptErr ?? (isLive(game) ? 'Accept now' : 'Accept at the end of this month')} onClick={() => answerWith(true)}>
             {answer === true ? 'Accepting' : 'Accept'}
           </button>
-          <button className={`btn btn-red ${answer === false ? 'bg-rose-500/25' : ''}`} onClick={() => answerWith(false)}>
+          <button className={`btn btn-red ${answer === false ? 'bg-[#ff453a]/25' : ''}`} onClick={() => answerWith(false)}>
             {answer === false ? 'Declining' : 'Decline'}
           </button>
         </div>
       </div>
-      {acceptErr && answer !== true && <p className="text-[11px] text-rose-300">Cannot accept: {acceptErr}</p>}
+      {acceptErr && answer !== true && <p className="text-[12px] text-[#ff8a84]">Cannot accept: {acceptErr}</p>}
     </motion.div>
   )
 }
@@ -158,15 +161,15 @@ function DealRow({ d }: { d: Deal }) {
         : `${partner.name} pays you ${describeBundle(into)} a month in war reparations`
       : `You send ${describeBundle(out)} and receive ${describeBundle(into)} each month`
   return (
-    <div className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3 text-sm space-y-2">
+    <div className="rounded-lg border border-white/12 bg-white/5 p-3 text-sm space-y-2">
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-2">
           <Dot color={partner.color} />
           <span className="font-semibold">{partner.name}</span>
         </span>
-        <span className="text-[10px] font-display tracking-widest text-slate-400">{left} MO LEFT</span>
+        <span className="text-[12px] font-display tracking-widest text-white/70">{left} MO LEFT</span>
       </div>
-      <p className="text-slate-300 text-xs">{text}.</p>
+      <p className="text-white/80 text-[13px]">{text}.</p>
       {!((d.kind === 'reparations' || d.kind === 'loan') && paying) && (
         <OrderButton
           order={{ type: 'cancelDeal', nationId: player.id, dealId: d.id }}
@@ -196,7 +199,7 @@ function AmountInput({ value, onChange }: { value: number; onChange: (v: number)
       value={value || ''}
       placeholder="0"
       onChange={(e) => onChange(clamp(Math.round(+e.target.value || 0), 0, TRADE_LIMITS.maxAmount))}
-      className="w-16 bg-slate-950/70 border border-slate-700 rounded px-1.5 py-0.5 text-right text-xs focus:border-cyan-400 outline-none"
+      className="w-16 bg-black/40 border border-white/15 rounded px-1.5 py-0.5 text-right text-[13px] focus:border-[#0a84ff] outline-none"
     />
   )
 }
@@ -213,8 +216,8 @@ function TradeComposer({ target }: { target: NationId }) {
   const gv = bundleValue(terms.give, prices) * Math.max(1, months)
   const rv = bundleValue(terms.receive, prices) * Math.max(1, months)
   return (
-    <div className="space-y-2 rounded-lg bg-slate-950/50 p-2.5">
-      <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 gap-y-1.5 items-center text-xs">
+    <div className="space-y-2 rounded-lg bg-black/30 p-2.5">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 gap-y-1.5 items-center text-[13px]">
         <span className="label">Resource</span>
         <span className="label text-right">You give</span>
         <span className="label text-right">You get</span>
@@ -222,9 +225,9 @@ function TradeComposer({ target }: { target: NationId }) {
           <div key={r} className="contents">
             <div>
               <div>
-                {MARKET[r].name} <span className="text-slate-500">@ {prices[r].toFixed(2)}</span>
+                {MARKET[r].name} <span className="text-white/55">@ {prices[r].toFixed(2)}</span>
               </div>
-              <div className="text-[10px] text-slate-500">
+              <div className="text-[12px] text-white/55">
                 you {Math.floor(stockOf(player, r))} · them {Math.floor(stockOf(them, r))}
               </div>
             </div>
@@ -233,9 +236,9 @@ function TradeComposer({ target }: { target: NationId }) {
           </div>
         ))}
       </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-slate-400">Schedule</span>
-        <select className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5" value={months} onChange={(e) => setMonths(+e.target.value)}>
+      <div className="flex items-center justify-between text-[13px]">
+        <span className="text-white/70">Schedule</span>
+        <select className="bg-[#1c1c20] border border-white/15 rounded px-2 py-0.5" value={months} onChange={(e) => setMonths(+e.target.value)}>
           <option value={0}>One-off exchange</option>
           {[3, 6, TRADE_LIMITS.maxMonths].map((m) => (
             <option key={m} value={m}>
@@ -244,7 +247,7 @@ function TradeComposer({ target }: { target: NationId }) {
           ))}
         </select>
       </div>
-      <div className="text-[11px] text-slate-400">
+      <div className="text-[12px] text-white/70">
         Market value: you give <span className="text-white">{gv.toFixed(0)}</span>, you get <span className="text-white">{rv.toFixed(0)}</span> money.{' '}
         {rv > 0 && gv / rv < 1 && 'They will want more for it, unless they are short of what you offer.'}
       </div>
@@ -256,16 +259,16 @@ function TradeComposer({ target }: { target: NationId }) {
 function RegionPick({ ids, picked, toggle }: { ids: RegionId[]; picked: RegionId[]; toggle: (id: RegionId) => void }) {
   const view = usePlayerView()!
   const { map } = getWorld()
-  if (!ids.length) return <p className="text-[11px] text-slate-500">None available.</p>
+  if (!ids.length) return <p className="text-[12px] text-white/55">None available.</p>
   return (
     <div className="max-h-32 overflow-y-auto scroll-thin space-y-0.5 pr-1">
       {ids.map((id) => (
-        <label key={id} className="flex items-center justify-between text-xs cursor-pointer hover:bg-white/5 rounded px-1">
+        <label key={id} className="flex items-center justify-between text-[13px] cursor-pointer hover:bg-white/5 rounded px-1">
           <span className="flex items-center gap-1.5">
             <input type="checkbox" checked={picked.includes(id)} onChange={() => toggle(id)} />
             {map.regions[id].name}
           </span>
-          <span className="text-slate-500">{regionValue(view.game, map, id)}</span>
+          <span className="text-white/55">{regionValue(view.game, map, id)}</span>
         </label>
       ))}
     </div>
@@ -279,8 +282,10 @@ function PeaceComposer({ target }: { target: NationId }) {
   const [cede, setCede] = useState<RegionId[]>([])
   const [reparations, setReparations] = useState(0)
   const [puppet, setPuppet] = useState(false)
+  const [general, setGeneral] = useState(false)
+  const ties = generalPeaceTies(game, player.id, target)
   const live = cede.filter((id) => game.regions[id] && (game.regions[id].owner === target || game.regions[id].owner === player.id))
-  const terms = { cede: live, reparations, ...(puppet ? { puppet: true } : {}) }
+  const terms = { cede: live, reparations, ...(puppet ? { puppet: true } : {}), ...(general && ties.length ? { general: true } : {}) }
   const net = netWarScore(game, player.id, target)
   const budget = Math.max(0, net)
   const { demand, concession } = termsCost(game, map, terms, player.id, target)
@@ -291,10 +296,10 @@ function PeaceComposer({ target }: { target: NationId }) {
   const toggle = (id: RegionId) => setCede((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]))
   const cost = demand - concession
   return (
-    <div className="space-y-2 rounded-lg bg-slate-950/50 p-2.5">
-      <div className="flex justify-between text-xs">
-        <span className="text-slate-400">Terms cost</span>
-        <span className={cost > budget ? 'text-rose-300' : 'text-emerald-300'}>
+    <div className="space-y-2 rounded-lg bg-black/30 p-2.5">
+      <div className="flex justify-between text-[13px]">
+        <span className="text-white/70">Terms cost</span>
+        <span className={cost > budget ? 'text-[#ff8a84]' : 'text-[#6eeb8a]'}>
           {cost} / {budget} war score
         </span>
       </div>
@@ -309,8 +314,8 @@ function PeaceComposer({ target }: { target: NationId }) {
         </div>
       )}
       <div>
-        <div className="flex justify-between text-xs">
-          <span className="text-slate-400">Reparations</span>
+        <div className="flex justify-between text-[13px]">
+          <span className="text-white/70">Reparations</span>
           <span>{reparations === 0 ? 'None' : reparations > 0 ? `They pay ${reparations}/mo` : `You pay ${-reparations}/mo`}</span>
         </div>
         <input type="range" className="w-full" min={-MAX_REPARATIONS} max={MAX_REPARATIONS} step={1} value={reparations} onChange={(e) => setReparations(+e.target.value)} />
@@ -327,9 +332,21 @@ function PeaceComposer({ target }: { target: NationId }) {
           </span>
         </label>
       )}
+      {ties.length > 0 && (
+        <label className="flex items-start gap-2 text-[14px]">
+          <input type="checkbox" className="mt-1" checked={general} onChange={(e) => setGeneral(e.target.checked)} />
+          <span>
+            Include allies on both sides
+            <span className="block text-[12px] text-white/65">
+              Also ends {ties.length === 1 ? 'the war' : `${ties.length} wars`} between their friends and yours ({ties.slice(0, 4).map(([x, y]) => `${game.nations[x].name}–${game.nations[y].name}`).join(', ')}
+              {ties.length > 4 ? ', …' : ''}). A broader peace is harder to sell.
+            </span>
+          </span>
+        </label>
+      )}
       <OrderButton
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
-        label={live.length === 0 && reparations === 0 && !puppet ? 'Offer peace with no terms' : 'Send terms'}
+        label={live.length === 0 && reparations === 0 && !puppet && !terms.general ? 'Offer peace with no terms' : 'Send terms'}
         cost={`${PROPOSAL_COSTS.peace} influence`}
         effect="They answer when the month ends"
         tone="btn-primary"
@@ -344,27 +361,39 @@ function MoneyComposer({ target }: { target: NationId }) {
   const { game, player } = view
   const [amount, setAmount] = useState(100)
   const [months, setMonths] = useState(12)
+  const [withPact, setWithPact] = useState(false)
   const [sector, setSector] = useState<SectorId>('manufacturing')
   const L = DIPLOMACY.loan
+  const lender = tierOf(player)
   const them = game.nations[target]
   return (
-    <div className="space-y-3 rounded-lg bg-slate-950/50 p-2.5">
+    <div className="space-y-3 rounded-lg bg-black/30 p-2.5">
       <div className="space-y-1.5">
         <div className="text-[15px] font-semibold">Lend them money</div>
         <div className="flex justify-between text-[14px]">
           <span className="text-white/75">Amount</span>
           <span className="tabular-nums">{amount}</span>
         </div>
-        <input type="range" className="w-full" aria-label="Loan amount" min={L.min} max={L.max} step={10} value={amount} onChange={(e) => setAmount(+e.target.value)} />
+        <input type="range" className="w-full" aria-label="Loan amount" min={L.min} max={lender.loanMax} step={10} value={Math.min(amount, lender.loanMax)} onChange={(e) => setAmount(+e.target.value)} />
         <div className="flex justify-between text-[14px]">
           <span className="text-white/75">Repaid over</span>
           <span className="tabular-nums">{months} months</span>
         </div>
-        <input type="range" className="w-full" aria-label="Loan length" min={L.minMonths} max={L.maxMonths} step={1} value={months} onChange={(e) => setMonths(+e.target.value)} />
+        <input type="range" className="w-full" aria-label="Loan length" min={L.minMonths} max={lender.loanMonths} step={1} value={Math.min(months, lender.loanMonths)} onChange={(e) => setMonths(+e.target.value)} />
+        {lender.loanPact && (
+          <label className="flex items-center justify-between gap-3 text-[14px]">
+            <span>
+              World Bank terms
+              <span className="block text-[12px] text-white/65">They sign a non-aggression pact for as long as the loan runs, and think well of you for it.</span>
+            </span>
+            <input type="checkbox" checked={withPact} onChange={(e) => setWithPact(e.target.checked)} aria-label="Attach a non-aggression pact" />
+          </label>
+        )}
+        <p className="text-[12px] text-white/55">A {lender.name} lends up to {lender.loanMax} for {lender.loanMonths} months. A bigger empire lends more.</p>
         <p className="text-[13px] text-white/70">
           They pay {loanPayment(amount, months).toFixed(1)} a month, {(loanPayment(amount, months) * months - amount).toFixed(0)} more than you lend. Someone who cannot pay breaks the deal and loses your trust.
         </p>
-        <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'loan', amount, months } }} label="Offer the loan" cost={`${PROPOSAL_COSTS.loan} influence`} effect="Money moves when they accept" tone="btn-primary" />
+        <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'loan', amount: Math.min(amount, lender.loanMax), months: Math.min(months, lender.loanMonths), ...(withPact && lender.loanPact ? { pact: true } : {}) } }} label="Offer the loan" cost={`${PROPOSAL_COSTS.loan} influence`} effect="Money moves when they accept" tone="btn-primary" />
       </div>
       <div className="space-y-1.5 border-t border-white/10 pt-3">
         <div className="text-[15px] font-semibold">Invest in their business</div>
@@ -394,7 +423,8 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const { game, player } = view
   const { map } = getWorld()
   const ref = useRef<HTMLDivElement>(null)
-  const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'money'>('none')
+  // Coming from the Wars tab, the nation's peace composer is already open.
+  const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'money'>(() => (focused && useGame.getState().diploPeace && atWar(game, player.id, id) ? 'peace' : 'none'))
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [focused])
@@ -406,18 +436,19 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const theirCb = hasCasusBelli(game, id, player.id)
   const borders = ctx.neighbors.has(id)
   const report = useMemo(() => opinionReport(game, map, id, player.id, { borders, coalition: ctx.coalition }), [game, map, id, player.id, borders, ctx.coalition])
-  const power = perceivedPower(game, map, player.id, id)
+  const seen = powerView(game, player.id, id)
+  const power = seen.value
   const persona = PERSONALITIES[n.personality]
   const bloc = blocOf(game, id)
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
   const sanctionedByMe = game.sanctions.some((x) => x.from === player.id && x.to === id && x.until >= game.turn)
   const status = n.overlord ? `Puppet of ${game.nations[n.overlord]?.name ?? 'someone'}` : war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
-  const statusColor = war ? 'text-rose-400' : allied ? 'text-cyan-300' : pact ? 'text-emerald-300' : 'text-slate-400'
+  const statusColor = war ? 'text-[#ff8a84]' : allied ? 'text-[#64d2ff]' : pact ? 'text-[#6eeb8a]' : 'text-white/70'
   const toggle = (m: 'trade' | 'peace' | 'money') => setMode((cur) => (cur === m ? 'none' : m))
   return (
     <div
       ref={ref}
-      className={`rounded-lg border p-3 space-y-2 transition-shadow ${war ? 'border-rose-500/50 bg-rose-500/5' : allied ? 'border-cyan-400/40 bg-cyan-400/5' : 'border-slate-700/70 bg-slate-900/40'} ${focused ? 'shadow-[0_0_0_1px_rgba(34,211,238,0.7),0_0_18px_rgba(34,211,238,0.25)]' : ''}`}
+      className={`rounded-lg border p-3 space-y-2 transition-shadow ${war ? 'border-[#ff453a]/50 bg-[#ff453a]/6' : allied ? 'border-[#0a84ff]/40 bg-[#0a84ff]/8' : 'border-white/12 bg-white/5'} ${focused ? 'shadow-[0_0_0_1px_rgba(10,132,255,0.7),0_0_18px_rgba(10,132,255,0.25)]' : ''}`}
     >
       <div className="flex items-center justify-between gap-2">
         <button className="flex items-center gap-2 hover:underline min-w-0" onClick={() => selectRegion(n.capital)}>
@@ -426,17 +457,17 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
         </button>
         <span className={`text-[12px] font-medium whitespace-nowrap ${statusColor}`}>{status}</span>
       </div>
-      <div className="flex items-center gap-2 text-[11px] text-slate-400">
+      <div className="flex items-center gap-2 text-[12px] text-white/70">
         <span className="chip" title={persona.description}>
           {persona.name}
         </span>
         {bloc && <span className="chip chip-blue">{bloc.name}</span>}
         <span>
-          {regionsOf(game, id).length === 1 ? '1 country' : `${regionsOf(game, id).length} countries`} · strength {power.toFixed(0)} ({power > ctx.myPower ? 'stronger than you' : 'weaker than you'})
+          {regionsOf(game, id).length === 1 ? '1 country' : `${regionsOf(game, id).length} countries`} · strength {showPower(seen)} ({power > ctx.myPower ? 'stronger than you' : 'weaker than you'})
         </span>
       </div>
       {(cb || theirCb) && (
-        <div className="text-[11px]">
+        <div className="text-[12px]">
           {cb && <span className="text-[#ffd60a]">You have a grievance, so war is cheaper. </span>}
           {theirCb && <span className="text-[#ff8a84]">They have a grievance against you.</span>}
         </div>
@@ -445,15 +476,15 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
       {war && <WarScoreBar target={id} />}
       <div className="flex flex-wrap gap-1.5">
         {war ? (
-          <button className={`btn btn-primary ${mode === 'peace' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('peace')}>
+          <button className={`btn btn-primary ${mode === 'peace' ? 'bg-[#0a84ff]/25' : ''}`} onClick={() => toggle('peace')}>
             Negotiate peace
           </button>
         ) : (
           <>
-            <button className={`btn btn-primary ${mode === 'trade' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('trade')}>
+            <button className={`btn btn-primary ${mode === 'trade' ? 'bg-[#0a84ff]/25' : ''}`} onClick={() => toggle('trade')}>
               Trade
             </button>
-            <button className={`btn ${mode === 'money' ? 'bg-cyan-400/25' : ''}`} onClick={() => toggle('money')}>
+            <button className={`btn ${mode === 'money' ? 'bg-[#0a84ff]/25' : ''}`} onClick={() => toggle('money')}>
               Loans and investment
             </button>
             {!allied && (
@@ -466,7 +497,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
               />
             )}
             {n.overlord === player.id && (
-              <OrderButton order={{ type: 'annexPuppet', nationId: player.id, target: id }} label="Annex" cost={`${EMPIRE.annexCost} influence`} effect="Its land joins your empire at once. A puppet must serve six months first." />
+              <OrderButton order={{ type: 'annexPuppet', nationId: player.id, target: id }} label="Annex" cost={`${annexCost(game, id)} influence`} effect={`Its land, army and treasury join yours. A puppet must serve ${EMPIRE.annexMonths} months first.`} />
             )}
             {!allied && !cb && (
               <OrderButton
@@ -477,6 +508,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
               />
             )}
             {allied && <OrderButton order={{ type: 'leaveAlliance', nationId: player.id, target: id }} label="Leave alliance" cost={`${COSTS.leaveAlliance} influence`} tone="btn-quiet" />}
+            {pact && !allied && <OrderButton order={{ type: 'breakPact', nationId: player.id, target: id }} label="Break the pact" cost={`${COSTS.breakPact} influence`} effect="They will remember it, and so will the world" tone="btn-quiet" />}
           </>
         )}
       </div>
@@ -547,14 +579,14 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
 }
 
 const DISPATCH_COLOR: Record<Dispatch['kind'], string> = {
-  proposal: 'text-amber-200',
-  accepted: 'text-emerald-300',
-  joined: 'text-emerald-300',
-  completed: 'text-emerald-200',
-  rejected: 'text-rose-300',
-  ignored: 'text-rose-300',
-  broken: 'text-rose-400',
-  expired: 'text-slate-400',
+  proposal: 'text-[#ffd60a]',
+  accepted: 'text-[#6eeb8a]',
+  joined: 'text-[#6eeb8a]',
+  completed: 'text-[#6eeb8a]',
+  rejected: 'text-[#ff8a84]',
+  ignored: 'text-[#ff8a84]',
+  broken: 'text-[#ff8a84]',
+  expired: 'text-white/70',
 }
 
 const CRISIS_STAGE = ['Rumor', 'Disturbance', 'On the brink']
@@ -565,7 +597,7 @@ function CrisisCards({ game, me }: { game: GameState; me: NationId }) {
   if (list.length === 0) return null
   return (
     <section className="space-y-2">
-      <div className="label text-amber-300">The world is watching</div>
+      <div className="label text-[#ffd60a]">The world is watching</div>
       {list.map((c) => {
         const nation = game.nations[c.nation]?.name
         const rival = c.rival ? game.nations[c.rival]?.name : null
@@ -594,6 +626,11 @@ function CrisisCards({ game, me }: { game: GameState; me: NationId }) {
 export function DiplomacyPanel() {
   const view = usePlayerView()
   const focus = useGame((s) => s.diploFocus)
+  const [tab, setTab] = useState<'nations' | 'ledger'>('nations')
+  const peaceIntent = useGame((s) => s.diploPeace)
+  // Coming from a war, the row opens with its peace composer: a new key starts it fresh even when the panel was already open.
+  const rowKey = (id: NationId) => (focus === id && peaceIntent ? `${id}:peace` : id)
+  const openDiplomacy = useGame((s) => s.openDiplomacy)
   const game = view?.game
   const ctx = useMemo<RowContext | null>(() => {
     if (!game) return null
@@ -615,13 +652,15 @@ export function DiplomacyPanel() {
   const closeList = [...close].filter((id) => game.nations[id]?.alive).sort((a, b) => Number(atWar(game, me, b)) - Number(atWar(game, me, a)) || Number(isAllied(game, me, b)) - Number(isAllied(game, me, a)) || game.nations[a].name.localeCompare(game.nations[b].name))
   const majors = Object.values(game.nations)
     .filter((n) => n.alive && n.id !== me && !close.has(n.id))
-    .sort((a, b) => regionsOf(game, b.id).length - regionsOf(game, a.id).length || militaryPower(game, b.id) - militaryPower(game, a.id))
+    .sort((a, b) => regionsOf(game, b.id).length - regionsOf(game, a.id).length || powerView(game, me, b.id).value - powerView(game, me, a.id).value)
     .slice(0, 6)
 
   return (
-    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. Offers are answered when the month ends.`} panel="diplomacy">
+    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. ${isLive(game) ? 'Rivals answer offers the same day.' : 'Offers are answered when the month ends.'}`} panel="diplomacy" wide={!focus && tab === 'ledger'} tabs={<Tabs value={focus ? 'nations' : tab} onChange={(t) => { if (focus) openDiplomacy(null); setTab(t) }} options={[['nations', 'Nations'], ['ledger', 'Ledger']] as const} />}>
+      {!focus && tab === 'ledger' && <Ledger game={game} onOpen={(id) => { setTab('nations'); openDiplomacy(id) }} />}
+      {(focus || tab === 'nations') && <>
       {ctx.coalition && (
-        <div className="rounded-lg border border-rose-500/50 bg-rose-500/10 p-3 text-xs text-rose-200">
+        <div className="rounded-lg border border-[#ff453a]/50 bg-[#ff453a]/10 p-3 text-[13px] text-[#ff8a84]">
           Your growing power alarms the world. Neighbors now distrust you and are quicker to band together against you.
         </div>
       )}
@@ -629,7 +668,7 @@ export function DiplomacyPanel() {
       <AnimatePresence initial={false}>
         {inbox.length > 0 && (
           <motion.section key="inbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
-            <div className="label text-amber-300">Awaiting your answer</div>
+            <div className="label text-[#ffd60a]">Awaiting your answer</div>
             <AnimatePresence initial={false}>
               {inbox.map((p) => (
                 <InboxCard key={p.id} p={p} />
@@ -644,7 +683,7 @@ export function DiplomacyPanel() {
           {blocs.slice(0, 6).map((b) => {
             const mineBloc = b.members.includes(me)
             return (
-              <div key={b.leader} className={`rounded-lg border p-2.5 text-[13px] ${mineBloc ? 'border-cyan-400/50 bg-cyan-400/5' : 'border-slate-700/70 bg-slate-900/40'}`}>
+              <div key={b.leader} className={`rounded-lg border p-2.5 text-[13px] ${mineBloc ? 'border-[#0a84ff]/50 bg-[#0a84ff]/8' : 'border-white/12 bg-white/5'}`}>
                 <div className="flex justify-between gap-2">
                   <span className="font-semibold">{b.name}{mineBloc ? ' (yours)' : ''}</span>
                   <span className="text-white/70 tabular-nums">strength {b.power.toFixed(0)}</span>
@@ -659,7 +698,7 @@ export function DiplomacyPanel() {
         <section className="space-y-1.5">
           <div className="label">Last month</div>
           {mine.map((d, i) => (
-            <p key={i} className={`text-xs border-l-2 border-slate-700 pl-2 ${DISPATCH_COLOR[d.kind]}`}>
+            <p key={i} className={`text-[13px] border-l-2 border-white/15 pl-2 ${DISPATCH_COLOR[d.kind]}`}>
               {d.text}
             </p>
           ))}
@@ -676,14 +715,14 @@ export function DiplomacyPanel() {
       <section className="space-y-2">
         <div className="label">Your neighbors, allies and enemies</div>
         {closeList.map((id) => (
-          <NationRow key={id} id={id} ctx={ctx} focused={focus === id} />
+          <NationRow key={rowKey(id)} id={id} ctx={ctx} focused={focus === id} />
         ))}
       </section>
       {majors.length > 0 && (
         <section className="space-y-2">
           <div className="label">The biggest powers elsewhere</div>
           {majors.map((n) => (
-            <NationRow key={n.id} id={n.id} ctx={ctx} focused={focus === n.id} />
+            <NationRow key={rowKey(n.id)} id={n.id} ctx={ctx} focused={focus === n.id} />
           ))}
         </section>
       )}
@@ -691,12 +730,13 @@ export function DiplomacyPanel() {
         <section className="space-y-1.5">
           <div className="label">Around the world</div>
           {world.slice(-8).map((d, i) => (
-            <p key={i} className="text-[11px] text-slate-400 border-l-2 border-slate-800 pl-2">
+            <p key={i} className="text-[12px] text-white/70 border-l-2 border-white/8 pl-2">
               {d.text}
             </p>
           ))}
         </section>
       )}
+      </>}
     </PanelShell>
   )
 }

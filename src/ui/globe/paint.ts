@@ -1,3 +1,4 @@
+import { lineMax } from '../../engine/economy'
 import type { GameState } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import type { MapMode } from '../../store'
@@ -12,7 +13,8 @@ export function paintSignature(game: GameState | null, mode: MapMode): string {
   if (mode === 'relations') out += `|${game.wars.join(',')}|${game.alliances.join(',')}|${Object.keys(game.pacts).join(',')}|${game.turn}`
   if (mode === 'fronts') {
     out += `|${game.wars.join(',')}|`
-    for (const id of map.order) out += `${Math.round(game.regions[id].line * 10)},`
+    // The color is the line against its maximum, and the maximum moves with barracks, cities, capitals and population.
+    for (const id of map.order) out += `${Math.round(game.regions[id].line * 10)}/${Math.round(lineMax(game, map, id) * 10)},`
   }
   return out
 }

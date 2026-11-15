@@ -109,6 +109,19 @@ describe('the lobby', () => {
     expect(seats[2].starts[0].playerId).toBe('r2')
   })
 
+  it('the host\'s win condition reaches the game everyone starts', async () => {
+    const { seats } = await room(2)
+    seats[0].s.updateSettings({ ...SETTINGS, goal: 'classic', victoryShare: 0.25 })
+    await settle()
+    expect(seats[1].s.lobby!.settings.goal).toBe('classic')
+    expect(await seats[0].s.startGame()).toBeNull()
+    await settle(120)
+    for (const x of seats) {
+      expect(x.s.game!.settings.goal).toBe('classic')
+      expect(x.s.game!.settings.victoryShare).toBe(0.25)
+    }
+  })
+
   it('will not start until everyone has a nation, and caps the room at four', async () => {
     const hub = new MemoryHub()
     const clock = { t: 0 }

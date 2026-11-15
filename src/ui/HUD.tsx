@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { maxWars, turnDate } from '../engine/helpers'
 import { worldTension } from '../engine/crises'
 import { controlled } from '../engine/victory'
+import { Tip } from './bits'
+import { tierSpec } from '../data/empire'
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
@@ -137,6 +139,23 @@ export function HUD() {
   const setHelp = useGame((s) => s.setHelp)
   const panel = useGame((s) => s.panel)
   const top = useAdvice(1)[0]
+  const wrap = useRef<HTMLDivElement>(null)
+  const has = !!view
+  // Desks, cards and docks sit below the top bar: tell the stylesheet how tall it really is, whatever the screen and mode.
+  useEffect(() => {
+    const el = wrap.current
+    if (!el) return
+    const root = document.documentElement
+    const set = () => root.style.setProperty('--hud-h', `${Math.ceil(el.getBoundingClientRect().height)}px`)
+    set()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(set)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      root.style.removeProperty('--hud-h')
+    }
+  }, [has])
   if (!view) return null
   const { game, player, econ, committed, orders } = view
   const live = isLive(game)
@@ -152,7 +171,7 @@ export function HUD() {
   const civic = econ.buildings.civic
 
   return (
-    <div className="absolute top-0 inset-x-0 z-30 p-3 pointer-events-none">
+    <div ref={wrap} className="absolute top-0 inset-x-0 z-30 p-3 pointer-events-none">
       <div className="hud-row">
         <div className="glass rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-3 min-w-56">
           <div className="w-1.5 self-stretch rounded-full" style={{ background: player.color }} />
@@ -191,9 +210,18 @@ export function HUD() {
               </div>
             )}
             </div>
-            <div className="mt-1.5 space-y-1" title={`Win by holding all ${lands} countries, yours or puppets of yours. World tension ${tension}: wars, crises and aggression raise it. Your reputation for aggression is ${standing}; it fades with time. You lose if ${player.name} is wiped out.`}>
+            <div className="mt-1.5 space-y-1">
               <div className="flex items-center justify-between gap-3 text-[12px] text-white/70 tabular-nums">
-                <span>World {held}/{lands} · Wars {econ.warBills.length}/{warLimit}</span>
+                <span>
+                  <button className="touch-pad underline-offset-2 hover:underline text-white/85" onClick={() => setPanel('empire')} title={`You are a ${tierSpec(player.tier).name}. Open the Empire desk to see what it opens up.`}>
+                    {tierSpec(player.tier).name}
+                  </button>{' '}
+                  ·{' '}
+                  <Tip text={`Win by holding all ${lands} countries, yours or puppets of yours. World tension ${tension}: wars, crises and aggression raise it. Your reputation for aggression is ${standing}; it fades with time. You lose if ${player.name} is wiped out.`}>
+                    World {held}/{lands}
+                  </Tip>{' '}
+                  · Wars {econ.warBills.length}/{warLimit}
+                </span>
                 <span className={tension >= 50 ? 'text-[#ff8a84]' : ''}>Tension {tension}</span>
               </div>
               <div className="h-1 w-full min-w-24 rounded-full bg-white/10 overflow-hidden">
@@ -220,7 +248,7 @@ export function HUD() {
             {econ.corporateIncome !== 0 && <Row k="Business tax and banks" v={signed(econ.corporateIncome)} />}
             {econ.interest > 0 && <Row k="Interest on bonds" v={signed(-econ.interest)} warn />}
             {econ.warBills.length > 0 && <Row k={`War bills (${econ.warBills.length} of ${warLimit})`} v={signed(-econ.warBillTotal)} warn />}
-            <Row k="Waiting for next turn" v={fmt(-committed.capital)} />
+            <Row k={live ? 'Waiting for the 1st' : 'Waiting for next turn'} v={fmt(-committed.capital)} />
             {player.inDebt && <p className="text-[13px] text-[#ff6961]">In debt. Stability is falling.</p>}
           </Resource>
           <Resource label="Food" amount={player.resources.food} delta={signed(econ.netFood)} warn={player.foodShortage || econ.netFood < 0}>

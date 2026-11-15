@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { BUDGET_LIMITS, ELECTION, EVEN_BUDGET, GOVERNMENTS, REFORM } from '../../data/government'
+import { ELECTION, GOVERNMENTS, REFORM } from '../../data/government'
 import { LAW_SPECS } from '../../data/unitTypes'
 import { computeEconomy } from '../economy'
 import { monthsToElection, runPolitics } from '../politics'
-import { policyEffects } from '../policy'
 import { validateOrder, orderCost } from '../orders'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import { createRng } from '../rng'
@@ -62,48 +61,57 @@ describe('government types', () => {
   })
 })
 
-describe('the budget', () => {
-  it('is zero-sum: leaning toward research costs upkeep savings', () => {
-    const even = policyEffects({ ...base().nations[P], budget: { ...EVEN_BUDGET } })
-    const school = policyEffects({ ...base().nations[P], budget: { military: 0.1, education: 0.6, health: 0.15, infrastructure: 0.15 } })
-    expect(even.research).toBeCloseTo(0)
-    expect(school.research).toBeGreaterThan(0)
-    expect(school.upkeep).toBeGreaterThan(even.upkeep)
-    expect(school.stability).toBeLessThan(even.stability)
+describe('spending on the people', () => {
+  it('costs real money: more schools cost more, fewer save money', () => {
+    const s = base()
+    const plain = computeEconomy(s, map, P)
+    const t = structuredClone(s)
+    t.nations[P].spending.schools = 4
+    expect(computeEconomy(t, map, P).netCapital).toBeLessThan(plain.netCapital)
+    const u = structuredClone(s)
+    u.nations[P].spending.schools = 0
+    expect(computeEconomy(u, map, P).netCapital).toBeGreaterThan(plain.netCapital)
   })
 
-  it('must add up to 100% with each part in range', () => {
+  it('each level stays in its range', () => {
     const s = base()
-    const ok = { military: 0.4, education: 0.2, health: 0.2, infrastructure: 0.2 }
-    expect(validateOrder(s, map, { type: 'setPolicy', nationId: P, taxRate: 0.25, draftRate: 0.05, budget: ok })).toBeNull()
-    expect(validateOrder(s, map, { type: 'setPolicy', nationId: P, taxRate: 0.25, draftRate: 0.05, budget: { ...ok, military: 0.5 } })).toMatch(/100%/)
-    expect(validateOrder(s, map, { type: 'setPolicy', nationId: P, taxRate: 0.25, draftRate: 0.05, budget: { military: 0.9, education: 0.05, health: 0.025, infrastructure: 0.025 } })).toMatch(/between/)
+    const ok = { schools: 3, health: 2, works: 2, pensions: 1, jobless: 1, housing: 2 }
+    expect(validateOrder(s, map, { type: 'setPolicy', nationId: P, taxRate: 0.25, draftRate: 0.05, spending: ok })).toBeNull()
+    expect(validateOrder(s, map, { type: 'setPolicy', nationId: P, taxRate: 0.25, draftRate: 0.05, spending: { ...ok, schools: 5 } })).toMatch(/0 to 4/)
+    expect(validateOrder(s, map, { type: 'setPolicy', nationId: P, taxRate: 0.25, draftRate: 0.05, spending: { ...ok, pensions: 3 } })).toMatch(/0 to 2/)
   })
 
-  it('a budget order takes effect when the month ends, with the business tax', () => {
+  it('a spending order takes effect when the month ends, with the business tax', () => {
     const s = base()
-    const budget = { military: 0.1, education: 0.4, health: 0.25, infrastructure: 0.25 }
-    const next = resolveTurn(s, map, [{ type: 'setPolicy', nationId: P, taxRate: 0.25, draftRate: 0.05, budget, corporateTax: 0.3 }])
-    expect(next.nations[P].budget).toEqual(budget)
+    const spending = { schools: 3, health: 3, works: 2, pensions: 1, jobless: 1, housing: 1 }
+    const next = resolveTurn(s, map, [{ type: 'setPolicy', nationId: P, taxRate: 0.25, draftRate: 0.05, spending, corporateTax: 0.3 }])
+    expect(next.nations[P].spending).toEqual(spending)
     expect(next.nations[P].corporateTax).toBe(0.3)
   })
 
-  it('an infrastructure budget makes upgrades cheaper', () => {
+  it('public works above standard make upgrades cheaper', () => {
     const even = base()
     const roads = base()
-    roads.nations[P].budget = { military: 0.1, education: 0.1, health: 0.1, infrastructure: BUDGET_LIMITS.max + 0.1 }
+    roads.nations[P].spending.works = 4
     const upgrade = { type: 'build', nationId: P, regionId: P, building: 'farm' } as const
     expect(orderCost(roads, upgrade).capital).toBeLessThan(orderCost(even, upgrade).capital)
+  })
+
+  it('an old saved order with a budget becomes spending levels', () => {
+    const s = base()
+    const next = resolveTurn(s, map, [{ type: 'setPolicy', nationId: P, taxRate: 0.25, draftRate: 0.05, budget: { military: 0.25, education: 0.5, health: 0.125, infrastructure: 0.125 } }])
+    expect(next.nations[P].spending.schools).toBe(4)
+    expect(next.nations[P].spending.health).toBe(1)
   })
 })
 
 describe('laws', () => {
-  it('there are ten, each with an effect the economy shows', () => {
-    expect(Object.keys(LAW_SPECS)).toHaveLength(10)
+  it('there are nine in use, each with an effect the economy shows', () => {
+    expect(Object.keys(LAW_SPECS).filter((l) => !LAW_SPECS[l as LawId].retired)).toHaveLength(9)
     const s = base()
     const plain = computeEconomy(s, map, P)
     for (const law of Object.keys(LAW_SPECS) as LawId[]) {
-      if (law === 'conscription_act') continue
+      if (law === 'conscription_act' || LAW_SPECS[law].retired) continue
       const t = structuredClone(s)
       t.nations[P].laws = [law]
       const e = computeEconomy(t, map, P)
@@ -112,26 +120,33 @@ describe('laws', () => {
     }
   })
 
-  it('martial law and the war economy still do what they always did', () => {
+  it('martial law buys less calm than it once did, and the war economy still costs what it did', () => {
     const s = base()
     const plain = computeEconomy(s, map, P)
     const m = structuredClone(s)
     m.nations[P].laws = ['martial_law']
-    expect(computeEconomy(m, map, P).stabilityTarget).toBeCloseTo(plain.stabilityTarget + 15)
+    expect(computeEconomy(m, map, P).stabilityTarget).toBeCloseTo(plain.stabilityTarget + 15 * 0.7)
     const w = structuredClone(s)
     w.nations[P].laws = ['war_economy']
     expect(computeEconomy(w, map, P).stabilityTarget).toBeCloseTo(plain.stabilityTarget - 10)
     expect(computeEconomy(w, map, P).factoryIncome).toBeGreaterThan(plain.factoryIncome)
   })
 
-  it('healthcare costs income and buys stability', () => {
+  it('healthcare is no longer a law: it is health spending', () => {
     const s = base()
-    const plain = computeEconomy(s, map, P)
-    s.nations[P].laws = ['universal_healthcare']
-    const e = computeEconomy(s, map, P)
-    expect(e.policyMoney).toBeLessThan(0)
-    expect(e.stabilityTarget).toBeCloseTo(plain.stabilityTarget + 8)
+    expect(validateOrder(s, map, { type: 'enactLaw', nationId: P, law: 'universal_healthcare' })).toMatch(/health spending/)
   })
+
+  it('a nation has room for a few laws, more as its empire grows, and some laws cannot stand together', () => {
+    const s = base()
+    s.nations[P].laws = ['free_trade']
+    expect(validateOrder(s, map, { type: 'enactLaw', nationId: P, law: 'rationing' })).toMatch(/cannot stand beside/)
+    s.nations[P].laws = ['martial_law', 'press_control', 'conscription_act']
+    expect(validateOrder(s, map, { type: 'enactLaw', nationId: P, law: 'research_grants' })).toMatch(/room for 3 laws/)
+    s.nations[P].tier = 2
+    expect(validateOrder(s, map, { type: 'enactLaw', nationId: P, law: 'research_grants' })).toBeNull()
+  })
+
 })
 
 describe('elections and coups', () => {
