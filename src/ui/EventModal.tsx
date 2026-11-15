@@ -44,7 +44,8 @@ function effectTone(e: EventEffect): 'good' | 'bad' | 'neutral' {
 const TONE_CLASS = { good: 'text-emerald-300', bad: 'text-rose-300', neutral: 'text-white/75' }
 
 export function EventModal() {
-  const game = useGame((s) => s.game)
+  // Only read while a decision is waiting, so a running game does not re-render this every day.
+  const game = useGame((s) => (s.game?.pendingEvent ? s.game : null))
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const summaryOpen = useGame((s) => !!s.summary)
   const choose = useGame((s) => s.chooseEventOption)

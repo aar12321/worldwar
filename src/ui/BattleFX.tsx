@@ -65,7 +65,8 @@ export function BattleFX() {
   const battle = useGame((s) => s.fxQueue[0])
   const total = useGame((s) => s.fxTotal)
   const left = useGame((s) => s.fxQueue.length)
-  const game = useGame((s) => s.game)
+  // Only read while a battle is showing, so a running game does not re-render this every day.
+  const game = useGame((s) => (s.fxQueue.length ? s.game : null))
   const settings = useGame((s) => s.settings)
   const updateSettings = useGame((s) => s.updateSettings)
   const shiftFx = useGame((s) => s.shiftFx)

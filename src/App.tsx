@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+import { MotionConfig } from 'framer-motion'
 import { isLive } from './engine/calendar'
 import { attackableRegions } from './engine/warfare'
 import { getWorld } from './map/world'
@@ -7,22 +8,24 @@ import { ArmiesDock, ArmyCard } from './ui/ArmiesTab'
 import { BattleFX } from './ui/BattleFX'
 import { Briefing } from './ui/Briefing'
 import { GameOver, NavRail, OrdersTray, Toasts, TurnSummary } from './ui/Chrome'
-import { Lobby } from './ui/Online'
 import { CountryPanel } from './ui/CountryPanel'
-import { DiplomacyPanel } from './ui/Diplomacy'
 import { EventModal } from './ui/EventModal'
-import { WorldGlobe } from './ui/Globe'
 import { useFx } from './ui/globeBridge'
 import { Help } from './ui/Help'
 import { HUD } from './ui/HUD'
 import { useLiveClock } from './ui/liveClock'
 import { MapModes } from './ui/MapModes'
-import { MilitaryPanel } from './ui/MilitaryPanel'
 import { Setup } from './ui/Setup'
-import { EconomyDesk } from './ui/EconomyDesk'
+import { Lobby } from './ui/Online'
 import { LogPanel, SettingsPanel } from './ui/SidePanels'
-import { TechTree } from './ui/TechTree'
 import { WarRoom } from './ui/WarRoom'
+
+// The globe (three.js, about 2 MB) and the big desks load in their own files, so the start screen appears at once.
+const WorldGlobe = lazy(() => import('./ui/Globe').then((m) => ({ default: m.WorldGlobe })))
+const DiplomacyPanel = lazy(() => import('./ui/Diplomacy').then((m) => ({ default: m.DiplomacyPanel })))
+const MilitaryPanel = lazy(() => import('./ui/MilitaryPanel').then((m) => ({ default: m.MilitaryPanel })))
+const EconomyDesk = lazy(() => import('./ui/EconomyDesk').then((m) => ({ default: m.EconomyDesk })))
+const TechTree = lazy(() => import('./ui/TechTree').then((m) => ({ default: m.TechTree })))
 
 function useShortcuts() {
   useEffect(() => {
@@ -118,12 +121,16 @@ export default function App() {
   useShortcuts()
   useFlushOnExit()
   useLiveClock(live)
+  const reduced = useGame((s) => s.settings.reducedMotion)
 
   return (
+    <MotionConfig reducedMotion={reduced ? 'always' : 'user'}>
     <div className="relative w-full h-full select-none">
       <div className="starfield" />
       <ShakeLayer>
-        <WorldGlobe />
+        <Suspense fallback={null}>
+          <WorldGlobe />
+        </Suspense>
       </ShakeLayer>
       {!inGame && !online && <Setup />}
       {!inGame && online && <Lobby />}
@@ -131,17 +138,21 @@ export default function App() {
         <>
           <HUD />
           <NavRail />
-          <MapModes />
+          {/* A desk covers these, so they are not rendered (and do not redo their work every live day) while one is open. */}
+          {panel === 'none' && <MapModes />}
           {panel === 'briefing' && <Briefing key="briefing" />}
-          {panel === 'economy' && <EconomyDesk key="economy" />}
-          {panel === 'military' && <MilitaryPanel key="military" />}
-          {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
+          {/* Each desk that loads on first use waits on its own, so the rest of the screen stays put. */}
+          <Suspense fallback={null}>
+            {panel === 'economy' && <EconomyDesk key="economy" />}
+            {panel === 'military' && <MilitaryPanel key="military" />}
+            {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
+            {panel === 'tech' && <TechTree key="tech" />}
+          </Suspense>
           {panel === 'log' && <LogPanel key="log" />}
           {panel === 'settings' && <SettingsPanel key="settings" />}
-          {panel === 'tech' && <TechTree key="tech" />}
-          <CountryPanel />
+          {panel === 'none' && <CountryPanel />}
           <ArmyCard />
-          <ArmiesDock />
+          {panel === 'none' && <ArmiesDock />}
           <OrdersTray />
           <WarRoom />
           <BattleFX />
@@ -153,5 +164,6 @@ export default function App() {
       )}
       <Toasts />
     </div>
+    </MotionConfig>
   )
 }

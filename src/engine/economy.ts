@@ -124,7 +124,28 @@ export interface EconomyReport {
   population: number
 }
 
+/**
+ * Game states the screen holds. They are never changed once the store has them, so their economy can be worked out once.
+ * States the engine is resolving are copies that are changed as the month runs, so they are never marked and never cached.
+ */
+const settled = new WeakSet<GameState>()
+const econCache = new WeakMap<GameState, Map<NationId, EconomyReport>>()
+
+/** Marks a state as finished and unchanging: the store calls this for every game it shows. */
+export function markSettled(s: GameState) {
+  settled.add(s)
+}
+
 export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId): EconomyReport {
+  if (!settled.has(s)) return economyOf(s, map, nationId)
+  let byNation = econCache.get(s)
+  if (!byNation) econCache.set(s, (byNation = new Map()))
+  let report = byNation.get(nationId)
+  if (!report) byNation.set(nationId, (report = economyOf(s, map, nationId)))
+  return report
+}
+
+function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyReport {
   const n = s.nations[nationId]
   const mods = nationModifiers(n)
   const owned = Object.values(s.regions).filter((r) => r.owner === nationId)

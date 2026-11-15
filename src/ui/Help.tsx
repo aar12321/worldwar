@@ -47,7 +47,7 @@ const TERMS: [string, string][] = [
 export function Help() {
   const open = useGame((s) => s.helpOpen)
   const setHelp = useGame((s) => s.setHelp)
-  const game = useGame((s) => s.game)
+  const game = useGame((s) => (s.helpOpen ? s.game : null))
   const online = useGame((s) => s.online?.status === 'playing')
   if (!open || !game) return null
   const live = isLive(game)

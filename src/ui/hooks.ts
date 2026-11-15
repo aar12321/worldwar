@@ -85,11 +85,22 @@ function buildPlayerView(game: GameState, orders: Order[]): PlayerView {
   }
 }
 
-/** The advisor's list for the player's nation, worked out once per game state. */
+const adviceCache = new WeakMap<GameState, { orders: Order[]; list: Advice[] }>()
+
+/** The advisor's full list for a game state and order list, worked out once however many screens ask. */
+function adviceFor(game: GameState, orders: Order[]): Advice[] {
+  const hit = adviceCache.get(game)
+  if (hit && hit.orders === orders) return hit.list
+  const list = advise(game, getWorld().map, game.playerId, orders, 50)
+  adviceCache.set(game, { orders, list })
+  return list
+}
+
+/** The advisor's list for the player's nation. Each caller takes the first `limit` of one shared list. */
 export function useAdvice(limit = 6): Advice[] {
   const game = useSlowGame()
   const orders = useGame((s) => s.orders)
-  return useMemo(() => (game ? advise(game, getWorld().map, game.playerId, orders, limit) : []), [game, orders, limit])
+  return useMemo(() => (game ? adviceFor(game, orders).slice(0, limit) : []), [game, orders, limit])
 }
 
 /** Matches the CSS `@media (max-width)` breakpoints, including the boundary pixel. */

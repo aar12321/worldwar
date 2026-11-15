@@ -115,7 +115,7 @@ function InboxCard({ p }: { p: Proposal }) {
   const left = p.expires - game.turn
   const answerWith = (accept: boolean) => (answer === accept ? removeOrder(idx) : issueOrder({ ...base, accept }))
   return (
-    <motion.div layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="rounded-lg border border-amber-400/50 bg-amber-400/5 p-3 space-y-2">
+    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -30 }} className="rounded-lg border border-amber-400/50 bg-amber-400/5 p-3 space-y-2">
       <div className="flex justify-between items-center gap-2">
         <span className="flex items-center gap-2 min-w-0">
           <Dot color={from.color} />

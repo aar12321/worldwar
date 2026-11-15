@@ -5,6 +5,7 @@ import type { AdviceTarget } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
 import { forceUnits, maxAttacks, totalUnits, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
+import { markSettled } from './engine/economy'
 import { MONTH_END_ORDERS, isMonthEndOrder, validateOrder } from './engine/orders'
 import { absDate, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
@@ -197,6 +198,9 @@ interface GameStore {
   recentBattles: BattleReport[]
   /** Live games: the month's report, waiting to be opened. */
   liveNote: MonthReport | null
+  /** When the game was last written to this device, and whether the last try failed. */
+  savedAt: number | null
+  saveFailed: boolean
 
   newGame(opts: NewGameOptions): void
   loadGame(): void
@@ -323,8 +327,8 @@ function hasStoredSave(): boolean {
 /** The live online session, if any. Online games are never saved to this device: the host holds the game. */
 let session: OnlineSession | null = null
 
-function save(game: GameState | null, orders?: Order[]) {
-  if (session) return
+/** Writes the game to this device now. Returns false when storage refused it (full, or private browsing). */
+function writeGame(game: GameState | null): boolean {
   try {
     // A finished game is not worth resuming, so it never stays as the save.
     if (game && game.outcome === 'playing') localStorage.setItem(SAVE_KEY, JSON.stringify(game))
@@ -332,11 +336,52 @@ function save(game: GameState | null, orders?: Order[]) {
       localStorage.removeItem(SAVE_KEY)
       localStorage.removeItem(ORDERS_KEY)
     }
+    return true
   } catch {
-    /* storage may be unavailable */
+    return false
   }
-  if (orders) writeOrders(orders)
 }
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+let queuedSave: { game: GameState | null } | null = null
+/** Only one warning about a failed save until saving works again. */
+let saveWarned = false
+
+/** Writes a save that is waiting, at once. The page calls this when it is hidden or closed. */
+export function flushSave() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = null
+  const q = queuedSave
+  queuedSave = null
+  if (!q) return
+  const ok = writeGame(q.game)
+  const st = useGame.getState()
+  if (ok) {
+    saveWarned = false
+    useGame.setState({ savedAt: Date.now(), saveFailed: false })
+  } else {
+    if (!saveWarned) st.toast('The game could not be saved on this device: storage is full or blocked. Export the save from Settings to keep it.', 'error', 9000)
+    saveWarned = true
+    useGame.setState({ saveFailed: true })
+  }
+}
+
+/**
+ * Saves the game. A save writes half a megabyte, so a burst of clicks is written once, a moment after the last one.
+ * `now` writes at once: leaving a game, or a game that ended.
+ */
+function save(game: GameState | null, orders?: Order[], now = false) {
+  if (session) return
+  if (orders) writeOrders(orders)
+  queuedSave = { game }
+  if (now || !game || game.outcome !== 'playing') {
+    flushSave()
+    return
+  }
+  if (!saveTimer) saveTimer = setTimeout(flushSave, SAVE_DELAY_MS)
+}
+
+const SAVE_DELAY_MS = 400
 
 function loadOrders(playerId: string): Order[] {
   try {
@@ -595,13 +640,15 @@ export const useGame = create<GameStore>((set, get) => ({
   selectedArmy: null,
   recentBattles: [],
   liveNote: null,
+  savedAt: null,
+  saveFailed: false,
   online: null,
   lastRoom: loadIdentity().code,
 
   newGame(opts) {
     const { map } = getWorld()
     const game = createInitialState(map, opts)
-    save(game, [])
+    save(game, [], true)
     monthStart = game
     monthBattles = []
     set({
@@ -646,7 +693,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return
     }
     const { game, orders } = get()
-    if (game) save(game, orders)
+    if (game) save(game, orders, true)
     set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
   },
 
@@ -1064,9 +1111,14 @@ export const useGame = create<GameStore>((set, get) => ({
 
   persist() {
     const { game, orders } = get()
-    save(game, orders)
+    save(game, orders, true)
   },
 }))
+
+// Every game the screen shows is finished and never changed again, so the economy can be worked out once for it.
+useGame.subscribe((st) => {
+  if (st.game) markSettled(st.game)
+})
 
 // A handle for browser tests, in development only.
 if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __store: typeof useGame }).__store = useGame

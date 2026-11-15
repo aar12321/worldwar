@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { BRANCH_LABELS, TECHS, type Tech } from '../data/techTree'
 import { validateOrder } from '../engine/orders'
 import type { TechBranch } from '../engine/types'
@@ -25,15 +24,14 @@ function TechNode({ tech }: { tech: Tech }) {
   const state = owned ? 'owned' : queuedIdx >= 0 ? 'queued' : available ? 'available' : 'locked'
 
   return (
-    <motion.button
-      whileHover={state === 'available' ? { y: -2 } : undefined}
+    <button
       onClick={() => {
         if (queuedIdx >= 0) removeOrder(queuedIdx)
         else if (available) issueOrder(order)
         else if (err) useGame.getState().toast(speak(err), 'error')
       }}
       disabled={state === 'owned'}
-      className={`relative w-full text-left rounded-2xl p-3 border transition-colors disabled:cursor-default ${state === 'locked' ? 'cursor-help border-white/10 bg-white/4' : 'border-white/10'}`}
+      className={`relative w-full text-left rounded-2xl p-3 border transition-[colors,transform] disabled:cursor-default ${state === 'available' ? 'hover:-translate-y-0.5' : ''} ${state === 'locked' ? 'cursor-help border-white/10 bg-white/4' : 'border-white/10'}`}
       style={{
         background: owned ? `${color}22` : state === 'queued' ? 'rgba(255,255,255,0.08)' : state === 'available' ? 'rgba(255,255,255,0.06)' : undefined,
         opacity: state === 'locked' ? 0.85 : 1,
@@ -50,7 +48,7 @@ function TechNode({ tech }: { tech: Tech }) {
       <div className="text-[12px] text-white/55 mt-1 leading-snug">{tech.description}</div>
       {tech.unlocks && <div className="text-[12px] text-[#ff8a9f] mt-1 font-medium">Unlocks: {tech.unlocks.join(', ')}</div>}
       {state === 'locked' && err && <div className="text-[12px] text-[#ff8a84] mt-1">{speak(err)}</div>}
-    </motion.button>
+    </button>
   )
 }
 

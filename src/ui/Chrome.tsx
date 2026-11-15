@@ -204,7 +204,8 @@ export function TurnSummary() {
 }
 
 export function GameOver() {
-  const game = useGame((s) => s.game)
+  // Only a finished game is read, so a running game does not re-render this every day.
+  const game = useGame((s) => (s.game && s.game.outcome !== 'playing' ? s.game : null))
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const quit = useGame((s) => s.quitToMenu)
   const abandon = useGame((s) => s.abandonGame)
