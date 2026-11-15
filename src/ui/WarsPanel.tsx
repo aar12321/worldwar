@@ -68,7 +68,7 @@ export function WarsTab() {
                   {netWarScore(game, player.id, enemyId)} · costs {(bills.get(enemyId) ?? 0).toFixed(1)}/month
                 </div>
               </div>
-              <button className="btn btn-primary" onClick={() => openDiplomacy(enemyId)}>
+              <button className="btn btn-primary" onClick={() => openDiplomacy(enemyId, { peace: true })}>
                 Make peace
               </button>
             </div>

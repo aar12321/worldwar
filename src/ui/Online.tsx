@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DIFFICULTY } from '../data/difficulty'
 import type { Difficulty } from '../engine/types'
+import { conquestGoal, economicGoal } from '../engine/victory'
 import { getWorld } from '../map/world'
 import { MAX_PLAYERS, type RoomSettings } from '../net/protocol'
 import { supabaseConfigured } from '../net/transport'
@@ -10,6 +11,22 @@ import { globeBridge } from './globeBridge'
 import { Modal } from './Modal'
 import { clock, useCountdown } from './clock'
 import { nationTier, rankNations } from './nationList'
+
+type Goal = 'world' | 'short' | 'standard' | 'long'
+const GOALS: { value: Goal; label: string }[] = [
+  { value: 'world', label: 'The world' },
+  { value: 'short', label: 'Short' },
+  { value: 'standard', label: 'Standard' },
+  { value: 'long', label: 'Long' },
+]
+const goalOf = (s: RoomSettings): Goal => ((s.goal ?? 'world') === 'world' ? 'world' : s.victoryShare <= 0.25 ? 'short' : s.victoryShare >= 0.6 ? 'long' : 'standard')
+const GOAL_SHARE: Record<Exclude<Goal, 'world'>, number> = { short: 0.25, standard: 0.4, long: 0.6 }
+/** The win condition in plain words, from the room's settings. */
+function goalText(s: RoomSettings): string {
+  const g = goalOf(s)
+  if (g === 'world') return 'Hold every country in the world, yours or puppets of yours. The longest game.'
+  return `First to take ${conquestGoal(s.victoryShare)} countries, or hold ${Math.round(s.victoryShare * 100)}% of the world's people, or ${Math.round(economicGoal(s.victoryShare) * 100)}% of its output.`
+}
 
 const TIMERS: { value: RoomSettings['timer']; label: string }[] = [
   { value: 0, label: 'No timer' },
@@ -63,7 +80,7 @@ export function OnlineEntry({ onClose }: { onClose: () => void }) {
           <button
             className="btn btn-primary w-full py-2.5 text-[15px]"
             disabled={!ready || busy}
-            onClick={() => void run(() => create(name, { difficulty: 'normal', victoryShare: 0.4, timer: 0, seed: Math.floor(Math.random() * 1e6) }))}
+            onClick={() => void run(() => create(name, { difficulty: 'normal', victoryShare: 0.4, goal: 'world', timer: 0, seed: Math.floor(Math.random() * 1e6) }))}
           >
             Create a room
           </button>
@@ -236,10 +253,14 @@ export function Lobby() {
           onChange={(difficulty) => change({ difficulty })}
         />
         <SettingRow<number> label="Time to plan each month" value={settings.timer} disabled={!isHost} options={TIMERS} onChange={(timer) => change({ timer: timer as RoomSettings['timer'] })} />
-        <div className="rounded-xl bg-white/5 px-3 py-2 text-[13px] text-white/80">
-          <span className="label block">How to win</span>
-          Hold every country in the world, yours or puppets of yours. A player whose nation falls can keep watching.
-        </div>
+        <SettingRow<Goal>
+          label="How to win"
+          value={goalOf(settings)}
+          disabled={!isHost}
+          options={GOALS}
+          onChange={(g) => change(g === 'world' ? { goal: 'world' } : { goal: 'classic', victoryShare: GOAL_SHARE[g] })}
+        />
+        <p className="rounded-xl bg-white/5 px-3 py-2 text-[13px] text-white/80">{goalText(settings)} A player whose nation falls can keep watching.</p>
         <p className="text-[13px] text-white/65 leading-snug">Everyone plans at once. The month moves on when every player is Ready, or when the timer ends. Nations nobody picks are run by the AI.</p>
         <div className="flex gap-2">
           <button className="btn flex-1 py-3" onClick={leave}>

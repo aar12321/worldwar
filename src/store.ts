@@ -186,6 +186,8 @@ interface GameStore {
   openAgencies(target?: NationId): void
   mapMode: MapMode
   diploFocus: NationId | null
+  /** Opening Diplomacy from a war: the peace composer opens by itself on that nation. */
+  diploPeace: boolean
   /** Battles waiting to play in the battle window. The first one is showing. */
   fxQueue: BattleReport[]
   /** How many battles this batch started with, for "Battle 2 of 4". */
@@ -239,7 +241,7 @@ interface GameStore {
   setMapMode(mode: MapMode): void
   /** Follows an advisor button to the desk, tab, country or window it points at. */
   goTo(target: AdviceTarget): void
-  openDiplomacy(nationId: NationId | null): void
+  openDiplomacy(nationId: NationId | null, opts?: { peace?: boolean }): void
   issueOrder(order: Order): boolean
   /** Issues several orders at once, one save and one summary. Returns how many went through. */
   issueBatch(orders: Order[]): { done: number; failed: number }
@@ -693,6 +695,7 @@ export const useGame = create<GameStore>((set, get) => ({
   agencyTarget: null,
   mapMode: 'political',
   diploFocus: null,
+  diploPeace: false,
   fxQueue: [],
   fxTotal: 0,
   summary: null,
@@ -920,8 +923,8 @@ export const useGame = create<GameStore>((set, get) => ({
     }
   },
 
-  openDiplomacy(nationId) {
-    set({ panel: 'diplomacy', diploFocus: nationId })
+  openDiplomacy(nationId, opts) {
+    set({ panel: 'diplomacy', diploFocus: nationId, diploPeace: !!opts?.peace })
   },
 
   issueOrder(order) {

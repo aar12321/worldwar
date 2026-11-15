@@ -162,7 +162,7 @@ export class OnlineSession {
     const humans = lobby.players.map((p) => p.nationId)
     if (humans.some((h) => !h)) return 'Everyone needs to pick a nation first'
     const ids = humans as NationId[]
-    const state = createInitialState(this.map, { playerRegionId: ids[0], humans: ids, seed: lobby.settings.seed, victoryShare: lobby.settings.victoryShare, difficulty: lobby.settings.difficulty })
+    const state = createInitialState(this.map, { playerRegionId: ids[0], humans: ids, seed: lobby.settings.seed, victoryShare: lobby.settings.victoryShare, goal: lobby.settings.goal ?? 'world', difficulty: lobby.settings.difficulty })
     lobby.phase = 'playing'
     this.game = state
     this.plans.clear()

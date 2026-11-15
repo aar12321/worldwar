@@ -354,6 +354,8 @@ export interface PeaceTerms {
   cede: RegionId[]
   /** The loser becomes a puppet of the proposer instead of losing land. */
   puppet?: boolean
+  /** A general peace: allies and puppets of each side who are fighting the other side stop too, with the same truce. */
+  general?: boolean
   /** Capital per month for REPARATION_MONTHS. Positive: the target pays the proposer. Negative: the proposer pays. */
   reparations: number
 }

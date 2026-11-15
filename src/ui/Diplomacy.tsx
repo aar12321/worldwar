@@ -5,7 +5,7 @@ import { coalitionActive, nationNeighbors, opinionLabel, opinionReport, type Opi
 import { PERSONALITIES } from '../data/personalities'
 import { COSTS, DIPLOMACY, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS } from '../data/unitTypes'
 import { blocOf, blocsOf } from '../engine/blocs'
-import { PACT_TURNS, describeProposal, loanPayment } from '../engine/diplomacy'
+import { PACT_TURNS, describeProposal, generalPeaceTies, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
 import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, regionsOf, turnDate } from '../engine/helpers'
 import { annexCost, warCost } from '../engine/orders'
@@ -282,8 +282,10 @@ function PeaceComposer({ target }: { target: NationId }) {
   const [cede, setCede] = useState<RegionId[]>([])
   const [reparations, setReparations] = useState(0)
   const [puppet, setPuppet] = useState(false)
+  const [general, setGeneral] = useState(false)
+  const ties = generalPeaceTies(game, player.id, target)
   const live = cede.filter((id) => game.regions[id] && (game.regions[id].owner === target || game.regions[id].owner === player.id))
-  const terms = { cede: live, reparations, ...(puppet ? { puppet: true } : {}) }
+  const terms = { cede: live, reparations, ...(puppet ? { puppet: true } : {}), ...(general && ties.length ? { general: true } : {}) }
   const net = netWarScore(game, player.id, target)
   const budget = Math.max(0, net)
   const { demand, concession } = termsCost(game, map, terms, player.id, target)
@@ -330,9 +332,21 @@ function PeaceComposer({ target }: { target: NationId }) {
           </span>
         </label>
       )}
+      {ties.length > 0 && (
+        <label className="flex items-start gap-2 text-[14px]">
+          <input type="checkbox" className="mt-1" checked={general} onChange={(e) => setGeneral(e.target.checked)} />
+          <span>
+            Include allies on both sides
+            <span className="block text-[12px] text-white/65">
+              Also ends {ties.length === 1 ? 'the war' : `${ties.length} wars`} between their friends and yours ({ties.slice(0, 4).map(([x, y]) => `${game.nations[x].name}–${game.nations[y].name}`).join(', ')}
+              {ties.length > 4 ? ', …' : ''}). A broader peace is harder to sell.
+            </span>
+          </span>
+        </label>
+      )}
       <OrderButton
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
-        label={live.length === 0 && reparations === 0 && !puppet ? 'Offer peace with no terms' : 'Send terms'}
+        label={live.length === 0 && reparations === 0 && !puppet && !terms.general ? 'Offer peace with no terms' : 'Send terms'}
         cost={`${PROPOSAL_COSTS.peace} influence`}
         effect="They answer when the month ends"
         tone="btn-primary"
@@ -410,9 +424,14 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const { map } = getWorld()
   const ref = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'money'>('none')
+  const peaceIntent = useGame((s) => s.diploPeace)
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [focused])
+  const atWarWithPlayer = atWar(game, player.id, id)
+  useEffect(() => {
+    if (focused && peaceIntent && atWarWithPlayer) setMode('peace')
+  }, [focused, peaceIntent, atWarWithPlayer])
   const n = game.nations[id]
   const war = atWar(game, player.id, id)
   const allied = isAllied(game, player.id, id)

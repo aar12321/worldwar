@@ -5,7 +5,10 @@ export type ClientId = string
 /** What the host decides about a room before the game starts. */
 export interface RoomSettings {
   difficulty: Difficulty
+  /** How big the 'classic' goals are (see `conquestGoal` and `economicGoal`). Ignored when the goal is the whole world. */
   victoryShare: number
+  /** 'world': the first player to hold every country wins. 'classic': the shorter goals (countries, people or output). Missing means 'world'. */
+  goal?: 'world' | 'classic'
   /** Seconds each month lasts before the game moves on without the slow players. 0 means wait for everyone. */
   timer: 0 | 60 | 90 | 120 | 180
   seed: number

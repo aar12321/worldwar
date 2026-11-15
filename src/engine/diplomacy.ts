@@ -139,6 +139,21 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   }
 }
 
+/** One side of a war: the nation, its allies and its puppets. */
+const sideOf = (s: GameState, id: NationId): NationId[] => [...new Set([id, ...alliesOf(s, id), ...puppetsOf(s, id)])].filter((x) => s.nations[x]?.alive)
+
+/** Wars between the two sides, other than the one between `a` and `b` themselves: what a general peace would also end. */
+export function generalPeaceTies(s: GameState, a: NationId, b: NationId): [NationId, NationId][] {
+  const mine = sideOf(s, a)
+  const theirs = sideOf(s, b)
+  const out: [NationId, NationId][] = []
+  for (const x of mine) for (const y of theirs) {
+    if (x === y || (x === a && y === b)) continue
+    if (atWar(s, x, y)) out.push([x, y])
+  }
+  return out
+}
+
 function makePeace(s: GameState, a: NationId, b: NationId) {
   const key = pairKey(a, b)
   s.wars = s.wars.filter((k) => k !== key)
@@ -157,6 +172,7 @@ export function validateProposal(s: GameState, map: WorldMap, from: NationId, to
   switch (d.kind) {
     case 'peace':
       if (!atWar(s, from, to)) return 'Not at war'
+      if (d.terms.general && !accepted && generalPeaceTies(s, from, to).length === 0) return 'Nobody else on either side is at war: untick "Include allies on both sides"'
       return validatePeaceTerms(s, map, d.terms, from, to, !accepted)
     case 'pact':
       if (atWar(s, from, to)) return 'Make peace first'
@@ -209,7 +225,9 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
       if (p.terms.reparations > 0) parts.push(`${name(s, p.to)} pays ${p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
       if (p.terms.reparations < 0) parts.push(`${name(s, p.from)} pays ${-p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
       if (p.terms.puppet) parts.unshift(`${name(s, p.to)} becomes a puppet of ${name(s, p.from)} and pays ${Math.round(DIPLOMACY.puppet.tribute * 100)}% of its income`)
-      return parts.length ? parts.join('; ') : 'White peace: no territory or payments change hands'
+      const base = parts.length ? parts.join('; ') : 'White peace: no territory or payments change hands'
+      const ties = p.terms.general ? generalPeaceTies(s, p.from, p.to) : []
+      return ties.length ? `${base}; and ${ties.length === 1 ? 'one more war' : `${ties.length} more wars`} between their allies and puppets end too (${ties.map(([x, y]) => `${name(s, x)}–${name(s, y)}`).join(', ')})` : base
     }
     case 'pact':
       return `Neither side may declare war for ${PACT_TURNS} months`
@@ -243,7 +261,10 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
   if (err) return err
   switch (p.kind) {
     case 'peace': {
+      // Read the other wars first: signing the main peace changes who counts as allied and at war.
+      const ties = p.terms.general ? generalPeaceTies(s, p.from, p.to) : []
       makePeace(s, p.from, p.to)
+      for (const [x, y] of ties) if (atWar(s, x, y)) makePeace(s, x, y)
       for (const id of p.terms.cede) {
         const owner = s.regions[id].owner
         const receiver = owner === p.to ? p.from : p.to
