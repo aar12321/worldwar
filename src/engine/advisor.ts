@@ -380,7 +380,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   }
   if (money > 250 && econ.netCapital > 5 && !n.inDebt) {
     const weakest = SECTOR_IDS.map((id) => ({ id, size: n.sectors[id] ?? 0 })).sort((a, b) => a.size - b.size)[0]
-    if (weakest) add('idea', 28, { id: 'business', title: `Back your ${SECTORS[weakest.id].name.toLowerCase()} sector`, detail: `It is your smallest industry, at size ${weakest.size.toFixed(1)}. A grant makes it bigger, and each size it grows adds ${SECTORS[weakest.id].yields.replace(/^\+/, '')}.`, action: 'Open Business', target: { desk: 'economy', tab: 'business' } })
+    if (weakest) add('idea', 28, { id: 'business', title: `Back your ${SECTORS[weakest.id].name.toLowerCase()} sector`, detail: `It is your smallest industry, at size ${weakest.size.toFixed(1)}. A grant makes it bigger, and each size it grows adds ${SECTORS[weakest.id].yields.replaceAll('+', '')}.`, action: 'Open Business', target: { desk: 'economy', tab: 'business' } })
   }
 
   // Growth

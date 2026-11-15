@@ -135,7 +135,7 @@ export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marsha
 
 export interface Agency {
   level: number
-  /** Experience from successful operations. */
+  /** Experience from successful operations. Only the foreign agency's counts (it raises the odds); the domestic count is kept for old saves and is not shown. */
   exp: number
 }
 

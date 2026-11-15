@@ -1,4 +1,7 @@
+import { useMemo } from 'react'
 import { DRAFT_LIMITS, TAX_LIMITS } from '../../data/unitTypes'
+import { monthEndLines } from '../../engine/monthEnd'
+import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
 import { signed, usePlayerView } from '../hooks'
 import { Card, Line, SliderRow } from './parts'
@@ -11,10 +14,13 @@ export function BudgetTab() {
   const tax = view.pendingPolicy.taxRate
   const draft = view.pendingPolicy.draftRate
   const maxDraft = player.laws.includes('conscription_act') ? DRAFT_LIMITS.maxWithConscription : DRAFT_LIMITS.max
+  // Share dividends, tribute and trade deals move at the month's end, outside the economy's own lines.
+  const extra = useMemo(() => monthEndLines(game, getWorld().map, player.id), [game, player.id])
+  const change = econ.netCapital + extra.reduce((sum, l) => sum + l.amount, 0)
 
   return (
     <section className="econ-grid">
-      <Card title="Money each month" hint="Everything that comes in and goes out, added up. These lines come straight from the engine, so they sum to what is left over.">
+      <Card title="Money each month" hint="Everything that comes in and goes out, added up. These lines come straight from the engine, so they sum to what is left over. Share dividends, tribute and trade deals arrive separately at the month's end and are listed below.">
         <div className="text-[14px] space-y-1">
           {econ.lines
             .filter((l) => l.kind === 'income')
@@ -27,6 +33,14 @@ export function BudgetTab() {
               <Line key={l.label} k={l.label === 'War bills' ? `War bills (${econ.warBills.map((b) => game.nations[b.enemy]?.name ?? b.enemy).join(', ')})` : l.label} v={signed(l.amount)} warn />
             ))}
           <Line k="Left over" v={signed(econ.netCapital)} warn={econ.netCapital < 0} strong />
+          {extra.length > 0 && (
+            <>
+              {extra.map((l) => (
+                <Line key={l.label} k={l.label} v={signed(l.amount)} warn={l.amount < 0} />
+              ))}
+              <Line k="Treasury change this month" v={signed(change)} warn={change < 0} strong />
+            </>
+          )}
         </div>
         <p className="text-[12px] text-white/60">Spending on schools, health and welfare is set in People; public works in Projects; the central bank in Bank.</p>
       </Card>
