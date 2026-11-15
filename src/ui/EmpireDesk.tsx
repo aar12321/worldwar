@@ -48,7 +48,7 @@ export function EmpireDesk() {
   const { game, player } = view
   const spec = tierOf(player)
   return (
-    <PanelShell title="Empire" kicker={`${spec.name} · ${empireCount(game, player.id)} countries`} panel="empire" wide tabs={<Tabs value={tab} onChange={setTab} options={TABS} />}>
+    <PanelShell title="Empire" kicker={`${spec.name} · ${empireCount(game, player.id)} ${empireCount(game, player.id) === 1 ? 'country' : 'countries'}`} panel="empire" wide tabs={<Tabs value={tab} onChange={setTab} options={TABS} />}>
       <div>
         {tab === 'overview' && <Overview />}
         {tab === 'provinces' && <Provinces />}
@@ -65,6 +65,14 @@ function Statistics() {
   const mine = (game.history ?? []).filter((h) => h.nation === player.id)
   const series = (f: (h: (typeof mine)[number]) => number) => mine.map(f)
   const n = Object.values(game.nations).filter((x) => x.alive).length
+  if (mine.length < 2) {
+    return (
+      <section className="inset-card p-5 text-center space-y-1">
+        <h3 className="text-[16px] font-semibold">The charts start after your first month</h3>
+        <p className="text-[13px] text-white/70">Money, income, strength, countries, stability, population, schooling, inflation, jobs and your rank in the world will be drawn here, one point a month.</p>
+      </section>
+    )
+  }
   return (
     <section className="econ-grid">
       <p className="text-[13px] text-white/70 span-all">One point a month for {player.name}. The charts keep up to fifty years.</p>
