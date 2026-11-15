@@ -3,15 +3,16 @@ import { generateAllBotOrders } from './ai/bot'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import type { AdviceTarget } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
-import { forceUnits, maxAttacks, totalUnits, turnDate } from './engine/helpers'
+import { maxAttacks, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
+import { markMonth, statsOf } from './engine/monthMark'
 import { markSettled } from './engine/economy'
 import { MONTH_END_ORDERS, isMonthEndOrder, validateOrder } from './engine/orders'
 import { absDate, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
 import { applyOrderNow, describeOrder, resolveTurn } from './engine/resolveTurn'
-import type { BattleReport, Dispatch, GameState, NationId, Order, Programs, RegionId, Spending } from './engine/types'
+import type { BattleReport, Dispatch, GameState, MonthMark, MonthStats, NationId, Order, Programs, RegionId, Spending } from './engine/types'
 import { getWorld } from './map/world'
 import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type Lobby, type RoomSettings } from './net/protocol'
 import { OnlineSession } from './net/session'
@@ -491,31 +492,27 @@ function flashCapture(regionId: RegionId, loss: boolean, color: string) {
   useFx.getState().shake(loss ? 1.15 : 0.7)
 }
 
-/** Divisions a nation has, at home and in the field. */
-const sumUnits = (game: GameState, id: NationId) => (game.nations[id] ? totalUnits(forceUnits(game, id)) : 0)
-
-/** The monthly report: what changed for the player between two states, from the numbers and the log. */
-function buildReport(before: GameState, after: GameState, player: NationId, battles: BattleReport[]): MonthReport {
-  const a = before.nations[player]
-  const b = after.nations[player]
+/** The monthly report: what changed for the player between how the month began and now, from the numbers and the log. */
+function buildReport(a: MonthStats, after: GameState, player: NationId, battles: { text: string; good: boolean }[]): MonthReport {
+  const b = statsOf(after, player)
   const month = after.turn - 1
   const mine = after.log.filter((e) => e.turn === month && e.nations.includes(player) && e.kind !== 'battle').map((e) => e.text)
   const world = after.log.filter((e) => e.turn === month && !e.nations.includes(player) && (e.kind === 'war' || e.kind === 'news')).map((e) => e.text)
   return {
     turn: month,
     deltas: [
-      { label: 'Money', before: a.resources.capital, after: b.resources.capital },
-      { label: 'Food', before: a.resources.food, after: b.resources.food },
-      { label: 'Influence', before: a.resources.pp, after: b.resources.pp },
-      { label: 'Research', before: a.resources.tp, after: b.resources.tp },
-      { label: 'Oil', before: a.resources.oil, after: b.resources.oil },
-      { label: 'Steel', before: a.resources.steel, after: b.resources.steel },
-      { label: 'Goods', before: a.resources.goods, after: b.resources.goods },
-      { label: 'Soldiers', before: a.militaryPool, after: b.militaryPool, suffix: 'k' },
-      { label: 'Divisions', before: sumUnits(before, player), after: sumUnits(after, player), digits: 1 },
+      { label: 'Money', before: a.money, after: b.money },
+      { label: 'Food', before: a.food, after: b.food },
+      { label: 'Influence', before: a.influence, after: b.influence },
+      { label: 'Research', before: a.research, after: b.research },
+      { label: 'Oil', before: a.oil, after: b.oil },
+      { label: 'Steel', before: a.steel, after: b.steel },
+      { label: 'Goods', before: a.goods, after: b.goods },
+      { label: 'Soldiers', before: a.soldiers, after: b.soldiers, suffix: 'k' },
+      { label: 'Divisions', before: a.divisions, after: b.divisions, digits: 1 },
       { label: 'Stability', before: a.stability, after: b.stability, suffix: '%' },
     ],
-    battles: battles.map((x) => battleLine(x, after, player)),
+    battles,
     lines: mine.slice(-10),
     world: world.slice(-4),
   }
@@ -526,22 +523,35 @@ function buildReport(before: GameState, after: GameState, player: NationId, batt
 /** Why a live game's clock is held other than the player's own pause, or null when nothing holds it. */
 export type Hold = 'online' | 'over' | 'event' | 'battle' | 'report' | 'planning' | 'help'
 
-/** The reason is the one the player sees: help sits on top of everything, a battle hides the report, the report hides a decision. */
+/**
+ * The reason is the one the player sees, in the order the windows are drawn: the end of the game when no battle is playing, then
+ * the jump-to box and a question being asked, then help, a battle, the report, a decision, and last the War Room.
+ */
 export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'> & Partial<Pick<GameStore, 'paletteOpen' | 'confirm'>>): Hold | null {
   if (st.online) return 'online'
   if (!st.game) return 'over'
+  const battle = st.fxQueue.length > 0
+  if (st.game.outcome !== 'playing' && !battle) return 'over'
+  if (st.paletteOpen || st.confirm) return 'planning'
   if (st.helpOpen) return 'help'
-  if (st.fxQueue.length > 0) return 'battle'
-  if (st.game.outcome !== 'playing') return 'over'
+  if (battle) return 'battle'
   if (st.summary) return 'report'
   if (st.game.pendingEvent) return 'event'
-  if (st.warRoom || st.paletteOpen || st.confirm) return 'planning'
+  if (st.warRoom) return 'planning'
   return null
 }
 
-/** The month as it began, and the player's battles in it, for the month's report. */
-let monthStart: GameState | null = null
-let monthBattles: BattleReport[] = []
+/** The month a live game is in as it began, with the player's battles in it so far. It lives in the game, so a save keeps it. */
+function monthOf(game: GameState): MonthMark {
+  return game.monthStart && game.monthStart.turn === game.turn ? game.monthStart : markMonth(game, game.playerId)
+}
+
+/** A live game with its month's starting point in place, so the report is right however the game was opened. */
+function withMonth(game: GameState): GameState {
+  if (isLive(game) && (!game.monthStart || game.monthStart.turn !== game.turn)) game.monthStart = markMonth(game, game.playerId)
+  return game
+}
+
 const UNDO_LIMIT = 10
 const botPlanner = (s: GameState, m: ReturnType<typeof getWorld>['map']) => generateAllBotOrders(s, m)
 
@@ -581,7 +591,7 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
     for (const d of mineNews.slice(-3)) toast(d.text, DISPATCH_TONE[d.kind], 6000)
     if (!fx.length) for (const b of mine) if (b.captured) toast(battleLine(b, next, player).text, b.defender.nationId === player ? 'error' : 'success', 6000)
   }
-  return { fxQueue: fx, fxTotal: fx.length, summary: settings.monthlyReport ? buildReport(before, next, player, mine) : null }
+  return { fxQueue: fx, fxTotal: fx.length, summary: settings.monthlyReport ? buildReport(statsOf(before, player), next, player, mine.map((b) => battleLine(b, next, player))) : null }
 }
 
 /** The host resolved a month. Show it the way a single-player turn is shown. */
@@ -674,8 +684,7 @@ async function connect(name: string, code: string, role: 'create' | 'join', sett
 /** Makes a loaded game the one being played: slots and imports go through here. Waiting orders must be ones that wait for the month's end. */
 function enterGame(game: GameState, orders: Order[] | undefined): boolean {
   if (session || useGame.getState().online) return false
-  monthStart = game
-  monthBattles = []
+  withMonth(game)
   const kept = (orders ?? []).filter((o): o is Order => keptOrder(o, game.playerId))
   save(game, kept, true)
   useGame.setState({ running: false, undoStack: [], confirm: null, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: kept, selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: true })
@@ -718,10 +727,8 @@ export const useGame = create<GameStore>((set, get) => ({
 
   newGame(opts) {
     const { map } = getWorld()
-    const game = createInitialState(map, opts)
+    const game = withMonth(createInitialState(map, opts))
     save(game, [], true)
-    monthStart = game
-    monthBattles = []
     set({
       running: false,
       undoStack: [],
@@ -751,9 +758,7 @@ export const useGame = create<GameStore>((set, get) => ({
     try {
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
-      const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
-      monthStart = game
-      monthBattles = []
+      const game = withMonth(normalizeGame(JSON.parse(raw) as GameState, getWorld().map))
       set({ running: false, undoStack: [], selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
     } catch {
       get().toast('Save file is corrupted.', 'error')
@@ -1144,15 +1149,18 @@ export const useGame = create<GameStore>((set, get) => ({
     if (step.state === game) return
     const shown = presentLiveStep({ step, player: game.playerId, before: game, fxQueue: st.fxQueue, recentBattles: st.recentBattles, settings: st.settings, toast: st.toast })
     // A day that moved the world on cannot be taken back.
+    const player = game.playerId
+    const lineOf = (b: BattleReport) => battleLine(b, step.state, player)
+    const month = monthOf(game)
     const patch: Partial<GameStore> = { game: step.state, recentBattles: shown.recentBattles, fxQueue: shown.fxQueue, fxTotal: shown.fxQueue.length, undoStack: [] }
     // An army that has gone home or been lost no longer has a card.
     if (st.selectedArmy && !step.state.armies?.some((a) => a.id === st.selectedArmy)) patch.selectedArmy = null
     if (step.monthEnded) {
       // Uprisings are fought as the month turns over and belong to the month that ended. Battles on the 1st belong to the new one.
-      monthBattles.push(...step.state.battles.filter((b) => b.attacker.nationId === 'rebels' && b.defender.nationId === game.playerId))
-      const report = buildReport(monthStart ?? game, step.state, game.playerId, monthBattles)
-      monthStart = step.state
-      monthBattles = shown.mine.filter((b) => b.attacker.nationId !== 'rebels')
+      const risings = step.state.battles.filter((b) => b.attacker.nationId === 'rebels' && b.defender.nationId === player).map(lineOf)
+      const report = buildReport(month.stats, step.state, player, [...month.battles, ...risings])
+      // The new month's starting point goes into the game, so a save made on any day of it keeps the month's report right.
+      patch.game = { ...step.state, monthStart: markMonth(step.state, player, shown.mine.filter((b) => b.attacker.nationId !== 'rebels').map(lineOf)) }
       patch.orders = []
       if (st.settings.liveReport === 'pause') patch.summary = report
       else patch.liveNote = report
@@ -1161,8 +1169,8 @@ export const useGame = create<GameStore>((set, get) => ({
       for (const d of news.slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
       const failed = step.state.log.filter((e) => e.turn === game.turn && e.text.startsWith('Order failed') && e.nations.includes(game.playerId))
       if (failed.length) st.toast(failed.length === 1 ? failed[0].text : `${failed.length} orders failed at the month's end. See the report.`, 'error', 7000)
-      save(step.state, [])
-    } else monthBattles.push(...shown.mine)
+      save(patch.game!, [])
+    } else if (shown.mine.length) patch.game = { ...step.state, monthStart: { ...month, battles: [...month.battles, ...shown.mine.map(lineOf)] } }
     set(patch)
   },
 

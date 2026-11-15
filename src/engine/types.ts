@@ -576,6 +576,8 @@ export interface BattleReport {
   lineMax?: number
   /** Live mode: the army that fought it. */
   armyId?: string
+  /** The player chose how much of the military to send, instead of a preset. */
+  chosen?: boolean
   /** Set by the screen on a battle watched again from the list, so the globe does not treat it as news. */
   replay?: boolean
 }
@@ -738,6 +740,30 @@ export interface GameState {
   flights?: MissileFlight[]
   /** Live mode only: the absolute day whose business waits until the player answers a decision that came with the new month. */
   pendingDay?: number
+  /** Live mode only: how the player's nation stood when the month began, and its battles since. It travels with the game, so a month's report is right across a save and a load. The screen keeps it; the clock does not touch it. */
+  monthStart?: MonthMark
+}
+
+/** The numbers the monthly report compares: how the player's nation stood at one moment. */
+export interface MonthStats {
+  money: number
+  food: number
+  influence: number
+  research: number
+  oil: number
+  steel: number
+  goods: number
+  soldiers: number
+  divisions: number
+  stability: number
+}
+
+/** A month's starting point for the report: the numbers as the month began, and one line for each of the player's battles since. */
+export interface MonthMark {
+  /** The month it began. */
+  turn: number
+  stats: MonthStats
+  battles: { text: string; good: boolean }[]
 }
 
 /** How an army gets to its target. Over water or air it fights with the amphibious penalty. */
@@ -759,6 +785,8 @@ export interface Army {
   stance: Stance
   /** Share of the military it was when it left, for the battle report. */
   share: number
+  /** The player chose the share, instead of a preset. The battle report names it a chosen force, not a preset. */
+  chosen?: boolean
   via: Via
   /** Fixed at launch: crossing water or air fights with the amphibious penalty. */
   bySea: boolean

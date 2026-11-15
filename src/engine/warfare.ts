@@ -477,6 +477,8 @@ export function resolveAttack(
 
   const captured = outcome.winner === 'attacker' && lineAfter <= 0
   const wasCapital = defenderNation.capital === target
+  // A live army says whether its share was chosen; in a turn game the order says so.
+  const chosen = army ? !!army.chosen : custom !== undefined
   const report: BattleReport = {
     id: newId(s, 'b'),
     turn: s.turn,
@@ -486,13 +488,14 @@ export function resolveAttack(
     rounds: outcome.rounds,
     winner: outcome.winner,
     captured,
-    modifiers: [...outcome.modifiers, `${spec.name} with ${custom !== undefined && !army ? 'a chosen force' : COMMITS[commit].name.toLowerCase()} (${Math.round(share * 100)}% of the military)`],
+    modifiers: [...outcome.modifiers, `${spec.name} with ${chosen ? 'a chosen force' : COMMITS[commit].name.toLowerCase()} (${Math.round(share * 100)}% of the military)`],
     commit,
     stance,
     lineBefore,
     lineAfter,
     lineMax: max,
     ...(army ? { armyId: army.id } : {}),
+    ...(chosen ? { chosen } : {}),
   }
   s.battles.push(report)
   if (outcome.winner === 'attacker') reach(attackerNation, 'win')

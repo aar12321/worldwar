@@ -19,7 +19,7 @@ export interface PlayerView {
 }
 
 /** What a live game changes on a quiet day. Nothing else is touched, so nothing that reads the rest needs to redo its work. */
-const CLOCK_KEYS = new Set(['day', 'armies', 'launches', 'flights', 'battles'])
+const CLOCK_KEYS = new Set(['day', 'armies', 'launches', 'flights', 'battles', 'monthStart'])
 let slowGame: GameState | null = null
 
 /**
