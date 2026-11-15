@@ -1,5 +1,6 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { EVENT_BY_ID } from '../data/events'
+import { campaignPrice, campaignProblem, socialCost, socialProblem } from './society'
 import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, DIPLOMACY, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
 import { CITY_RULES, FOCUS } from '../data/cities'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS } from '../data/business'
@@ -187,6 +188,12 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     }
     case 'enactLaw':
       c.pp = LAW_SPECS[o.law].cost
+      break
+    case 'setSocial':
+      c.pp = s.nations[o.nationId] ? socialCost(s.nations[o.nationId], o.policy, o.level) : 0
+      break
+    case 'campaign':
+      c.capital = s.nations[o.nationId] ? campaignPrice(s, s.nations[o.nationId], o.campaign) : 0
       break
     case 'suppressRebels':
       c.pp = COSTS.suppressRebels
@@ -549,6 +556,13 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'enactLaw':
       if (pending.some((p) => p.type === 'enactLaw')) return 'One new law a month'
       return lawProblem(n, o.law)
+    case 'setSocial':
+      // Two changes to one program in the same batch would both pass the once-a-month rule: the second is refused.
+      if (pending.some((p) => p.type === 'setSocial' && p.policy === o.policy)) return 'Already changed this month'
+      return socialProblem(s, n, o.policy, o.level)
+    case 'campaign':
+      if (pending.some((p) => p.type === 'campaign' && p.campaign === o.campaign)) return 'Already running'
+      return campaignProblem(n, o.campaign)
     case 'repealLaw':
       return n.laws.includes(o.law) ? null : 'Not enacted'
     case 'suppressRebels': {

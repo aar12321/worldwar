@@ -32,6 +32,8 @@ export function CountryPanel() {
   const openMilitary = useGame((s) => s.openMilitary)
   const openWarRoom = useGame((s) => s.openWarRoom)
   const { map } = getWorld()
+  // Read before the early return below: a hook may not be skipped on some renders.
+  const humanName = useHumanName(useGame((s) => (selected ? (s.game?.regions[selected]?.owner ?? null) : null)))
   if (!view || !selected) return null
   const { game, player, orders } = view
   const region = game.regions[selected]
@@ -42,7 +44,6 @@ export function CountryPanel() {
   const pact = !mine && hasPact(game, player.id, owner.id)
   const allied = !mine && isAllied(game, player.id, owner.id)
   const opinion = mine ? 0 : opinionOf(game, map, owner.id, player.id)
-  const humanName = useHumanName(owner.id)
   const built = BUILDING_TYPES.filter((b) => region.buildings[b] > 0)
   const attackErr = war ? validateOrder(game, map, { type: 'attack', nationId: player.id, target: selected }, orders) : null
   const max = lineMax(game, map, selected)

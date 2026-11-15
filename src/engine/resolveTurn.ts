@@ -29,6 +29,8 @@ import { runEpidemics } from './epidemics'
 import { updateTiers } from './empire'
 import { nationNeighborMap } from './helpers'
 import { EVENT_BY_ID } from '../data/events'
+import { CAMPAIGNS, LEVEL_NAMES, SOCIAL } from '../data/society'
+import { applyCampaign, applySocial } from './society'
 import { EVENT_GAP_TURNS, resolveEvent, scheduleEvent, scheduleHumanEvents, settleUnanswered } from './events'
 import { addLog, forceUnits, reach, regionsOf } from './helpers'
 import { clockOf, isLive } from './calendar'
@@ -185,6 +187,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Enact ${LAW_SPECS[o.law].name}`
     case 'repealLaw':
       return `Repeal ${LAW_SPECS[o.law].name}`
+    case 'setSocial':
+      return `${SOCIAL[o.policy]?.name ?? 'Program'}: ${LEVEL_NAMES[o.level] ?? o.level}`
+    case 'campaign':
+      return `Run a ${CAMPAIGNS[o.campaign]?.name.toLowerCase() ?? 'campaign'}`
     case 'suppressRebels':
       return `Suppress rebels in ${region(o.regionId)}`
     case 'eventChoice': {
@@ -198,7 +204,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 const PHASES: Order['type'][][] = [
   ['eventChoice'],
   ['respond'],
-  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor', 'setDirective', 'moveCapital'],
+  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose', 'resolution'],
   ['cancelTrain'],
@@ -499,6 +505,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'enactLaw':
       n.laws.push(o.law)
       addLog(s, 'info', `${n.name} enacted ${LAW_SPECS[o.law].name}.`, [o.nationId])
+      break
+    case 'setSocial':
+      applySocial(s, n, o.policy, o.level)
+      break
+    case 'campaign':
+      applyCampaign(s, n, o.campaign)
       break
     case 'repealLaw':
       n.laws = n.laws.filter((l) => l !== o.law)

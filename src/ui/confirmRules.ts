@@ -1,3 +1,4 @@
+import { SOCIAL, SOCIAL_RULES } from '../data/society'
 import { describeOrder } from '../engine/resolveTurn'
 import { orderCost } from '../engine/orders'
 import type { GameState, Order, WorldMap } from '../engine/types'
@@ -37,6 +38,11 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
     case 'cancelDeal': {
       const d = game.deals.find((x) => x.id === o.dealId)
       return d && d.kind === 'trade' ? asks('Tear up this trade deal?', 'The other side will not forget it.', 'Tear it up', true) : null
+    }
+    case 'setSocial': {
+      const before = game.nations[o.nationId]?.social?.[o.policy]?.level ?? 0
+      if (o.level >= before) return null
+      return asks(`${before - o.level > 1 ? 'Cut' : 'Reduce'} ${SOCIAL[o.policy].name.toLowerCase()}?`, `People will lose it: stability falls by ${(before - o.level) * SOCIAL_RULES.cutStability} at once, and the benefit fades over a few months. Raising it again costs influence again.`, 'Cut it', true)
     }
     case 'repealLaw':
       return null

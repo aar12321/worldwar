@@ -39,6 +39,14 @@ export type OccupationPolicy = 'standard' | 'autonomy' | 'assimilate' | 'settle'
 export type ArmsExports = 'off' | 'friends' | 'anyone'
 export type ProjectId = 'rail' | 'grid' | 'ports' | 'sciencePark' | 'medCentre' | 'digitalGov' | 'spaceComplex'
 export type ResearchTrack = 'productivity' | 'medicine' | 'weapons'
+/** The standing programs a government runs for its people (see `data/society.ts`). */
+export type SocialId =
+  | 'clinics' | 'cleanWater' | 'mentalHealth' | 'elderCare'
+  | 'schoolMeals' | 'scholarships' | 'apprenticeships' | 'libraries'
+  | 'minimumWage' | 'jobsGuarantee' | 'smallLoans' | 'workerRights'
+  | 'childBenefit' | 'parentalLeave' | 'foodAid' | 'transit'
+  | 'policing' | 'courts' | 'integration' | 'festivals' | 'broadcasting' | 'surveillance'
+export type CampaignId = 'celebration' | 'vaccination' | 'literacy' | 'jobFair' | 'unityTour' | 'foodBank' | 'babyBonus'
 /** 1 Nation, 2 Regional power, 3 Great power, 4 Superpower, 5 Hegemon. */
 export type Tier = 1 | 2 | 3 | 4 | 5
 
@@ -110,6 +118,19 @@ export interface Bond {
   /** Months it ran for, to roll it over for as long again. */
   term: number
   war?: boolean
+}
+
+/** One social program: the level chosen, how far its effect has phased in toward it, and the month it was last changed. */
+export interface SocialState {
+  level: number
+  strength: number
+  changed: number
+}
+
+/** A campaign: months of effect left, and months until it can be run again. */
+export interface CampaignState {
+  left: number
+  cooldown: number
 }
 
 export interface ProjectState {
@@ -309,6 +330,10 @@ export interface Nation {
   stateOwned: SectorId[]
   seizedUntil: number
   projects: Partial<Record<ProjectId, ProjectState>>
+  /** Social programs in force. Absent until the first one is set, so a nation that never uses them is unchanged. */
+  social?: Partial<Record<SocialId, SocialState>>
+  /** Campaigns running or cooling down. Absent until the first one is run. */
+  campaigns?: Partial<Record<CampaignId, CampaignState>>
   /** Military academy level, 0 to 3. */
   academy: number
   /** Levels bought in each future research program. */
@@ -535,6 +560,9 @@ export type Order =
   | { type: 'setDirective'; nationId: NationId; company: string; directive: Directive }
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
+  /** Sets a social program to Off (0), Pilot, National or Universal (3). */
+  | { type: 'setSocial'; nationId: NationId; policy: SocialId; level: number }
+  | { type: 'campaign'; nationId: NationId; campaign: CampaignId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
   /** Online: this player's answer to the decision waiting for them (`GameState.pendingEvents`). */
   | { type: 'eventChoice'; nationId: NationId; index: number }

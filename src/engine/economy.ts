@@ -26,6 +26,7 @@ import { bankCredit, inflationStability, interestOf, policyRate, realIncomeFacto
 import { accordTrade } from './council'
 import { adminReport, combineTraits, occupationFloor, settleSpeed, type AdminReport } from './empire'
 import { activeProjects, armsExportIncome, doneProject, enterpriseIncome, industryCapMult, powerMult, programEffects, projectBill, runArmsExports, runProjects, worksEffects } from './industry'
+import { societyBill, societyEffects, runSociety, type SocietySource } from './society'
 import { coverageMult, coverageOf, demandOf, peopleStability, populationGrowth, runPeople, spendingBill, type Demand, type PeopleBasis } from './people'
 import { commanderTrait } from './generals'
 
@@ -106,6 +107,12 @@ export interface MoneyLine {
   kind: 'income' | 'cost'
 }
 
+/** One cause of stability, with its effect in points. */
+export interface StabilityPart {
+  label: string
+  value: number
+}
+
 export interface EconomyReport {
   workforce: number
   civilianWorkforce: number
@@ -157,6 +164,10 @@ export interface EconomyReport {
   militaryCap: number
   civilianManpower: number
   stabilityTarget: number
+  /** Why stability is heading where it is: each cause and how many points it adds (or takes). They sum to the target before it is held to 0-100. */
+  stabilityParts: StabilityPart[]
+  /** Programs for the people: what they cost a month, what they add, and where it comes from. */
+  society: { bill: number; byPolicy: Record<string, number>; stability: number; rawStability: number; sources: SocietySource[] }
   divisions: number
   population: number
   /** The people model's view of the nation: its land, what its work needs, how well it is staffed. */
@@ -369,24 +380,31 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
 
   const highTax = Math.max(0, n.taxRate - 0.2) * 150 * Math.max(0.2, 1 + pol.taxSensitivity)
   const lowTax = Math.max(0, 0.2 - n.taxRate) * 50
+  const soc = societyEffects(n)
+  const societyCost = societyBill(n, workforce)
+  // Every cause on its own line, so the screen can say why stability is where it is. Added in this order, which is the order the sum has always had.
+  const stabilityParts: StabilityPart[] = [
+    { label: 'A settled country', value: ECON.stabilityBase },
+    { label: 'High taxes', value: -highTax },
+    { label: 'Low taxes', value: lowTax },
+    { label: 'Hunger', value: -(n.foodShortage ? 25 * (1 - soc.social.famine) : 0) },
+    { label: 'Empty shops', value: -(n.goodsShortage ? MATERIALS.noGoodsStability * (1 - soc.social.famine) : 0) },
+    { label: 'Debt', value: -(n.inDebt ? 15 : 0) },
+    { label: 'War weariness', value: -(n.warWeariness * 0.5 * Math.max(0.2, 1 + pol.weariness)) },
+    { label: 'Government and laws', value: pol.stability },
+    { label: 'Technology', value: mods.stability },
+    { label: 'Rebels', value: -(rebelRegions * 3) },
+    // Officials can run only so much: an empire past its administration capacity grows restless.
+    { label: 'Stretched officials', value: -admin.stability },
+    { label: 'Health, jobs and welfare', value: n.people ? peopleStability(n) : 0 },
+    { label: 'Rising prices', value: -inflationStability(n) },
+    { label: 'Epidemic', value: -(EPIDEMIC.stability * epidemic) },
+    { label: 'Conquered land', value: -(OCCUPATION[n.programs?.occupation ?? 'standard'].stability * occupied) },
+    { label: 'Immigration', value: IMMIGRATION[n.programs?.immigration ?? 'normal'].stability },
+    { label: 'Programs for the people', value: soc.stability },
+  ]
   const stabilityTarget = clamp(
-    ECON.stabilityBase -
-      highTax +
-      lowTax -
-      (n.foodShortage ? 25 : 0) -
-      (n.goodsShortage ? MATERIALS.noGoodsStability : 0) -
-      (n.inDebt ? 15 : 0) -
-      n.warWeariness * 0.5 * Math.max(0.2, 1 + pol.weariness) +
-      pol.stability +
-      mods.stability -
-      rebelRegions * 3 -
-      // Officials can run only so much: an empire past its administration capacity grows restless.
-      admin.stability +
-      (n.people ? peopleStability(n) : 0) -
-      inflationStability(n) -
-      EPIDEMIC.stability * epidemic -
-      OCCUPATION[n.programs?.occupation ?? 'standard'].stability * occupied +
-      IMMIGRATION[n.programs?.immigration ?? 'normal'].stability,
+    stabilityParts.reduce((sum, p) => sum + p.value, 0),
     0,
     100,
   )
@@ -409,6 +427,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'Pensions', amount: -spending.pensions, kind: 'cost' },
     { label: 'Jobless support', amount: -spending.jobless, kind: 'cost' },
     { label: 'Housing', amount: -spending.housing, kind: 'cost' },
+    { label: 'Programs for the people', amount: -societyCost.total, kind: 'cost' },
     { label: 'National projects', amount: -(projects.building + projects.upkeep), kind: 'cost' },
     { label: 'Governors', amount: -governors, kind: 'cost' },
     { label: 'Settlers', amount: -settle, kind: 'cost' },
@@ -460,6 +479,8 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     militaryCap: workforce * n.draftRate * ECON.militaryCapPerWorkforce,
     civilianManpower: population * (1 - n.draftRate),
     stabilityTarget,
+    stabilityParts,
+    society: { bill: societyCost.total, byPolicy: societyCost.byPolicy as Record<string, number>, stability: soc.stability, rawStability: soc.rawStability, sources: soc.sources },
     divisions,
     population,
     basis,
@@ -547,14 +568,15 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   // Families grow with health, homes and food; an epidemic or famine takes its toll.
   const growth = n.people ? populationGrowth(n) : n.foodShortage ? -0.003 : 0.0008
   const occ = OCCUPATION[n.programs?.occupation ?? 'standard']
+  const soc = societyEffects(n).social
   const heal = 1 + worksEffects(n).heal + (doneProject(n, 'rail') ? 0.15 : 0)
   for (const region of owned) {
     region.population *= 1 + growth
     if (region.sabotaged > 0) region.sabotaged--
     if (region.integration < 1) {
-      region.integration = Math.min(1, region.integration + settleSpeed(s, map, n, region.id) / WAR.integrationTurns)
-      // Unrest in land you have not yet won over.
-      if (rng.chance(0.07 * occ.rebels * (1 - region.integration))) region.rebels += 0.4 + e.workforce * 0.02
+      region.integration = Math.min(1, region.integration + (settleSpeed(s, map, n, region.id) * (1 + soc.settle)) / WAR.integrationTurns)
+      // Unrest in land you have not yet won over. Good policing and a tour of the provinces make it rarer.
+      if (rng.chance(0.07 * occ.rebels * (1 - region.integration) * (1 - soc.order))) region.rebels += 0.4 + e.workforce * 0.02
     }
     // A country heals its Defense Line in months nobody attacks it.
     if (region.attackedTurn < s.turn) {
@@ -563,7 +585,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
     }
   }
 
-  if (n.stability < 30 && rng.chance((30 - n.stability) / 120)) {
+  if (n.stability < 30 && rng.chance(((30 - n.stability) / 120) * (1 - soc.order))) {
     const candidates = owned.filter((x) => x.id !== n.capital)
     const target = candidates.length ? rng.pick(candidates) : owned[0]
     if (target) {
@@ -574,6 +596,8 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
 
   // The people's year, the bank's month, the projects' progress and the arms trade.
   if (n.people) runPeople(s, n, e.basis)
+  // Programs phase in toward their level, and campaigns run down.
+  runSociety(n)
   if (n.bank) runBank(s, n, e.gross, e.credit.score, e.credit.room, e.credit.rate, e.credit.locked)
   if (n.projects) r.capital += runProjects(s, n, e.coverage.engineers)
   runArmsExports(s, n)

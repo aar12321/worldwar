@@ -35,6 +35,8 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 /** The five desks, plus News and Settings which open from the top bar. */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
 export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
+/** The parts of the People tab. */
+export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'family' | 'safety' | 'campaigns'
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
@@ -191,6 +193,8 @@ interface GameStore {
   selectedRegion: RegionId | null
   panel: Panel
   economyTab: EconomyTab
+  peopleSection: PeopleSection
+  setPeopleSection(section: PeopleSection): void
   /** Country shown in the Economy desk's upgrade list. Null means the capital. */
   economyRegion: RegionId | null
   militaryTab: MilitaryTab
@@ -748,6 +752,7 @@ export const useGame = create<GameStore>((set, get) => ({
   selectedRegion: null,
   panel: 'none',
   economyTab: 'country',
+  peopleSection: 'overview',
   economyRegion: null,
   militaryTab: 'forces',
   empireTab: 'overview',
@@ -912,6 +917,10 @@ export const useGame = create<GameStore>((set, get) => ({
 
   setEconomyTab(tab) {
     set({ economyTab: tab })
+  },
+
+  setPeopleSection(section) {
+    set({ peopleSection: section })
   },
 
   setEconomyRegion(id) {
