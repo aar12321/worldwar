@@ -110,7 +110,9 @@ export function ArmiesDock() {
       {yours.slice(0, 4).map((a) => (
         <ArmyRow key={a.id} army={a} game={game} compact />
       ))}
-      {yours.length + coming.length > 7 && <div className="text-[12px] text-white/65 px-1">and more in Military › Armies</div>}
+      {Math.max(0, coming.length - 3) + Math.max(0, yours.length - 4) > 0 && (
+        <div className="text-[12px] text-white/65 px-1">{Math.max(0, coming.length - 3) + Math.max(0, yours.length - 4)} more in Military › Armies</div>
+      )}
     </div>
   )
 }

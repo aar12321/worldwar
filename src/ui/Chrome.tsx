@@ -10,6 +10,7 @@ import { AdviceList } from './Briefing'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, MilitaryIcon, ResearchIcon } from './icons'
 import { Modal } from './Modal'
+import { Spark } from './Charts'
 
 const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
   { panel: 'briefing', label: 'Briefing', key: 'B', icon: <BriefingIcon /> },
@@ -267,6 +268,12 @@ export function GameOver() {
           <dd className="text-[26px] font-semibold">{Object.values(game.nations).filter((n) => n.alive).length}</dd>
         </div>
       </dl>
+      {(game.history ?? []).filter((h) => h.nation === game.playerId).length >= 2 && (
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Spark label="Countries over the game" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.countries)} color="#0a84ff" />
+          <Spark label="Military strength" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.power)} color="#ff9f0a" />
+        </div>
+      )}
     </Modal>
   )
 }

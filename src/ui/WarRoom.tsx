@@ -73,6 +73,16 @@ function WarRoomDialog({ target }: { target: RegionId }) {
     if (!game || !player) return null
     return Object.fromEntries(STANCE_KEYS.map((st) => [st, forecastAttack(game, map, player.id, target, commit, st, undefined, missiles)])) as Record<Stance, ReturnType<typeof forecastAttack>>
   }, [game, player, target, commit, map, missiles])
+  // AI Battle Command level 3 also recommends how much to send: the smallest force that wins with good odds, or all in if that is the best hope.
+  const aiLevelNow = player?.systems?.ai ?? 0
+  const bestCommit = useMemo<Commit | null>(() => {
+    if (!game || !player || aiLevelNow < 3) return null
+    const odds = COMMIT_KEYS.map((c) => ({ c, f: forecastAttack(game, map, player.id, target, c, 'assault', undefined, undefined) })).filter((x) => x.f)
+    const good = odds.find((x) => x.f!.winChance >= 0.75)
+    if (good) return good.c
+    const best = odds.reduce<(typeof odds)[number] | null>((b, x) => (!b || x.f!.winChance > b.f!.winChance ? x : b), null)
+    return best && best.f!.winChance >= 0.4 ? best.c : null
+  }, [game, player, aiLevelNow, target, map])
   if (!view || !game || !player || !game.regions[target]) return null
 
   const region = game.regions[target]
@@ -117,6 +127,11 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           <button className="btn btn-quiet mr-auto" onClick={() => open(null)}>
             Cancel
           </button>
+          {f && !err && (
+            <span className="text-[13px] text-white/80 tabular-nums mr-1 hidden sm:inline" aria-live="polite">
+              {f.label} · {Math.round(f.winChance * 100)}% to win · lose about {f.yourLosses.toFixed(1)}
+            </span>
+          )}
           {err && <span className="text-[13px] text-white/80 max-w-[260px] text-right">{speak(err)}</span>}
           <button className="btn btn-red px-5" data-autofocus disabled={!!err} onClick={() => attack(target, commit, stance, missiles)}>
             {live ? 'Launch army' : 'Launch attack'}
@@ -163,7 +178,10 @@ function WarRoomDialog({ target }: { target: RegionId }) {
                   onClick={() => setCommit(c)}
                   className={`rounded-xl p-2.5 text-left border ${commit === c ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/6 hover:bg-white/10'}`}
                 >
-                  <div className="text-[14px] font-semibold">{COMMITS[c].name}</div>
+                  <div className="text-[14px] font-semibold">
+                    {COMMITS[c].name}
+                    {bestCommit === c && <span className="ml-1.5 rounded-full bg-[#30d158]/25 px-1.5 py-0.5 text-[10px] font-semibold text-[#6eeb8a]">AI recommends</span>}
+                  </div>
                   <div className="text-[12px] text-white/75 tabular-nums">{formatDivisions(totalUnits(player.military.units) * share)} divisions</div>
                   <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[12px] text-white/80 tabular-nums">
                     {UNIT_TYPES.filter((u) => player.military.units[u] * share >= 0.05).map((u) => (

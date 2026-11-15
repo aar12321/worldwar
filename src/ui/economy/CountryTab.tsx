@@ -106,6 +106,29 @@ function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
   const { game, player } = view
   const { map } = getWorld()
   const unsettled = owned.filter((id) => game.regions[id].integration < 1).length
+  const [sort, setSort] = useState<'name' | 'population' | 'settling' | 'rebels'>('population')
+  const [filter, setFilter] = useState<'all' | 'settling' | 'rebels' | 'nogov' | string>('all')
+  const [query, setQuery] = useState('')
+  // A country's trait, to filter by.
+  const traits = [...new Set(owned.map((id) => traitOf(id, map.regions[id])))].sort()
+  const shownList = (() => {
+    const q = query.trim().toLowerCase()
+    const list = owned.filter((id) => {
+      const r = game.regions[id]
+      if (q && !map.regions[id].name.toLowerCase().includes(q)) return false
+      if (filter === 'settling') return r.integration < 1
+      if (filter === 'rebels') return r.rebels > 0
+      if (filter === 'nogov') return !r.governor || r.governor === 'off'
+      if (filter !== 'all') return traitOf(id, map.regions[id]) === filter
+      return true
+    })
+    return list.sort((a, b) => {
+      const ra = game.regions[a]
+      const rb = game.regions[b]
+      const v = sort === 'name' ? map.regions[a].name.localeCompare(map.regions[b].name) : sort === 'population' ? rb.population - ra.population : sort === 'settling' ? ra.integration - rb.integration : rb.rebels - ra.rebels
+      return v || (a < b ? -1 : 1)
+    })
+  })()
   return (
     <div className="span-all inset-card p-3.5 space-y-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -134,8 +157,31 @@ function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
           ))}
         </select>
       </div>
+      {owned.length > 6 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input className="field px-3 py-1.5 text-[13px] flex-1 min-w-32" placeholder="Search your countries" aria-label="Search your countries" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className="field px-2 py-1.5 text-[13px]" aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="all">All countries</option>
+            <option value="settling">Still settling</option>
+            <option value="rebels">With rebels</option>
+            <option value="nogov">No governor</option>
+            {traits.map((t) => (
+              <option key={t} value={t}>
+                {TRAITS[t].name}
+              </option>
+            ))}
+          </select>
+          <select className="field px-2 py-1.5 text-[13px]" aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <option value="population">Biggest first</option>
+            <option value="name">A to Z</option>
+            <option value="settling">Least settled first</option>
+            <option value="rebels">Most rebels first</option>
+          </select>
+        </div>
+      )}
+      {shownList.length === 0 && <p className="text-[13px] text-white/60">No country matches.</p>}
       <ul className="space-y-1.5">
-        {owned.map((id) => {
+        {shownList.map((id) => {
           const r = game.regions[id]
           const tr = TRAITS[traitOf(id, map.regions[id])]
           return (

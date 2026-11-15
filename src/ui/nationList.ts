@@ -9,4 +9,5 @@ export function rankNations(map: WorldMap): { r: MapRegion; score: number }[] {
     .sort((a, b) => b.score - a.score)
 }
 
-export const nationTier = (score: number) => (score > 25 ? 'Great Power' : score > 10 ? 'Major Power' : score > 4 ? 'Regional Power' : 'Minor Nation')
+/** How strong a nation starts. These are not the empire tiers, which you earn by holding countries. */
+export const nationTier = (score: number) => (score > 25 ? 'Powerhouse' : score > 10 ? 'Strong start' : score > 4 ? 'Modest start' : 'Small start')
