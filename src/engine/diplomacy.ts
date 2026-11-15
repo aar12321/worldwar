@@ -55,7 +55,10 @@ export function annexPuppet(s: GameState, map: WorldMap, master: NationId, puppe
     m.military.units[k] += p.military.units[k]
     p.military.units[k] = 0
   }
+  // Live mode: its armies in the field and salvos in the air are the master's now, and its planned attacks go with them.
   for (const a of s.armies ?? []) if (a.nationId === puppet) a.nationId = master
+  for (const f of s.flights ?? []) if (f.nationId === puppet) f.nationId = master
+  for (const l of s.launches ?? []) if (l.order.nationId === puppet) l.order.nationId = master
   m.resources.capital += Math.max(0, p.resources.capital)
   p.resources.capital = Math.min(0, p.resources.capital)
   for (const id of Object.keys(s.regions).sort()) if (s.regions[id].owner === puppet) transferRegion(s, map, id, master, false)

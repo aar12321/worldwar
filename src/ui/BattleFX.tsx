@@ -222,7 +222,7 @@ export function BattleFX() {
           <LineBar now={done ? (battle.lineAfter ?? battle.lineBefore) : battle.lineBefore} max={battle.lineMax} />
           {battle.stance && battle.commit && (
             <p className="text-[13px] text-white/70">
-              {STANCES[battle.stance].name} · {COMMITS[battle.commit].name.toLowerCase()}
+              {STANCES[battle.stance].name} · {battle.chosen ? 'a chosen force' : COMMITS[battle.commit].name.toLowerCase()}
             </p>
           )}
         </div>

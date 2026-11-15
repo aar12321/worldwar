@@ -5,6 +5,7 @@ import { newStocks } from './stocks'
 import { EVENT_BY_ID } from '../data/events'
 import { startingCities } from './cities'
 import { lineMax } from './economy'
+import { cleanMark } from './monthMark'
 import { UNIT_TYPES } from './types'
 import { EVENT_GAP_TURNS, FIRST_EVENT_TURN } from './events'
 import type { GameState, WorldMap } from './types'
@@ -91,6 +92,7 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   }
   if (game.pendingEvent && !EVENT_BY_ID[game.pendingEvent.eventId]) game.pendingEvent = null
   if (game.settings.mode === 'live') cleanLive(game, map)
+  else delete game.monthStart
   // Statecraft: spending levels from the old budget, bonds from old debt, people, the bank, tiers.
   for (const r of Object.values(game.regions)) r.buildings.hospital ??= 0
   ensureStatecraft(game, map)
@@ -128,6 +130,13 @@ function cleanLive(game: GameState, map: WorldMap) {
     a.commit = ['probe', 'main', 'allin'].includes(a.commit) ? a.commit : 'main'
     a.stance = ['assault', 'blitz', 'siege'].includes(a.stance) ? a.stance : 'assault'
     a.bySea = !!a.bySea
+    if (a.chosen !== true) delete a.chosen
+  }
+  // The month's starting point for the report. A damaged one, or one from another month, is dropped, and the screen starts the month from where the game stands.
+  if (game.monthStart !== undefined) {
+    const mark = cleanMark(game.monthStart, game.turn)
+    if (mark) game.monthStart = mark
+    else delete game.monthStart
   }
   if (game.pendingDay !== undefined && (!finite(game.pendingDay) || !game.pendingEvent)) delete game.pendingDay
   const armyIds = new Set(game.armies.map((a) => a.id))

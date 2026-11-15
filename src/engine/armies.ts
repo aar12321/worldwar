@@ -144,6 +144,7 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
     commit,
     stance,
     share,
+    ...(o.share !== undefined ? { chosen: true } : {}),
     via: trip.via,
     bySea: trip.bySea,
     home: trip.from,
