@@ -1,3 +1,4 @@
+import type { LiveOp } from '../engine/live'
 import type { Difficulty, GameState, NationId, Order } from '../engine/types'
 
 export type ClientId = string
@@ -12,6 +13,39 @@ export interface RoomSettings {
   /** Seconds each month lasts before the game moves on without the slow players. 0 means wait for everyone. */
   timer: 0 | 60 | 90 | 120 | 180
   seed: number
+  /** 'live': the clock runs and armies march. Missing means turns. */
+  mode?: 'turns' | 'live'
+  /** Live: how fast the clock runs. The host can change it during the game. */
+  speed?: LiveSpeed
+  /** Live: how many times each player who is not the host may pause the game. 99 means as often as they like. */
+  pauses?: number
+  /** Live: seconds a pause by a player who is not the host lasts before the clock runs again by itself. */
+  pauseLimitSec?: number
+}
+
+export type LiveSpeed = 1 | 2 | 4
+
+export const PAUSE_CHOICES = [0, 3, 5, 99] as const
+export const DEFAULT_PAUSES = 3
+export const DEFAULT_PAUSE_LIMIT_SEC = 90
+
+/** A new room's rules: the mode chosen on the start screen, and the usual defaults. */
+export function newRoomSettings(mode: 'turns' | 'live', random: () => number = Math.random): RoomSettings {
+  return { difficulty: 'normal', victoryShare: 0.4, goal: 'world', timer: 0, seed: Math.floor(random() * 1e6), mode, speed: 1, pauses: DEFAULT_PAUSES, pauseLimitSec: DEFAULT_PAUSE_LIMIT_SEC }
+}
+
+/** The shared clock of an online live game, as the host runs it. */
+export interface LiveClock {
+  running: boolean
+  speed: LiveSpeed
+  /** Who paused it, while it is paused by a player. Null when nobody has (a new game, or after the host changed). */
+  pausedBy: ClientId | null
+  /** Pauses each player who is not the host has left. */
+  pausesLeft: Record<ClientId, number>
+  /** Milliseconds until a player's pause ends by itself, or null. */
+  resumeInMs: number | null
+  /** The host's page is hidden, so its browser may slow the game down. */
+  hostHidden?: boolean
 }
 
 export interface LobbyPlayer {
@@ -46,11 +80,22 @@ export type NetMessage =
   | { t: 'leave'; from: ClientId }
   | { t: 'orders'; from: ClientId; turn: number; orders: Order[]; ready: boolean }
   | { t: 'ready'; from: ClientId; turn: number; ready: NationId[]; remainingMs: number | null }
-  | { t: 'state'; from: ClientId; id: string; part: number; parts: number; data: string; turn: number; remainingMs: number | null }
+  | { t: 'state'; from: ClientId; id: string; part: number; parts: number; data: string; turn: number; remainingMs: number | null; seq?: number; reset?: boolean }
   | { t: 'need-state'; from: ClientId }
   | { t: 'chat'; from: ClientId; name: string; text: string; at: number }
   | { t: 'ping'; from: ClientId; name: string }
   | { t: 'claim-host'; from: ClientId }
+  // Live games.
+  /** An order that happens at once, for the host to apply and pass on. `nonce` lets the sender match the answer. */
+  | { t: 'act'; from: ClientId; nonce: string; order: Order }
+  /** The host could not make an order. */
+  | { t: 'act-fail'; from: ClientId; to: ClientId; nonce: string; error: string }
+  /** Steps of the game, numbered from `seq0`. `fp` is the fingerprint of the game after the last one, when it is known. */
+  | { t: 'ops'; from: ClientId; seq0: number; ops: LiveOp[]; fp: string | null }
+  | { t: 'clock'; from: ClientId; clock: LiveClock }
+  | { t: 'clock-req'; from: ClientId; action: 'pause' | 'resume' | 'speed'; speed?: LiveSpeed }
+  /** A screen missed steps and asks for them again, from this number on. */
+  | { t: 'need-ops'; from: ClientId; fromSeq: number }
 
 /** Room codes avoid letters that look alike, so they can be read out loud. */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -101,7 +146,8 @@ export async function decodeState(parts: string[]): Promise<GameState> {
 /** A short fingerprint of a game, to see at a glance whether two screens agree. */
 export function fingerprint(state: GameState): string {
   let h = 2166136261
-  const text = `${state.turn}|${state.seed}|${state.log.length}|${state.nextId}|${Object.values(state.nations).map((n) => `${n.id}${n.alive ? 1 : 0}${Math.round(n.resources.capital)}`).join(',')}`
+  const armies = (state.armies ?? []).map((a) => `${a.id}${a.phase}${a.end}`).join(',')
+  const text = `${state.turn}|${state.day ?? ''}|${armies}|${state.seed}|${state.log.length}|${state.nextId}|${Object.values(state.nations).map((n) => `${n.id}${n.alive ? 1 : 0}${Math.round(n.resources.capital)}`).join(',')}`
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619)
   return (h >>> 0).toString(36)
 }

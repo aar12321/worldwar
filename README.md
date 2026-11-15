@@ -13,7 +13,7 @@ npm run build      # type-check + production bundle
 
 ## How to play
 
-The game has two modes, chosen when you start. In **Turns** (the default), one turn is one month, starting January 2026, and nothing moves until you press **Next turn** (or Enter). In **Live** (for one player), time flows by itself and you watch armies march: see [Live mode](#live-mode).
+The game has two modes, chosen when you start. In **Turns** (the default), one turn is one month, starting January 2026, and nothing moves until you press **Next turn** (or Enter). In **Live**, time flows by itself and you watch armies march: see [Live mode](#live-mode). Both modes can be played alone or with friends online.
 
 1. Pick a nation on the main menu (search the list or click the globe), and choose how skilled your rivals are. **You win by holding the whole world**: every country yours or a puppet of yours. It is a long game, built for about 12 to 15 hours of play. Taxes start at the neutral 20% (and business tax at 15%), so every change you make has an effect. **Easy** rivals play the basics, wait a long time before attacking you, and never band together against you. **Medium** rivals also grow cities, set budgets and laws, fund business, and form alliances and blocs. **Hard** rivals also borrow, invest abroad, sanction, counter the units you field, press an ally's enemy together, and turn a crushing win into a puppet state.
 2. The game is run from **six desks** on the left (Briefing, Economy, Military, Diplomacy, Empire, Research):
@@ -55,17 +55,31 @@ Pick **Live** on the start screen and the same game runs on a clock: a month tak
 - **Armies.** An attack in the War Room sends an army out of your military. It leaves from a border country, a port or an airbase, marches for days (by land, across a sea lane, by fleet or by air: the War Room shows the days and the dates), fights with the usual combat rules when it arrives, stays a day, and marches home; the survivors rejoin your military. Units that are away do not defend your country, but still cost upkeep. Recall an army while it is on its way out, or turn it back by making peace.
 - **On the globe.** Each army is a badge in its nation's color (a plane, ship, tank or infantry mark). Yours have a white outline and a dashed blue route; enemy armies marching on you are outlined in red with a red route, a pulsing ring over the country and an alert in the top bar with the days left. Battles show a pin with the Defense Line draining and the result; hypersonic missiles fly as arcs and land a day later; an orbital strike hits at once.
 - **The AI** plans once a month as in Turns, and its attacks leave on days of the month, so you see them coming.
-- **What stops the clock:** pausing, a decision (an event), a battle window (opt in with Settings > Pause on my battles), the monthly report if you chose that, the War Room, and the help window. The clock never runs in the background of a hidden tab. Live games are single player; playing with friends online uses Turns.
+- **What stops the clock:** pausing, a decision (an event), a battle window (opt in with Settings > Pause on my battles), the monthly report if you chose that, the War Room, and the help window. The clock never runs in the background of a hidden tab. With friends online only a pause stops the clock: see [Play with friends](#play-with-friends-1-to-4-players).
 
 ## Play with friends (1 to 4 players)
 
-On the main menu press **Play with friends online**, type a name, and **Create a room**. You get a five-letter code. Friends press the same button, choose **Join a room** and type it. In the lobby everyone picks a nation, and the host sets the rules: rival skill (Easy, Medium, Hard), how you win (hold the whole world, or a short, standard or long game of countries taken, people held or share of the world's output), and how long each month lasts (no timer, 1, 1.5, 2 or 3 minutes). Nations nobody picks are run by the AI, and AI nations still ally, trade and fight each other.
+On the main menu press **Play with friends online**, type a name, and **Create a room**. You get a five-letter code. Friends press the same button, choose **Join a room** and type it. In the lobby everyone picks a nation, and the host sets the rules: the mode (**Turns** or **Live**, starting with the one chosen on the menu), rival skill (Easy, Medium, Hard), and how you win (hold the whole world, or a short, standard or long game of countries taken, people held or share of the world's output). In Turns the host also sets how long each month lasts (no timer, 1, 1.5, 2 or 3 minutes); in Live, the speed and how many pauses each player has. Nations nobody picks are run by the AI, and AI nations still ally, trade and fight each other.
+
+### Turns with friends
 
 - **Everyone plans the same month at once.** Press **Ready** when you are done. The month moves on when every player is ready, or when the timer ends. Press the button again to keep planning. Players who are away are skipped, and their nation is run by the AI until they return.
 - **Attacks wait for the end of the month online.** In a one-player game an attack plays out the moment you order it. Online, it joins your plan and is resolved at month end in a seeded order, so nobody wins by clicking faster. Builds, trades and training still happen at once.
 - **No random events online**, since one player's choice would stall the others.
+
+### Live with friends
+
+- **One clock for everyone.** The game starts paused; the host presses play when everyone is ready. The host sets the speed (1x, 2x, 4x) for the whole room.
+- **Pauses.** The host can pause at any time. Every other player has a few pauses for the game (none, 3, 5 or any number, as the host chose), shown under the clock. Only the player who paused, or the host, can start the clock again, and a player's pause ends by itself after 90 seconds, so nobody can hold the room. The War Room, reports, battles and help never stop the shared clock.
+- **Orders.** Upgrades, training, trades, shares, armies, recalls, missiles, offers and answers go to the host and take effect for everyone a moment later ("Sending..." under the clock). They are made in the order the host receives them. Research, taxes, the draft and other changes wait for the 1st of the month, as alone; if they reach the host after the month has turned, they count on the 1st of the next.
+- **Armies** of every player march on every globe: yours outlined in white, other players' in their nation's color.
+- **No random events online**, as in Turns. A player who is away has their nation run by the AI each month until they come back.
+- **Keep the host's tab open.** The host's browser runs the game. A hidden host tab keeps running, but browsers may slow it, and everyone sees a note when the host's tab is in the background.
+
+### Both modes
+
 - The first player to reach the goal wins. A player whose nation falls keeps watching; the game ends when someone wins or every player has fallen.
-- Open **Players and chat** under the Ready button to see who is ready and to talk. If your tab closes, press **Rejoin** on the same menu to take your seat back. If the host leaves, the next player takes over the game.
+- Open **Players and chat** under the Ready button (or under the clock in Live) to see who is here and to talk. If your tab closes, press **Rejoin** on the same menu to take your seat back. If the host leaves, the next player takes over the game (in Live, paused, until the new host presses play).
 
 ### Connecting players
 
@@ -82,7 +96,7 @@ npm run dev
 
 Without them the game still runs, and **Play with friends** works in a practice mode between tabs of the same browser (open the page twice). It cannot connect different computers.
 
-How it works: the host's browser runs the same pure engine as a one-player game and is the referee. Other players send their plan for the month to the host, who checks every order against that player's own nation, resolves the month, and sends the new game back (compressed, in pieces under 50 KB). Everyone's game is therefore identical. The room is a trust-your-friends design: the host's browser holds the truth, and there is no server-side anti-cheat. Messages are not encrypted beyond what Supabase provides, so do not share the room code with strangers.
+How it works: the host's browser runs the same pure engine as a one-player game and is the referee. In Turns, other players send their plan for the month to the host, who checks every order against that player's own nation, resolves the month, and sends the new game back (compressed, in pieces under 50 KB). In Live, the host sends a numbered stream of small steps instead: each order it made, and each day that passed. Every screen applies the same steps to the same game, and the host sends the whole game once a month, when it turns the month over. Each step carries a fingerprint of the host's game, and a screen that missed steps or disagrees asks for them, or the game, again. Everyone's game is therefore identical. The room is a trust-your-friends design: the host's browser holds the truth, and there is no server-side anti-cheat. Messages are not encrypted beyond what Supabase provides, so do not share the room code with strangers.
 
 Shortcuts: `Enter` next turn, `B` briefing, `E` economy, `M` military, `W` wars, `D` diplomacy, `R` research, `N` news, `A` War Room for the selected country, `?` help, `Esc` close.
 
@@ -102,7 +116,7 @@ src/
     economy.ts / diplomacy.ts / espionage.ts / tech.ts / victory.ts
   data/        Tech tree, units, buildings, terrain, events, country stats, starting nations
   ai/          Rule-based orders for every nation no human plays (same rules as the player): bot, diplomat, management, opinion, blocs
-  net/         Online play: protocol (messages, room codes, compressed snapshots), transport (Supabase Realtime, same-browser fallback), session (lobby, host, ready, timer, host handover)
+  net/         Online play: protocol (messages, room codes, compressed snapshots), transport (Supabase Realtime, same-browser fallback), session (lobby, host, ready, timer, host handover), liveRoom (live games: the host's referee with its clock and pause rules, and each screen's mirror of the host's steps), ticker (keeps a hidden host's page ticking)
   map/world.ts Natural Earth 110m countries -> regions, adjacency, coastlines, sea lanes
   ui/          React: globe, HUD, drawers, Modal, battle window, diplomacy, tech tree. ui/globe has the army layer (badges, routes, missile arcs); ui/liveClock.ts is the one loop that runs a live game's clock
   store.ts     Zustand store: orders, turn flow, battle queue, autosave (localStorage)

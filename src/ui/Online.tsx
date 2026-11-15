@@ -4,7 +4,7 @@ import { DIFFICULTY } from '../data/difficulty'
 import type { Difficulty } from '../engine/types'
 import { conquestGoal, economicGoal } from '../engine/victory'
 import { getWorld } from '../map/world'
-import { MAX_PLAYERS, type RoomSettings } from '../net/protocol'
+import { DEFAULT_PAUSE_LIMIT_SEC, DEFAULT_PAUSES, MAX_PLAYERS, newRoomSettings, PAUSE_CHOICES, type LiveSpeed, type RoomSettings } from '../net/protocol'
 import { supabaseConfigured } from '../net/transport'
 import { rememberedName, useGame } from '../store'
 import { globeBridge } from './globeBridge'
@@ -36,6 +36,26 @@ const TIMERS: { value: RoomSettings['timer']; label: string }[] = [
   { value: 180, label: '3 min' },
 ]
 
+type Mode = 'turns' | 'live'
+const MODES: { value: Mode; label: string }[] = [
+  { value: 'turns', label: 'Turns' },
+  { value: 'live', label: 'Live' },
+]
+const SPEED_CHOICES: { value: LiveSpeed; label: string }[] = [
+  { value: 1, label: '1×' },
+  { value: 2, label: '2×' },
+  { value: 4, label: '4×' },
+]
+const PAUSE_OPTIONS = PAUSE_CHOICES.map((n) => ({ value: n as number, label: n === 0 ? 'None' : n >= 99 ? 'Any' : String(n) }))
+
+/** How a room plays, in plain words, from its settings. */
+function modeText(s: RoomSettings): string {
+  if (s.mode !== 'live') return 'Everyone plans at once. The month moves on when every player is Ready, or when the timer ends. Nations nobody picks are run by the AI.'
+  const pauses = s.pauses ?? DEFAULT_PAUSES
+  const pauseText = pauses === 0 ? 'Only the host can pause.' : pauses >= 99 ? 'Anyone can pause.' : `Each player can pause ${pauses} time${pauses === 1 ? '' : 's'}.`
+  return `The clock runs for everyone at once, and armies march as you order them. The host sets the speed. ${pauseText} A player's pause ends after ${Math.round((s.pauseLimitSec ?? DEFAULT_PAUSE_LIMIT_SEC) / 60 * 10) / 10} min, and only they or the host can end it sooner. Nations nobody picks are run by the AI.`
+}
+
 /** What kind of connection this is, in words a player can act on. */
 export function ConnectionNote({ kind }: { kind: 'supabase' | 'browser' | 'memory' }) {
   if (kind === 'supabase') return <p className="text-[13px] text-[#6eeb8a]">Connected. Friends anywhere can join with the code.</p>
@@ -47,7 +67,7 @@ export function ConnectionNote({ kind }: { kind: 'supabase' | 'browser' | 'memor
 }
 
 /** The first step: a name, then make a room or join one. */
-export function OnlineEntry({ onClose }: { onClose: () => void }) {
+export function OnlineEntry({ onClose, mode = 'turns' }: { onClose: () => void; mode?: Mode }) {
   const create = useGame((s) => s.createOnline)
   const join = useGame((s) => s.joinOnline)
   const lastRoom = useGame((s) => s.lastRoom)
@@ -65,7 +85,7 @@ export function OnlineEntry({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="Play with friends" kicker="Two to four players. Everyone plans the same month, then presses Ready." onClose={onClose} footer={<button className="btn px-5 py-2.5 text-[15px]" onClick={onClose}>Back</button>}>
+    <Modal title="Play with friends" kicker={mode === 'live' ? 'Two to four players, live: one clock for everyone, and armies march as you order them.' : 'Two to four players. Everyone plans the same month, then presses Ready.'} onClose={onClose} footer={<button className="btn px-5 py-2.5 text-[15px]" onClick={onClose}>Back</button>}>
       <div className="space-y-5">
         <label className="block">
           <span className="label">Your name</span>
@@ -75,12 +95,12 @@ export function OnlineEntry({ onClose }: { onClose: () => void }) {
         <section className="inset-card p-4 space-y-3">
           <div>
             <div className="text-[16px] font-semibold tracking-tight">Make a room</div>
-            <p className="text-[14px] text-white/70 mt-0.5">You choose the rules and share a five-letter code.</p>
+            <p className="text-[14px] text-white/70 mt-0.5">You choose the rules, Turns or Live, and share a five-letter code.</p>
           </div>
           <button
             className="btn btn-primary w-full py-2.5 text-[15px]"
             disabled={!ready || busy}
-            onClick={() => void run(() => create(name, { difficulty: 'normal', victoryShare: 0.4, goal: 'world', timer: 0, seed: Math.floor(Math.random() * 1e6) }))}
+            onClick={() => void run(() => create(name, newRoomSettings(mode)))}
           >
             Create a room
           </button>
@@ -245,6 +265,7 @@ export function Lobby() {
           <div className="text-[17px] font-semibold tracking-tight">Rules</div>
           <div className="text-[12px] text-white/65">{isHost ? 'You set these' : 'The host sets these'}</div>
         </div>
+        <SettingRow<Mode> label="Mode" value={settings.mode ?? 'turns'} disabled={!isHost} options={MODES} onChange={(mode) => change(mode === 'live' ? { mode, speed: settings.speed ?? 1, pauses: settings.pauses ?? DEFAULT_PAUSES, pauseLimitSec: settings.pauseLimitSec ?? DEFAULT_PAUSE_LIMIT_SEC } : { mode })} />
         <SettingRow<Difficulty>
           label="Rival nations"
           value={settings.difficulty}
@@ -252,7 +273,14 @@ export function Lobby() {
           options={(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => ({ value: d, label: DIFFICULTY[d].name }))}
           onChange={(difficulty) => change({ difficulty })}
         />
-        <SettingRow<number> label="Time to plan each month" value={settings.timer} disabled={!isHost} options={TIMERS} onChange={(timer) => change({ timer: timer as RoomSettings['timer'] })} />
+        {settings.mode === 'live' ? (
+          <>
+            <SettingRow<LiveSpeed> label="Speed (the host can change it during the game)" value={settings.speed ?? 1} disabled={!isHost} options={SPEED_CHOICES} onChange={(speed) => change({ speed })} />
+            <SettingRow<number> label="Pauses for each player" value={settings.pauses ?? DEFAULT_PAUSES} disabled={!isHost} options={PAUSE_OPTIONS} onChange={(pauses) => change({ pauses })} />
+          </>
+        ) : (
+          <SettingRow<number> label="Time to plan each month" value={settings.timer} disabled={!isHost} options={TIMERS} onChange={(timer) => change({ timer: timer as RoomSettings['timer'] })} />
+        )}
         <SettingRow<Goal>
           label="How to win"
           value={goalOf(settings)}
@@ -261,7 +289,7 @@ export function Lobby() {
           onChange={(g) => change(g === 'world' ? { goal: 'world' } : { goal: 'classic', victoryShare: GOAL_SHARE[g] })}
         />
         <p className="rounded-xl bg-white/5 px-3 py-2 text-[13px] text-white/80">{goalText(settings)} A player whose nation falls can keep watching.</p>
-        <p className="text-[13px] text-white/65 leading-snug">Everyone plans at once. The month moves on when every player is Ready, or when the timer ends. Nations nobody picks are run by the AI.</p>
+        <p className="text-[13px] text-white/65 leading-snug">{modeText(settings)}</p>
         <div className="flex gap-2">
           <button className="btn flex-1 py-3" onClick={leave}>
             Leave
@@ -372,6 +400,7 @@ export function OnlinePeople() {
                 const done = online.ready.includes(p.nationId as string)
                 const here = p.clientId === online.clientId || online.peers.includes(p.clientId)
                 const out = game.eliminated.includes(p.nationId as string)
+                const live = online.lobby?.settings.mode === 'live'
                 return (
                   <li key={p.clientId} className="flex items-center gap-2 text-[14px]">
                     <span aria-hidden className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: nation?.color ?? '#fff' }} />
@@ -379,7 +408,7 @@ export function OnlinePeople() {
                       <span className="font-semibold">{p.name}</span>
                       <span className="text-white/65"> · {nation?.name}</span>
                     </span>
-                    <span className="text-[12px] shrink-0 text-white/70">{out ? 'Out' : !here ? 'Away (AI plays)' : done ? 'Ready' : 'Planning'}</span>
+                    <span className="text-[12px] shrink-0 text-white/70">{out ? 'Out' : !here ? 'Away (AI plays)' : live ? (p.clientId === online.lobby?.host ? 'Host' : 'Playing') : done ? 'Ready' : 'Planning'}</span>
                   </li>
                 )
               })}

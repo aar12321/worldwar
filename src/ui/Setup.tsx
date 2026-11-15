@@ -179,10 +179,10 @@ export function Setup() {
         <button className="btn w-full py-2.5 text-[14px]" onClick={() => setOnlineOpen(true)}>
           Play with friends online
         </button>
-        <p className="text-[13px] text-white/65">{mode === 'live' ? 'Every other nation is a rival, acting as the days pass. Live games are for one player; playing with friends online uses turns.' : 'Every other nation is a rival. They act when you press Next turn. Playing with friends? Everyone presses Ready instead.'}</p>
+        <p className="text-[13px] text-white/65">{mode === 'live' ? 'Every other nation is a rival, acting as the days pass. Playing with friends? Everyone shares one clock.' : 'Every other nation is a rival. They act when you press Next turn. Playing with friends? Everyone presses Ready instead.'}</p>
       </motion.div>
     </div>
-      {onlineOpen && <OnlineEntry onClose={() => setOnlineOpen(false)} />}
+      {onlineOpen && <OnlineEntry mode={mode} onClose={() => setOnlineOpen(false)} />}
     </>
   )
 }

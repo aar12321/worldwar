@@ -13,7 +13,8 @@ import type { Commit, Stance } from './data/war'
 import { applyOrderNow, describeOrder, resolveTurn } from './engine/resolveTurn'
 import type { BattleReport, Dispatch, GameState, NationId, Order, Programs, RegionId, Spending } from './engine/types'
 import { getWorld } from './map/world'
-import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type Lobby, type RoomSettings } from './net/protocol'
+import type { LiveUpdate } from './net/liveRoom'
+import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type LiveClock, type LiveSpeed, type Lobby, type RoomSettings } from './net/protocol'
 import { OnlineSession } from './net/session'
 import { openTransport } from './net/transport'
 import { globeBridge, useFx } from './ui/globeBridge'
@@ -110,7 +111,15 @@ export interface OnlineView {
   error: string | null
   /** True until the room answers. */
   connecting: boolean
+  /** Live rooms: the shared clock, and when this screen heard it (for the pause countdown). */
+  clock: LiveClock | null
+  clockAt: number
+  /** Live rooms: orders sent to the host that have not come back yet, by nonce, with what each was. */
+  pending: Record<string, string>
 }
+
+/** Whether this screen is in an online live game that is under way. */
+const onlineLive = (st: { game: GameState | null; online: OnlineView | null }) => !!session && st.online?.status === 'playing' && !!st.game && isLive(st.game)
 
 const ONLINE_KEY = 'worlds-of-others-online'
 
@@ -601,7 +610,64 @@ function leaveSession() {
   session = null
   base = null
   immediate = []
+  stopWatching?.()
+  stopWatching = null
   s?.leave()
+}
+
+let stopWatching: (() => void) | null = null
+
+const dropKeys = (rec: Record<string, string>, keys: (string | undefined)[]) => {
+  const out = { ...rec }
+  for (const k of keys) if (k) delete out[k]
+  return out
+}
+
+/** The host's steps reached this screen (or were taken here, on the host). Show them the way a single-player day is shown. */
+function receiveLive(u: LiveUpdate) {
+  const st = useGame.getState()
+  const next = u.next
+  const player = next.playerId
+  if (!st.online) return
+  const patch: Partial<GameStore> = { game: next, undoStack: [] }
+  if (u.resync) {
+    // A fresh copy, not a step: nothing new to show, only the game.
+    if (st.selectedArmy && !next.armies?.some((a) => a.id === st.selectedArmy)) patch.selectedArmy = null
+    useGame.setState(patch)
+    return
+  }
+  const shown = presentLiveStep({ step: { state: next, events: u.events, monthEnded: u.monthEnded }, player, before: u.prev, fxQueue: st.fxQueue, recentBattles: st.recentBattles, settings: st.settings, toast: st.toast })
+  patch.recentBattles = shown.recentBattles
+  patch.fxQueue = shown.fxQueue
+  patch.fxTotal = shown.fxQueue.length
+  if (st.selectedArmy && !next.armies?.some((a) => a.id === st.selectedArmy)) patch.selectedArmy = null
+  const mine = u.acts.filter((a) => a.nationId === player)
+  if (mine.length) patch.online = { ...st.online, pending: dropKeys(st.online.pending, mine.map((a) => a.nonce)) }
+  // An offer answered on the spot, or one made to you, says how it went.
+  if (!u.monthEnded && next.turn === u.prev.turn) for (const d of next.dispatches.slice(u.prev.dispatches.length)) if (d.to === player || d.from === player) st.toast(d.text, DISPATCH_TONE[d.kind], 6000)
+  if (u.monthEnded) {
+    monthBattles.push(...next.battles.filter((b) => b.attacker.nationId === 'rebels' && b.defender.nationId === player))
+    patch.liveNote = buildReport(monthStart ?? u.prev, next, player, monthBattles)
+    monthStart = next
+    monthBattles = shown.mine.filter((b) => b.attacker.nationId !== 'rebels')
+    // The month's orders were used, unless they reached the host too late; then they count next month instead.
+    const late = st.orders.length > 0 && u.plans?.[player] !== u.prev.turn
+    patch.orders = late ? st.orders : []
+    const news = next.dispatches.filter((d) => d.to === player || d.from === player)
+    for (const d of news.slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
+    const failed = next.log.filter((e) => e.turn === u.prev.turn && e.text.startsWith('Order failed') && e.nations.includes(player))
+    if (failed.length) st.toast(failed.length === 1 ? failed[0].text : `${failed.length} orders failed at the month's end. See the report.`, 'error', 7000)
+    useGame.setState(patch)
+    if (late) {
+      st.toast('Your orders for the 1st reached the host after the month ended. They will count on the 1st of next month.', 'info', 7000)
+      sendPlan(st.orders)
+    }
+    if (!u.prev.eliminated.includes(player) && next.eliminated.includes(player) && next.outcome === 'playing') st.toast('Your nation has fallen. You can keep watching the game.', 'error', 9000)
+    return
+  }
+  monthBattles.push(...shown.mine)
+  useGame.setState(patch)
+  if (!u.prev.eliminated.includes(player) && next.eliminated.includes(player) && next.outcome === 'playing') st.toast('Your nation has fallen. You can keep watching the game.', 'error', 9000)
 }
 
 const ROOM_ERRORS = {
@@ -615,7 +681,7 @@ async function connect(name: string, code: string, role: 'create' | 'join', sett
   const stored = loadIdentity()
   const id = { clientId: rejoin && stored.code === code && stored.clientId ? stored.clientId : tabClientId() }
   const clean = name.trim().slice(0, 20) || 'Player'
-  useGame.setState({ online: { status: 'lobby', code, clientId: id.clientId, name: clean, kind: 'browser', host: role === 'create', lobby: null, ready: [], deadline: null, peers: [], chat: [], unread: 0, error: null, connecting: true } })
+  useGame.setState({ online: { status: 'lobby', code, clientId: id.clientId, name: clean, kind: 'browser', host: role === 'create', lobby: null, ready: [], deadline: null, peers: [], chat: [], unread: 0, error: null, connecting: true, clock: null, clockAt: 0, pending: {} } })
   let transport
   try {
     transport = await openTransport(code, id.clientId)
@@ -635,10 +701,12 @@ async function connect(name: string, code: string, role: 'create' | 'join', sett
       onHost: (host) => patch({ host }),
       onStart: (state) => {
         // The host sends the current game again to anyone who joins late. This month's plan is not lost to that.
-        if (base && base.turn === state.turn) return
+        if (base && base.turn === state.turn && !isLive(state)) return
         base = state
         immediate = []
-        useGame.setState({ game: state, orders: [], selectedRegion: state.playerId, panel: 'briefing', economyTab: 'country', economyRegion: null, militaryTab: 'forces', mapMode: 'political', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, helpOpen: false })
+        monthStart = state
+        monthBattles = []
+        useGame.setState({ running: false, selectedArmy: null, recentBattles: [], liveNote: null, undoStack: [], game: state, orders: [], selectedRegion: state.playerId, panel: 'briefing', economyTab: 'country', economyRegion: null, militaryTab: 'forces', mapMode: 'political', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, helpOpen: false })
         patch({ status: 'playing', connecting: false })
       },
       onState: receiveMonth,
@@ -650,8 +718,23 @@ async function connect(name: string, code: string, role: 'create' | 'join', sett
         sendPlan(st.orders, !!(s.me && st.online?.ready.includes(s.me)))
       },
       onError: (text) => useGame.getState().toast(text, 'error', 7000),
+      onLive: receiveLive,
+      onClock: (clock) => {
+        patch({ clock, clockAt: Date.now() })
+        if (useGame.getState().running !== clock.running) useGame.setState({ running: clock.running })
+      },
+      onActFail: (nonce, error) => {
+        useGame.setState((st) => (st.online && st.online.pending[nonce] ? { online: { ...st.online, pending: dropKeys(st.online.pending, [nonce]) } } : {}))
+        useGame.getState().toast(error, 'error')
+      },
     },
   })
+  // The host of a live game tells everyone when its page is hidden, since a hidden page can slow the game.
+  const visibility = () => s.setHidden(document.hidden)
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', visibility)
+    stopWatching = () => document.removeEventListener('visibilitychange', visibility)
+  }
   session = s
   saveIdentity({ clientId: id.clientId, name: clean, code })
   patch({ kind: transport.kind })
@@ -936,6 +1019,20 @@ export const useGame = create<GameStore>((set, get) => ({
       get().toast('Your nation has fallen. You are watching now.', 'error')
       return false
     }
+    // Online and live, an order that happens at once goes to the host, which applies it for every screen.
+    if (playing && isLive(game) && !isMonthEndOrder(game, order.type)) {
+      const err = validateOrder(game, map, order, orders)
+      if (err) {
+        get().toast(err, 'error')
+        return false
+      }
+      // Marked as on its way first: on the host the order comes back at once.
+      const nonce = session!.newNonce()
+      const st = get()
+      if (st.online) set({ online: { ...st.online, pending: { ...st.online.pending, [nonce]: describeOrder(game, map, order) } } })
+      session!.sendAct(order, nonce)
+      return true
+    }
     // Online, an attack waits for the month to end like every other country's, so nobody wins by clicking fast.
     if (!isMonthEndOrder(game, order.type) && !(playing && order.type === 'attack')) {
       const next = structuredClone(game)
@@ -1057,6 +1154,14 @@ export const useGame = create<GameStore>((set, get) => ({
     const { game, settings, online } = get()
     if (!game) return false
     const { map } = getWorld()
+    if (onlineLive(get())) {
+      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}) })
+      if (ok) {
+        set({ warRoom: null })
+        get().toast(`Orders sent: an army will march on ${map.regions[target].name}.`, 'info', 4000)
+      }
+      return ok
+    }
     if (session && online?.status === 'playing') {
       const queued = get().orders.filter((o) => o.type === 'attack').length
       if (queued >= maxAttacks(game, game.playerId)) {
@@ -1116,21 +1221,35 @@ export const useGame = create<GameStore>((set, get) => ({
   play() {
     const { game } = get()
     if (!game || !isLive(game) || game.outcome !== 'playing') return
+    if (onlineLive(get())) {
+      session!.requestResume()
+      return
+    }
     set({ running: true })
   },
 
   pause() {
+    if (onlineLive(get())) {
+      if (get().online?.clock?.running) session!.requestPause()
+      return
+    }
     if (!get().running) return
     set({ running: false })
     get().persist()
   },
 
   togglePause() {
-    if (get().running) get().pause()
+    const running = onlineLive(get()) ? !!get().online?.clock?.running : get().running
+    if (running) get().pause()
     else get().play()
   },
 
   setSpeed(speed) {
+    // Online, the host sets the room's speed for everyone.
+    if (onlineLive(get())) {
+      session!.requestSpeed(speed as LiveSpeed)
+      return
+    }
     // Choosing a speed does not start a paused clock.
     get().updateSettings({ liveSpeed: speed })
   },
@@ -1220,7 +1339,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   leaveOnline() {
     leaveSession()
-    set({ online: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
+    set({ running: false, selectedArmy: null, recentBattles: [], liveNote: null, online: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
   },
 
   sendChat(text) {

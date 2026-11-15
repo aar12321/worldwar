@@ -309,7 +309,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   expireDiplomacy(s)
   // Surprise decisions are for single-player games. Online, everyone plans the same month, with no interruptions.
   const player = s.nations[s.humans[0] ?? s.playerId]
-  if (s.humans.length === 1 && player?.alive && s.turn >= s.nextEventTurn) {
+  if (s.humans.length === 1 && !s.settings.online && player?.alive && s.turn >= s.nextEventTurn) {
     s.pendingEvent = scheduleEvent(s, map, player.id, rng)
     s.nextEventTurn = s.turn + EVENT_GAP_TURNS
   }

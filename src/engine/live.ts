@@ -4,7 +4,7 @@ import { bringHome, calledOff, sendHome, turnBack, launchArmy } from './armies'
 import { absDay, clockOf, daysInMonth, isLive } from './calendar'
 import { atWar, newId, totalUnits } from './helpers'
 import { orderCost, validateOrder } from './orders'
-import { runMonth } from './resolveTurn'
+import { applyOrderNow, runMonth } from './resolveTurn'
 import { createRng } from './rng'
 import { strikeHits } from './systems'
 import type { Army, ArmyOutcome, AttackOrder, BattleReport, GameState, MissileFlight, Order, TrainingJob, WorldMap } from './types'
@@ -223,4 +223,53 @@ export function advanceDay(prev: GameState, map: WorldMap, input: LiveInput = {}
   s.battles = []
   processDay(s, map, today, events)
   return { state: s, events, monthEnded: false }
+}
+
+// ---- live games with friends ----
+
+/**
+ * One step of an online live game, in the order the host decided it. Every screen applies the same steps to the same game,
+ * so they all show the same world without the whole game crossing the network each day.
+ * - `act`: an order that happens at once (a build, a trade, an army sent out, an offer...), for the nation that gave it.
+ * - `day`: the clock moves one day that is not the last of its month.
+ * - `month`: the host turned the month over. Only the host can (it has everyone's month-end plans and plans for the AI), so
+ *   the other screens take the game the host sends next. `events` are what the turnover brought, for the screens to show, and
+ *   `plans` says, for each human whose month-end orders were used, the month they were for.
+ */
+export type LiveOp =
+  | { k: 'act'; nationId: string; order: Order; nonce?: string }
+  | { k: 'day' }
+  | { k: 'month'; plans: Record<string, number>; events: LiveEvent[] }
+
+/** Whether the next day of a live game turns the month over. */
+export function isMonthEndDay(s: GameState): boolean {
+  return (s.day ?? 0) >= daysInMonth(s.turn) - 1
+}
+
+export interface LiveOpResult {
+  state: GameState
+  events: LiveEvent[]
+  /** Why an order could not be made. The game is then unchanged. */
+  error?: string
+}
+
+/**
+ * Applies one step of an online live game. Pure: `prev` is never changed. A `month` step cannot be applied here, since it
+ * needs everyone's plans; the screens that are not the host wait for the host's game instead.
+ */
+export function applyLiveOp(prev: GameState, map: WorldMap, op: LiveOp): LiveOpResult {
+  if (op.k === 'act') {
+    if (op.order.nationId !== op.nationId) return { state: prev, events: [], error: 'That order is for another nation' }
+    if (prev.outcome !== 'playing') return { state: prev, events: [], error: 'The game is over' }
+    const s = structuredClone(prev)
+    const result = applyOrderNow(s, map, op.order)
+    if (result.error) return { state: prev, events: [], error: result.error }
+    return { state: s, events: result.army ? [{ kind: 'launched', army: structuredClone(result.army) }] : [] }
+  }
+  if (op.k === 'day') {
+    if (isMonthEndDay(prev)) return { state: prev, events: [], error: 'The month ends on the host' }
+    const step = advanceDay(prev, map, {})
+    return { state: step.state, events: step.events }
+  }
+  return { state: prev, events: [], error: 'The month ends on the host' }
 }
