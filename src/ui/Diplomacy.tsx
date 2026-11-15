@@ -423,15 +423,11 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const { game, player } = view
   const { map } = getWorld()
   const ref = useRef<HTMLDivElement>(null)
-  const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'money'>('none')
-  const peaceIntent = useGame((s) => s.diploPeace)
+  // Coming from the Wars tab, the nation's peace composer is already open.
+  const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'money'>(() => (focused && useGame.getState().diploPeace && atWar(game, player.id, id) ? 'peace' : 'none'))
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [focused])
-  const atWarWithPlayer = atWar(game, player.id, id)
-  useEffect(() => {
-    if (focused && peaceIntent && atWarWithPlayer) setMode('peace')
-  }, [focused, peaceIntent, atWarWithPlayer])
   const n = game.nations[id]
   const war = atWar(game, player.id, id)
   const allied = isAllied(game, player.id, id)
