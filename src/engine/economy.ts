@@ -290,7 +290,8 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     development: workforce > 0 ? devWeight / workforce : 0.3,
     occupiedShare: owned.length ? occupied / owned.length : 0,
     systemLevels: Object.values(n.systems ?? {}).reduce((a, b) => a + (b ?? 0), 0),
-    activeProjects: activeProjects(n).length + activeLocal(s, nationId).length,
+    // A project in a country is smaller than a national one, so it draws half as hard on the engineers.
+    activeProjects: activeProjects(n).length + 0.5 * activeLocal(s, nationId).length,
   }
   const demand = demandOf(n, basis)
   const coverage = coverageOf(n, demand)

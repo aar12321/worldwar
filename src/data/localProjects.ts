@@ -77,3 +77,26 @@ export const LOCAL: Record<LocalProjectId, LocalSpec> = {
 
 export const LOCAL_IDS = Object.keys(LOCAL) as LocalProjectId[]
 export const isLocalProject = (id: string): id is LocalProjectId => id in LOCAL
+
+/** What a country project does at a level of worth and in a country of a size, one line each, for the screens. */
+export function describeLocal(id: LocalProjectId, power: number, scale: number, development = 0.5): string[] {
+  const spec = LOCAL[id]
+  const y = spec.yields
+  const flat = (v: number | undefined) => (v ?? 0) * power * scale
+  const out: string[] = []
+  const f = (v: number, digits = 1) => v.toFixed(digits)
+  if (y.factory) out.push(`This country's factories +${Math.round(y.factory * power * 100)}%`)
+  if (y.steel) out.push(`Steel +${f(flat(y.steel))} a month`)
+  if (y.food) out.push(`Food +${f(flat(y.food))} a month`)
+  if (y.research) out.push(`Research +${f(flat(y.research))} a month`)
+  const money = flat(y.money) + (spec.perDevelopment ?? 0) * development * power * scale
+  if (money) out.push(`Money +${f(money)} a month`)
+  if (y.trade) out.push(`Trade capacity +${f(flat(y.trade))}`)
+  if (y.power) out.push(`Power for factories +${f(flat(y.power))}`)
+  if (y.line) out.push(`Defense Line +${f(flat(y.line))}`)
+  if (y.settle) out.push(`Settles ${Math.round(y.settle * power * 100)}% faster`)
+  if (y.order) out.push(`Rebels ${Math.round(y.order * power * 100)}% less likely here`)
+  if (y.stability) out.push(`Stability +${f(y.stability * power)}`)
+  if (y.deposits) out.push(`Oil and steel deposits +${Math.round(y.deposits * power * 100)}%`)
+  return out
+}
