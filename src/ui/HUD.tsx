@@ -138,6 +138,23 @@ export function HUD() {
   const setHelp = useGame((s) => s.setHelp)
   const panel = useGame((s) => s.panel)
   const top = useAdvice(1)[0]
+  const wrap = useRef<HTMLDivElement>(null)
+  const has = !!view
+  // Desks, cards and docks sit below the top bar: tell the stylesheet how tall it really is, whatever the screen and mode.
+  useEffect(() => {
+    const el = wrap.current
+    if (!el) return
+    const root = document.documentElement
+    const set = () => root.style.setProperty('--hud-h', `${Math.ceil(el.getBoundingClientRect().height)}px`)
+    set()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(set)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      root.style.removeProperty('--hud-h')
+    }
+  }, [has])
   if (!view) return null
   const { game, player, econ, committed, orders } = view
   const live = isLive(game)
@@ -153,7 +170,7 @@ export function HUD() {
   const civic = econ.buildings.civic
 
   return (
-    <div className="absolute top-0 inset-x-0 z-30 p-3 pointer-events-none">
+    <div ref={wrap} className="absolute top-0 inset-x-0 z-30 p-3 pointer-events-none">
       <div className="hud-row">
         <div className="glass rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-3 min-w-56">
           <div className="w-1.5 self-stretch rounded-full" style={{ background: player.color }} />

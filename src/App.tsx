@@ -57,8 +57,8 @@ function useShortcuts() {
         if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
       } else if (e.key === 'Enter') {
-        // A focused button uses Enter for itself.
-        if (target.tagName === 'BUTTON' || e.repeat) return
+        // A focused button, a disclosure, a tab or a row uses Enter for itself.
+        if (target.tagName === 'BUTTON' || target.tagName === 'SUMMARY' || target.tagName === 'A' || target.closest('[role="button"], [role="tab"], [role="option"], [role="radio"], summary') || e.repeat) return
         e.preventDefault()
         st.endTurn()
       } else if (e.key === ' ' && isLive(st.game)) {

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingCost, trainingRank, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from '../engine/arms'
 import { enemiesOf, formatDivisions, maxWars } from '../engine/helpers'
@@ -23,6 +24,9 @@ const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`
 function UnitCard({ line }: { line: UnitStatLine }) {
   const view = usePlayerView()!
   const { game, player } = view
+  const [batch, setBatch] = useState(1)
+  const issueBatch = useGame((st) => st.issueBatch)
+  const toast = useGame((st) => st.toast)
   const spec = UNIT_SPECS[line.unit]
   const weapons = nextWeaponLevel(game, player.id, line.unit)
   const bonusAttack = line.attack / line.baseAttack - 1
@@ -69,6 +73,28 @@ function UnitCard({ line }: { line: UnitStatLine }) {
           Drill <Pips value={line.drillRank} max={TRAINING.max} />
           <span className="text-white/70">{trainingRank(line.drillRank)}</span>
         </span>
+      </div>
+
+      <div className="flex items-center gap-1.5 text-[13px]" role="group" aria-label={`How many ${line.name} to train at once`}>
+        <span className="text-white/65">Train</span>
+        {[1, 5, 10].map((n) => (
+          <button key={n} className={`btn px-2.5 py-1 text-[13px] ${batch === n ? 'btn-primary' : 'btn-quiet'}`} aria-pressed={batch === n} onClick={() => setBatch(n)}>
+            {n}
+          </button>
+        ))}
+        {batch > 1 && (
+          <button
+            className="btn btn-primary px-3 py-1 text-[13px] ml-auto"
+            title={`Queue ${batch} ${line.name} until the queue is full or you run out of money, soldiers or steel`}
+            onClick={() => {
+              const order = { type: 'queueTrain' as const, nationId: player.id, unit: line.unit }
+              const { done, failed } = issueBatch(Array.from({ length: batch }, () => order))
+              if (done > 0 && failed > 0) toast(`${done} queued; the rest could not be: the queue, money, soldiers or steel ran out.`, 'info')
+            }}
+          >
+            Queue {batch}
+          </button>
+        )}
       </div>
 
       <div className="unit-actions">

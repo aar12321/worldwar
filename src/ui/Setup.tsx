@@ -155,6 +155,8 @@ export function Setup() {
               if (!pick) return
               if (hasSave && !window.confirm(`Starting a new game replaces your saved game${saved ? ` (${saved.nation}, ${saved.date})` : ''}. Start anyway?`)) return
               newGame({ playerRegionId: pick.id, seed, difficulty, mode })
+              // The first game opens on how it works. Closing the window remembers that it was seen.
+              if (!useGame.getState().settings.seenHelp) useGame.getState().setHelp(true)
             }}
           >
             Start game

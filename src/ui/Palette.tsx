@@ -54,7 +54,7 @@ function PaletteBody() {
     requestAnimationFrame(() => input.current?.focus())
   }, [])
 
-  const items = useMemo<Item[]>(() => {
+  const [items] = useState<Item[]>(() => {
     const st = useGame.getState()
     const game = st.game
     if (!game) return []
@@ -96,7 +96,7 @@ function PaletteBody() {
     if (st.undoStack.length > 0) out.push({ id: 'd-undo', label: `Undo: ${st.undoStack[st.undoStack.length - 1].label}`, hint: 'Ctrl+Z', group: 'Do', run: () => st.undo() })
     out.push({ id: 'd-capital', label: 'Go to your capital', hint: '', group: 'Go to', run: goTo(game.nations[game.playerId].capital) })
     return out
-  }, [])
+  })
 
   const shown = useMemo(() => {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)

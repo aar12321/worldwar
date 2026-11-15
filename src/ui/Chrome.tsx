@@ -105,11 +105,13 @@ export function Toasts() {
             initial={{ x: 40, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 40, opacity: 0 }}
-            onClick={() => dismiss(t.id)}
             role={t.tone === 'error' ? 'alert' : 'status'}
-            className={`pointer-events-auto surface rounded-2xl px-4 py-3 text-[14px] cursor-pointer max-w-sm ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
+            className={`pointer-events-auto surface rounded-2xl pl-4 pr-1.5 py-2.5 text-[14px] max-w-sm flex items-start gap-2 ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
           >
-            {t.text}
+            <span className="flex-1 min-w-0 py-0.5">{t.text}</span>
+            <button className="shrink-0 w-8 h-8 rounded-full text-white/60 hover:text-white hover:bg-white/10 text-[18px] leading-none" aria-label="Dismiss" onClick={() => dismiss(t.id)}>
+              ×
+            </button>
           </motion.div>
         ))}
       </AnimatePresence>
