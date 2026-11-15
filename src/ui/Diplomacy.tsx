@@ -627,6 +627,9 @@ export function DiplomacyPanel() {
   const view = usePlayerView()
   const focus = useGame((s) => s.diploFocus)
   const [tab, setTab] = useState<'nations' | 'ledger'>('nations')
+  const peaceIntent = useGame((s) => s.diploPeace)
+  // Coming from a war, the row opens with its peace composer: a new key starts it fresh even when the panel was already open.
+  const rowKey = (id: NationId) => (focus === id && peaceIntent ? `${id}:peace` : id)
   const openDiplomacy = useGame((s) => s.openDiplomacy)
   const game = view?.game
   const ctx = useMemo<RowContext | null>(() => {
@@ -712,14 +715,14 @@ export function DiplomacyPanel() {
       <section className="space-y-2">
         <div className="label">Your neighbors, allies and enemies</div>
         {closeList.map((id) => (
-          <NationRow key={id} id={id} ctx={ctx} focused={focus === id} />
+          <NationRow key={rowKey(id)} id={id} ctx={ctx} focused={focus === id} />
         ))}
       </section>
       {majors.length > 0 && (
         <section className="space-y-2">
           <div className="label">The biggest powers elsewhere</div>
           {majors.map((n) => (
-            <NationRow key={n.id} id={n.id} ctx={ctx} focused={focus === n.id} />
+            <NationRow key={rowKey(n.id)} id={n.id} ctx={ctx} focused={focus === n.id} />
           ))}
         </section>
       )}

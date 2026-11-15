@@ -213,7 +213,7 @@ export function HUD() {
             <div className="mt-1.5 space-y-1">
               <div className="flex items-center justify-between gap-3 text-[12px] text-white/70 tabular-nums">
                 <span>
-                  <button className="underline-offset-2 hover:underline text-white/85" onClick={() => setPanel('empire')} title={`You are a ${tierSpec(player.tier).name}. Open the Empire desk to see what it opens up.`}>
+                  <button className="touch-pad underline-offset-2 hover:underline text-white/85" onClick={() => setPanel('empire')} title={`You are a ${tierSpec(player.tier).name}. Open the Empire desk to see what it opens up.`}>
                     {tierSpec(player.tier).name}
                   </button>{' '}
                   ·{' '}

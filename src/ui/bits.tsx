@@ -17,7 +17,7 @@ export function Tip({ text, children }: { text: string; children: ReactNode }) {
   }, [open])
   return (
     <span ref={ref} className="relative inline-flex" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button type="button" aria-expanded={open} className="cursor-help underline decoration-dotted underline-offset-2 decoration-white/30" onClick={() => setOpen((v) => !v)} onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+      <button type="button" aria-expanded={open} className="touch-pad cursor-help underline decoration-dotted underline-offset-2 decoration-white/30" onClick={() => setOpen((v) => !v)} onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
         {children}
       </button>
       {open && (

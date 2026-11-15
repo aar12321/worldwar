@@ -30,10 +30,14 @@ export function MilitaryCompare({ game, mine, theirs }: { game: GameState; mine:
         <thead>
           <tr className="text-white/65">
             <th className="text-left font-medium pb-1">Unit</th>
-            <th className="font-medium pb-1">You</th>
-            <th className="font-medium pb-1">ATK / DEF</th>
-            <th className="font-medium pb-1">Them</th>
-            <th className="text-right font-medium pb-1">ATK / DEF</th>
+            <th className="font-medium pb-1 px-1">You</th>
+            <th className="font-medium pb-1 px-1 whitespace-nowrap" title="Attack / defense">
+              A / D
+            </th>
+            <th className="font-medium pb-1 px-1">Them</th>
+            <th className="text-right font-medium pb-1 pl-1 whitespace-nowrap" title="Attack / defense">
+              A / D
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -60,6 +64,7 @@ export function MilitaryCompare({ game, mine, theirs }: { game: GameState; mine:
           })}
         </tbody>
       </table>
+      <p className="text-[12px] text-white/55">A / D is attack and defense per division.</p>
       {!known && <p className="text-[12px] text-white/65">Their units are hidden, and their strength is a guess. Gather intelligence, ally with them, or go to war to see the real numbers.</p>}
     </div>
   )
