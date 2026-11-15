@@ -6,6 +6,7 @@ import { advanceDay, startLive } from '../live'
 import { applyEventChoice } from '../events'
 import { resolveTurn } from '../resolveTurn'
 import type { GameState } from '../types'
+import { playAttacks } from './attackRate'
 import { checkInvariants } from './invariants'
 
 /**
@@ -61,6 +62,38 @@ long('long headless games', () => {
       expect(s.turn).toBeGreaterThan(Math.min(months, 30))
       // Every army that is still out belongs to a living nation, and no unit count has gone negative or odd.
       for (const a of s.armies ?? []) expect(s.nations[a.nationId]?.alive).toBe(true)
+    }, 3_600_000)
+  }
+})
+
+/**
+ * The plan's promise: "attack-rate parity stays within ±20% over 36 months". The same AI plans the same wars in both modes; live
+ * only adds marches, recalls and held-back launches, so it should fight about as many battles as turns do. Three seeds each, added
+ * up, because a single seed swings by a quarter either way (battles depend on who happens to fall to whom). Measured when this was
+ * written, over seeds 1 to 3 on China: Hard 880 live vs 889 turns (0.99), Normal 538 vs 596 (0.90); seeds 4 to 6 on Hard, 946 vs 1080 (0.88).
+ */
+long('attack-rate parity between turns and live, 36 months', () => {
+  for (const difficulty of ['hard', 'normal'] as const) {
+    it(`${difficulty}: live fights within 20% of the battles turns do, over three seeds`, () => {
+      const total = { turns: { battles: 0, captures: 0 }, live: { battles: 0, captures: 0 } }
+      for (const seed of [1, 2, 3]) {
+        const t = playAttacks('turns', { seed, difficulty, months: 36 })
+        const l = playAttacks('live', { seed, difficulty, months: 36 })
+        console.log(`${difficulty} seed ${seed}: turns ${t.battles} battles, ${t.captures} captured; live ${l.battles} battles, ${l.captures} captured`)
+        for (const k of ['battles', 'captures'] as const) {
+          total.turns[k] += t[k]
+          total.live[k] += l[k]
+        }
+      }
+      const ratio = total.live.battles / total.turns.battles
+      const captureRatio = total.live.captures / Math.max(1, total.turns.captures)
+      console.log(`${difficulty}: battles live/turns = ${total.live.battles}/${total.turns.battles} = ${ratio.toFixed(2)}, captures ${total.live.captures}/${total.turns.captures} = ${captureRatio.toFixed(2)}`)
+      expect(total.turns.battles).toBeGreaterThan(300)
+      expect(ratio).toBeGreaterThanOrEqual(0.8)
+      expect(ratio).toBeLessThanOrEqual(1.2)
+      // Captures are a fifth as many, so they are noisier: a wider band, still tight enough to notice a live clock that stops taking land.
+      expect(captureRatio).toBeGreaterThanOrEqual(0.7)
+      expect(captureRatio).toBeLessThanOrEqual(1.3)
     }, 3_600_000)
   }
 })
