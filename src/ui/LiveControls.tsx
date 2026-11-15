@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { incomingArmies } from '../engine/armies'
 import { absDay, clockOf, dayDate, daysInMonth } from '../engine/calendar'
+import type { GameState } from '../engine/types'
 import { liveHold, useGame, type Hold } from '../store'
 import { liveClock } from './liveClock'
 
@@ -66,30 +67,40 @@ const Pause = () => (
 
 const SPEEDS = [1, 2, 4] as const
 
+/**
+ * The line under the clock's buttons. It is the one part of the clock that follows the date (days left in the month), so it
+ * alone reads the day. The buttons around it only re-render when the clock starts, stops, is held or changes speed.
+ */
+function LiveStatus() {
+  const status = useGame((s) => {
+    const hold = liveHold(s)
+    if (hold) return HOLD_TEXT[hold]
+    const turn = s.game?.turn ?? 1
+    const day = s.game?.day ?? 0
+    if (!s.running) return turn === 1 && day === 0 ? 'Press play to start the clock' : 'Paused'
+    const waiting = s.orders.length
+    if (waiting > 0) return `${waiting} order${waiting === 1 ? '' : 's'} on ${dayDate(turn + 1, 0)}`
+    const left = daysInMonth(turn) - day
+    return `${left} day${left === 1 ? '' : 's'} left in the month`
+  })
+  return (
+    <div className="hud-live-status px-1 text-center text-[12px] text-white/70" aria-live="polite">
+      {status}
+    </div>
+  )
+}
+
 /** The live game's clock: play and pause, how fast, and what is holding it. Replaces Next turn. */
 export function LiveControls() {
   const running = useGame((s) => s.running)
   const speed = useGame((s) => s.settings.liveSpeed)
   const hold = useGame((s) => liveHold(s))
-  const waiting = useGame((s) => s.orders.length)
-  const turn = useGame((s) => s.game?.turn ?? 1)
-  const day = useGame((s) => s.game?.day ?? 0)
+  // Only a clock that has not started yet sits on the first day, so this does not change as the days pass.
+  const fresh = useGame((s) => !s.running && !liveHold(s) && (s.game?.turn ?? 1) === 1 && (s.game?.day ?? 0) === 0)
   const note = useGame((s) => s.liveNote)
   const toggle = useGame((s) => s.togglePause)
   const setSpeed = useGame((s) => s.setSpeed)
   const openNote = useGame((s) => s.openNote)
-  const left = daysInMonth(turn) - day
-  const fresh = !running && !hold && turn === 1 && day === 0
-
-  const status = hold
-    ? HOLD_TEXT[hold]
-    : !running
-      ? fresh
-        ? 'Press play to start the clock'
-        : 'Paused'
-      : waiting > 0
-        ? `${waiting} order${waiting === 1 ? '' : 's'} on ${dayDate(turn + 1, 0)}`
-        : `${left} day${left === 1 ? '' : 's'} left in the month`
 
   return (
     <div className="hud-next hud-live glass rounded-2xl p-2 pointer-events-auto flex flex-col gap-1.5 min-w-[196px]">
@@ -106,9 +117,7 @@ export function LiveControls() {
           ))}
         </div>
       </div>
-      <div className="hud-live-status px-1 text-center text-[12px] text-white/70" aria-live="polite">
-        {status}
-      </div>
+      <LiveStatus />
       {note && (
         <button className="hud-live-status text-[12px] text-[#6cb4ff] underline underline-offset-2" onClick={openNote}>
           Read the {dayDate(note.turn, 0).split(' ')[1]} report
@@ -118,14 +127,18 @@ export function LiveControls() {
   )
 }
 
+/** The game while an enemy army is marching on the player's countries, else nothing, so a day with no such army leaves the chip alone. */
+const marchedOn = (s: { game: GameState | null }) => {
+  const g = s.game
+  return g && incomingArmies(g, g.playerId).some((a) => a.nationId !== g.playerId) ? g : null
+}
+
 /** A warning when enemy armies are marching on your countries, with the time the first has left. Opens the Armies list. */
 export function IncomingChip() {
-  const armies = useGame((s) => s.game?.armies)
-  const game = useGame((s) => s.game)
+  const game = useGame(marchedOn)
   const open = useGame((s) => s.openMilitary)
-  if (!game || !armies) return null
+  if (!game) return null
   const mine = incomingArmies(game, game.playerId).filter((a) => a.nationId !== game.playerId)
-  if (mine.length === 0) return null
   const now = clockOf(game)
   const first = Math.max(0, Math.ceil(Math.min(...mine.map((a) => a.end)) - now))
   return (

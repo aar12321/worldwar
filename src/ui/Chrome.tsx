@@ -59,17 +59,18 @@ export function NavRail() {
 export function OrdersTray() {
   const view = usePlayerView()
   const removeOrder = useGame((s) => s.removeOrder)
-  const undoStack = useGame((s) => s.undoStack)
+  // A live day hands the store a fresh empty undo list, so read what the tray shows, not the list.
+  const undoCount = useGame((s) => s.undoStack.length)
+  const undoLabel = useGame((s) => s.undoStack[s.undoStack.length - 1]?.label)
   const undo = useGame((s) => s.undo)
-  if (!view || (view.orders.length === 0 && undoStack.length === 0)) return null
+  if (!view || (view.orders.length === 0 && undoCount === 0)) return null
   const { game, orders } = view
   const { map } = getWorld()
-  const last = undoStack[undoStack.length - 1]
   return (
     <div className="orders-tray absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
       <div className="surface rounded-full px-3 py-1.5 flex items-center gap-2 overflow-x-auto scroll-thin">
-        {last && (
-          <button className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-semibold bg-[#0a84ff]/25 text-[#9fd0ff] hover:bg-[#0a84ff]/40" onClick={undo} title={`Undo: ${last.label} (Ctrl+Z)`} aria-label={`Undo ${last.label}`}>
+        {undoCount > 0 && (
+          <button className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-semibold bg-[#0a84ff]/25 text-[#9fd0ff] hover:bg-[#0a84ff]/40" onClick={undo} title={`Undo: ${undoLabel} (Ctrl+Z)`} aria-label={`Undo ${undoLabel}`}>
             ↶ Undo
           </button>
         )}
