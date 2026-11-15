@@ -1,5 +1,6 @@
 import { dayDate, isLive } from '../engine/calendar'
 import { shortcutsFor } from './shortcuts'
+import { Saves } from './Saves'
 import { useState } from 'react'
 import { turnDate } from '../engine/helpers'
 import type { LogKind } from '../engine/types'
@@ -102,6 +103,7 @@ export function SettingsPanel() {
         <span>Reduce motion</span>
         <input type="checkbox" checked={settings.reducedMotion} onChange={(e) => update({ reducedMotion: e.target.checked })} />
       </label>
+      <Saves />
       <button className="btn w-full py-2.5 text-[14px]" onClick={() => setHelp(true)}>
         How the game works
       </button>

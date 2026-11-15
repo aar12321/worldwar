@@ -22,7 +22,8 @@ import { MAX_REPARATIONS, netWarScore, puppetValue, REPARATION_MONTHS, regionVal
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { usePlayerView } from './hooks'
-import { OrderButton, PanelShell } from './panel'
+import { OrderButton, PanelShell, Tabs } from './panel'
+import { Ledger } from './Ledger'
 
 const opinionColor = (v: number) => (v >= 25 ? '#34d399' : v >= 5 ? '#a7f3d0' : v > -5 ? '#94a3b8' : v > -25 ? '#fbbf24' : '#fb7185')
 
@@ -609,6 +610,8 @@ function CrisisCards({ game, me }: { game: GameState; me: NationId }) {
 export function DiplomacyPanel() {
   const view = usePlayerView()
   const focus = useGame((s) => s.diploFocus)
+  const [tab, setTab] = useState<'nations' | 'ledger'>('nations')
+  const openDiplomacy = useGame((s) => s.openDiplomacy)
   const game = view?.game
   const ctx = useMemo<RowContext | null>(() => {
     if (!game) return null
@@ -634,7 +637,9 @@ export function DiplomacyPanel() {
     .slice(0, 6)
 
   return (
-    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. Offers are answered when the month ends.`} panel="diplomacy">
+    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. ${isLive(game) ? 'Rivals answer offers the same day.' : 'Offers are answered when the month ends.'}`} panel="diplomacy" tabs={<Tabs value={focus ? 'nations' : tab} onChange={(t) => { if (focus) openDiplomacy(null); setTab(t) }} options={[['nations', 'Nations'], ['ledger', 'Ledger']] as const} />}>
+      {!focus && tab === 'ledger' && <Ledger game={game} onOpen={(id) => { setTab('nations'); openDiplomacy(id) }} />}
+      {(focus || tab === 'nations') && <>
       {ctx.coalition && (
         <div className="rounded-lg border border-rose-500/50 bg-rose-500/10 p-3 text-xs text-rose-200">
           Your growing power alarms the world. Neighbors now distrust you and are quicker to band together against you.
@@ -712,6 +717,7 @@ export function DiplomacyPanel() {
           ))}
         </section>
       )}
+      </>}
     </PanelShell>
   )
 }

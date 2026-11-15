@@ -167,6 +167,35 @@ body,
   padding: 6px 8px;
   cursor: pointer;
 }
+.segmented-wrap {
+  position: relative;
+}
+.segmented-wrap::before,
+.segmented-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 1;
+}
+.segmented-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, rgba(28, 28, 32, 0.95), transparent);
+  border-radius: 10px 0 0 10px;
+}
+.segmented-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, rgba(28, 28, 32, 0.95), transparent);
+  border-radius: 0 10px 10px 0;
+}
+.segmented-wrap.fade-left::before,
+.segmented-wrap.fade-right::after {
+  opacity: 1;
+}
 .segmented > button[aria-pressed='true'] {
   background: rgba(99, 99, 102, 0.92);
   color: #fff;

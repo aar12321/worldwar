@@ -251,3 +251,55 @@ describe('undo and confirm in the store', () => {
     expect(confirmFor(g, map, { type: 'marketBuy', nationId: me, resource: 'food', amount: 5 })).toBeNull()
   })
 })
+
+describe('saves: slots, export and import', () => {
+  const memory = new Map<string, string>()
+  beforeEach(() => {
+    memory.clear()
+    ;(globalThis as unknown as { localStorage: Storage }).localStorage = {
+      getItem: (k: string) => memory.get(k) ?? null,
+      setItem: (k: string, v: string) => void memory.set(k, v),
+      removeItem: (k: string) => void memory.delete(k),
+      clear: () => memory.clear(),
+      key: () => null,
+      length: 0,
+    } as Storage
+    useGame.setState({ online: null, fxQueue: [], summary: null, warRoom: null, helpOpen: false, running: false })
+  })
+
+  it('a slot keeps a game and brings it back, even after the game moved on', async () => {
+    const { peekSlot } = await import('../store')
+    const g = liveGame()
+    const me = g.playerId
+    expect(peekSlot(1)).toBeNull()
+    expect(useGame.getState().saveSlot(1)).toBe(true)
+    const info = peekSlot(1)!
+    expect(info.nation).toBe(g.nations[me].name)
+    expect(info.live).toBe(true)
+    useGame.getState().issueOrder({ type: 'build', nationId: me, regionId: me, building: 'farm' })
+    const farmed = useGame.getState().game!.regions[me].buildings.farm
+    expect(useGame.getState().loadSlot(1)).toBe(true)
+    expect(useGame.getState().game!.regions[me].buildings.farm).toBe(farmed - 1)
+    expect(useGame.getState().running).toBe(false)
+  })
+
+  it('an exported game imports as the same game, with its waiting orders', () => {
+    const g = liveGame()
+    const me = g.playerId
+    useGame.getState().setPolicy({ taxRate: 0.3 })
+    const text = useGame.getState().exportSave()!
+    useGame.getState().newGame({ playerRegionId: 'france', seed: 9, difficulty: 'normal' })
+    expect(useGame.getState().game!.playerId).toBe('france')
+    expect(useGame.getState().importSave(text)).toBe(true)
+    expect(useGame.getState().game!.playerId).toBe(me)
+    expect(useGame.getState().orders.some((o) => o.type === 'setPolicy')).toBe(true)
+    expect(useGame.getState().game!.settings.mode).toBe('live')
+  })
+
+  it('a file that is not a save is refused and nothing changes', () => {
+    const g = liveGame()
+    expect(useGame.getState().importSave('{"hello":1}')).toBe(false)
+    expect(useGame.getState().importSave('not json')).toBe(false)
+    expect(useGame.getState().game!.playerId).toBe(g.playerId)
+  })
+})

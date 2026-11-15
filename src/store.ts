@@ -25,6 +25,8 @@ import type { PendingConfirm } from './ui/confirmRules'
 const SAVE_KEY = 'worlds-of-others-save-v4'
 const ORDERS_KEY = 'worlds-of-others-orders-v4'
 const SETTINGS_KEY = 'worlds-of-others-settings-v2'
+const SLOT_KEY = (i: number) => `worlds-of-others-slot-${i}`
+export const SLOT_COUNT = 3
 /** Everything a crashed game may have left behind. */
 export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
@@ -206,6 +208,14 @@ interface GameStore {
   /** When the game was last written to this device, and whether the last try failed. */
   savedAt: number | null
   saveFailed: boolean
+  paletteOpen: boolean
+  setPalette(open: boolean): void
+  /** Save slots, on this device. Each keeps a whole game and the month's waiting orders. */
+  saveSlot(slot: number): boolean
+  loadSlot(slot: number): boolean
+  /** The game as a file's text, to keep or to move to another device. */
+  exportSave(): string | null
+  importSave(text: string): boolean
   /** A question waiting for yes or no before a big order goes through. */
   confirm: PendingConfirm | null
   askConfirm(c: PendingConfirm): void
@@ -325,6 +335,30 @@ export function peekSave(): { nation: string; date: string; live: boolean } | nu
     const nation = saved.nations?.[saved.playerId]?.name
     const live = saved.settings?.mode === 'live'
     return nation ? { nation, date: live ? dayDate(saved.turn, saved.day ?? 0) : turnDate(saved.turn), live } : null
+  } catch {
+    return null
+  }
+}
+
+export interface SlotInfo {
+  slot: number
+  nation: string
+  date: string
+  live: boolean
+  savedAt: number
+}
+
+/** What a save slot holds, or null when it is empty or damaged. */
+export function peekSlot(slot: number): SlotInfo | null {
+  try {
+    const raw = localStorage.getItem(SLOT_KEY(slot))
+    if (!raw) return null
+    const saved = JSON.parse(raw) as { savedAt: number; game: GameState }
+    const g = saved.game
+    const nation = g?.nations?.[g.playerId]?.name
+    if (!nation) return null
+    const live = g.settings?.mode === 'live'
+    return { slot, nation, live, date: live ? dayDate(g.turn, g.day ?? 0) : turnDate(g.turn), savedAt: saved.savedAt ?? 0 }
   } catch {
     return null
   }
@@ -492,7 +526,7 @@ function buildReport(before: GameState, after: GameState, player: NationId, batt
 export type Hold = 'online' | 'over' | 'event' | 'battle' | 'report' | 'planning' | 'help'
 
 /** The reason is the one the player sees: help sits on top of everything, a battle hides the report, the report hides a decision. */
-export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'>): Hold | null {
+export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'> & Partial<Pick<GameStore, 'paletteOpen' | 'confirm'>>): Hold | null {
   if (st.online) return 'online'
   if (!st.game) return 'over'
   if (st.helpOpen) return 'help'
@@ -500,7 +534,7 @@ export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'w
   if (st.game.outcome !== 'playing') return 'over'
   if (st.summary) return 'report'
   if (st.game.pendingEvent) return 'event'
-  if (st.warRoom) return 'planning'
+  if (st.warRoom || st.paletteOpen || st.confirm) return 'planning'
   return null
 }
 
@@ -636,6 +670,18 @@ async function connect(name: string, code: string, role: 'create' | 'join', sett
   }
 }
 
+/** Makes a loaded game the one being played: slots and imports go through here. Waiting orders must be ones that wait for the month's end. */
+function enterGame(game: GameState, orders: Order[] | undefined): boolean {
+  if (session || useGame.getState().online) return false
+  monthStart = game
+  monthBattles = []
+  const kept = (orders ?? []).filter((o): o is Order => keptOrder(o, game.playerId))
+  save(game, kept, true)
+  useGame.setState({ running: false, undoStack: [], confirm: null, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: kept, selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: true })
+  useGame.getState().toast('Game loaded.', 'success', 2500)
+  return true
+}
+
 export const useGame = create<GameStore>((set, get) => ({
   game: null,
   orders: [],
@@ -663,6 +709,7 @@ export const useGame = create<GameStore>((set, get) => ({
   savedAt: null,
   saveFailed: false,
   confirm: null,
+  paletteOpen: false,
   undoStack: [],
   online: null,
   lastRoom: loadIdentity().code,
@@ -728,6 +775,54 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     save(null)
     set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: false })
+  },
+
+  setPalette(open) {
+    set({ paletteOpen: open })
+  },
+
+  saveSlot(slot) {
+    const { game, orders } = get()
+    if (!game || session) return false
+    try {
+      localStorage.setItem(SLOT_KEY(slot), JSON.stringify({ savedAt: Date.now(), game, orders }))
+      get().toast(`Saved to slot ${slot}.`, 'success', 2500)
+      return true
+    } catch {
+      get().toast('Could not save: storage is full or blocked. Export the save instead.', 'error')
+      return false
+    }
+  },
+
+  loadSlot(slot) {
+    try {
+      const raw = localStorage.getItem(SLOT_KEY(slot))
+      if (!raw) return false
+      const saved = JSON.parse(raw) as { game: GameState; orders?: Order[] }
+      return enterGame(normalizeGame(saved.game, getWorld().map), saved.orders)
+    } catch {
+      get().toast('That save is damaged and could not be opened.', 'error')
+      return false
+    }
+  },
+
+  exportSave() {
+    const { game, orders } = get()
+    if (!game || session) return null
+    return JSON.stringify({ app: 'worlds-of-others', version: 1, exportedAt: Date.now(), game, orders })
+  },
+
+  importSave(text) {
+    try {
+      const data = JSON.parse(text) as { app?: string; game?: GameState; orders?: Order[] } & Partial<GameState>
+      // A file made by Export holds the game under `game`; a bare game is accepted too.
+      const raw = data.game ?? (data.nations ? (data as GameState) : null)
+      if (!raw) throw new Error('not a save')
+      return enterGame(normalizeGame(raw, getWorld().map), data.game ? data.orders : [])
+    } catch {
+      get().toast('That file is not a save of this game.', 'error')
+      return false
+    }
   },
 
   askConfirm(c) {

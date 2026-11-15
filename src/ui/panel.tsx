@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { validateOrder } from '../engine/orders'
 import type { Order } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -29,15 +29,44 @@ export function PanelShell({ title, kicker, panel, children, wide = false, tabs 
   )
 }
 
-/** Tabs inside a desk. */
+/**
+ * Tabs inside a desk. Arrow keys, Home and End move between them; only the chosen tab is in the tab order, and on a narrow
+ * screen the chosen one scrolls into view with a fade that shows there are more.
+ */
 export function Tabs<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: readonly (readonly [T, string])[] }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ left: false, right: false })
+  const measure = () => {
+    const el = ref.current
+    if (el) setEdges({ left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 })
+  }
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+    measure()
+  }, [value])
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const move = (e: React.KeyboardEvent, i: number) => {
+    const to = e.key === 'ArrowRight' ? (i + 1) % options.length : e.key === 'ArrowLeft' ? (i - 1 + options.length) % options.length : e.key === 'Home' ? 0 : e.key === 'End' ? options.length - 1 : -1
+    if (to < 0) return
+    e.preventDefault()
+    onChange(options[to][0])
+    requestAnimationFrame(() => ref.current?.querySelectorAll<HTMLElement>('[role="tab"]')[to]?.focus())
+  }
   return (
-    <div className="segmented" role="tablist">
-      {options.map(([id, label]) => (
-        <button key={id} type="button" role="tab" aria-selected={value === id} aria-pressed={value === id} onClick={() => onChange(id)}>
-          {label}
-        </button>
-      ))}
+    <div className={`segmented-wrap ${edges.left ? 'fade-left' : ''} ${edges.right ? 'fade-right' : ''}`}>
+      <div ref={ref} className="segmented" role="tablist" onScroll={measure}>
+        {options.map(([id, label], i) => (
+          <button key={id} type="button" role="tab" id={`tab-${id}`} aria-selected={value === id} aria-pressed={value === id} tabIndex={value === id ? 0 : -1} onKeyDown={(e) => move(e, i)} onClick={() => onChange(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

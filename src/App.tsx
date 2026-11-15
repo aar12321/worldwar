@@ -9,6 +9,7 @@ import { BattleFX } from './ui/BattleFX'
 import { Briefing } from './ui/Briefing'
 import { GameOver, NavRail, OrdersTray, Toasts, TurnSummary } from './ui/Chrome'
 import { ConfirmDialog } from './ui/confirm'
+import { Palette } from './ui/Palette'
 import { CountryPanel } from './ui/CountryPanel'
 import { EventModal } from './ui/EventModal'
 import { useFx } from './ui/globeBridge'
@@ -33,6 +34,13 @@ function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
+      // The command palette opens from anywhere, even with a desk open.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        const st = useGame.getState()
+        if (st.game) st.setPalette(!st.paletteOpen)
+        return
+      }
       // Undo the last thing that happened at once.
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey && target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
         e.preventDefault()
@@ -44,7 +52,7 @@ function useShortcuts() {
       const st = useGame.getState()
       if (!st.game) return
       // A dialog is open: it handles its own keys.
-      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom || st.confirm) return
+      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom || st.confirm || st.paletteOpen) return
       if (e.key === 'Escape') {
         if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
@@ -67,6 +75,9 @@ function useShortcuts() {
         else st.toast('Select an enemy country you are at war with and border, then press A', 'error')
       } else if (e.key === '?') {
         st.setHelp(true)
+      } else if (e.key === '/') {
+        e.preventDefault()
+        st.setPalette(true)
       } else {
         const key = e.key.toLowerCase()
         if (key === 'w') st.openMilitary('wars')
@@ -169,6 +180,7 @@ export default function App() {
           <EventModal />
           <Help />
           <ConfirmDialog />
+          <Palette />
           <GameOver />
         </>
       )}
