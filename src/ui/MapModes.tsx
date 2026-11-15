@@ -1,5 +1,6 @@
 import { useGame, type MapMode } from '../store'
 import { FRONT_COLORS, RELATION_COLORS } from './colors'
+import { MAP_MODE_KEYS } from './shortcuts'
 
 const MODES: { id: MapMode; label: string; hint: string }[] = [
   { id: 'political', label: 'Nations', hint: 'Each nation in its own color. Countries you can attack glow pink.' },
@@ -32,7 +33,7 @@ export function MapModes() {
     <div className="map-modes surface" role="group" aria-label="Map colors">
       <div className="segmented">
         {MODES.map((m) => (
-          <button key={m.id} type="button" aria-pressed={mode === m.id} title={m.hint} onClick={() => setMode(m.id)}>
+          <button key={m.id} type="button" aria-pressed={mode === m.id} aria-keyshortcuts={MAP_MODE_KEYS[m.id]} title={`${m.label} (${MAP_MODE_KEYS[m.id]}). ${m.hint}`} onClick={() => setMode(m.id)}>
             {m.label}
           </button>
         ))}
