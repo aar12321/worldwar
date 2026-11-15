@@ -136,7 +136,7 @@ export default function App() {
   const inGame = useGame((s) => !!s.game)
   const online = useGame((s) => !!s.online)
   const panel = useGame((s) => s.panel)
-  const live = useGame((s) => !!s.game && isLive(s.game) && !s.online)
+  const live = useGame((s) => !!s.game && isLive(s.game))
   useShortcuts()
   useFlushOnExit()
   useLiveClock(live)

@@ -42,6 +42,8 @@ export interface NewGameOptions {
   difficulty?: Difficulty
   /** 'live': time flows and armies march. Turns, the default, is the game as it has always played. */
   mode?: 'turns' | 'live'
+  /** A game played with friends online. */
+  online?: boolean
 }
 
 function pickPersonality(aggression: number, rng: Rng): Personality {
@@ -64,6 +66,8 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
   // The old early-surprise roll stays so a seed still builds the same generals and personalities.
   void rng.int(0, 2)
   const settings: GameSettings = { victoryShare: opts.victoryShare ?? 0.4, goal: opts.goal ?? 'world', seed: opts.seed, difficulty: opts.difficulty ?? 'normal' }
+  // Only set when true, so a one-player game's save is exactly what it always was.
+  if (opts.online) settings.online = true
   const state: GameState = {
     turn: 1,
     seed: opts.seed,

@@ -599,6 +599,8 @@ export interface GameSettings {
   difficulty: Difficulty
   /** 'live': time flows and armies march. Missing means turns, the way the game has always played. */
   mode?: 'turns' | 'live'
+  /** True for a game played with friends online: no surprise decisions, since one player's choice would stall the others. */
+  online?: boolean
 }
 
 export interface Crisis {

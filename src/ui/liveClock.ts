@@ -28,19 +28,32 @@ export const liveClock = {
   },
 }
 
-/** Runs the clock of a live single-player game. It is the only thing that moves time: one loop, one source. */
+/** Runs the clock of a live game. Alone, it is the only thing that moves time: one loop, one source. Online, the host moves time. */
 export function useLiveClock(active: boolean) {
   useEffect(() => {
     if (!active) return
     let raf = 0
     let last = performance.now()
     let acc = 0
+    let lastDay = -1
     const frame = (now: number) => {
       // A tab that was hidden or a slow frame never makes the game race to catch up.
       const dt = Math.min(250, now - last)
       last = now
       let st = useGame.getState()
-      if (st.game && isLive(st.game)) {
+      if (st.online && st.game && isLive(st.game)) {
+        // Online, the host moves the days. This screen only glides the armies between them, at the room's speed.
+        const game = st.game
+        const day = clockOf(game)
+        if (day !== lastDay) {
+          lastDay = day
+          acc = 0
+        }
+        const clock = st.online.clock
+        if (clock?.running && game.outcome === 'playing') acc = Math.min(LIVE.msPerDay - 1, acc + dt * clock.speed)
+        const fraction = Math.min(0.999, acc / LIVE.msPerDay)
+        liveClock.set(day + fraction, fraction)
+      } else if (st.game && isLive(st.game)) {
         if (st.running && !liveHold(st)) {
           acc += dt * st.settings.liveSpeed
           let steps = 0
