@@ -777,6 +777,9 @@ export const useGame = create<GameStore>((set, get) => ({
       case 'research':
         set({ panel: 'tech', diploFocus: null })
         break
+      case 'empire':
+        get().openEmpire(target.tab)
+        break
       case 'diplomacy':
         get().openDiplomacy(target.nation ?? null)
         break
