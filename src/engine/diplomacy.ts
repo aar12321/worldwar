@@ -8,6 +8,7 @@ import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, tran
 import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, WorldMap } from './types'
 import { clearWarScore, REPARATION_MONTHS, validatePeaceTerms } from './warscore'
 import { transferRegion } from './warfare'
+import { tierOf } from './empire'
 
 export const TRUCE_TURNS = 12
 export const PACT_TURNS = 24
@@ -171,9 +172,13 @@ export function validateProposal(s: GameState, map: WorldMap, from: NationId, to
       return validateTradeTerms(s, d.terms, from, to)
     case 'loan': {
       const L = DIPLOMACY.loan
+      // A bigger empire can lend more and for longer; from a superpower up, a loan can carry a pact (a World Bank loan).
+      const spec = tierOf(s.nations[from])
       if (atWar(s, from, to)) return 'You cannot lend to an enemy'
-      if (!Number.isFinite(d.amount) || d.amount < L.min || d.amount > L.max) return `Loans run from ${L.min} to ${L.max} money`
-      if (!Number.isInteger(d.months) || d.months < L.minMonths || d.months > L.maxMonths) return `Loans run ${L.minMonths} to ${L.maxMonths} months`
+      if (!Number.isFinite(d.amount) || d.amount < L.min || d.amount > spec.loanMax) return `Loans run from ${L.min} to ${spec.loanMax} money for a ${spec.name}`
+      if (!Number.isInteger(d.months) || d.months < L.minMonths || d.months > spec.loanMonths) return `Loans run ${L.minMonths} to ${spec.loanMonths} months for a ${spec.name}`
+      if (d.pact && !spec.loanPact) return 'Only a Superpower (25 countries) can attach a pact to a loan'
+      if (d.pact && (isAllied(s, from, to) || hasPact(s, from, to))) return 'You already have a pact or an alliance with them'
       if (s.nations[from].resources.capital < d.amount) return 'You do not have that much money to lend'
       return null
     }
@@ -221,7 +226,7 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
       return `Declare war on ${name(s, p.enemy)} at ${name(s, p.from)}'s side`
     case 'loan': {
       const pay = loanPayment(p.amount, p.months)
-      return `${name(s, p.from)} lends ${Math.round(p.amount)} money, repaid at ${pay.toFixed(1)} a month for ${p.months} months`
+      return `${name(s, p.from)} lends ${Math.round(p.amount)} money, repaid at ${pay.toFixed(1)} a month for ${p.months} months${p.pact ? ', with a non-aggression pact for as long' : ''}`
     }
     case 'guarantee':
       return `${name(s, p.from)} promises to defend ${name(s, p.to)} for ${DIPLOMACY.guarantee.months} months`
@@ -295,6 +300,10 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
       borrower.resources.capital += p.amount
       startDeal(s, { kind: 'loan', from: p.to, to: p.from, give: { capital: loanPayment(p.amount, p.months) }, receive: {}, until: s.turn + p.months - 1 })
       addOpinion(s, p.to, p.from, 'Lent us money', 12, 0.3)
+      if (p.pact) {
+        s.pacts[pairKey(p.from, p.to)] = Math.max(s.pacts[pairKey(p.from, p.to)] ?? -1, s.turn + p.months)
+        addOpinion(s, p.to, p.from, 'A World Bank loan', 20, 0.2)
+      }
       return null
     }
     case 'guarantee':

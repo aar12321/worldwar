@@ -4,7 +4,9 @@ import { SECTOR_IDS, SECTORS } from './business'
 import { sectorCap } from '../engine/business'
 import { worldGross } from '../engine/victory'
 import { startingCities } from '../engine/cities'
-import { CORPORATE_TAX, EVEN_BUDGET, GOVERNMENTS } from './government'
+import { CORPORATE_TAX, GOVERNMENTS } from './government'
+import { freshStatecraft, seedPeople } from '../engine/statecraft'
+import { startingWorldStats } from '../engine/bank'
 import { UNIT_SPECS, emptyTraining } from './unitTypes'
 import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
@@ -100,6 +102,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     nextId: 1,
     outcome: 'playing',
     worldGross: 0,
+    worldStats: startingWorldStats(),
   }
 
   map.order.forEach((id, index) => {
@@ -108,7 +111,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       id,
       owner: id,
       population: mr.basePopulation,
-      buildings: { factory: 0, farm: 0, university: 0, barracks: 1, port: 0, civic: 0 },
+      buildings: { factory: 0, farm: 0, university: 0, barracks: 1, port: 0, civic: 0, hospital: 0 },
       sabotaged: 0,
       rebels: 0,
       line: 0,
@@ -178,7 +181,6 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       laws: [],
       generals,
       government,
-      budget: { ...EVEN_BUDGET },
       overlord: null,
       agencies: { foreign: { level: dev > 0.75 ? 2 : dev > 0.45 ? 1 : 0, exp: 0 }, domestic: { level: dev > 0.55 ? 1 : 0, exp: 0 } },
       secureUntil: 0,
@@ -204,12 +206,14 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       aggression,
       personality,
       military: { units, drill: emptyTraining(), weapons: emptyTraining(), commanderId: null, lastAttackTurn: 0, attacksThisTurn: 0, exposed: 0 },
+      ...freshStatecraft(),
     }
 
     state.regions[id] = region
     state.nations[id] = nation
   })
 
+  seedPeople(state, map)
   for (const nation of Object.values(state.nations)) {
     const capital = state.regions[nation.capital]
     const units = nation.military.units
@@ -225,6 +229,8 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     }
     if (nation.resources.food < 8) nation.resources.food = 8
   }
+  // The food guard may have moved buildings: staff each nation exactly for what it ended up with.
+  seedPeople(state, map)
   for (const r of Object.values(state.regions)) r.line = lineMax(state, map, r.id)
   state.worldGross = worldGross(state, map)
   // The live fields exist only in a live game, so a turn game's save is exactly what it always was.

@@ -2,7 +2,6 @@ import { levelCost } from '../data/agencies'
 import { systemCost, type SystemId } from '../data/systems'
 import { companiesOf, directiveOf, stakeShare, strengthOf } from '../engine/stocks'
 import { difficultyOf } from '../data/difficulty'
-import { BUDGET_KEYS } from '../data/government'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { TECHS } from '../data/techTree'
@@ -22,7 +21,7 @@ import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
 import { canAttackRegion, garrisonStrength } from '../engine/warfare'
 import { MAX_REPARATIONS, netWarScore, puppetValue, regionValue } from '../engine/warscore'
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
-import { manageCountry, wantedBudget, wantedCorporateTax } from './management'
+import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
 
 export const BOT = {
@@ -141,8 +140,8 @@ function estimateDefense(s: GameState, map: WorldMap, ctx: TurnContext, regionId
 }
 
 const BRANCH_PRIORITY: Record<'aggressive' | 'builder', TechBranch[]> = {
-  aggressive: ['land', 'air', 'frontier', 'economy', 'infra', 'naval'],
-  builder: ['economy', 'infra', 'frontier', 'land', 'air', 'naval'],
+  aggressive: ['land', 'air', 'frontier', 'economy', 'infra', 'medicine', 'naval'],
+  builder: ['economy', 'infra', 'medicine', 'frontier', 'land', 'air', 'naval'],
 }
 
 /** Stock above which a nation considers a resource spare. */
@@ -217,11 +216,11 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   tax = clamp(Math.round(tax * 100) / 100, 0.1, 0.4)
   const draft = atWarNow ? (n.warWeariness > 30 ? 0.07 : 0.1) : 0.05
   if (diff.skill >= 1) {
-    // Skilled bots set the budget and business tax as well.
-    const budgetWanted = wantedBudget(n, econ, atWarNow)
+    // Skilled bots set spending on the people and business tax as well.
+    const spending = wantedSpending(n, econ, atWarNow)
     const corp = wantedCorporateTax(n, econ)
-    const changed = Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6 || Math.abs(corp - n.corporateTax) > 0.02 || BUDGET_KEYS.some((k) => Math.abs(budgetWanted[k] - n.budget[k]) > 0.05)
-    if (changed) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft, corporateTax: corp, budget: budgetWanted })
+    const changed = Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6 || Math.abs(corp - n.corporateTax) > 0.02 || !sameSpending(spending, n.spending)
+    if (changed) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft, corporateTax: corp, spending })
   } else if (Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft })
 
   // The world market: sell what piles up when money is short, and the shortfall is bought on its own (auto-buy).

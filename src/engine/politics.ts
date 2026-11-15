@@ -3,6 +3,7 @@ import { DIPLOMACY } from '../data/unitTypes'
 import { computeEconomy } from './economy'
 import { addLog, clamp } from './helpers'
 import { militaryPower } from './militaryStats'
+import { electionNeed } from './people'
 import type { Rng } from './rng'
 import type { GameState, Nation, WorldMap } from './types'
 
@@ -18,7 +19,7 @@ export function runPolitics(s: GameState, map: WorldMap, rng: Rng) {
     const gov = GOVERNMENTS[n.government]
     if (gov.election > 0 && n.nextElection > 0 && s.turn >= n.nextElection) {
       n.nextElection = s.turn + gov.election
-      if (n.stability >= ELECTION.needed) {
+      if (n.stability >= electionNeed(n, ELECTION.needed)) {
         n.stability = clamp(n.stability + ELECTION.win.stability, 0, 100)
         n.resources.pp = Math.min(200, n.resources.pp + ELECTION.win.influence)
         if (n.isPlayer) addLog(s, 'event', `${n.name}'s government won the election. Stability +${ELECTION.win.stability}, influence +${ELECTION.win.influence}.`, [n.id])

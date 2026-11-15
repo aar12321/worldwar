@@ -1,4 +1,6 @@
 import { LIVE } from '../data/live'
+import { GENERAL_TRAITS } from '../data/projects'
+import { commanderTrait } from './generals'
 import { REACH } from '../data/war'
 import { FRONTIER } from '../data/systems'
 import { atWar, clamp, distanceKm, emptyUnits, newId, totalUnits } from './helpers'
@@ -98,7 +100,9 @@ export function planTrip(s: GameState, map: WorldMap, nationId: NationId, target
   const from = launchPoint(s, map, nationId, target, reach.via)
   if (!from) return null
   const km = distanceKm(map.regions[from], map.regions[target])
-  return { via: reach.via, bySea: reach.bySea, from, km, days: travelDays(km, reach.via) }
+  // A commander who knows logistics marches the army faster.
+  const quick = commanderTrait(s.nations[nationId]) === 'logistician' ? GENERAL_TRAITS.logistician.march : 1
+  return { via: reach.via, bySea: reach.bySea, from, km, days: Math.max(1, Math.round(travelDays(km, reach.via) * quick)) }
 }
 
 /** When an army launched on `today` would set out, arrive, and be home again, in absolute days. */

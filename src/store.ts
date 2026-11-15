@@ -11,8 +11,7 @@ import { absDate, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
 import { applyOrderNow, resolveTurn } from './engine/resolveTurn'
-import { BUDGET_KEYS } from './data/government'
-import type { BattleReport, Budget, Dispatch, GameState, NationId, Order, RegionId } from './engine/types'
+import type { BattleReport, Dispatch, GameState, NationId, Order, RegionId, Spending } from './engine/types'
 import { getWorld } from './map/world'
 import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type Lobby, type RoomSettings } from './net/protocol'
 import { OnlineSession } from './net/session'
@@ -39,7 +38,8 @@ export interface PolicyPatch {
   taxRate?: number
   draftRate?: number
   corporateTax?: number
-  budget?: Budget
+  /** Changes to spending levels; levels not named keep what is queued or set. */
+  spending?: Partial<Spending>
 }
 
 export interface Settings {
@@ -400,6 +400,10 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   const order = item as Order
   if (typeof order.type !== 'string' || order.nationId !== playerId || !MONTH_END_ORDERS.has(order.type)) return false
   if (order.type === 'setPolicy') return Number.isFinite(order.taxRate) && Number.isFinite(order.draftRate) && (order.corporateTax === undefined || Number.isFinite(order.corporateTax))
+  if (order.type === 'setPrograms') return !!order.programs && typeof order.programs === 'object' && (order.rate === undefined || Number.isFinite(order.rate))
+  if (order.type === 'moveCapital') return typeof order.regionId === 'string'
+  if (order.type === 'researchProgram') return ['productivity', 'medicine', 'weapons'].includes(order.track)
+  if (order.type === 'resolution') return ['sanctions', 'ceasefire', 'recognition', 'accord'].includes(order.kind)
   if (order.type === 'propose') return typeof order.target === 'string' && !!order.proposal && typeof order.proposal.kind === 'string'
   if (order.type === 'respond') return typeof order.proposalId === 'string' && typeof order.accept === 'boolean'
   if (order.type === 'research') return typeof order.techId === 'string'
@@ -864,10 +868,10 @@ export const useGame = create<GameStore>((set, get) => ({
     const taxRate = patch.taxRate ?? was?.taxRate ?? n.taxRate
     const draftRate = patch.draftRate ?? was?.draftRate ?? n.draftRate
     const corporateTax = patch.corporateTax ?? was?.corporateTax ?? n.corporateTax
-    const budget = patch.budget ?? was?.budget ?? n.budget
+    const spending: Spending = { ...n.spending, ...(was?.spending ?? {}), ...(patch.spending ?? {}) }
     const same = (a: number, b: number) => Math.abs(a - b) < 1e-6
-    const unchanged = same(n.taxRate, taxRate) && same(n.draftRate, draftRate) && same(n.corporateTax, corporateTax) && BUDGET_KEYS.every((k) => same(n.budget[k], budget[k]))
-    const next: Order[] = unchanged ? rest : [...rest, { type: 'setPolicy', nationId: game.playerId, taxRate, draftRate, corporateTax, budget }]
+    const unchanged = same(n.taxRate, taxRate) && same(n.draftRate, draftRate) && same(n.corporateTax, corporateTax) && (Object.keys(spending) as (keyof Spending)[]).every((k) => spending[k] === n.spending[k])
+    const next: Order[] = unchanged ? rest : [...rest, { type: 'setPolicy', nationId: game.playerId, taxRate, draftRate, corporateTax, spending }]
     set({ orders: next })
     writeOrders(next)
   },

@@ -7,8 +7,8 @@ import { fmt, usePlayerView } from './hooks'
 import { techBonuses } from '../engine/techBonuses'
 import { speak } from './plain'
 
-const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy', 'frontier']
-const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2', economy: '#30d158', frontier: '#ff375f' }
+const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy', 'frontier', 'medicine']
+const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2', economy: '#30d158', frontier: '#ff375f', medicine: '#66d4cf' }
 
 function TechNode({ tech }: { tech: Tech }) {
   const view = usePlayerView()!

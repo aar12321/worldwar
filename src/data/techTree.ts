@@ -42,6 +42,7 @@ export const BRANCH_LABELS: Record<TechBranch, string> = {
   infra: 'Infrastructure',
   economy: 'Economy',
   frontier: 'Frontier',
+  medicine: 'Medicine',
 }
 
 export const TIER_COSTS = [0, 25, 70, 150, 260, 400, 580]
@@ -95,6 +96,11 @@ export const TECHS: Tech[] = [
   t({ id: 'frontier_quantum', name: 'Quantum Computing', branch: 'frontier', tier: 5, requires: ['frontier_robotics'], description: 'Unbreakable codes and breakable ones. Unlocks Quantum Codebreaking: threat warnings and safer agents. Research +15%, business grows 5% faster.', unlocks: ['Quantum Codebreaking (Military, Systems)'], modifiers: { researchOutput: 0.15, policy: { growth: 0.05 } } }),
   t({ id: 'frontier_space', name: 'Orbital Systems', branch: 'frontier', tier: 6, requires: ['frontier_hypersonic'], description: 'Satellites that see and strike. Unlocks the Orbital Network: permanent intelligence on enemies, easier landings, and a strike from space once a year. 10% more room to trade.', unlocks: ['Orbital Network (Military, Systems)'], modifiers: { policy: { trade: 0.1 } } }),
   t({ id: 'frontier_nano', name: 'Nanotechnology', branch: 'frontier', tier: 6, requires: ['frontier_quantum'], description: 'Machines built atom by atom. Unlocks Nano-armor and Nano-medicine: units take less damage and part of every loss comes back. Stability +4, food +30%, all output +10%.', unlocks: ['Nano-armor and Nano-medicine (Military, Systems)'], modifiers: { stability: 4, foodOutput: 0.3, allOutput: 0.1 } }),
+  t({ id: 'med_sanitation', name: 'Sanitation', branch: 'medicine', tier: 1, requires: [], description: 'Clean water and sewers for every town. Health +0.05, and epidemics break out 30% less often.', modifiers: {} }),
+  t({ id: 'med_vaccines', name: 'Vaccines', branch: 'medicine', tier: 2, requires: ['med_sanitation'], description: 'Mass vaccination. Health +0.03, and epidemics end much faster.', modifiers: {} }),
+  t({ id: 'med_surgery', name: 'Modern Surgery', branch: 'medicine', tier: 3, requires: ['med_vaccines'], description: 'Trauma care and keyhole surgery. Each doctor covers 20% more, and more wounded soldiers return to the ranks.', modifiers: {} }),
+  t({ id: 'med_genomics', name: 'Genomics', branch: 'medicine', tier: 4, requires: ['med_surgery'], description: 'Medicine fitted to each patient. Health +0.05, faster population growth. Needs a Medical Research Centre or doctors for every need.', modifiers: {} }),
+  t({ id: 'med_longevity', name: 'Longevity', branch: 'medicine', tier: 5, requires: ['med_genomics'], description: 'Healthy lives into old age. Health +0.04, and pensions cost 30% less. Needs a Medical Research Centre or doctors for every need.', modifiers: {} }),
 ]
 
 export const TECH_BY_ID: Record<string, Tech> = Object.fromEntries(TECHS.map((x) => [x.id, x]))

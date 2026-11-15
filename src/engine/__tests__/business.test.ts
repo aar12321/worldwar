@@ -197,6 +197,7 @@ describe('the treasury', () => {
   it('a nation in the red for months with debt defaults', () => {
     let s = base()
     const n = s.nations[P]
+    n.bonds = [{ id: 'b1', amount: 200, rate: 0.006, due: 99, term: 36 }]
     n.debt = 200
     n.resources.capital = -500
     n.stability = 60

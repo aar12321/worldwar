@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { advise, type Advice } from '../engine/advisor'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { committedCost, type OrderCost } from '../engine/orders'
-import type { Budget, GameState, Nation, Order } from '../engine/types'
+import type { GameState, Nation, Order, Spending } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 
@@ -12,7 +12,7 @@ export interface PlayerView {
   econ: EconomyReport
   committed: OrderCost
   orders: Order[]
-  pendingPolicy: { taxRate: number; draftRate: number; corporateTax: number; budget: Budget }
+  pendingPolicy: { taxRate: number; draftRate: number; corporateTax: number; spending: Spending }
 }
 
 /** What a live game changes on a quiet day. Nothing else is touched, so nothing that reads the rest needs to redo its work. */
@@ -70,8 +70,8 @@ function buildPlayerView(game: GameState, orders: Order[]): PlayerView {
   const policy = orders.find((o) => o.type === 'setPolicy')
   const pendingPolicy =
     policy && policy.type === 'setPolicy'
-      ? { taxRate: policy.taxRate, draftRate: policy.draftRate, corporateTax: policy.corporateTax ?? player.corporateTax, budget: policy.budget ?? player.budget }
-      : { taxRate: player.taxRate, draftRate: player.draftRate, corporateTax: player.corporateTax, budget: player.budget }
+      ? { taxRate: policy.taxRate, draftRate: policy.draftRate, corporateTax: policy.corporateTax ?? player.corporateTax, spending: { ...player.spending, ...(policy.spending ?? {}) } }
+      : { taxRate: player.taxRate, draftRate: player.draftRate, corporateTax: player.corporateTax, spending: player.spending }
   const projectedGame: GameState = policy
     ? { ...game, nations: { ...game.nations, [player.id]: { ...player, ...pendingPolicy } } }
     : game

@@ -7,8 +7,8 @@ export type NationId = string
 /** Planes are two types: fighters win the air, bombers (`air`) strike the ground. */
 /** Drones, robot infantry and hypersonic batteries are the Frontier units. They need no soldiers. */
 export type UnitType = 'infantry' | 'armor' | 'artillery' | 'fighter' | 'air' | 'naval' | 'drone' | 'robot' | 'missile'
-export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic'
-export type TechBranch = 'land' | 'air' | 'naval' | 'infra' | 'economy' | 'frontier'
+export type BuildingType = 'factory' | 'farm' | 'university' | 'barracks' | 'port' | 'civic' | 'hospital'
+export type TechBranch = 'land' | 'air' | 'naval' | 'infra' | 'economy' | 'frontier' | 'medicine'
 export type LawId =
   | 'martial_law'
   | 'war_economy'
@@ -23,9 +23,114 @@ export type LawId =
 export type SectorId = 'farming' | 'energy' | 'manufacturing' | 'arms' | 'technology' | 'finance'
 export type CityFocus = 'balanced' | 'industry' | 'farming' | 'harbor' | 'research' | 'fortress' | 'finance'
 export type GovernmentType = 'democracy' | 'monarchy' | 'junta' | 'one_party'
-/** Where tax money goes. Each share is 0 to 1 and the four add up to 1. */
+/** The old zero-sum budget, kept so older saves can be read and turned into spending levels. */
 export type BudgetKey = 'military' | 'education' | 'health' | 'infrastructure'
 export type Budget = Record<BudgetKey, number>
+
+// ---- Statecraft: people, money, industry and empire ----
+
+/** The five kinds of workers a country has. Their shares add up to 1. */
+export type SkillKey = 'basic' | 'skilled' | 'engineers' | 'doctors' | 'scientists'
+export const SKILL_KEYS: SkillKey[] = ['basic', 'skilled', 'engineers', 'doctors', 'scientists']
+export type SchoolStage = 'primary' | 'secondary' | 'university'
+export type SchoolFocus = 'balanced' | 'trades' | 'engineering' | 'medicine' | 'science' | 'business'
+export type ImmigrationPolicy = 'closed' | 'normal' | 'selective' | 'open'
+export type OccupationPolicy = 'standard' | 'autonomy' | 'assimilate' | 'settle'
+export type ArmsExports = 'off' | 'friends' | 'anyone'
+export type ProjectId = 'rail' | 'grid' | 'ports' | 'sciencePark' | 'medCentre' | 'digitalGov' | 'spaceComplex'
+export type ResearchTrack = 'productivity' | 'medicine' | 'weapons'
+/** 1 Nation, 2 Regional power, 3 Great power, 4 Superpower, 5 Hegemon. */
+export type Tier = 1 | 2 | 3 | 4 | 5
+
+/** Real money a nation spends on its people each month. Schools, health and public works go 0 to 4 (2 is standard); welfare goes 0 to 2. */
+export interface Spending {
+  schools: number
+  health: number
+  works: number
+  pensions: number
+  jobless: number
+  housing: number
+}
+export type SpendingKey = keyof Spending
+
+/** Standing choices a nation makes about how it is run. */
+export interface Programs {
+  stage: SchoolStage
+  focus: SchoolFocus
+  immigration: ImmigrationPolicy
+  occupation: OccupationPolicy
+  armsExports: ArmsExports
+  quarantine: boolean
+  /** The business sector the banks are told to lend to, if any. */
+  creditSector: SectorId | null
+}
+
+export interface People {
+  skills: Record<SkillKey, number>
+  /** How well schooled the people are, 0 to 1. */
+  schooling: number
+  /** How healthy the people are, 0 to 1. */
+  health: number
+  /** Share of the workforce without a job. */
+  unemployment: number
+  /** How specialized the schools have made the people in their focus, 0 to 1. */
+  specialization: number
+  /** Turn the school focus last changed. Specialization starts again from nothing. */
+  focusSince: number
+  /** How bad an epidemic is, 0 when there is none. */
+  epidemic: number
+  /** Last month's people moving in (positive) or out, as a share of the population. */
+  migration: number
+}
+
+export interface Bank {
+  /** The central bank's interest rate, in percent a year. */
+  rate: number
+  /** Price rises, in percent a year. */
+  inflation: number
+  /** Strength of the currency against the world's, 1 is even. */
+  currency: number
+  /** Money printed this month, as a share of a month's income. */
+  printed: number
+  /** The sovereign wealth fund. */
+  fund: number
+  /** War bonds sold in the present wars, and the stability they have bought. */
+  warBonds: number
+  warBondStability: number
+}
+
+/** A bond the state owes: a fixed monthly rate until it comes due. */
+export interface Bond {
+  id: string
+  amount: number
+  /** Monthly interest. */
+  rate: number
+  /** Turn it comes due. */
+  due: number
+  /** Months it ran for, to roll it over for as long again. */
+  term: number
+  war?: boolean
+}
+
+export interface ProjectState {
+  /** Months of work done. */
+  progress: number
+  done: boolean
+  paused?: boolean
+}
+
+/** What everyone can see about the world economy, worked out once a month. */
+export interface WorldStats {
+  /** Average interest rate, weighted by income. */
+  rate: number
+  inflation: number
+  /** The median living standard, to compare a country's against. */
+  living: number
+  /** The nation whose money the world trades in, if any. */
+  reserve: NationId | null
+  /** The stock exchange's index last month, to see how it moved. */
+  lastIndex: number
+}
 export type GeneralTrait = 'mountaineer' | 'logistician' | 'blitz' | 'air_marshal' | 'stalwart'
 export type SpyMission = 'sabotage'
 
@@ -45,7 +150,7 @@ export type Milestone = 'build' | 'train' | 'research' | 'war' | 'win' | 'captur
 export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms' | 'loan' | 'guarantee'
 
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'artillery', 'fighter', 'air', 'naval', 'drone', 'robot', 'missile']
-export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic']
+export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic', 'hospital']
 export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower', 'oil', 'steel', 'goods']
 export const MATERIALS_LIST: Material[] = ['oil', 'steel', 'goods']
 
@@ -119,7 +224,7 @@ export interface RegionState {
 export interface General {
   id: string
   name: string
-  /** Kept so older saves still load. It no longer changes combat or supply. */
+  /** What the commander is good at, when appointed: mountains, logistics, blitz, air power or defense. */
   trait: GeneralTrait
 }
 
@@ -169,7 +274,8 @@ export interface Nation {
   stability: number
   warWeariness: number
   government: GovernmentType
-  budget: Budget
+  /** Older saves only: the zero-sum budget, turned into spending levels when the game loads. */
+  budget?: Budget
   /** Tax on private businesses, 0 to 0.4. */
   corporateTax: number
   /** Turn of the next election, or 0 when the government holds none. */
@@ -194,8 +300,27 @@ export interface Nation {
   sectors: Record<SectorId, number>
   /** Sectors the state subsidizes: they cost money and grow faster. */
   subsidies: SectorId[]
-  /** Bonds the state owes. Interest is paid every month. */
+  /** Bonds the state owes, the sum of `bonds`. Interest is paid every month. */
   debt: number
+  bonds: Bond[]
+  spending: Spending
+  programs: Programs
+  people: People
+  bank: Bank
+  /** Business sectors the state owns, and the turn until which business distrusts it after a seizure. */
+  stateOwned: SectorId[]
+  seizedUntil: number
+  projects: Partial<Record<ProjectId, ProjectState>>
+  /** Military academy level, 0 to 3. */
+  academy: number
+  /** Levels bought in each future research program. */
+  research2: Record<ResearchTrack, number>
+  /** Empire tier, from the countries held. */
+  tier: Tier
+  regionalCapitals: RegionId[]
+  /** Turn the capital last moved, and the last World Council resolution. */
+  capitalMoved: number
+  lastResolution: number
   /** Months in a row the treasury has been in the red with debt outstanding. */
   redMonths: number
   /** Turn until which no one will lend to this nation after a default. */
@@ -250,7 +375,7 @@ export type ProposalDraft =
   | { kind: 'alliance' }
   | { kind: 'trade'; terms: TradeTerms }
   | { kind: 'callToArms'; enemy: NationId }
-  | { kind: 'loan'; amount: number; months: number }
+  | { kind: 'loan'; amount: number; months: number; /** A World Bank loan from a superpower: the borrower signs a pact for the loan's length. */ pact?: boolean }
   | { kind: 'guarantee' }
 
 export type Proposal = ProposalDraft & {
@@ -307,6 +432,22 @@ export interface Dispatch {
   text: string
 }
 
+/** One month of a nation's numbers, for the Statistics charts and the monthly report. */
+export interface HistoryPoint {
+  turn: number
+  nation: NationId
+  money: number
+  income: number
+  power: number
+  countries: number
+  stability: number
+  population: number
+  schooling: number
+  inflation: number
+  unemployment: number
+  rank: number
+}
+
 export type EventEffect =
   | { type: 'resource'; key: keyof Resources; amount: number; perWorkforce?: number }
   | { type: 'stability'; amount: number }
@@ -325,6 +466,11 @@ export type EventEffect =
   | { type: 'rivalResource'; key: keyof Resources; amount: number; perWorkforce?: number }
   | { type: 'clearCasusBelli' }
   | { type: 'embargo'; turns: number }
+  | { type: 'people'; key: 'health' | 'schooling' | 'unemployment' | 'specialization'; amount: number }
+  | { type: 'bank'; key: 'inflation' | 'currency'; amount: number }
+  | { type: 'epidemic'; severity: number }
+  | { type: 'skills'; from: SkillKey; to: SkillKey; amount: number }
+  | { type: 'projectProgress'; months: number }
 
 export interface PendingEvent {
   eventId: string
@@ -334,7 +480,18 @@ export interface PendingEvent {
 }
 
 export type Order =
-  | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number; corporateTax?: number; budget?: Budget }
+  | { type: 'setPolicy'; nationId: NationId; taxRate: number; draftRate: number; corporateTax?: number; spending?: Spending; /** Older saved orders only. */ budget?: Budget }
+  | { type: 'setPrograms'; nationId: NationId; programs: Partial<Programs>; rate?: number }
+  | { type: 'printMoney'; nationId: NationId; share: number }
+  | { type: 'wealthFund'; nationId: NationId; amount: number }
+  | { type: 'setStateOwned'; nationId: NationId; sector: SectorId; mode: 'buy' | 'seize' | 'sell' }
+  | { type: 'startProject'; nationId: NationId; project: ProjectId }
+  | { type: 'pauseProject'; nationId: NationId; project: ProjectId; paused: boolean }
+  | { type: 'moveCapital'; nationId: NationId; regionId: RegionId }
+  | { type: 'setRegionalCapital'; nationId: NationId; regionId: RegionId; on: boolean }
+  | { type: 'fundAcademy'; nationId: NationId }
+  | { type: 'researchProgram'; nationId: NationId; track: ResearchTrack }
+  | { type: 'resolution'; nationId: NationId; kind: ResolutionKind; target?: NationId; target2?: NationId }
   | { type: 'setGovernment'; nationId: NationId; government: GovernmentType }
   | { type: 'imposeSanctions'; nationId: NationId; target: NationId }
   | { type: 'liftSanctions'; nationId: NationId; target: NationId }
@@ -343,7 +500,7 @@ export type Order =
   | { type: 'setCityFocus'; nationId: NationId; regionId: RegionId; cityId: string; focus: CityFocus }
   | { type: 'fundSector'; nationId: NationId; sector: SectorId; amount: number }
   | { type: 'setSubsidies'; nationId: NationId; sectors: SectorId[] }
-  | { type: 'issueBonds'; nationId: NationId; amount: number }
+  | { type: 'issueBonds'; nationId: NationId; amount: number; /** Months until it comes due: 12, 36 or 60. */ term?: number; /** War bonds: sold to the people in wartime, outside normal credit. */ war?: boolean }
   | { type: 'repayDebt'; nationId: NationId; amount: number }
   | { type: 'invest'; nationId: NationId; target: NationId; sector: SectorId; amount: number }
   | { type: 'build'; nationId: NationId; regionId: RegionId; building: BuildingType }
@@ -382,6 +539,8 @@ export type Order =
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
   /** Live mode: calls an army that is still on its way out back home. */
   | { type: 'recall'; nationId: NationId; armyId: string }
+
+export type ResolutionKind = 'sanctions' | 'ceasefire' | 'recognition' | 'accord'
 
 export interface BattleSide {
   nationId: NationId
@@ -563,6 +722,11 @@ export interface GameState {
   outcome: 'playing' | 'victory' | 'defeat'
   /** Every nation's gross income added together, from the last turn. The base for the economic victory. */
   worldGross: number
+  worldStats: WorldStats
+  /** A World Council trade accord: its members trade more freely until it ends. */
+  accord?: { until: number; members: NationId[] }
+  /** Per-month history of the player's nation, for charts and reports. */
+  history?: HistoryPoint[]
   /** How much buying (positive) or selling (negative) has pushed each world price lately. It fades every month. */
   marketPressure?: Partial<Record<TradeResource, number>>
   /** Live mode only: the day of the month, from 0. `turn` is still the month. */

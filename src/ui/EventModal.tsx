@@ -37,7 +37,16 @@ function effectTone(e: EventEffect): 'good' | 'bad' | 'neutral' {
     case 'warWeariness':
       return e.amount > 0 ? 'bad' : 'good'
     case 'rivalResource':
+    case 'skills':
       return 'neutral'
+    case 'people':
+      return (e.key === 'unemployment' ? -e.amount : e.amount) >= 0 ? 'good' : 'bad'
+    case 'bank':
+      return (e.key === 'inflation' ? -e.amount : e.amount) >= 0 ? 'good' : 'bad'
+    case 'epidemic':
+      return 'bad'
+    case 'projectProgress':
+      return e.months >= 0 ? 'good' : 'bad'
   }
 }
 

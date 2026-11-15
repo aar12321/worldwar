@@ -1,8 +1,15 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, DIPLOMACY, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
 import { CITY_RULES, FOCUS } from '../data/cities'
-import { BUSINESS, INVEST, SECTORS, SECTOR_IDS, TREASURY } from '../data/business'
-import { BUDGET_KEYS, BUDGET_LIMITS, CORPORATE_TAX, EVEN_BUDGET, REFORM, buildDiscount } from '../data/government'
+import { BUSINESS, INVEST, SECTORS, SECTOR_IDS } from '../data/business'
+import { CORPORATE_TAX, REFORM } from '../data/government'
+import { FOCUSES, IMMIGRATION, SPENDING, STAGES } from '../data/people'
+import { EMPIRE_RULES, RESOLUTIONS } from '../data/empire'
+import { ACADEMY, programCost } from '../data/projects'
+import { lawProblem, tierGate, tierOf, tierWhere } from './empire'
+import { bondProblem, fundProblem, printProblem } from './bank'
+import { academyCost, academyProblem, doneProject, enterpriseCost, enterpriseProblem, programProblem, projectProblem, worksEffects } from './industry'
+import { resolutionProblem } from './council'
 import { EMPIRE, JUSTIFY, STANCES } from '../data/war'
 import { nextWeaponLevel } from './arms'
 import { companyEffects, tradeValue, validateDirective, validateTrade } from './stocks'
@@ -16,13 +23,13 @@ import { buildingCap, computeEconomy, nationWorkforce, regionWorkforce } from '.
 import { atWar, canUseUnit, enemiesOf, forceUnits, hasCasusBelli, hasPact, isAllied, maxAttacks, maxWars, totalUnits } from './helpers'
 import { trainingSlots } from './training'
 import { MARKET_GOODS, marketValue, tradeRoom } from './trade'
-import type { GameState, Order, UnitType, WorldMap } from './types'
+import type { GameState, Nation, Order, Programs, SpendingKey, UnitType, WorldMap } from './types'
 import { canAttackRegion, commitShare, reachProblem } from './warfare'
 import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'spy', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
 const LIVE_NOW = new Set<Order['type']>(['strike', 'respond', 'propose'])
@@ -69,7 +76,29 @@ export function orderCost(s: GameState, o: Order): OrderCost {
   const c: OrderCost = { capital: 0, pp: 0, tp: 0, manpower: 0, steel: 0 }
   switch (o.type) {
     case 'build':
-      c.capital = Math.round(buildingCost(o.building, s.regions[o.regionId]?.buildings[o.building] ?? 0) * (1 + buildDiscount(s.nations[o.nationId]?.budget ?? EVEN_BUDGET)))
+      // Public works above standard make building cheaper; below it, dearer.
+      c.capital = Math.round(buildingCost(o.building, s.regions[o.regionId]?.buildings[o.building] ?? 0) * (1 + (s.nations[o.nationId] ? worksEffects(s.nations[o.nationId]).buildCost : 0)))
+      break
+    case 'setStateOwned':
+      c.capital = s.nations[o.nationId] ? enterpriseCost(s.nations[o.nationId], o.sector, o.mode) : 0
+      break
+    case 'fundAcademy':
+      c.capital = s.nations[o.nationId] ? academyCost(s.nations[o.nationId]) : 0
+      break
+    case 'researchProgram':
+      c.tp = programCost(s.nations[o.nationId]?.research2?.[o.track] ?? 0)
+      break
+    case 'resolution':
+      c.pp = RESOLUTIONS[o.kind]?.cost ?? 0
+      break
+    case 'moveCapital':
+      c.pp = EMPIRE_RULES.capitalMoveInfluence
+      break
+    case 'setRegionalCapital':
+      c.pp = o.on ? EMPIRE_RULES.regionalCapitalInfluence : 0
+      break
+    case 'repealLaw':
+      c.pp = EMPIRE_RULES.repealCost
       break
     case 'setGovernment':
       c.pp = REFORM.cost
@@ -99,7 +128,8 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.capital = s.nations[o.nationId] ? marketValue(s, s.nations[o.nationId], o.resource, o.amount, 'buy') : 0
       break
     case 'train':
-      c.capital = trainingCost(s.nations[o.nationId]?.military.drill[o.unit] ?? 0)
+      // A military academy makes drill cheaper.
+      c.capital = Math.round(trainingCost(s.nations[o.nationId]?.military.drill[o.unit] ?? 0) * (1 - ACADEMY.drillDiscount * (s.nations[o.nationId]?.academy ?? 0)))
       break
     case 'upgradeWeapons':
       c.capital = weaponCost(s.nations[o.nationId]?.military.weapons[o.unit] ?? 0)
@@ -182,6 +212,34 @@ export function committedCost(s: GameState, orders: Order[]): OrderCost {
   return total
 }
 
+/** Why a change to the nation's standing programs (and its interest rate) is not allowed, or null. */
+export function programsProblem(s: GameState, n: Nation, p: Partial<Programs>, rate?: number): string | null {
+  const spec = tierOf(n)
+  if (p.stage !== undefined && !STAGES[p.stage]) return 'Unknown school stage'
+  if (p.stage === 'university' && !Object.values(s.regions).some((r) => r.owner === n.id && r.buildings.university > 0)) return 'Build a university first to teach at university level'
+  if (p.focus !== undefined && !FOCUSES[p.focus]) return 'Unknown school focus'
+  if (p.immigration !== undefined) {
+    if (!IMMIGRATION[p.immigration]) return 'Unknown immigration policy'
+    if (p.immigration === 'selective' && !spec.selectiveImmigration) return tierGate(s, n.id, 2)
+  }
+  if (p.occupation !== undefined && !spec.occupation.includes(p.occupation)) return tierGate(s, n.id, tierWhere((t) => t.occupation.includes(p.occupation!))) ?? 'Not open to you yet'
+  if (p.armsExports !== undefined) {
+    if (!['off', 'friends', 'anyone'].includes(p.armsExports)) return 'Unknown arms policy'
+    if (p.armsExports === 'anyone' && !spec.armsToAnyone) return tierGate(s, n.id, 2)
+  }
+  if (p.creditSector !== undefined && p.creditSector !== null) {
+    if (!spec.directedCredit) return tierGate(s, n.id, 2)
+    if (!SECTORS[p.creditSector]) return 'Unknown sector'
+  }
+  if (p.quarantine !== undefined && typeof p.quarantine !== 'boolean') return 'Choose on or off'
+  if (rate !== undefined) {
+    const range = spec.rate
+    if (!range) return `A ${spec.name} uses the world's interest rate. A Regional power (4 countries) runs its own central bank.`
+    if (!Number.isFinite(rate) || rate < range[0] - 1e-9 || rate > range[1] + 1e-9) return `The rate must be between ${range[0]}% and ${range[1]}%`
+  }
+  return null
+}
+
 /** Returns a human readable reason the order is invalid, or null if it can be issued. */
 export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Order[] = []): string | null {
   const n = s.nations[o.nationId]
@@ -208,13 +266,62 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (o.taxRate < TAX_LIMITS.min || o.taxRate > TAX_LIMITS.max) return 'Tax rate out of range'
       if (o.draftRate < DRAFT_LIMITS.min || o.draftRate > maxDraft + 1e-9) return 'Draft rate out of range'
       if (o.corporateTax !== undefined && (!Number.isFinite(o.corporateTax) || o.corporateTax < CORPORATE_TAX.min || o.corporateTax > CORPORATE_TAX.max + 1e-9)) return 'Business tax out of range'
-      if (o.budget) {
-        const shares = BUDGET_KEYS.map((k) => o.budget![k])
-        if (shares.some((v) => !Number.isFinite(v) || v < BUDGET_LIMITS.min - 1e-9 || v > BUDGET_LIMITS.max + 1e-9)) return `Each part of the budget must be between ${Math.round(BUDGET_LIMITS.min * 100)}% and ${Math.round(BUDGET_LIMITS.max * 100)}%`
-        if (Math.abs(shares.reduce((a, b) => a + b, 0) - 1) > 0.011) return 'The budget must add up to 100%'
+      if (o.spending) {
+        for (const [k, v] of Object.entries(o.spending)) {
+          const spec = SPENDING[k as SpendingKey]
+          if (!spec) return 'Unknown spending'
+          if (!Number.isInteger(v) || v < 0 || v > spec.max) return `${spec.name} goes from 0 to ${spec.max}`
+        }
       }
       return null
     }
+    case 'setPrograms':
+      return programsProblem(s, n, o.programs, o.rate)
+    case 'printMoney':
+      return printProblem(n, o.share)
+    case 'wealthFund':
+      return fundProblem(n, o.amount)
+    case 'setStateOwned':
+      return enterpriseProblem(s, n, o.sector, o.mode)
+    case 'startProject':
+      return projectProblem(s, map, n, o.project)
+    case 'pauseProject': {
+      const p = n.projects?.[o.project]
+      if (!p || p.done) return 'That project is not under way'
+      return null
+    }
+    case 'moveCapital': {
+      const gate = tierOf(n).moveCapital ? null : tierGate(s, o.nationId, 3)
+      if (gate) return gate
+      const r = s.regions[o.regionId]
+      if (r?.owner !== o.nationId) return 'You do not hold that country'
+      if (o.regionId === n.capital) return 'It is already your capital'
+      if (r.integration < 1) return 'It has not settled yet'
+      const wait = EMPIRE_RULES.capitalMoveCooldown - (s.turn - (n.capitalMoved ?? -99))
+      if (wait > 0) return `The capital can move again in ${wait} months`
+      return null
+    }
+    case 'setRegionalCapital': {
+      const r = s.regions[o.regionId]
+      if (r?.owner !== o.nationId) return 'You do not hold that country'
+      const caps = n.regionalCapitals ?? []
+      if (!o.on) return caps.includes(o.regionId) ? null : 'It is not a regional capital'
+      const max = tierOf(n).regionalCapitals
+      if (max === 0) return tierGate(s, o.nationId, 4)
+      if (caps.includes(o.regionId) || o.regionId === n.capital) return 'It is already a capital'
+      if (r.integration < 1) return 'It has not settled yet'
+      if (caps.length >= max) return `A ${tierOf(n).name} can have ${max} regional capitals`
+      return null
+    }
+    case 'fundAcademy':
+      return academyProblem(s, n)
+    case 'researchProgram': {
+      if (pending.some((p) => p.type === 'researchProgram' && p.track === o.track)) return 'Already queued this month'
+      return programProblem(n, o.track)
+    }
+    case 'resolution':
+      if (pending.some((p) => p.type === 'resolution')) return 'One resolution a month'
+      return resolutionProblem(s, o.nationId, o.kind, o.target, o.target2)
     case 'fundSector': {
       const at = n.sectors[o.sector] ?? 0
       if (!Number.isFinite(o.amount) || o.amount < BUSINESS.minFunding) return `A grant must be at least ${BUSINESS.minFunding} money`
@@ -242,11 +349,9 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'setSubsidies':
       return o.sectors.every((x) => SECTOR_IDS.includes(x)) ? null : 'Unknown sector'
     case 'issueBonds': {
-      if (!Number.isFinite(o.amount) || o.amount < TREASURY.min) return `Bonds start at ${TREASURY.min} money`
-      const credit = computeEconomy(s, map, o.nationId).credit
-      if (credit.locked) return 'Nobody will lend to you after your default'
-      if (o.amount > credit.room + 1e-6) return `Lenders will give you at most ${Math.floor(credit.room)} more (rating ${credit.rating})`
-      return null
+      const e = computeEconomy(s, map, o.nationId)
+      const pendingBonds = pending.reduce((sum, p) => (p.type === 'issueBonds' && !p.war ? sum + p.amount : sum), 0)
+      return bondProblem(s, n, o.amount, o.term, o.war, e.credit.room - pendingBonds, e.credit.locked, e.gross)
     }
     case 'repayDebt':
       if (n.debt <= 0) return 'You owe nothing'
@@ -324,6 +429,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const t = TECH_BY_ID[o.techId]
       if (!t) return 'Unknown technology'
       if (n.techs.includes(t.id)) return 'Already researched'
+      // The last medicine research needs a medical research centre, or doctors for every need.
+      if ((t.id === 'med_genomics' || t.id === 'med_longevity') && !doneProject(n, 'medCentre') && computeEconomy(s, map, o.nationId).coverage.doctors < 1) return 'Needs a Medical Research Centre, or doctors for every need (see People)'
       if (pending.some((p) => p.type === 'research' && p.techId === t.id)) return 'Already queued'
       const queuedTechs = pending.filter((p) => p.type === 'research').map((p) => (p as { techId: string }).techId)
       if (!t.requires.every((r) => n.techs.includes(r) || queuedTechs.includes(r))) return 'Prerequisites missing'
@@ -440,7 +547,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return null
     }
     case 'enactLaw':
-      return n.laws.includes(o.law) ? 'Already enacted' : null
+      if (pending.some((p) => p.type === 'enactLaw')) return 'One new law a month'
+      return lawProblem(n, o.law)
     case 'repealLaw':
       return n.laws.includes(o.law) ? null : 'Not enacted'
     case 'suppressRebels': {

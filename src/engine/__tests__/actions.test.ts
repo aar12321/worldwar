@@ -1,3 +1,4 @@
+import { EMPIRE_RULES } from '../../data/empire'
 import { describe, expect, it } from 'vitest'
 import { storedOpinion } from '../../ai/opinion'
 import { EVENTS } from '../../data/events'
@@ -243,7 +244,9 @@ describe('every order type', () => {
       // Upkeep and income from the order itself shift the totals slightly, so allow a small margin.
       if (cost.capital) expect(spent('capital')).toBeGreaterThanOrEqual(cost.capital - 0.01)
       if (cost.capital) expect(spent('capital')).toBeLessThan(cost.capital + 3)
-      if (cost.pp) expect(spent('pp')).toBeCloseTo(cost.pp, 5)
+      // A law in force costs a little influence every month to uphold.
+      const upkeep = order.type === 'enactLaw' ? EMPIRE_RULES.lawUpkeep : order.type === 'repealLaw' ? -EMPIRE_RULES.lawUpkeep : 0
+      if (cost.pp) expect(spent('pp')).toBeCloseTo(cost.pp + upkeep, 5)
       if (cost.tp) expect(spent('tp')).toBeCloseTo(cost.tp, 5)
       if (cost.manpower) expect(idle.nations[P].militaryPool - next.nations[P].militaryPool).toBeGreaterThan(cost.manpower * 0.5)
       row.check(next, s)
@@ -525,6 +528,8 @@ describe('the national military', () => {
 
     const withCommander = structuredClone(s)
     withCommander.nations[P].military.commanderId = generalId
+    // A commander with no trait that touches money, so the comparison is only about drill.
+    withCommander.nations[P].generals[0].trait = 'stalwart'
     // Paid drill still works with a commander: the commander drills one more type for free.
     expect(validateOrder(withCommander, map, { type: 'train', nationId: P, unit: 'infantry' })).toBeNull()
     const free = resolveTurn(withCommander, map, [])

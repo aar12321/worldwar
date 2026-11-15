@@ -1,4 +1,5 @@
 import { addLog } from './helpers'
+import { ensureStatecraft } from './statecraft'
 import { daysInMonth } from './calendar'
 import { newStocks } from './stocks'
 import { EVENT_BY_ID } from '../data/events'
@@ -31,7 +32,6 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     n.redMonths ??= 0
     n.defaultedUntil ??= 0
     n.government ??= 'monarchy'
-    n.budget ??= { military: 0.25, education: 0.25, health: 0.25, infrastructure: 0.25 }
     n.corporateTax ??= 0.15
     n.nextElection ??= 0
     n.lastReform ??= -99
@@ -92,6 +92,9 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   }
   if (game.pendingEvent && !EVENT_BY_ID[game.pendingEvent.eventId]) game.pendingEvent = null
   if (game.settings.mode === 'live') cleanLive(game, map)
+  // Statecraft: spending levels from the old budget, bonds from old debt, people, the bank, tiers.
+  for (const r of Object.values(game.regions)) r.buildings.hospital ??= 0
+  ensureStatecraft(game, map)
   return game
 }
 

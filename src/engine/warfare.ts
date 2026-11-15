@@ -1,4 +1,10 @@
 import { addOpinion, forgetNation } from '../ai/opinion'
+import { BANKING } from '../data/banking'
+import { COMBAT_MEDICINE, DEMAND, MEDICINE } from '../data/people'
+import { GENERAL_TRAITS } from '../data/projects'
+import { updateTiers } from './empire'
+import { commanderTrait } from './generals'
+import { blendPeople } from './people'
 import { emptyTraining } from '../data/unitTypes'
 import { combatMods } from './arms'
 import { MATERIALS } from '../data/deposits'
@@ -123,6 +129,12 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
     const spoils = Math.max(0, n.resources.capital) * EMPIRE.spoilsShare
     conqueror.resources.capital += spoils
     n.resources.capital -= spoils
+    // And part of its wealth fund.
+    const fund = (n.bank?.fund ?? 0) * BANKING.fundSpoils
+    if (fund > 0) {
+      conqueror.resources.capital += fund
+      n.bank.fund -= fund
+    }
     const learn = n.techs.filter((t) => !conqueror.techs.includes(t) && TECH_BY_ID[t]?.requires.every((r) => conqueror.techs.includes(r))).sort()[0]
     if (learn) {
       conqueror.techs.push(learn)
@@ -147,6 +159,11 @@ function seize(s: GameState, map: WorldMap, regionId: RegionId, newOwner: Nation
 /** Hands a country to a new owner. Conquest razes the barracks; a negotiated cession keeps them. */
 export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, newOwner: NationId, raze = true) {
   const oldOwner = s.regions[regionId].owner
+  // The land's people come with it: the new owner's schooling, health and skills move toward theirs, by the land's share of its workforce.
+  const gained = regionWorkforce(s.regions[regionId], map.regions[regionId])
+  let had = 0
+  for (const r of Object.values(s.regions)) if (r.owner === newOwner) had += regionWorkforce(r, map.regions[r.id])
+  if (s.nations[newOwner] && s.nations[oldOwner]) blendPeople(s.nations[newOwner], s.nations[oldOwner], gained / Math.max(0.1, had + gained))
   seize(s, map, regionId, newOwner, raze)
   const old = s.nations[oldOwner]
   if (!old) return
@@ -170,6 +187,24 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
     old.stability = Math.max(0, old.stability - 15)
     addLog(s, 'war', `${old.name}'s capital has fallen! The government flees to ${map.regions[next].name}.`, [oldOwner, newOwner])
   }
+}
+
+/** A Blitz under a commander who knows the trade pushes further. */
+function blitzSpec(n: Nation | undefined, stance: Stance) {
+  const spec = STANCES[stance]
+  return stance === 'blitz' && commanderTrait(n) === 'blitz' ? { ...spec, advance: spec.advance * (1 + GENERAL_TRAITS.blitz.blitz) } : spec
+}
+
+/** Doctors return a share of infantry losses: more with good coverage and modern surgery, capped with nano-medicine. */
+function treatWounded(n: Nation, losses: UnitCounts, into: UnitCounts = n.military.units): number {
+  if (!n.people) return 0
+  const coverage = n.people.skills.doctors / Math.max(1e-4, DEMAND.doctorsBase + DEMAND.doctorsPerHealth * (n.spending?.health ?? 2))
+  const nano = NANO_REVIVE[Math.max(0, Math.min(3, n.systems?.nano ?? 0))]
+  const share = Math.max(0, Math.min(COMBAT_MEDICINE.cap - nano, COMBAT_MEDICINE.perCoverage * Math.min(1.5, coverage) + (n.techs.includes('med_surgery') ? (MEDICINE.med_surgery.combatMedicine ?? 0) : 0)))
+  if (share <= 0) return 0
+  const back = losses.infantry * share
+  into.infantry += back
+  return back
 }
 
 /** Nano-medicine returns part of a side's losses to its military. Returns the divisions saved. */
@@ -285,7 +320,7 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const share = army ? army.share : commitShare(attackerNation, commit)
   if (army ? totalUnits(army.units) < 0.05 : !reach.ok || share < 0.05 || totalUnits(attackerNation.military.units) < 0.1) return null
 
-  const spec = STANCES[stance]
+  const spec = blitzSpec(attackerNation, stance)
   const attNotes: string[] = []
   let attPenalty = 1
   if (reach.bySea) {
@@ -335,7 +370,7 @@ export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, 
   const mr = map.regions[target]
   const max = lineMax(s, map, target)
   const before = Math.min(s.regions[target].line, max)
-  const spec = STANCES[stance]
+  const spec = blitzSpec(s.nations[nationId], stance)
   const missileCut = setup.attacker.units.missile * FRONTIER.missileLine * interceptFactor(s.nations[s.regions[target].owner]?.systems?.shield ?? 0)
   let wins = 0
   let damage = 0
@@ -389,7 +424,7 @@ export function resolveAttack(
   const mr = map.regions[target]
   const defenderId = targetRegion.owner
   const defenderNation = s.nations[defenderId]
-  const spec = STANCES[stance]
+  const spec = blitzSpec(attackerNation, stance)
 
   const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
   const mine = army ? army.units : attackerNation.military.units
@@ -406,6 +441,9 @@ export function resolveAttack(
   if (firedMissiles > 0) mine.missile = Math.max(0, mine.missile - Math.max(0, firedMissiles - outcome.attackerLosses.missile))
   const savedA = reviveLosses(attackerNation, outcome.attackerLosses, mine)
   const savedD = reviveLosses(defenderNation, defMilLosses)
+  // Doctors return part of the wounded infantry to the ranks (more with modern surgery).
+  const healedA = treatWounded(attackerNation, outcome.attackerLosses, mine)
+  const healedD = treatWounded(defenderNation, defMilLosses)
   if (!army) {
     const m = attackerNation.military
     m.attacksThisTurn = m.lastAttackTurn === s.turn ? m.attacksThisTurn + 1 : 1
@@ -468,6 +506,8 @@ export function resolveAttack(
   if (firedMissiles >= 0.5) report.modifiers.push(`Fired ${Math.round(firedMissiles)} hypersonic missile${Math.round(firedMissiles) === 1 ? '' : 's'} (used up)`)
   if (missileHits > 0) report.modifiers.push(`Hypersonic batteries cut the Defense Line by ${missileHits.toFixed(1)}`)
   if (savedA + savedD > 0) report.modifiers.push(`Nano-medicine saved ${(savedA + savedD).toFixed(1)} divisions`)
+  if (healedA + healedD >= 0.05) report.modifiers.push(`Field hospitals returned ${(healedA + healedD).toFixed(1)} divisions of wounded infantry`)
+  if (captured) updateTiers(s)
   return { report }
 }
 
