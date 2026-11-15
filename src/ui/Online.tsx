@@ -216,7 +216,7 @@ export function Lobby() {
                 aria-pressed={mineNow}
               >
                 <span className="font-semibold">{r.name}</span>
-                <span className="text-xs text-slate-400">{owner ? (mineNow ? 'Yours' : owner.name) : nationTier(score)}</span>
+                <span className="text-xs text-white/70">{owner ? (mineNow ? 'Yours' : owner.name) : nationTier(score)}</span>
               </button>
             )
           })}
@@ -236,6 +236,10 @@ export function Lobby() {
           onChange={(difficulty) => change({ difficulty })}
         />
         <SettingRow<number> label="Time to plan each month" value={settings.timer} disabled={!isHost} options={TIMERS} onChange={(timer) => change({ timer: timer as RoomSettings['timer'] })} />
+        <div className="rounded-xl bg-white/5 px-3 py-2 text-[13px] text-white/80">
+          <span className="label block">How to win</span>
+          Hold every country in the world, yours or puppets of yours. A player whose nation falls can keep watching.
+        </div>
         <p className="text-[13px] text-white/65 leading-snug">Everyone plans at once. The month moves on when every player is Ready, or when the timer ends. Nations nobody picks are run by the AI.</p>
         <div className="flex gap-2">
           <button className="btn flex-1 py-3" onClick={leave}>

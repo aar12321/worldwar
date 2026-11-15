@@ -185,7 +185,6 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
       agencies: { foreign: { level: dev > 0.75 ? 2 : dev > 0.45 ? 1 : 0, exp: 0 }, domestic: { level: dev > 0.55 ? 1 : 0, exp: 0 } },
       secureUntil: 0,
       systems: { cyber: 0, shield: 0, ai: 0, quantum: 0, orbital: 0, nano: 0 },
-      lastStrike: -99,
       lastOrbital: -99,
       sectors: startingSectors(w, dev),
       subsidies: [],

@@ -74,7 +74,7 @@ export function Setup() {
               className={`w-full text-left rounded-xl px-3 py-2 flex items-center justify-between transition-colors ${selected === r.id ? 'bg-white/12' : 'hover:bg-white/6'}`}
             >
               <span className="font-semibold">{r.name}</span>
-              <span className="text-xs text-slate-400">{tier(score)}</span>
+              <span className="text-xs text-white/70">{tier(score)}</span>
             </button>
           ))}
         </div>
@@ -99,7 +99,7 @@ export function Setup() {
                 <div className="font-semibold">{TERRAIN[pick.terrain].name}</div>
               </div>
             </div>
-            <div className="text-xs text-slate-400 mt-2">
+            <div className="text-xs text-white/70 mt-2">
               {pick.neighbors.length} land borders · {pick.seaLanes.length} sea lanes · {pick.coastal ? 'coastal' : 'landlocked'}
             </div>
           </div>

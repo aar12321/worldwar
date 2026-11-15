@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { advise, type Advice } from '../engine/advisor'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { committedCost, type OrderCost } from '../engine/orders'
@@ -113,20 +113,6 @@ export function useAdvice(limit = 6): Advice[] {
   const game = useSlowGame()
   const orders = useGame((s) => s.orders)
   return useMemo(() => (game ? adviceFor(game, orders).slice(0, limit) : []), [game, orders, limit])
-}
-
-/** Matches the CSS `@media (max-width)` breakpoints, including the boundary pixel. */
-export function useNarrow(max = 1100): boolean {
-  const query = `(max-width: ${max}px)`
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
-  useEffect(() => {
-    const media = window.matchMedia(query)
-    const onChange = () => setNarrow(media.matches)
-    onChange()
-    media.addEventListener('change', onChange)
-    return () => media.removeEventListener('change', onChange)
-  }, [query])
-  return narrow
 }
 
 export const fmt = (v: number, digits = 0) =>

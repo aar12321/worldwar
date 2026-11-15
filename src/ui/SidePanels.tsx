@@ -11,15 +11,15 @@ import { PanelShell } from './panel'
 /** One list of shortcuts, shown in Settings and in the help window. */
 
 const KIND_COLOR: Record<LogKind, string> = {
-  news: 'text-amber-200',
-  info: 'text-slate-300',
-  war: 'text-rose-300',
-  battle: 'text-amber-200',
-  tech: 'text-cyan-200',
-  economy: 'text-emerald-200',
-  event: 'text-fuchsia-200',
-  spy: 'text-violet-300',
-  diplomacy: 'text-sky-200',
+  news: 'text-[#ffd60a]',
+  info: 'text-white/80',
+  war: 'text-[#ff8a84]',
+  battle: 'text-[#ffd60a]',
+  tech: 'text-[#64d2ff]',
+  economy: 'text-[#6eeb8a]',
+  event: 'text-[#f0a8ff]',
+  spy: 'text-[#bf9bff]',
+  diplomacy: 'text-[#6cb4ff]',
 }
 
 const NEWS_FILTERS: [string, string, LogKind[] | null][] = [

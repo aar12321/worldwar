@@ -431,8 +431,7 @@ input[type='range'] {
   text-transform: none;
   pointer-events: none;
 }
-.group\/tip:hover .tip-bubble,
-.group\/tip:focus-within .tip-bubble {
+.tip-bubble.open {
   display: block;
 }
 

@@ -160,3 +160,23 @@ describe('money', () => {
     expect(Math.abs(next.marketPressure?.oil ?? 0)).toBeLessThan(0.01)
   })
 })
+
+describe('rival AIs answer crises', () => {
+  it('a Medium rival with a friend in unrest sends aid', async () => {
+    const { generateBotOrders } = await import('../../ai/bot')
+    const s = startState(map)
+    s.settings.difficulty = 'normal'
+    s.humans = ['r0']
+    s.nations.r2.resources.pp = 80
+    s.nations.r2.resources.capital = 400
+    // r3 is in unrest; r2 likes r3.
+    s.crises.push({ id: 'cr1', kind: 'unrest', nation: 'r3', rival: null, area: 'Somewhere', stage: 1, next: 99, boil: 0.5, answered: [] })
+    s.opinions['r2>r3'] = [{ label: 'friend', value: 40, decay: 0 }]
+    let sent = false
+    for (let seed = 1; seed <= 30 && !sent; seed++) {
+      s.seed = seed
+      sent = generateBotOrders(s, map, 'r2').some((o) => o.type === 'crisisAction' && o.action === 'aid')
+    }
+    expect(sent).toBe(true)
+  })
+})

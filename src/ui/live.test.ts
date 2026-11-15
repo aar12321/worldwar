@@ -303,3 +303,23 @@ describe('saves: slots, export and import', () => {
     expect(useGame.getState().game!.playerId).toBe(g.playerId)
   })
 })
+
+describe('the capture color hold', () => {
+  it('a newer hold on the same country is not cleared by the older timer', async () => {
+    const { useFx } = await import('./globeBridge')
+    const vi = (await import('vitest')).vi
+    vi.useFakeTimers()
+    try {
+      useFx.getState().hold('poland', '#111111', 1000)
+      vi.advanceTimersByTime(600)
+      useFx.getState().hold('poland', '#222222', 1000)
+      vi.advanceTimersByTime(600)
+      // The first timer has fired by now, but the second hold is still in force.
+      expect(useFx.getState().held.poland).toBe('#222222')
+      vi.advanceTimersByTime(600)
+      expect(useFx.getState().held.poland).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

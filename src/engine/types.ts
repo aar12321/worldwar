@@ -287,8 +287,7 @@ export interface Nation {
   agencies: { foreign: Agency; domestic: Agency }
   /** Frontier systems, each from 0 to 3. */
   systems: Record<SystemId, number>
-  /** The turn of the last strike from afar and the last orbital strike, for the cooldowns. */
-  lastStrike: number
+  /** The turn of the last orbital strike, for its cooldown. */
   lastOrbital: number
   /** The turn until which foreign operations against this nation are harder. */
   secureUntil: number

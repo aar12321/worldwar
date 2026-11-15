@@ -147,7 +147,7 @@ const BRANCH_PRIORITY: Record<'aggressive' | 'builder', TechBranch[]> = {
 /** Stock above which a nation considers a resource spare. */
 const SURPLUS: Record<TradeResource, number> = { capital: 80, food: 40, tp: 60, manpower: 180, oil: 30, steel: 40, goods: 50 }
 
-type Agenda = 'agency' | 'peace' | 'allies' | 'research' | 'economy' | 'military' | 'trade' | 'diplomacy' | 'war'
+type Agenda = 'agency' | 'peace' | 'allies' | 'research' | 'economy' | 'military' | 'trade' | 'diplomacy' | 'war' | 'crisis'
 
 export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer = false, context?: TurnContext): Order[] {
   const n = s.nations[nationId]
@@ -436,6 +436,24 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       return used
     },
 
+    /** Medium and Hard rivals answer the world's crises: aid for a friend in unrest, mediation or a stand in a dispute. */
+    crisis() {
+      if (diff.skill < 1 || n.resources.pp < 30) return false
+      for (const c of s.crises) {
+        if (c.stage < 1 || c.answered.includes(nationId) || c.nation === nationId || c.rival === nationId) continue
+        const victim = opinion(c.nation)
+        if (c.kind === 'unrest') {
+          if (victim >= 5 && n.resources.capital > 90 && tryAdd({ type: 'crisisAction', nationId, crisisId: c.id, action: 'aid' })) return true
+        } else if (c.rival) {
+          const aggressor = opinion(c.rival)
+          // The strongest tier stands with a friend against a rival it dislikes; the peaceful try to talk it down.
+          if (diff.skill === 2 && aggressor < -10 && victim >= 0 && tryAdd({ type: 'crisisAction', nationId, crisisId: c.id, action: 'support' })) return true
+          if ((n.personality === 'honorable' || n.personality === 'trader') && victim > -10 && aggressor > -25 && tryAdd({ type: 'crisisAction', nationId, crisisId: c.id, action: 'mediate' })) return true
+        }
+      }
+      return false
+    },
+
     allies() {
       for (const e of enemies) {
         if (myPower > perceived(e) * 1.2) continue
@@ -555,8 +573,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   }
 
   const plan: Agenda[] = atWarNow
-    ? ['peace', 'military', 'allies', ...shuffle<Agenda>(['agency', 'research', 'economy', 'trade', 'diplomacy', 'war'], rng)]
-    : shuffle<Agenda>(['agency', 'research', 'economy', 'military', 'trade', 'diplomacy', 'war'], rng)
+    ? ['peace', 'military', 'allies', ...shuffle<Agenda>(['agency', 'research', 'economy', 'trade', 'diplomacy', 'war', 'crisis'], rng)]
+    : shuffle<Agenda>(['agency', 'research', 'economy', 'military', 'trade', 'diplomacy', 'war', 'crisis'], rng)
   for (const item of plan) {
     if (attention <= 0) break
     if (agenda[item]()) attention--

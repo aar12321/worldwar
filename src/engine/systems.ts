@@ -100,7 +100,6 @@ export function fireMissiles(s: GameState, o: Strike): number {
   const fired = Math.min(o.count ?? 1, Math.floor(n.military.units.missile + 1e-9))
   if (fired < 1) return 0
   n.military.units.missile -= fired
-  n.lastStrike = s.turn
   return fired
 }
 
