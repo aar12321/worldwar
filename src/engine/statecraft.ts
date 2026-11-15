@@ -3,6 +3,7 @@ import { STANDARD_SPENDING } from '../data/people'
 import { startingBank, startingWorldStats, syncDebt, updateWorldStats } from './bank'
 import { countRegions, empireCount, tierFor } from './empire'
 import { activeProjects } from './industry'
+import { militaryPower } from './militaryStats'
 import { cleanSpending, developmentOf, livingStandard, runMigration, startingPeople, type PeopleBasis } from './people'
 import type { Budget, GameState, Nation, NationId, Programs, Spending, WorldMap } from './types'
 
@@ -113,6 +114,40 @@ export function seedPeople(s: GameState, map: WorldMap) {
     n.people = startingPeople(n, peopleBasis(s, map, n.id))
     n.tier = tierFor(empireCount(s, n.id, counts))
   }
+}
+
+/** Most months of history kept. */
+export const HISTORY_CAP = 600
+
+/** One snapshot of each human nation for the charts and the monthly report. Called once a month, after the economy has run. */
+export function recordHistory(s: GameState, gross: Map<NationId, number>, netIncome: Map<NationId, number>) {
+  const ranked = [...gross].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([id]) => id)
+  const list = (s.history ??= [])
+  for (const id of s.humans) {
+    const n = s.nations[id]
+    if (!n?.alive) continue
+    let countries = 0
+    let population = 0
+    for (const r of Object.values(s.regions)) if (r.owner === id) {
+      countries++
+      population += r.population
+    }
+    list.push({
+      turn: s.turn,
+      nation: id,
+      money: n.resources.capital,
+      income: netIncome.get(id) ?? 0,
+      power: militaryPower(s, id),
+      countries,
+      stability: n.stability,
+      population,
+      schooling: n.people.schooling,
+      inflation: n.bank.inflation,
+      unemployment: n.people.unemployment,
+      rank: Math.max(1, ranked.indexOf(id) + 1),
+    })
+  }
+  if (list.length > HISTORY_CAP * Math.max(1, s.humans.length)) list.splice(0, list.length - HISTORY_CAP * Math.max(1, s.humans.length))
 }
 
 /**

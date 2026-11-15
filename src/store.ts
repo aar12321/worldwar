@@ -10,7 +10,7 @@ import { MONTH_END_ORDERS, isMonthEndOrder, validateOrder } from './engine/order
 import { absDate, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
-import { applyOrderNow, resolveTurn } from './engine/resolveTurn'
+import { applyOrderNow, describeOrder, resolveTurn } from './engine/resolveTurn'
 import type { BattleReport, Dispatch, GameState, NationId, Order, Programs, RegionId, Spending } from './engine/types'
 import { getWorld } from './map/world'
 import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type Lobby, type RoomSettings } from './net/protocol'
@@ -20,6 +20,7 @@ import { globeBridge, useFx } from './ui/globeBridge'
 import { battleLine, scenesFor } from './ui/battleText'
 import { presentLiveStep } from './ui/livePresent'
 import { speak } from './ui/plain'
+import type { PendingConfirm } from './ui/confirmRules'
 
 const SAVE_KEY = 'worlds-of-others-save-v4'
 const ORDERS_KEY = 'worlds-of-others-orders-v4'
@@ -29,7 +30,7 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 /** The five desks, plus News and Settings which open from the top bar. */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
-export type EmpireTab = 'overview' | 'provinces' | 'world'
+export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
@@ -205,6 +206,13 @@ interface GameStore {
   /** When the game was last written to this device, and whether the last try failed. */
   savedAt: number | null
   saveFailed: boolean
+  /** A question waiting for yes or no before a big order goes through. */
+  confirm: PendingConfirm | null
+  askConfirm(c: PendingConfirm): void
+  closeConfirm(): void
+  /** What can be taken back: the games before each order that happened at once, newest last. */
+  undoStack: { game: GameState; label: string }[]
+  undo(): void
 
   newGame(opts: NewGameOptions): void
   loadGame(): void
@@ -499,6 +507,7 @@ export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'w
 /** The month as it began, and the player's battles in it, for the month's report. */
 let monthStart: GameState | null = null
 let monthBattles: BattleReport[] = []
+const UNDO_LIMIT = 10
 const botPlanner = (s: GameState, m: ReturnType<typeof getWorld>['map']) => generateAllBotOrders(s, m)
 
 // ---- online play ----
@@ -653,6 +662,8 @@ export const useGame = create<GameStore>((set, get) => ({
   liveNote: null,
   savedAt: null,
   saveFailed: false,
+  confirm: null,
+  undoStack: [],
   online: null,
   lastRoom: loadIdentity().code,
 
@@ -664,6 +675,8 @@ export const useGame = create<GameStore>((set, get) => ({
     monthBattles = []
     set({
       running: false,
+      undoStack: [],
+      confirm: null,
       selectedArmy: null,
       recentBattles: [],
       liveNote: null,
@@ -692,7 +705,7 @@ export const useGame = create<GameStore>((set, get) => ({
       const game = normalizeGame(JSON.parse(raw) as GameState, getWorld().map)
       monthStart = game
       monthBattles = []
-      set({ running: false, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
+      set({ running: false, undoStack: [], selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
@@ -715,6 +728,23 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     save(null)
     set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: false })
+  },
+
+  askConfirm(c) {
+    set({ confirm: c })
+  },
+
+  closeConfirm() {
+    set({ confirm: null })
+  },
+
+  undo() {
+    const { undoStack, game } = get()
+    const last = undoStack[undoStack.length - 1]
+    if (!last || !game) return
+    set({ game: last.game, undoStack: undoStack.slice(0, -1) })
+    save(last.game)
+    get().toast(`Undone: ${last.label}`, 'info', 2500)
   },
 
   selectRegion(id) {
@@ -818,7 +848,7 @@ export const useGame = create<GameStore>((set, get) => ({
         get().toast(result.error, 'error')
         return false
       }
-      set({ game: next })
+      set({ game: next, undoStack: [...get().undoStack, { game, label: describeOrder(game, map, order) }].slice(-UNDO_LIMIT) })
       // An offer a rival answered on the spot (live games) says how it went.
       for (const d of next.dispatches.slice(seen)) if (d.to === game.playerId || d.from === game.playerId) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
       if (playing) {
@@ -864,7 +894,7 @@ export const useGame = create<GameStore>((set, get) => ({
         firstError ||= result.error
       } else done++
     }
-    set({ game: next })
+    set({ game: next, undoStack: done > 0 ? [...get().undoStack, { game, label: `${done} orders` }].slice(-UNDO_LIMIT) : get().undoStack })
     save(next)
     if (failed > 0) get().toast(`${done} done, ${failed} could not be made: ${firstError}`, 'error')
     return { done, failed }
@@ -983,7 +1013,7 @@ export const useGame = create<GameStore>((set, get) => ({
     const next = resolveTurn(game, map, [...orders, ...botOrders])
     const shown = presentMonth(game, next, game.playerId)
     save(next, [])
-    set({ game: next, orders: [], ...shown })
+    set({ game: next, orders: [], undoStack: [], ...shown })
   },
 
   play() {
@@ -1016,7 +1046,8 @@ export const useGame = create<GameStore>((set, get) => ({
     const step = advanceDay(game, map, { monthOrders: orders, planner: botPlanner })
     if (step.state === game) return
     const shown = presentLiveStep({ step, player: game.playerId, before: game, fxQueue: st.fxQueue, recentBattles: st.recentBattles, settings: st.settings, toast: st.toast })
-    const patch: Partial<GameStore> = { game: step.state, recentBattles: shown.recentBattles, fxQueue: shown.fxQueue, fxTotal: shown.fxQueue.length }
+    // A day that moved the world on cannot be taken back.
+    const patch: Partial<GameStore> = { game: step.state, recentBattles: shown.recentBattles, fxQueue: shown.fxQueue, fxTotal: shown.fxQueue.length, undoStack: [] }
     // An army that has gone home or been lost no longer has a card.
     if (st.selectedArmy && !step.state.armies?.some((a) => a.id === st.selectedArmy)) patch.selectedArmy = null
     if (step.monthEnded) {

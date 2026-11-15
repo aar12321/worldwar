@@ -210,3 +210,44 @@ describe('what the globe draws', () => {
     expect(s.turn).toBe(2)
   })
 })
+
+describe('undo and confirm in the store', () => {
+  beforeEach(() => {
+    useGame.setState({ online: null, fxQueue: [], summary: null, warRoom: null, helpOpen: false, running: false })
+  })
+
+  it('an order that happens at once can be taken back, and a day that passes cannot', () => {
+    const g = liveGame()
+    const me = g.playerId
+    const farm = g.regions[me].buildings.farm
+    const money = g.nations[me].resources.capital
+    expect(useGame.getState().issueOrder({ type: 'build', nationId: me, regionId: me, building: 'farm' })).toBe(true)
+    expect(useGame.getState().game!.regions[me].buildings.farm).toBe(farm + 1)
+    expect(useGame.getState().undoStack).toHaveLength(1)
+    useGame.getState().undo()
+    expect(useGame.getState().game!.regions[me].buildings.farm).toBe(farm)
+    expect(useGame.getState().game!.nations[me].resources.capital).toBe(money)
+    expect(useGame.getState().undoStack).toHaveLength(0)
+    // After an order, a day of the clock clears the stack.
+    useGame.getState().issueOrder({ type: 'build', nationId: me, regionId: me, building: 'farm' })
+    useGame.getState().stepDay()
+    expect(useGame.getState().undoStack).toHaveLength(0)
+  })
+
+  it('keeps the last ten things only', () => {
+    const g = liveGame()
+    const me = g.playerId
+    for (let i = 0; i < 14; i++) useGame.getState().issueOrder({ type: 'build', nationId: me, regionId: me, building: i % 2 ? 'farm' : 'barracks' })
+    expect(useGame.getState().undoStack.length).toBeLessThanOrEqual(10)
+  })
+
+  it('big orders ask first, and small ones do not', async () => {
+    const { confirmFor } = await import('./confirmRules')
+    const g = liveGame()
+    const me = g.playerId
+    expect(confirmFor(g, map, { type: 'declareWar', nationId: me, target: 'france' })?.danger).toBe(true)
+    expect(confirmFor(g, map, { type: 'setGovernment', nationId: me, government: 'junta' })).toBeTruthy()
+    expect(confirmFor(g, map, { type: 'build', nationId: me, regionId: me, building: 'farm' })).toBeNull()
+    expect(confirmFor(g, map, { type: 'marketBuy', nationId: me, resource: 'food', amount: 5 })).toBeNull()
+  })
+})

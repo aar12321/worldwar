@@ -58,13 +58,21 @@ export function NavRail() {
 export function OrdersTray() {
   const view = usePlayerView()
   const removeOrder = useGame((s) => s.removeOrder)
-  if (!view || view.orders.length === 0) return null
+  const undoStack = useGame((s) => s.undoStack)
+  const undo = useGame((s) => s.undo)
+  if (!view || (view.orders.length === 0 && undoStack.length === 0)) return null
   const { game, orders } = view
   const { map } = getWorld()
+  const last = undoStack[undoStack.length - 1]
   return (
     <div className="orders-tray absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
       <div className="surface rounded-full px-3 py-1.5 flex items-center gap-2 overflow-x-auto scroll-thin">
-        <span className="label whitespace-nowrap px-1">{isLive(game) ? `On ${dayDate(game.turn + 1, 0)}` : 'Next turn'}</span>
+        {last && (
+          <button className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-semibold bg-[#0a84ff]/25 text-[#9fd0ff] hover:bg-[#0a84ff]/40" onClick={undo} title={`Undo: ${last.label} (Ctrl+Z)`} aria-label={`Undo ${last.label}`}>
+            ↶ Undo
+          </button>
+        )}
+        {orders.length > 0 && <span className="label whitespace-nowrap px-1">{isLive(game) ? `On ${dayDate(game.turn + 1, 0)}` : 'Next turn'}</span>}
         <AnimatePresence initial={false}>
           {orders.map((o, i) => (
             <motion.button

@@ -8,6 +8,7 @@ import { ArmiesDock, ArmyCard } from './ui/ArmiesTab'
 import { BattleFX } from './ui/BattleFX'
 import { Briefing } from './ui/Briefing'
 import { GameOver, NavRail, OrdersTray, Toasts, TurnSummary } from './ui/Chrome'
+import { ConfirmDialog } from './ui/confirm'
 import { CountryPanel } from './ui/CountryPanel'
 import { EventModal } from './ui/EventModal'
 import { useFx } from './ui/globeBridge'
@@ -32,12 +33,18 @@ function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
+      // Undo the last thing that happened at once.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey && target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+        e.preventDefault()
+        useGame.getState().undo()
+        return
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return
       if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') return
       const st = useGame.getState()
       if (!st.game) return
       // A dialog is open: it handles its own keys.
-      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom) return
+      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom || st.confirm) return
       if (e.key === 'Escape') {
         if (st.panel !== 'none') st.setPanel(st.panel)
         else st.selectRegion(null)
@@ -161,6 +168,7 @@ export default function App() {
           <TurnSummary />
           <EventModal />
           <Help />
+          <ConfirmDialog />
           <GameOver />
         </>
       )}

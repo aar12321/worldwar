@@ -5,6 +5,7 @@ import { getWorld } from '../map/world'
 import { useGame, type Panel } from '../store'
 import { usePlayerView } from './hooks'
 import { speak } from './plain'
+import { confirmFor } from './confirmRules'
 
 /** A side drawer. The header stays put and the body is the only part that scrolls. */
 export function PanelShell({ title, kicker, panel, children, wide = false, tabs }: { title: string; kicker: string; panel: Panel; children: ReactNode; wide?: boolean; tabs?: ReactNode }) {
@@ -66,6 +67,7 @@ export function OrderButton({
 }) {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
+  const askConfirm = useGame((s) => s.askConfirm)
   const err = validateOrder(view.game, getWorld().map, order, view.orders)
   const why = err ? speak(err) : null
   const detail = why ?? effect
@@ -75,7 +77,10 @@ export function OrderButton({
       disabled={!!err}
       title={why ?? effect ?? ''}
       onClick={() => {
-        if (issueOrder(order)) onDone?.()
+        const ask = confirmFor(view.game, getWorld().map, order)
+        // Big or hard-to-reverse orders ask first.
+        if (ask) askConfirm({ ...ask, run: () => issueOrder(order) && onDone?.() })
+        else if (issueOrder(order)) onDone?.()
       }}
     >
       {detail ? (

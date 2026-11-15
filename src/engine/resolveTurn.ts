@@ -24,7 +24,7 @@ import { issueBond, moveFund, newBondRate, printMoney, repayBonds } from './bank
 import { runResolution } from './council'
 import { setStateOwned, startProject } from './industry'
 import { cleanSpending } from './people'
-import { runWorld, spendingFromBudget } from './statecraft'
+import { recordHistory, runWorld, spendingFromBudget } from './statecraft'
 import { runEpidemics } from './epidemics'
 import { updateTiers } from './empire'
 import { nationNeighborMap } from './helpers'
@@ -284,12 +284,14 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   const prices = marketPrices(s)
   // The economy, and with it each nation's people, bank and projects. What it earns feeds the world's numbers below.
   const gross = new Map<string, number>()
+  const net = new Map<string, number>()
   const workforce = new Map<string, number>()
   const doctors = new Map<string, number>()
   for (const id of alive) {
     if (!s.nations[id].alive) continue
     const e = applyEconomy(s, map, id, rng, prices)
     gross.set(id, e.gross)
+    net.set(id, e.netCapital)
     workforce.set(id, e.workforce)
     doctors.set(id, e.coverage.doctors)
   }
@@ -302,6 +304,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runSystems(s)
   runWorld(s, gross, workforce)
   updateTiers(s)
+  recordHistory(s, gross, net)
 
   s.turn++
   // A live clock reads the 1st of the new month from here on, so the news below carries the right date.

@@ -11,11 +11,13 @@ import { pct } from './format'
 import { Card, Line } from './economy/parts'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import { useState } from 'react'
+import { Spark } from './Charts'
 
 const TABS = [
   ['overview', 'Overview'],
   ['provinces', 'Provinces'],
   ['world', 'World'],
+  ['stats', 'Statistics'],
 ] as const satisfies readonly (readonly [EmpireTab, string])[]
 
 /** What a tier opens, one line each, for the table. */
@@ -51,8 +53,32 @@ export function EmpireDesk() {
         {tab === 'overview' && <Overview />}
         {tab === 'provinces' && <Provinces />}
         {tab === 'world' && <World />}
+        {tab === 'stats' && <Statistics />}
       </div>
     </PanelShell>
+  )
+}
+
+function Statistics() {
+  const view = usePlayerView()!
+  const { game, player } = view
+  const mine = (game.history ?? []).filter((h) => h.nation === player.id)
+  const series = (f: (h: (typeof mine)[number]) => number) => mine.map(f)
+  const n = Object.values(game.nations).filter((x) => x.alive).length
+  return (
+    <section className="econ-grid">
+      <p className="text-[13px] text-white/70 span-all">One point a month for {player.name}. The charts keep up to fifty years.</p>
+      <Spark label="Money" values={series((h) => h.money)} color="#30d158" />
+      <Spark label="Net income a month" values={series((h) => h.income)} color="#30d158" format={(v) => v.toFixed(1)} />
+      <Spark label="Military strength" values={series((h) => h.power)} color="#ff9f0a" />
+      <Spark label="Countries" values={series((h) => h.countries)} color="#0a84ff" />
+      <Spark label="Stability" values={series((h) => h.stability)} color="#bf5af2" format={(v) => `${v.toFixed(0)}%`} />
+      <Spark label="Population" values={series((h) => h.population)} color="#64d2ff" format={(v) => v.toFixed(1)} />
+      <Spark label="Schooling" values={series((h) => h.schooling * 100)} color="#ffd60a" format={(v) => `${v.toFixed(0)}%`} />
+      <Spark label="Inflation" values={series((h) => h.inflation)} color="#ff453a" format={(v) => `${v.toFixed(1)}%`} invert />
+      <Spark label="Out of work" values={series((h) => h.unemployment * 100)} color="#ff6961" format={(v) => `${v.toFixed(1)}%`} invert />
+      <Spark label={`Economy rank of ${n}`} values={series((h) => h.rank)} color="#0a84ff" format={(v) => `#${v.toFixed(0)}`} invert />
+    </section>
   )
 }
 
