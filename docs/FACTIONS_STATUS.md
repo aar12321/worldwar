@@ -24,8 +24,13 @@ Checks at the audit: `npx tsc -b` clean, `npm run lint` clean, `npx vitest run`:
 ## PARTLY DONE
 - (none; offline-human vote, advisor items, leaving mid-war, upkeep going negative, repair of damaged saves are now tested)
 
-## NOT STARTED
-- Rivals proposing contracts (between nations or with the pool) on their own; they vote on and accept them.
+## FINAL PASS (see docs/FINAL_STATUS.md)
+- Rivals (Medium and Hard; never Easy) offer to sell fuel or rations to the pool at the market price (bounded: one open per member, a fifth of spare stock, six months, the pool must hold four months of the pay) and back a standing supply with a small collateral (at most 40). They vote on contracts by the market price, not the fixed pool value, so a contract paying above the market is voted down.
+- Pooled soldiers never defend home. Rule: a nation at war with someone the faction is not fighting cannot pool soldiers (refused with a message; the Faction desk says so).
+- Weighted votes use the weights of the day the proposal was put forward (`FactionProposal.weights`), so money paid in after a vote was called cannot buy it.
+- Exploit sweep: contribute/withdraw loops (lock + wash test), locking (also not bypassed by leaving: refund less the 10% fee), leaving after a loss (shrunken claim only), valuation (fixed prices equal the market's base; shares only matter for spoils and weighted votes and need real money to buy), oil/food contract arbitrage (bots vote by market price). Tests in `factionsFinal.test.ts`.
+- Known, accepted: the pool pays its army's upkeep from the common money, so a member who pools soldiers and no money has the others' money fund its soldiers' upkeep (their claims shrink by the common ratio, its claim in soldiers does not). The charter is the check: members vote on every war.
+- Live: a joint offensive is fought as part of the month turn (the 1st), the same day the vote passes, by one call to the combat code; it does not march as an army on the globe. Bounded by two attacks a month per faction. Launching it through the live armies path was judged too risky (a synthetic army would have to survive the live day loop, patrols and recalls; the turn and live parity test pins the current behavior).
 
 ## Last check results
 - tsc clean, lint clean. Full vitest (after the second merge): 826 pass, 6 fail, all 6 are explicit-timeout simulation tests (20 to 120 s limits) that run long on the shared, loaded machine (load average 27 to 45); `simulation.test.ts` alone: 2 of 3 pass, the third took 22.5 s against a 20 s limit. Faction AI costs about 1.5% of a bot month.

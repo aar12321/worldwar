@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { BODIES, BODY_IDS, COMPANIES, DOMESTIC, MINE_IDS, MISSION_IDS, MISSIONS, NODES, ROCKETS, SPACE, type BodyId, type MineId, type MissionId, type NodeId } from '../../data/space'
 import { blocsOf } from '../blocs'
-import { atWar, enemiesOf, maxWars, pairKey } from '../helpers'
+import { atWar, enemiesOf, maxWars, pairKey, totalUnits } from '../helpers'
+import { computeEconomy } from '../economy'
+import { freeUnits } from '../deployment'
 import { detonate } from '../nuclear'
 import { validateOrder } from '../orders'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
@@ -158,5 +160,33 @@ describe('space exploits', () => {
     expect(bonus.output).toBeLessThanOrEqual(SPACE.discoveryCap.output)
     // Below the ceiling nothing is trimmed.
     expect(discoveryBonus({ discoveries: ['isru'] } as never).mining).toBe(NODES.isru.effect.mining ?? 0)
+  })
+})
+
+// ---- deployment ----
+
+describe('posted forces cannot be abused', () => {
+  const base = () => {
+    const s = startState(map, 'r1')
+    s.nations.r1.resources.capital = 5000
+    setMilitary(s, 'r1', { infantry: 20, armor: 6 })
+    setMilitary(s, 'r0', { infantry: 8 })
+    return s
+  }
+  const post = (share: number): Order => ({ type: 'setDeployment', nationId: 'r1', coastal: 0, subs: 0, air: 0, border: { r0: share } })
+
+  it('post and cancel is not free: one move a month (even from two batches), the posted share cannot attack, and the bill is the same', () => {
+    let s = base()
+    const bill = () => computeEconomy(s, map, 'r1').upkeep
+    const before = bill()
+    const r = applyOrderNow(s, map, post(0.8))
+    expect(r.error).toBeNull()
+    expect(bill()).toBeCloseTo(before, 9)
+    // Taking it down again the same month is refused, in a later batch too.
+    expect(validateOrder(s, map, post(0))).toMatch(/next month/)
+    // Posted forces are not free to attack with.
+    expect(totalUnits(freeUnits(s, 'r1'))).toBeLessThan(totalUnits(s.nations.r1.military.units) * 0.4)
+    s = resolveTurn(s, map, [])
+    expect(validateOrder(s, map, post(0))).toBeNull()
   })
 })

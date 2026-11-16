@@ -56,6 +56,9 @@ export interface SimResult {
   openAges: number[]
   /** Nations that never declared a war, never attacked and were never attacked in the whole game. */
   quiet: number
+  /** Median months of income the quiet nations hold in the treasury, and the median of the nations that fought. */
+  quietHoard: number
+  fightHoard: number
   /** Nations that fought at least one war. */
   fighters: number
   alliances: number
@@ -90,6 +93,8 @@ export interface SimOptions extends Partial<NewGameOptions> {
   /** Called with the state after each month, for custom probes. */
   probe?: (s: GameState, orders: Order[], month: number) => void
   check?: boolean
+  /** Leave out every posture order, as if nobody ever stationed forces (to measure what the postures change). */
+  noPosture?: boolean
 }
 
 export function playWorld(opts: SimOptions): { result: SimResult; state: GameState } {
@@ -123,6 +128,8 @@ export function playWorld(opts: SimOptions): { result: SimResult; state: GameSta
     wars: [],
     openAges: [],
     quiet: 0,
+    quietHoard: 0,
+    fightHoard: 0,
     fighters: 0,
     alliances: 0,
     allianceCalls: 0,
@@ -150,7 +157,7 @@ export function playWorld(opts: SimOptions): { result: SimResult; state: GameSta
   }
   for (let i = 0; i < opts.months; i++) {
     if (s.pendingEvent) s = applyEventChoice(s, map, 0)
-    const orders = [...generateAllBotOrders(s, map), ...generateBotOrders(s, map, s.playerId, true)]
+    const orders = [...generateAllBotOrders(s, map), ...generateBotOrders(s, map, s.playerId, true)].filter((o) => !(opts.noPosture && o.type === 'setDeployment'))
     for (const o of orders) {
       if (o.type === 'attack') {
         const f = forecastAttack(s, map, o.nationId, o.target, o.commit ?? 'main', o.stance ?? 'assault', 8, o.missiles, o.share)
@@ -246,11 +253,18 @@ export function playWorld(opts: SimOptions): { result: SimResult; state: GameSta
   r.recoveries = recovered.size
   r.puppets = alive.filter((n) => n.overlord).length
   const hoards: number[] = []
+  const quietHoards: number[] = []
+  const fightHoards: number[] = []
   for (const n of alive) {
     const e = computeEconomy(s, map, n.id)
     const income = Math.max(1, e.taxIncome + e.factoryIncome + e.tradeIncome)
     hoards.push(n.resources.capital / income)
+    ;(!fought.has(n.id) && enemiesOf(s, n.id).length === 0 ? quietHoards : fightHoards).push(n.resources.capital / income)
   }
+  quietHoards.sort((a, b) => a - b)
+  fightHoards.sort((a, b) => a - b)
+  r.quietHoard = quietHoards[Math.floor(quietHoards.length / 2)] ?? 0
+  r.fightHoard = fightHoards[Math.floor(fightHoards.length / 2)] ?? 0
   hoards.sort((a, b) => a - b)
   r.hoardMedian = hoards[Math.floor(hoards.length / 2)] ?? 0
   r.hoardShare = hoards.filter((h) => h > 24).length / Math.max(1, hoards.length)

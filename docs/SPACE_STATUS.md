@@ -32,9 +32,9 @@ Branch: the SPACE worktree branch. Last merge of `claude/laughing-planck-9gjcru`
 
 ## Balance numbers (simulation, events off, small test nation, steel valued at 1.7, oil at 1.9)
 
-- Metal mine on asteroids with in-situ resource use: outpost cargo and mine pay back in about 121 months; with metallurgy, propellant and remote mining about 76 months.
-- Rare-metal mine on the Moon: about 136 months.
-- Helium-3 and water mines do not pay in money on their own; they pay through grid power, fusion bonus and cheaper upkeep.
+- Final pass, outpost cargo plus the mine against a nation that stayed home, events off (months to break even, `finalAudit.test.ts` pins 85 to 170): moon rare metals 136, helium-3 125, water 95; asteroids rare metals 115, metals 121; Mars rare metals 141, water 98, metals 152; Europa water 160, volatiles 114.
+- Changed to get there: helium-3 mine money 8 to 14, water mine oil 4.5 to 7, Mars richness 1 to 1.9, Europa 1.2 to 2.1. Before: helium-3 on the Moon 160 or more, Mars and Europa water never within 400 months.
+- Also changed: a claim with no outpost lapses after 60 months (squatting), discoveries stack to at most +50% mining and +4% output, a home firm returns 15% of the price to the technology sector (was 25%, which made a flight at a mature industry as cheap as in-house).
 - Outsourcing: satellites cost about 1.8 to 2.4 times the in-house marginal cost; the whole in-house ladder to a lunar landing costs about 3300 money over eight years in staff, development, pads, rockets and payloads.
 - Hard-bot world golden hash re-pinned twice: only the space AI call moves it (verified by turning it off).
 

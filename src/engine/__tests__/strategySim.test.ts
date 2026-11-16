@@ -12,6 +12,7 @@ import { playWorld, summarize, type SimResult } from './strategySim'
  */
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env
 const on = !!env.VITE_STRAT_DIFF
+const noPosture = env.VITE_STRAT_NOPOSTURE === '1'
 
 const suite = on ? describe : describe.skip
 
@@ -23,7 +24,7 @@ suite('strategy harness', () => {
   const results: SimResult[] = []
   seeds.forEach((seed, i) => {
     it(`plays seed ${seed}`, () => {
-      const { result } = playWorld({ seed, difficulty, months, player: players[i % players.length], check: true })
+      const { result } = playWorld({ seed, difficulty, months, player: players[i % players.length], check: true, noPosture })
       results.push(result)
       console.log('STRATGAME ' + JSON.stringify({ ...result, wars: result.wars.length, aliveSeries: result.aliveSeries.filter((_, k) => k % 12 === 11) }))
     }, 3_600_000)
