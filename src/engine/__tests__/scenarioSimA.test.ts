@@ -16,7 +16,9 @@ describe('scenarios play out (A)', () => {
     expect(state.turn).toBeGreaterThan(20)
   })
   it('two-fronts: 24 months of bots, no broken rule', { timeout: 900_000 }, () => {
-    const { state } = playScenario('two-fronts')
+    const { state, peaceOffers } = playScenario('two-fronts')
     expect(state.turn).toBeGreaterThan(20)
+    // A nation that starts the game losing on two borders looks for the peace table at once.
+    expect(peaceOffers).toBeGreaterThan(0)
   })
 })
