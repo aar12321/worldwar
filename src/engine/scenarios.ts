@@ -10,6 +10,7 @@ import { startEpidemic } from './epidemics'
 import { addLog, clamp, grantJustification, isAllied, nationNeighborMap, newId, pairKey, regionsOf } from './helpers'
 import { militaryPower } from './militaryStats'
 import { bindPuppet } from './puppets'
+import { empireCount } from './empire'
 import { createRng } from './rng'
 import type { GameState, NationId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -350,11 +351,11 @@ export function scenarioGoalLines(s: GameState, map: WorldMap, id: NationId = s.
   }
 }
 
-/** Countries that count toward an empire tier, the way tiers count them (half of each puppet's). */
+/** Countries that count toward an empire tier, the way tiers count them (each puppet's by its loyalty weight, half when it has none). */
 function countriesHeld(s: GameState, id: NationId): number {
   const n = s.nations[id]
   if (!n) return 0
-  return Object.values(s.regions).filter((r) => r.owner === id).length + Math.floor(Object.values(s.regions).filter((r) => s.nations[r.owner]?.overlord === id).length / 2)
+  return empireCount(s, id)
 }
 
 export { SCENARIOS, scenarioGoalSentence }

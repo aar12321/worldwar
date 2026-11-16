@@ -3,6 +3,7 @@ import { UNIT_SPECS } from '../data/unitTypes'
 import { tierSpec } from '../data/empire'
 import { forceUnits, puppetsOf, regionsOf, totalUnits } from './helpers'
 import { computeEconomy } from './economy'
+import { countWeight } from './puppets'
 import type { GameState, NationId, WorldMap } from './types'
 
 export function populationShare(s: GameState, nationId: NationId): number {
@@ -24,8 +25,8 @@ export function conquestGoal(victoryShare: number): number {
 
 /** Countries the player holds that were not the country they started as. */
 export function countriesTaken(s: GameState, id: NationId = s.playerId): number {
-  // A puppet counts as half a country.
-  return regionsOf(s, id).filter((r) => r !== id).length + Math.floor(puppetsOf(s, id).length / 2)
+  // A puppet counts as half a country, more when it is loyal and less when it is restive (the weights the empire tier uses).
+  return regionsOf(s, id).filter((r) => r !== id).length + Math.floor(puppetsOf(s, id).reduce((sum, p) => sum + countWeight(s.nations[p]), 0))
 }
 
 /** Share of the world's output needed to win by economy: well under the conquest goals, but only big economies get there. */
@@ -39,11 +40,11 @@ export function grossIncome(s: GameState, map: WorldMap, nationId: NationId): nu
   return Math.max(0, e.taxIncome + e.factoryIncome + e.tradeIncome + e.corporateIncome)
 }
 
-/** The nation's share of the world's output, counting half of each puppet's. Needs the world total from the last turn. */
+/** The nation's share of the world's output, counting each puppet's by the loyalty weights (half when it has none). Needs the world total from the last turn. */
 export function economicShare(s: GameState, map: WorldMap, nationId: NationId): number {
   if (!(s.worldGross > 0)) return 0
   let mine = grossIncome(s, map, nationId)
-  for (const id of puppetsOf(s, nationId)) mine += grossIncome(s, map, id) * 0.5
+  for (const id of puppetsOf(s, nationId)) mine += grossIncome(s, map, id) * countWeight(s.nations[id])
   return mine / s.worldGross
 }
 
