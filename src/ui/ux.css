@@ -1087,3 +1087,21 @@ body.resizing {
 [data-motion='reduced'] .skeleton {
   animation: none !important;
 }
+
+/* Rail labels and badges stay at 12 px whatever the older rules say. */
+.nav-btn > .nav-label,
+.nav-btn > .nav-badge {
+  font-size: 12px !important;
+  letter-spacing: -0.01em;
+}
+@media (pointer: coarse), (max-width: 900px) {
+  /* Touch scrolls the tab bar by swiping; the little arrows are for mice. */
+  .seg-edge {
+    display: none;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    flex: none;
+    min-width: 22px;
+  }
+}

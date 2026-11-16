@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingCost, trainingRank, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from '../engine/arms'
 import { enemiesOf, formatDivisions, maxWars } from '../engine/helpers'
@@ -10,7 +10,7 @@ import { Pips } from './bits'
 import { fmt, usePlayerView } from './hooks'
 import { UnitIcon } from './icons'
 import { DeskTabs, OrderButton, PanelShell, TabHost } from './panel'
-import { NumberStepper } from './widgets'
+import { NumberStepper, Term } from './widgets'
 import { ACADEMY, GENERAL_TRAITS } from '../data/projects'
 import { tierOf } from '../engine/empire'
 import { academyCost } from '../engine/industry'
@@ -183,7 +183,7 @@ function Forces() {
     <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
         <Total label="Strength" value={sheet.totalPower.toFixed(0)} />
-        <Total label="Divisions" value={formatDivisions(sheet.totalUnits)} sub={sheet.inField > 0.05 ? `${formatDivisions(sheet.totalUnits - sheet.inField)} at home · ${formatDivisions(sheet.inField)} in the field` : undefined} />
+        <Total label={<Term word="Division">Divisions</Term>} value={formatDivisions(sheet.totalUnits)} sub={sheet.inField > 0.05 ? `${formatDivisions(sheet.totalUnits - sheet.inField)} at home · ${formatDivisions(sheet.inField)} in the field` : undefined} />
         <Total label="Upkeep a month" value={`-${fmt(sheet.upkeep, 1)}`} />
         <Total label="Food a month" value={`-${fmt(sheet.foodUse, 1)}`} />
       </div>
@@ -279,7 +279,7 @@ export function MilitaryPanel() {
 /** The Forces tab, named for the registry. */
 export { Forces as MilitaryForces }
 
-function Total({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Total({ label, value, sub }: { label: ReactNode; value: string; sub?: string }) {
   return (
     <div className="inset-card py-2.5">
       <div className="label">{label}</div>
