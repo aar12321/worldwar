@@ -238,6 +238,8 @@ export function worldReacts(s: GameState, map: WorldMap, rng: Rng, attacker: Nat
     sanctioners++
   }
   // The leading factions declare war, each member within its own limit of wars. Easy rivals send only the first.
+  // The attacker's own limit never shields it: being at its limit does not stop the world answering (that is the consequence of the bomb).
+  // It can exceed its limit only by these declarations, and cannot start another war of its own until it is back under it.
   const easy = (s.settings.difficulty ?? 'normal') === 'easy'
   const factions = leadingFactions(s, attacker, easy ? NUCLEAR.factionsEasy : NUCLEAR.factions, victim)
   const declared: NationId[] = []

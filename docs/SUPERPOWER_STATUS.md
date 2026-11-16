@@ -15,23 +15,21 @@ Branch: `worktree-agent-a85f3cade64c6897e`. Commits: `0f9e5b7` (the feature), `0
 8. **AI behaviour**: Hard only, Superpower only, builds when rich and at war, fires only when desperate or provoked, 36 months between its own launches, 18 months of world quiet after any bomb.
 9. Saves: plans and flights are cleaned on load; untouched games carry none of the new fields (`turnGolden` hashes unchanged).
 
+## War limits (decided in the final pass)
+
+- The nations that answer a bomb declare within their own war limit (a stretched nation stays out).
+- The attacker's own war limit never shields it: a nuker already at its limit is still declared on. It then stands over its limit only because of the answer and cannot declare another war until it is back under it. Test: `finalAudit.test.ts`, mutation-checked both ways.
+
 ## DONE BUT UNTESTED
 
 - World reaction panel and nuclear card rendering (checked by eye in screenshots only; no component tests).
 - Globe arc for a warhead (merged with the missile arcs in `useArmyLayer.ts`); impact rings in `livePresent.ts`.
-- Help.tsx / README text.
-- Hunters and stealth against a warhead (`nukeAir`, added after the second merge).
 
-## PARTLY DONE
+## Edge cases (all covered in `superpower.test.ts`, section "edge cases of the world's answer")
 
-- Mutation checks: scripted (`/tmp` helper) but not yet run on the final code.
-- Multi-seed 60+ month Hard simulation: one seed per scenario exists in `superpowerSim.test.ts`; more seeds and statistics still to run.
-- Edge cases still to be covered by tests: no second bloc, a warhead at your own ally, a human target in an online game, a nation killed by the strike while its flight is in the air.
+No second bloc, a victim's allies never counted, an ally cannot be targeted, a human target online, a nation dying with a warhead in the air, hunters and stealth against a warhead.
 
-## NOT STARTED
+## NOT DONE / LIMITS
 
-- (none)
-
-## Checks
-
-Recorded at the bottom after each run.
+- Multi-seed statistics: `superpowerSim.test.ts` runs seeds for 60 to 66 months of Hard bots (bombs rare, spaced, wars few).
+- Mutation checks of the superpower rules were not re-run in the final pass; only the war-limit rule was.
