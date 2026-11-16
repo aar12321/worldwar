@@ -903,7 +903,8 @@ describe('a game where nobody stations forces plays as it always did', () => {
     // The only trace the new rules leave is the memory of a border incident.
     delete s.borders
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('f924d485be247')
+    // Re-pinned when the AI got its strategic layer (docs/STRATEGY.md): the bots decide differently on purpose, so the old hash no longer applies.
+    expect(hash(JSON.stringify(s))).toBe('bc68beaeedca7')
   }, 300_000)
 })
 
