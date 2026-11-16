@@ -520,6 +520,7 @@ export class OnlineSession {
     this.checkedAt = -Infinity
     this.syncing = false
     this.clock = { running: false, speed: this.lobby?.settings.liveSpeed ?? 1, by: '', why: 'start' }
+    this.events.onClock?.(this.clockView())
   }
 
   /** Everything a live game keeps about itself, dropped, for a rematch. */
