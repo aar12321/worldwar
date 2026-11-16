@@ -29,6 +29,8 @@ export interface RegCtx {
   armies: number
   /** Puppets you rule. */
   puppets: number
+  /** Territories you hold. */
+  territories?: number
 }
 
 export type Loader = () => Promise<{ default: ComponentType }>

@@ -5,7 +5,7 @@ import { PROPOSAL_COSTS, UNIT_SPECS } from '../data/unitTypes'
 import { FactionNotices } from './FactionLinks'
 import { inviteCandidates } from '../engine/partners'
 import { inviteItems, nationItems, pickerMatches, type PickerItem } from './pickerItems'
-import { claimValue, describeContract, factionOf, lockLeft, poolPower, poolUnits, poolValue, sharesOf, tallyOf, warInfluence, warTargetProblem, withdrawable, withdrawableUnits } from '../engine/factions'
+import { claimValue, describeContract, factionOf, lockLeft, poolPower, poolUnits, poolValue, seatsUsed, sharesOf, tallyOf, warInfluence, warTargetProblem, withdrawable, withdrawableUnits } from '../engine/factions'
 import { atWar, clamp, regionsOf, turnDate } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { powerView, showPower } from '../engine/intel'
@@ -162,6 +162,7 @@ function Members({ game, f, me }: { game: GameState; f: Faction; me: NationId })
                 <span className="font-semibold text-[15px] truncate">{n?.name ?? id}</span>
                 {id === me && <span className="chip chip-blue">You</span>}
                 {id === f.founder && <span className="chip" title="The founder">Founder</span>}
+                {n?.territoryOf && <span className="chip chip-blue" title={`A territory of ${game.nations[n.territoryOf]?.name}: it sits in this faction for ever, takes no seat and has no vote.`}>Territory of {game.nations[n.territoryOf]?.name}</span>}
                 {!(id === me && !names[id]) && <span className="chip">{person ? (names[id] ? `Player: ${names[id]}` : 'Player') : 'Rival'}</span>}
               </span>
               <span className="text-[18px] font-semibold tabular-nums">{pct(shares[id] ?? 0)}</span>
@@ -445,12 +446,12 @@ function InviteBox({ game, f, me, orders }: { game: GameState; f: Faction; me: N
   }, [focus])
   const partners = rows.filter((r) => r.relations.length > 0).length
   const open = rows.filter((r) => !r.problem).length
-  const full = f.members.length >= FACTION.maxMembers
+  const full = seatsUsed(game, f) >= FACTION.maxMembers
   return (
     <section ref={box} className="space-y-2" aria-label="Invite a nation">
       <div className="label">Invite a nation</div>
       <p className="text-[13px] text-white/70">
-        {full ? `${f.name} is full (${f.members.length} of ${FACTION.maxMembers} members), so nobody can be invited. ` : ''}
+        {full ? `${f.name} is full (${seatsUsed(game, f)} of ${FACTION.maxMembers} members), so nobody can be invited. ` : ''}
         {partners > 0 ? 'Your partners from the Diplomacy desk come first. ' : 'Nations you make a pact, alliance, guarantee or trade deal with come first. '}
         {open} of {rows.length} nations can be invited now; the rest say why not.
       </p>

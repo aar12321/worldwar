@@ -22,6 +22,8 @@ import { Modal } from './Modal'
 import { NuclearCard } from './NuclearCard'
 import { Breakdown, OddsGauge } from './OddsGauge'
 import { speak } from './plain'
+import { TerritoryForces } from './TerritoryForces'
+import { defaultPick, sendingTerritories, territoryAttack, useTerritoryPrefs } from './territoryPrefs'
 
 const STANCE_KEYS = Object.keys(STANCES) as Stance[]
 const LABEL_TONE = { Likely: 'text-[#6eeb8a]', Even: 'text-[#ffd60a]', Unlikely: 'text-[#ff8a84]' }
@@ -67,6 +69,8 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const [units, setUnits] = useState<UnitCounts | null>(() => (view && pool ? suggestedUnits(view.game, view.player.id, target, pool) : null))
   const [stance, setStance] = useState<Stance>('assault')
   const [missiles, setMissiles] = useState(0)
+  const [terr, setTerr] = useState<Record<NationId, UnitCounts>>({})
+  const sendPrefs = useTerritoryPrefs((s) => s.send)
   const { map } = getWorld()
   const level = player ? commandLevel(game!, player.id) : 0
   const cap = capabilities(level)
@@ -133,7 +137,14 @@ function WarRoomDialog({ target }: { target: RegionId }) {
             </span>
           )}
           {err && <span className="text-[13px] text-white/80 max-w-[260px] text-right">{speak(err)}</span>}
-          <button className="btn btn-red px-5" data-autofocus disabled={!!err} onClick={() => attack(target, 'main', stance, fired, undefined, sendUnits)}>
+          <button className="btn btn-red px-5" data-autofocus disabled={!!err} onClick={() => {
+              // Territories fight first, each as an army of its own, then yours.
+              for (const id of sendingTerritories(game, player.id, target)) if (sendPrefs[id]) {
+                const pickedUnits = terr[id] ?? defaultPick(attackPool(game, id, [], live))
+                if (totalUnits(pickedUnits) >= 0.05) useGame.getState().issueOrder(territoryAttack(player.id, id, target, stance, pickedUnits))
+              }
+              attack(target, 'main', stance, fired, undefined, sendUnits)
+            }}>
             {live ? 'Launch army' : 'Launch attack'}
           </button>
         </>
@@ -180,6 +191,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           live={live}
           shortcuts
         />
+        <TerritoryForces game={game} me={player.id} target={target} stance={stance} picks={terr} setPicks={setTerr} live={live} />
         {!live && away > 0.05 && <p className="text-[13px] text-white/70 -mt-3">Until the turn ends, the part of your army that fights here defends at half strength elsewhere, so rivals can hit you while it is out.</p>}
 
         <section className="space-y-2">

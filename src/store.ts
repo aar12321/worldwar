@@ -9,7 +9,7 @@ import { maxAttacks, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
 import { markMonth, statsOf } from './engine/monthMark'
 import { markSettled } from './engine/economy'
-import { MONTH_END_ORDERS, isMonthEndOrder, undoable, validateOrder } from './engine/orders'
+import { MONTH_END_ORDERS, innerType, isMonthEndOrder, undoable, validateOrder } from './engine/orders'
 import { absDate, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
@@ -1095,7 +1095,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return false
     }
     // Online, an attack waits for the month to end like every other country's, so nobody wins by clicking fast.
-    if (!isMonthEndOrder(game, order.type) && !(playing && order.type === 'attack')) {
+    if (!isMonthEndOrder(game, order.type, order) && !(playing && innerType(order) === 'attack')) {
       const next = structuredClone(game)
       const seen = game.dispatches.length
       const result = applyOrderNow(next, map, order, orders)
@@ -1142,7 +1142,7 @@ export const useGame = create<GameStore>((set, get) => ({
     let done = 0
     let failed = 0
     let firstError = ''
-    if (playing || batch.some((o) => isMonthEndOrder(game, o.type))) {
+    if (playing || batch.some((o) => isMonthEndOrder(game, o.type, o))) {
       // Online, or with orders that wait for the month end, each goes through the usual single path.
       for (const o of batch) {
         if (get().issueOrder(o)) done++

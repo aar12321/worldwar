@@ -37,6 +37,7 @@ export function DeployPanel({
   stanceCost,
   live,
   shortcuts,
+  title = 'Your force',
 }: {
   game: GameState
   player: Nation
@@ -50,6 +51,7 @@ export function DeployPanel({
   stanceCost: number
   live: boolean
   shortcuts?: boolean
+  title?: string
 }) {
   const reducedMotion = useGame((s) => s.settings.reducedMotion)
   const force = player.military.units
@@ -65,9 +67,9 @@ export function DeployPanel({
     return SENDABLE.every((k) => Math.abs(target[k] - units[k]) < 0.05)
   }
   return (
-    <section className="space-y-2.5" aria-label="Your force">
+    <section className="space-y-2.5" aria-label={title}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h3 className="text-[15px] font-semibold">Your force</h3>
+        <h3 className="text-[15px] font-semibold">{title}</h3>
         <span className="text-[13px] text-white/80 tabular-nums" aria-live="polite">
           sending <b className="text-white">{formatDivisions(sent)}</b> of {formatDivisions(poolTotal)} free divisions
         </span>
