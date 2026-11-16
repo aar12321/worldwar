@@ -13,6 +13,9 @@ export const KEEP_ROOMS = 3
 export interface OnlineSaveInfo {
   code: string
   turn: number
+  /** Live rooms: the day of the month, and that the room is live. */
+  day?: number
+  live?: boolean
   savedAt: number
   /** Who sat where, for choosing which seat to take back. */
   seats: { nationId: NationId; name: string }[]
@@ -68,7 +71,7 @@ function write(store: Store | null, saves: StoredSave[]): boolean {
 
 /** The saved rooms on this device, newest first. */
 export function listOnlineSaves(store: Store | null = defaultStore()): OnlineSaveInfo[] {
-  return read(store).map(({ code, turn, savedAt, seats }) => ({ code, turn, savedAt, seats }))
+  return read(store).map(({ code, turn, day, live, savedAt, seats }) => ({ code, turn, ...(live ? { day, live } : {}), savedAt, seats }))
 }
 
 /** Saves a room's game. A finished game is not worth reopening, so it is dropped instead. */
@@ -79,7 +82,7 @@ export async function writeOnlineSave(lobby: Lobby, game: GameState, now: number
   }
   const data = (await encodeState(game)).join('')
   const seats = lobby.players.filter((p) => p.nationId && game.humans.includes(p.nationId)).map((p) => ({ nationId: p.nationId as NationId, name: p.name.replace(/ \(left\)$/, '') }))
-  const entry: StoredSave = { code: lobby.code, turn: game.turn, savedAt: now, seats, lobby, data }
+  const entry: StoredSave = { code: lobby.code, turn: game.turn, ...(game.settings.mode === 'live' ? { day: game.day ?? 0, live: true } : {}), savedAt: now, seats, lobby, data }
   return write(store, [entry, ...read(store).filter((s) => s.code !== lobby.code)].slice(0, KEEP_ROOMS))
 }
 

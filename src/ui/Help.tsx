@@ -131,6 +131,7 @@ export function Help() {
   const setTab = useGame((s) => s.setHelpTab)
   const game = useGame((s) => (s.helpOpen ? s.game : null))
   const online = useGame((s) => s.online?.status === 'playing')
+  const liveRoom = useGame((s) => s.online?.lobby?.settings.mode === 'live')
   // ? flips between the guide and the list of keys while the window is open.
   useEffect(() => {
     if (!open) return
@@ -192,7 +193,12 @@ export function Help() {
           </li>
         ))}
       </ol>
-      {online && (
+      {online && liveRoom && (
+        <p className="rounded-xl bg-white/5 px-3 py-2 mb-3 text-[14px] text-white/85">
+          <strong>Live with friends.</strong> One shared clock runs for everyone. Orders reach the host as you give them, and a refused one says why. Pausing and speed follow the room&apos;s rule (host only, or more than half of the players agree). Battle windows, reports and decisions are yours alone and never stop the clock; a decision you leave is made for you at month end. If you leave, the AI plays your nation; if the host leaves, the next player takes over.
+        </p>
+      )}
+      {online && !liveRoom && (
         <p className="mt-3 text-[14px] text-white/80 rounded-xl bg-[#0a84ff]/15 border border-[#0a84ff]/40 px-3 py-2.5">
           <strong>Playing with friends.</strong> Everyone plans the same month at once. Press <strong>Ready</strong> when you are done (press it again to keep planning). The month moves on when everyone is ready or the timer ends. Attacks are planned now and play out at month end, so nobody wins by clicking faster. A surprise decision comes to each player separately and never holds the month: if you do not choose, your ministers take the first option. There is no undo online, since your orders are already on their way. If everyone leaves, any player can reopen the room from <strong>Saved games</strong> under Play with friends, and the others take their seats back with the same code.
         </p>
