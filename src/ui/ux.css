@@ -1105,3 +1105,64 @@ body.resizing {
     min-width: 22px;
   }
 }
+
+/* The queued-orders tray sits right of centre on wide screens, so an open desk (up to ~600px) never hides under it. */
+@media (min-width: 901px) {
+  .orders-tray {
+    left: calc(50% + 130px) !important;
+    max-width: min(60vw, 820px) !important;
+  }
+}
+
+/* A live alert never cuts off the part that matters (who, where, how many days) on a phone: it wraps instead. */
+@media (max-width: 900px) {
+  .live-alert {
+    border-radius: 18px;
+    text-align: left;
+  }
+  .live-alert .truncate {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+/* On a phone an open desk covers the globe, so the soft hint pills (space flights, advice) step aside; red alerts stay. */
+@media (max-width: 900px) {
+  body:has([data-panel-body]) .advice-pill:not(.live-alert),
+  body:has([data-panel-body]) .pill-stack:not(:has(.live-alert)) {
+    display: none;
+  }
+}
+
+/* The map colors control sits to the right of the desk rail on wide screens, so the Borders legend never hides under it. */
+@media (min-width: 901px) {
+  .map-modes {
+    left: 120px !important;
+  }
+}
+
+/* Narrow screens (and the largest text size on them): a setting with a control beside it wraps the control underneath
+   instead of squeezing the words to one per line, and HUD labels clip with an ellipsis instead of running together. */
+@media (max-width: 900px) {
+  .setting-row.inline {
+    flex-wrap: wrap;
+  }
+  .setting-row.inline > .min-w-0 {
+    flex: 1 1 11rem;
+  }
+  .hud-resources .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+}
+
+/* The room code and its hint sit over the globe: a soft shadow keeps them readable on any colour. */
+.lobby-title {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.75);
+}
+.lobby-title .lobby-sub {
+  color: rgba(255, 255, 255, 0.88);
+}

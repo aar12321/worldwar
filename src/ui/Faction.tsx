@@ -144,7 +144,7 @@ function Members({ game, f, me }: { game: GameState; f: Faction; me: NationId })
                 <span className="font-semibold text-[15px] truncate">{n?.name ?? id}</span>
                 {id === me && <span className="chip chip-blue">You</span>}
                 {id === f.founder && <span className="chip" title="The founder">Founder</span>}
-                <span className="chip">{person ? (names[id] ? `Player: ${names[id]}` : 'Player') : 'Rival'}</span>
+                {!(id === me && !names[id]) && <span className="chip">{person ? (names[id] ? `Player: ${names[id]}` : 'Player') : 'Rival'}</span>}
               </span>
               <span className="text-[18px] font-semibold tabular-nums">{pct(shares[id] ?? 0)}</span>
             </div>
@@ -192,7 +192,7 @@ function VoteCard({ game, f, p, me, orders }: { game: GameState; f: Faction; p: 
   const toast = useGame((s) => s.toast)
   const cast = (vote: 'yes' | 'no') => {
     if (queued === vote) return removeOrder(idx)
-    if (issueOrder({ ...base, vote })) toast(`Your ${vote} vote on ${title.toLowerCase()} is in. It counts when the month ends.`, 'success', 3500)
+    if (issueOrder({ ...base, vote })) toast(`Your ${vote} vote on ${title.replace(/^War/, 'war').replace(/^Supply/, 'supply')} is in. It counts when the month ends.`, 'success', 3500)
   }
   const verdict = t.outcome === 'pass' ? 'Passes when the month ends' : t.outcome === 'fail' ? 'Fails when the month ends' : `Open: it needs more than half of the ${f.charter.vote === 'weighted' ? 'weight' : 'votes'} to pass`
   return (

@@ -258,9 +258,9 @@ export function GameOver() {
             <thead>
               <tr className="text-left text-[12px] text-white/60">
                 <th className="font-medium pb-1">Player</th>
-                <th className="font-medium pb-1 text-right">Countries</th>
-                <th className="font-medium pb-1 text-right">World's people</th>
-                <th className="font-medium pb-1 text-right">Strength</th>
+                <th className="font-medium pb-1 px-3 text-right whitespace-nowrap">Countries</th>
+                <th className="font-medium pb-1 px-3 text-right whitespace-nowrap">World's people</th>
+                <th className="font-medium pb-1 px-3 text-right whitespace-nowrap">Strength</th>
               </tr>
             </thead>
             <tbody>
