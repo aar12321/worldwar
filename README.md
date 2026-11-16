@@ -34,7 +34,7 @@ The game has two modes, chosen when you start. In **Turns** (the default), one t
    - **Every country has a trait** (chip foundries, financial hub, energy giant, rare minerals, breadbasket, mountain stronghold...) that helps your whole nation once it settles. When a nation falls its conqueror also takes 40% of its treasury and learns a technology it knew.
    - **Conquered land starts restless** and produces about 40% at first, settling over six months. Holding many unsettled countries strains stability.
 4. **Next turn** runs the rivals, training, research, income, diplomacy, rebels and any attacks on you, replays the battles you were in, then shows a **monthly report**: what changed, the news, and what the advisor would do next.
-5. The **map control** (bottom left) switches the globe between Nations, Relations (allies, pacts, enemies), Fronts (how much Defense Line is left) and Borders (how tense every border is; see [Active military and borders](#active-military-and-borders)).
+5. The **map control** (bottom left, shown while no desk is open; with a desk open use keys `4` to `7` or Ctrl+K, "Map colors") switches the globe between Nations, Relations (allies, pacts, enemies), Fronts (how much Defense Line is left) and Borders (how tense every border is; see [Active military and borders](#active-military-and-borders)).
 
 ## Statecraft
 

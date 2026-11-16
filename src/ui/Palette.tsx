@@ -16,7 +16,7 @@ const FILTERS: [string, string, Group[] | null][] = [
   ['actions', 'Actions and orders', ['Actions', 'Orders']],
 ]
 
-const GROUP_ORDER: Group[] = ['Recent', 'Pinned', 'Desks and tabs', 'Actions', 'Orders', 'Settings', 'Nations', 'Countries']
+const GROUP_ORDER: Group[] = ['Recent', 'Pinned', 'Desks and tabs', 'Actions', 'Orders', 'Settings', 'Countries', 'Nations']
 
 /** Jump to anything: a desk or tab, a setting, an action, a nation or a country on the globe. Opens with Ctrl+K or /. */
 export function Palette() {
