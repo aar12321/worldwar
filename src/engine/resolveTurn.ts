@@ -35,7 +35,7 @@ import { nationNeighborMap } from './helpers'
 import { EVENT_BY_ID } from '../data/events'
 import { CAMPAIGNS, LEVEL_NAMES, SOCIAL } from '../data/society'
 import { applyCampaign, applySocial } from './society'
-import { EVENT_GAP_TURNS, resolveEvent, scheduleEvent, scheduleHumanEvents, settleUnanswered } from './events'
+import { eventGap, resolveEvent, scheduleEvent, scheduleHumanEvents, settleUnanswered } from './events'
 import { addLog, forceUnits, reach, regionsOf } from './helpers'
 import { clockOf, isLive } from './calendar'
 import { launchArmy, launchStrike, turnBack } from './armies'
@@ -344,7 +344,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
     const player = s.nations[s.humans[0] ?? s.playerId]
     if (s.humans.length === 1 && player?.alive && s.turn >= s.nextEventTurn) {
       s.pendingEvent = scheduleEvent(s, map, player.id, rng)
-      s.nextEventTurn = s.turn + EVENT_GAP_TURNS
+      s.nextEventTurn = s.turn + eventGap(s, player.id)
     }
   }
   s.worldGross = worldGross(s, map)

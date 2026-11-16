@@ -148,7 +148,7 @@ export function playWorld(opts: SimOptions): { result: SimResult; state: GameSta
     for (const v of count.values()) best = Math.max(best, v)
     return { best, count }
   }
-  for (let i = 0; i < opts.months && s.outcome === 'playing'; i++) {
+  for (let i = 0; i < opts.months; i++) {
     if (s.pendingEvent) s = applyEventChoice(s, map, 0)
     const orders = [...generateAllBotOrders(s, map), ...generateBotOrders(s, map, s.playerId, true)]
     for (const o of orders) {
@@ -178,6 +178,8 @@ export function playWorld(opts: SimOptions): { result: SimResult; state: GameSta
     const before = new Set(s.wars)
     const owners0 = new Map(Object.values(s.regions).map((x) => [x.id, x.owner]))
     s = resolveTurn(s, map, orders)
+    // The bots play the player's nation too. If it falls, or reaches its goal, the world carries on: the measuring does not stop with it.
+    if (s.outcome !== 'playing') s.outcome = 'playing'
     for (const b of s.battles) {
       if (b.attacker.nationId === 'rebels') continue
       if (b.winner === 'attacker') r.attackWins++
@@ -285,6 +287,21 @@ export function summarize(results: SimResult[]) {
     decisiveShare: ended.length ? decisive.length / ended.length : 0,
     warMonthsMedian: med(ended.map((w) => (w.ended ?? 0) - w.started)),
     warMonthsMean: avg(ended.map((w) => (w.ended ?? 0) - w.started)),
+    rematchShare: ((): number => {
+      const seen = new Map<string, number>()
+      let again = 0
+      for (const w of wars) {
+        const k = `${w.key}`
+        seen.set(k, (seen.get(k) ?? 0) + 1)
+        if ((seen.get(k) ?? 0) >= 3) again++
+      }
+      return wars.length ? again / wars.length : 0
+    })(),
+    idleByOrderShare: ((): number => {
+      const byOrder = ended.filter((w) => w.ratio > 0)
+      return byOrder.length ? byOrder.filter((w) => w.battles === 0 && w.how === 'peace').length / byOrder.length : 0
+    })(),
+    idleMonthsMedian: med(ended.filter((w) => w.battles === 0 && w.how === 'peace').map((w) => (w.ended ?? 0) - w.started)),
     idleWarShare: ended.length ? ended.filter((w) => w.battles === 0 && w.how === 'peace').length / ended.length : 0,
     stalledPerGame: wars.filter((w) => w.battles >= 3 && w.captures === 0 && (w.ended ?? 999) - w.started >= 12).length / results.length,
     riskyDeclarationShare: results.reduce((a, x) => a + x.declarations, 0) ? results.reduce((a, x) => a + x.riskyDeclarations, 0) / results.reduce((a, x) => a + x.declarations, 0) : 0,

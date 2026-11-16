@@ -14,6 +14,25 @@ export const FIRST_EVENT_TURN = 8
 /** Months between surprise decisions once they start. */
 export const EVENT_GAP_TURNS = 12
 
+/**
+ * A bigger empire has more going on and more at stake. Its decisions come sooner (the gap shrinks with the countries held), and the
+ * flat sums in them (money, influence, food) grow with the square root of its size, so a late decision weighs what an early one did.
+ * Amounts per worker already scale, and shares of an army or a pool do too: only the flat ones need this.
+ */
+export const EVENT_SCALE = { perRoot: 0.4, gaps: [[25, 6], [10, 8], [4, 10]] as [number, number][] }
+
+/** Months until a nation's next decision. 12 for a small country, 6 for an empire of 25 or more. */
+export function eventGap(s: GameState, nationId: NationId): number {
+  const held = regionsOf(s, nationId).length
+  for (const [countries, gap] of EVENT_SCALE.gaps) if (held >= countries) return gap
+  return EVENT_GAP_TURNS
+}
+
+/** How much heavier the flat sums in a decision are for this nation: 1 for a single country, about 2.2 for ten, 3 for twenty-five. */
+export function eventScale(s: GameState, nationId: NationId): number {
+  return 1 + EVENT_SCALE.perRoot * Math.sqrt(Math.max(0, regionsOf(s, nationId).length - 1))
+}
+
 function availableTechs(s: GameState, nationId: NationId): string[] {
   const n = s.nations[nationId]
   return TECHS.filter((t) => !n.techs.includes(t.id) && t.requires.every((r) => n.techs.includes(r))).map((t) => t.id)
@@ -74,19 +93,20 @@ export function fillEventText(text: string, s: GameState, map: WorldMap, ev: Pen
     .replaceAll('{nation}', s.nations[nationId].name)
 }
 
-export function effectAmount(e: Extract<EventEffect, { type: 'resource' }>, workforce: number): number {
-  return Math.round(e.amount + (e.perWorkforce ?? 0) * workforce)
+export function effectAmount(e: Extract<EventEffect, { type: 'resource' }>, workforce: number, scale = 1): number {
+  return Math.round(e.amount * scale + (e.perWorkforce ?? 0) * workforce)
 }
 
 export function describeEffect(e: EventEffect, workforce: number, s: GameState, map: WorldMap, ev: PendingEvent): string {
   const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`)
   const labels = { capital: 'money', food: 'food', pp: 'influence', tp: 'research', oil: 'oil', steel: 'steel', goods: 'goods' }
   const rival = ev.rivalId ? s.nations[ev.rivalId].name : 'Rival'
+  const scale = eventScale(s, s.playerId)
   switch (e.type) {
     case 'opinion':
       return `${rival}'s opinion of you ${sign(e.amount)}`
     case 'rivalResource': {
-      const v = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce)
+      const v = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce, scale)
       return `${rival} ${v >= 0 ? 'receives' : 'loses'} ${Math.abs(v)} ${labels[e.key]}`
     }
     case 'clearCasusBelli':
@@ -94,7 +114,7 @@ export function describeEffect(e: EventEffect, workforce: number, s: GameState, 
     case 'embargo':
       return `Port trade -${Math.round((1 - ECON.embargoTradeMult) * 100)}% for ${e.turns} months`
     case 'resource':
-      return `${sign(effectAmount(e, workforce))} ${labels[e.key]}`
+      return `${sign(effectAmount(e, workforce, scale))} ${labels[e.key]}`
     case 'stability':
       return `${sign(e.amount)} Stability`
     case 'militaryPool':
@@ -159,13 +179,14 @@ export function resolveEvent(s: GameState, map: WorldMap, optionIndex: number, n
   const n = s.nations[nationId]
   const rng = createRng(s.seed, s.turn * 977 + 13 + (multi ? idSalt(nationId) : 0))
   const workforce = computeEconomy(s, map, nationId).workforce
+  const scale = eventScale(s, nationId)
   const region = ev.regionId ? s.regions[ev.regionId] : null
 
   for (const e of option.effects) {
     switch (e.type) {
       case 'resource':
         // Money can go into the red: a choice that costs money is not free for a nation that has none.
-        n.resources[e.key] = e.key === 'capital' ? n.resources.capital + effectAmount(e, workforce) : Math.max(0, n.resources[e.key] + effectAmount(e, workforce))
+        n.resources[e.key] = e.key === 'capital' ? n.resources.capital + effectAmount(e, workforce, scale) : Math.max(0, n.resources[e.key] + effectAmount(e, workforce, scale))
         break
       case 'stability':
         n.stability = clamp(n.stability + e.amount, 0, 100)
@@ -213,7 +234,7 @@ export function resolveEvent(s: GameState, map: WorldMap, optionIndex: number, n
       case 'rivalResource': {
         const rival = ev.rivalId ? s.nations[ev.rivalId] : null
         if (rival?.alive) {
-          const amount = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce)
+          const amount = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce, scale)
           rival.resources[e.key] = Math.max(e.key === 'capital' ? -9999 : 0, rival.resources[e.key] + amount)
         }
         break
@@ -276,5 +297,5 @@ export function scheduleHumanEvents(s: GameState, map: WorldMap, rng: Rng) {
     const ev = scheduleEvent(s, map, id, rng)
     if (ev) s.pendingEvents[id] = ev
   }
-  s.nextEventTurn = s.turn + EVENT_GAP_TURNS
+  s.nextEventTurn = s.turn + Math.min(EVENT_GAP_TURNS, ...s.humans.filter((id) => s.nations[id]?.alive).map((id) => eventGap(s, id)))
 }
