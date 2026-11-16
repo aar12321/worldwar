@@ -30,19 +30,20 @@ export function WorldReaction() {
   const hasCouncil = player.tier >= 4
 
   return (
-    <Card title="World reaction" hint="How the rest of the world takes your rise, and what it is about to do." right={<span className="chip" style={{ color }}>{r.threat.levelName}</span>}>
+    <Card title="World reaction" hint="How the rest of the world takes your rise, and what it is about to do.">
       <div className="space-y-1" data-testid="threat">
         <div className="flex items-baseline justify-between text-[14px]">
           <span>Threat you pose</span>
-          <span className="tabular-nums font-semibold" style={{ color }}>
-            {Math.round(r.threat.score)} of 100
+          <span className="tabular-nums font-semibold text-right" style={{ color }}>
+            {Math.round(r.threat.score)} of 100 · {r.threat.levelName}
           </span>
         </div>
         <Bar value={r.threat.score / 100} color={color} label="Threat you pose to the world" />
-        <div className="flex justify-between text-[11px] text-white/45 tabular-nums" aria-hidden>
+        <div className="relative h-8 text-[11px] text-white/50 tabular-nums" aria-hidden>
           {THREAT.levelNames.map((n, i) => (
-            <span key={n} style={{ color: i === level ? color : undefined }} className={i === level ? 'font-semibold' : ''}>
+            <span key={n} className="absolute top-0 -translate-x-1/2 text-center leading-tight whitespace-nowrap" style={{ left: `${Math.min(92, Math.max(6, THREAT.levels[i]))}%`, color: i === level ? color : undefined, fontWeight: i === level ? 600 : 400 }}>
               {THREAT.levels[i]}
+              <span className="hidden sm:block">{['calm', 'watched', 'alarmed', 'united', 'total'][i]}</span>
             </span>
           ))}
         </div>
