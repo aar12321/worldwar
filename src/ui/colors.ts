@@ -120,3 +120,11 @@ export const NEON = {
 export const RELATION_COLORS = { yours: '#0a84ff', ally: '#30d158', pact: '#64d2ff', war: '#ff453a', other: '#5b6270' }
 /** Fronts mode: a full Defense Line is the strong color, a broken one fades toward the pale color. */
 export const FRONT_COLORS = { yours: '#0a84ff', enemy: '#ff453a', weak: '#f1e3c8', other: '#3d434e' }
+
+/** The same two tables for people who cannot tell red from green: blue and yellow for friends, vermillion for enemies. */
+export const RELATION_COLORS_CB = { yours: '#0a84ff', ally: '#f0e442', pact: '#cc79a7', war: '#d55e00', other: '#5b6270' }
+export const FRONT_COLORS_CB = { yours: '#0a84ff', enemy: '#d55e00', weak: '#f1e3c8', other: '#3d434e' }
+
+/** The map tables for the chosen palette. The globe and its legend both read through these. */
+export const relationColors = (palette: 'standard' | 'colorblind') => (palette === 'colorblind' ? RELATION_COLORS_CB : RELATION_COLORS)
+export const frontColors = (palette: 'standard' | 'colorblind') => (palette === 'colorblind' ? FRONT_COLORS_CB : FRONT_COLORS)

@@ -1,7 +1,10 @@
+import { useEffect } from 'react'
 import { isLive } from '../engine/calendar'
 import { useGame } from '../store'
 import { Modal } from './Modal'
-import { shortcutsFor } from './shortcuts'
+import { Tabs } from './panel'
+import { regCtxOf } from './regCtx'
+import { shortcutRows, shortcutsFor } from './shortcuts'
 
 const TURN = [
   { title: 'Read the Briefing', body: 'Your advisor lists what needs you this month, most urgent first. Every item has a button that takes you to the fix.' },
@@ -16,7 +19,8 @@ const LIVE_STEPS = [
   { title: 'Watch for armies marching on you', body: 'An enemy army shows in red with the days left. You have that time to recall your own armies, raise shields, fire missiles or make peace, which turns armies back.' },
 ]
 
-const TERMS: [string, string][] = [
+/** The words the game explains. The help window lists them; `Term` (widgets.tsx) shows the same text on hover, focus or tap. */
+export const TERMS: [string, string][] = [
   ['Money', 'Comes from taxes, factories and ports. Pays for upgrades, units, their upkeep and your wars.'],
   ['Food', 'Farms grow it; people and soldiers eat it. Run out and your military fights 30% weaker.'],
   ['Influence', 'Political capital. You spend it to declare war, pass laws, sign treaties and put down rebels.'],
@@ -58,18 +62,71 @@ const TERMS: [string, string][] = [
   ['Empire and governors', 'Every country you hold is listed together in Economy. A governor upgrades a country each month on a plan you pick.'],
 ]
 
+/** Every key the game answers, built from the registry, so a new desk or tab lists its key here by itself. */
+export function KeysSheet({ live }: { live: boolean }) {
+  const game = useGame((s) => s.game)
+  const orders = useGame((s) => s.orders)
+  const rows = shortcutRows(regCtxOf(game, orders)).filter((r) => live || r.group !== 'Live games')
+  const groups = [...new Set(rows.map((r) => r.group))]
+  return (
+    <div className="space-y-5">
+      <p className="text-[14px] text-white/80">
+        Keys work when you are not typing in a box. <kbd className="kbd">Ctrl</kbd> + <kbd className="kbd">K</kbd> or <kbd className="kbd">/</kbd> opens the jump window, which finds every desk, tab, setting, nation and country by name.
+      </p>
+      {groups.map((g) => (
+        <section key={g} aria-label={g}>
+          <h3 className="text-[15px] font-semibold mb-1.5">{g}</h3>
+          <dl className="keys-grid">
+            {rows
+              .filter((r) => r.group === g)
+              .map((r) => (
+                <div key={r.label + r.keys.join()} className="keys-row">
+                  <dt className="flex flex-wrap items-center gap-1">
+                    {r.keys.map((k, i) => (
+                      <span key={k} className="inline-flex items-center gap-1">
+                        {i > 0 && <span className="text-[12px] text-white/60">or</span>}
+                        <kbd className="kbd">{k}</kbd>
+                      </span>
+                    ))}
+                  </dt>
+                  <dd className="text-[14px] text-white/85">{r.label}</dd>
+                </div>
+              ))}
+          </dl>
+        </section>
+      ))}
+    </div>
+  )
+}
+
 export function Help() {
   const open = useGame((s) => s.helpOpen)
   const setHelp = useGame((s) => s.setHelp)
+  const tab = useGame((s) => s.helpTab)
+  const setTab = useGame((s) => s.setHelpTab)
   const game = useGame((s) => (s.helpOpen ? s.game : null))
   const online = useGame((s) => s.online?.status === 'playing')
+  // ? flips between the guide and the list of keys while the window is open.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (e.key === '?' && t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && t.tagName !== 'SELECT') {
+        e.preventDefault()
+        const st = useGame.getState()
+        st.setHelpTab(st.helpTab === 'keys' ? 'guide' : 'keys')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
   if (!open || !game) return null
   const live = isLive(game)
   const steps = live ? LIVE_STEPS : TURN
   const total = Object.keys(game.regions).length
   return (
     <Modal
-      title="How the game works"
+      title={tab === 'keys' ? 'Keyboard shortcuts' : 'How the game works'}
       kicker="Worlds of Others"
       onClose={() => setHelp(false)}
       footer={
@@ -78,6 +135,23 @@ export function Help() {
         </button>
       }
     >
+      <div className="mb-4">
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          label="Help"
+          options={
+            [
+              ['guide', 'How to play'],
+              ['keys', 'Keyboard shortcuts'],
+            ] as const
+          }
+        />
+      </div>
+      {tab === 'keys' ? (
+        <KeysSheet live={live} />
+      ) : (
+        <>
       <p className="text-[15px] text-white/85">
         You run a country{live ? ' as the days pass' : ', one month at a time'}. <strong>To win</strong>, hold the whole world: all {total} countries yours or puppets of yours. It is a long game. A war needs a reason, so build a case, use your agencies and answer the crises in the news. You lose if your nation is wiped out.
       </p>
@@ -109,6 +183,8 @@ export function Help() {
       </dl>
       <h3 className="text-[16px] font-semibold mt-5 mb-1">Keys</h3>
       <p className="text-[14px] text-white/75">{shortcutsFor(isLive(game))}</p>
+        </>
+      )}
     </Modal>
   )
 }

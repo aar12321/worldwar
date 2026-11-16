@@ -1,5 +1,5 @@
 import { useGame, type MapMode } from '../store'
-import { FRONT_COLORS, RELATION_COLORS } from './colors'
+import { frontColors, relationColors } from './colors'
 import { MAP_MODE_KEYS } from './shortcuts'
 
 const MODES: { id: MapMode; label: string; hint: string }[] = [
@@ -8,27 +8,32 @@ const MODES: { id: MapMode; label: string; hint: string }[] = [
   { id: 'fronts', label: 'Fronts', hint: 'How much Defense Line is left in your countries and your enemies\'.' },
 ]
 
-const LEGEND: Record<MapMode, { color: string; label: string }[]> = {
-  political: [],
-  relations: [
-    { color: RELATION_COLORS.yours, label: 'You' },
-    { color: RELATION_COLORS.ally, label: 'Ally' },
-    { color: RELATION_COLORS.pact, label: 'Pact' },
-    { color: RELATION_COLORS.war, label: 'At war' },
-    { color: RELATION_COLORS.other, label: 'Neutral' },
-  ],
-  fronts: [
-    { color: FRONT_COLORS.yours, label: 'Your line, strong' },
-    { color: FRONT_COLORS.enemy, label: 'Enemy line, strong' },
-    { color: FRONT_COLORS.weak, label: 'Nearly broken' },
-  ],
+const legendFor = (mode: MapMode, palette: 'standard' | 'colorblind'): { color: string; label: string }[] => {
+  const R = relationColors(palette)
+  const F = frontColors(palette)
+  if (mode === 'relations')
+    return [
+      { color: R.yours, label: 'You' },
+      { color: R.ally, label: 'Ally' },
+      { color: R.pact, label: 'Pact' },
+      { color: R.war, label: 'At war' },
+      { color: R.other, label: 'Neutral' },
+    ]
+  if (mode === 'fronts')
+    return [
+      { color: F.yours, label: 'Your line, strong' },
+      { color: F.enemy, label: 'Enemy line, strong' },
+      { color: F.weak, label: 'Nearly broken' },
+    ]
+  return []
 }
 
 /** Chooses what the globe's colors mean, with a legend for the current choice. */
 export function MapModes() {
   const mode = useGame((s) => s.mapMode)
   const setMode = useGame((s) => s.setMapMode)
-  const legend = LEGEND[mode]
+  const palette = useGame((s) => s.settings.ui.palette)
+  const legend = legendFor(mode, palette)
   return (
     <div className="map-modes surface" role="group" aria-label="Map colors">
       <div className="segmented">
