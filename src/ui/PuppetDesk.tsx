@@ -40,7 +40,7 @@ export default function PuppetsTab() {
         A puppet is yours to rule. Its <strong>loyalty</strong> moves each month with how hard you press it (taxes, draft, laws, the tribute you take) against what you give back (aid, investment, a garrison, decent spending), and settles where those balance. A loyal puppet pays more, fights beside you and counts for more in your empire; a restive one rebels, refuses your wars and may break free. You can change one puppet's rules once a month.
       </p>
       <Tiles>
-        <StatTile label="Puppets" value={ids.length} sub={`${ids.reduce((t, id) => t + regionsOf(game, id).length, 0)} countries`} />
+        <StatTile label="Puppets" value={ids.length} sub={(() => { const n = ids.reduce((t, id) => t + regionsOf(game, id).length, 0); return `${n} ${n === 1 ? 'country' : 'countries'}` })()} />
         <StatTile label="Tribute a month" value={ex.total.toFixed(1)} sub={`cap ${ex.cap.toFixed(0)} (${pctTxt(PUPPET.extractionCap)} of your income)`} tone={ex.total > ex.cap ? 'warn' : undefined} />
         <StatTile label="Average loyalty" value={Math.round(mean)} sub={loyaltyWord(mean)} tone={mean < PUPPET.restive ? 'bad' : mean < 50 ? 'warn' : 'good'} />
       </Tiles>
@@ -80,7 +80,7 @@ function PuppetCard({ puppet, pending }: { puppet: Nation; pending: boolean }) {
         <div className="min-w-0">
           <h3 className="text-[16px] font-semibold truncate">{puppet.name}</h3>
           <div className="text-[12px] text-white/65">
-            {countries} {countries === 1 ? 'country' : 'countries'} · counts {Math.floor(countries * countWeight(puppet) * 10) / 10} · stability {Math.round(puppet.stability)} · {served} months in service
+            {countries} {countries === 1 ? 'country' : 'countries'} · counts {Math.floor(countries * countWeight(puppet) * 10) / 10} · stability {Math.round(puppet.stability)} · {served} {served === 1 ? 'month' : 'months'} in service
           </div>
         </div>
         <button className="btn btn-quiet px-3 py-1 text-[13px] shrink-0" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
@@ -160,7 +160,10 @@ function Controls({ puppet, pending }: { puppet: Nation; pending: boolean }) {
   const any = Object.keys(patch).length > 0
   const order: Govern = { type: 'governPuppet', nationId: player.id, target: puppet.id, patch }
   const why = any ? governProblem(game, order, orders.filter((o) => !(o.type === 'governPuppet' && o.target === puppet.id))) : null
-  const pv = useMemo(() => (any ? previewGovern(game, map, player.id, puppet.id, patch) : null), [game, map, player.id, puppet.id, any, JSON.stringify(patch)]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The patch is rebuilt every render; keying the preview on its text keeps it from being recomputed until something actually changes.
+  const patchKey = JSON.stringify(patch)
+  const stablePatch = useMemo(() => JSON.parse(patchKey) as PuppetPatch, [patchKey])
+  const pv = useMemo(() => (any ? previewGovern(game, map, player.id, puppet.id, stablePatch) : null), [game, map, player.id, puppet.id, any, stablePatch])
   const base = useMemo(() => {
     const p = pressureOf(game, map, puppet)
     return { parts: p.parts, total: p.total, settles: equilibrium(p.total) }
@@ -305,9 +308,3 @@ function Garrison({ puppet }: { puppet: Nation }) {
     </Card>
   )
 }
-
-/** Exported for the tests and the Diplomacy card: the one-line state of a puppet. */
-export function puppetSummary(n: Nation): string {
-  return n.loyalty === undefined ? 'flat tribute' : `${loyaltyWord(n.loyalty)} (${Math.round(n.loyalty)})`
-}
-

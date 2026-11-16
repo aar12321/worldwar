@@ -47,7 +47,7 @@ export function PeopleTab() {
 
   return (
     <section className="econ-grid">
-      <Tiles>
+      <Tiles compact>
         <StatTile label="Population" value={fmt(econ.population, 1)} sub={p.migration !== 0 ? `${p.migration > 0 ? '+' : ''}${(p.migration * 100).toFixed(2)}% from migration` : 'no migration'} />
         <StatTile label="Life expectancy" value={`${Math.round(lifeExpectancy(p.health))} years`} sub={`health ${pct(p.health)}`} tone={p.health < 0.45 ? 'bad' : undefined} />
         <StatTile label="Stability" value={`${Math.round(player.stability)}%`} sub={`heading for ${Math.round(econ.stabilityTarget)}%`} tone={player.stability < 35 ? 'bad' : undefined} />

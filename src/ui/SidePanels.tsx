@@ -5,7 +5,8 @@ import { turnDate } from '../engine/helpers'
 import type { LogKind } from '../engine/types'
 import { useGame } from '../store'
 import { usePlayerView } from './hooks'
-import { DeskTabs, PanelShell, useDeskTab } from './panel'
+import { DeskTabs, PanelShell } from './panel'
+import { useDeskTab } from './deskTab'
 import { KeysSheet } from './Help'
 import { LevelPicker } from './kit'
 import { EmptyState } from './widgets'
@@ -81,7 +82,7 @@ export function LogPanel() {
             {g.items.map((l, i) => (
               <div key={i} className="text-sm border-l-2 border-white/15 pl-2">
                 {live && l.day !== undefined && <span className="text-[11px] text-white/50 mr-2">{dayDate(l.turn, l.day).split(' ').slice(0, 2).join(' ')}</span>}
-                <span className={KIND_COLOR[l.kind]}>{l.text}</span>
+                <span className={l.kind === 'economy' && /\b(failed|died)\b/i.test(l.text) ? 'text-[#ff8a84]' : KIND_COLOR[l.kind]}>{l.text}</span>
               </div>
             ))}
           </section>

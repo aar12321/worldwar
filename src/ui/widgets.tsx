@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useGame } from '../store'
 import { Tip } from './bits'
 import { TERMS } from './Help'
+import { runWithUndo } from './undo'
 
 // --- Empty and loading states -----------------------------------------------------------------------------------------
 
@@ -117,47 +118,52 @@ export function NumberStepper({
   return (
     <div className="stepper" role="group" aria-label={label}>
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="btn stepper-btn" aria-label={`Less ${label}`} disabled={disabled || value <= min} {...hold(-1)}>
-          &minus;
-        </button>
-        <input
-          className="field stepper-input tabular-nums"
-          role="spinbutton"
-          inputMode="numeric"
-          aria-label={label}
-          aria-valuemin={min}
-          aria-valuemax={hi}
-          aria-valuenow={value}
-          disabled={disabled}
-          value={draft ?? format(value)}
-          onChange={(e) => setDraft(e.target.value)}
-          onFocus={(e) => e.target.select()}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              commit()
-            } else if (e.key === 'Escape' && draft !== null) {
-              e.stopPropagation()
-              setDraft(null)
-            } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-              e.preventDefault()
-              bump(e.key === 'ArrowUp' ? 1 : -1, e.shiftKey ? 10 : 1)
-            }
-          }}
-        />
-        <button type="button" className="btn stepper-btn" aria-label={`More ${label}`} disabled={disabled || value >= hi} {...hold(1)}>
-          +
-        </button>
-        {unit && <span className="text-[13px] text-white/70">{unit}</span>}
-        <button type="button" className="btn btn-quiet" disabled={disabled || value >= hi} onClick={() => set(hi)} title={`Set to the most you can: ${format(hi)}`}>
-          Max
-        </button>
-        {quick?.map((q) => (
-          <button key={q} type="button" className="btn btn-quiet" disabled={disabled || q > hi || q < min} aria-pressed={value === q} onClick={() => set(q)}>
-            {q}
+        <div className="flex items-center gap-2">
+          <button type="button" className="btn stepper-btn" aria-label={`Less ${label}`} disabled={disabled || value <= min} {...hold(-1)}>
+            &minus;
           </button>
-        ))}
+          <input
+            className="field stepper-input tabular-nums"
+            role="spinbutton"
+            inputMode="numeric"
+            aria-label={label}
+            aria-valuemin={min}
+            aria-valuemax={hi}
+            aria-valuenow={value}
+            disabled={disabled}
+            value={draft ?? format(value)}
+            onChange={(e) => setDraft(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commit()
+              } else if (e.key === 'Escape' && draft !== null) {
+                e.stopPropagation()
+                setDraft(null)
+              } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                e.preventDefault()
+                bump(e.key === 'ArrowUp' ? 1 : -1, e.shiftKey ? 10 : 1)
+              }
+            }}
+          />
+          <button type="button" className="btn stepper-btn" aria-label={`More ${label}`} disabled={disabled || value >= hi} {...hold(1)}>
+            +
+          </button>
+          {unit && <span className="text-[13px] text-white/70">{unit}</span>}
+        </div>
+        {/* The shortcuts stay together: on a narrow screen they drop to the next line as a group, never one by one. */}
+        <div className="flex items-center gap-2">
+          <button type="button" className="btn btn-quiet" disabled={disabled || value >= hi} onClick={() => set(hi)} title={`Set to the most you can: ${format(hi)}`}>
+            Max
+          </button>
+          {quick?.map((q) => (
+            <button key={q} type="button" className="btn btn-quiet" disabled={disabled || q > hi || q < min} aria-pressed={value === q} onClick={() => set(q)}>
+              {q}
+            </button>
+          ))}
+        </div>
       </div>
       {slider && hi > min && (
         <input type="range" className="w-full mt-2" aria-label={`${label} slider`} min={min} max={hi} step={step} value={clampTo(value, min, hi)} disabled={disabled} onChange={(e) => set(+e.target.value)} />
@@ -248,20 +254,6 @@ export function ConfirmButton({
       {label}
     </button>
   )
-}
-
-/** Runs something that issues orders, then offers Undo (done at once) or Cancel (queued for the month end) in a toast. */
-export function runWithUndo(what: string, fn: () => void): void {
-  const before = useGame.getState()
-  const undos = before.undoStack.length
-  const queued = before.orders.length
-  fn()
-  const st = useGame.getState()
-  if (st.undoStack.length > undos) st.toast(`Done: ${what}`, 'success', 6000, { label: 'Undo', run: () => useGame.getState().undo() })
-  else if (st.orders.length > queued) {
-    const index = st.orders.length - 1
-    st.toast(`Queued: ${what}`, 'info', 6000, { label: 'Cancel', run: () => useGame.getState().removeOrder(index) })
-  }
 }
 
 // --- Jargon --------------------------------------------------------------------------------------------------------------

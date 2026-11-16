@@ -894,6 +894,10 @@ body:has(.drawer) .map-modes {
   .pill-stack {
     top: calc(var(--hud-h) + 4px);
   }
+  /* On a phone one chip is enough: a red alert shows alone, and the plainer chips under it (the Briefing and Space chips) wait, so the stack never sits on the country card. */
+  .pill-stack .live-alert ~ .advice-pill:not(.live-alert) {
+    display: none;
+  }
   .hud-live {
     gap: 4px !important;
   }
@@ -1281,5 +1285,31 @@ select option:disabled {
   }
   .scenario-facts > :first-child {
     grid-column: 1 / -1;
+  }
+}
+
+/* Stat tiles in compact mode (phones): the label and the figure share a line and the small print sits under them, so a page of figures stays short. */
+@media (max-width: 639px) {
+  .tiles-compact {
+    gap: 6px;
+  }
+  .tiles-compact .stat-tile {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    column-gap: 8px;
+    padding: 6px 10px;
+  }
+  .tiles-compact .stat-tile .stat-label {
+    white-space: normal;
+  }
+  .tiles-compact .stat-tile .stat-value {
+    font-size: 15px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .tiles-compact .stat-tile .stat-sub {
+    grid-column: 1 / -1;
+    font-size: 11px;
   }
 }
