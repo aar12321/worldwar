@@ -21,6 +21,8 @@ interface Tally {
   salvos: number
   missilesFired: number
   site: number
+  /** Counterforce by missile ordered by the rival (not a doctrine's answer; the rest of `site` is bomber raids on launch sites). */
+  siteMissiles: number
   raids: number
   auto: number
   ceasefires: number
@@ -58,7 +60,7 @@ function play(seed: number, difficulty: Difficulty, player: string, months: numb
   const { map } = getWorld()
   let s: GameState = createInitialState(map, { playerRegionId: player, seed, difficulty, goal: 'classic', victoryShare: 2 })
   if (stress) worldWar(s)
-  const t: Tally = { months: 0, salvos: 0, missilesFired: 0, site: 0, raids: 0, auto: 0, ceasefires: 0, nukes: 0, falseAlarms: 0, maxTension: 0, dead: 0, interceptorsSpent: 0, problems: [] }
+  const t: Tally = { months: 0, salvos: 0, missilesFired: 0, site: 0, siteMissiles: 0, raids: 0, auto: 0, ceasefires: 0, nukes: 0, falseAlarms: 0, maxTension: 0, dead: 0, interceptorsSpent: 0, problems: [] }
   const seen = new Set<string>()
   for (let i = 0; i < months && s.outcome === 'playing'; i++) {
     if (s.pendingEvent) s = applyEventChoice(s, map, 0)
@@ -72,6 +74,7 @@ function play(seed: number, difficulty: Difficulty, player: string, months: numb
       if (r.weapon === 'raid') t.raids++
       else t.missilesFired += r.fired
       if (r.aim === 'site') t.site++
+      if (r.aim === 'site' && r.weapon === 'missile' && !r.auto) t.siteMissiles++
       if (r.auto) t.auto++
       t.dead += r.dead
       t.interceptorsSpent += r.interceptorsUsed
@@ -89,15 +92,15 @@ function play(seed: number, difficulty: Difficulty, player: string, months: numb
 
 describe('the AI in the missile war', () => {
   const runs: Record<string, Tally> = {}
-  const show = (label: string, t: Tally) => {
+  const show = (label: string, t: Tally, task: { meta: object }) => {
     runs[label] = t
-    // eslint-disable-next-line no-console
-    console.log(`MWSIM ${label} ${JSON.stringify(t)}`)
+    // Printed with `vitest --reporter=json`: the tallies ride in the test's meta, so docs/MISSILE_WAR_STATUS.md can quote them.
+    Object.assign(task.meta, { [`mwsim-${label}`]: t })
   }
 
-  it('Easy rivals never use it', () => {
+  it('Easy rivals never use it', ({ task }) => {
     const t = play(3, 'easy', 'poland', 60)
-    show('easy-3', t)
+    show('easy-3', t, task)
     expect(t.site).toBe(0)
     expect(t.raids).toBe(0)
     expect(t.auto).toBe(0)
@@ -105,36 +108,47 @@ describe('the AI in the missile war', () => {
     expect(t.problems).toEqual([])
   })
 
-  it('Normal rivals defend and answer, with few raids, and nothing runs away', () => {
+  it('Normal rivals defend and answer, with few raids, and nothing runs away', ({ task }) => {
     const t = play(7, 'normal', 'poland', 60)
-    show('normal-7', t)
+    show('normal-7', t, task)
     expect(t.nukes).toBeLessThanOrEqual(1)
     expect(t.maxTension).toBeLessThan(100)
     expect(t.problems).toEqual([])
   })
 
-  it.each([
+  const stressed = [
     ['easy', 3],
     ['normal', 7],
     ['hard', 5],
     ['hard', 11],
-  ] as const)('a stressed world war, %s (seed %i): bounded, and Hard uses the missile war most', (difficulty, seed) => {
+  ] as const
+  for (const [difficulty, seed] of stressed) it(`a stressed world war, ${difficulty} (seed ${seed}): bounded, and Hard uses the missile war most`, ({ task }) => {
     const t = play(seed, difficulty, 'poland', 36, true)
-    show(`war-${difficulty}-${seed}`, t)
+    show(`war-${difficulty}-${seed}`, t, task)
     expect(t.problems).toEqual([])
     expect(t.nukes).toBeLessThanOrEqual(2)
     expect(t.maxTension).toBeLessThanOrEqual(100)
     expect(t.falseAlarms).toBeLessThanOrEqual(3)
     if (difficulty === 'easy') expect(t.site + t.raids + t.auto + t.ceasefires).toBe(0)
+    // Normal rivals answer by doctrine; Hard rivals strike launch sites and raid, and use more of the war than Normal.
+    if (difficulty === 'normal') expect(t.auto).toBeGreaterThan(0)
+    if (difficulty === 'hard') {
+      expect(t.siteMissiles).toBeGreaterThan(0)
+      expect(t.raids).toBeGreaterThan(0)
+      // The ladder climbs far enough in this war for rivals to offer each other a ceasefire.
+      if (seed === 11) expect(t.ceasefires).toBeGreaterThan(0)
+      expect(t.site + t.raids).toBeGreaterThan(play(7, 'normal', 'poland', 36, true).site + 2)
+    }
   })
 
-  it.each([
+  const organic = [
     [5, 'china'],
     [11, 'poland'],
     [23, 'brazil'],
-  ])('Hard rivals run the whole war (seed %i), bounded: no runaway nuclear war, tension bounded', (seed, player) => {
+  ] as const
+  for (const [seed, player] of organic) it(`Hard rivals run the whole war (seed ${seed}), bounded: no runaway nuclear war, tension bounded`, ({ task }) => {
     const t = play(seed, 'hard', player, 90)
-    show(`hard-${seed}`, t)
+    show(`hard-${seed}`, t, task)
     // The bomb keeps its own rarity rules: a few launches in seven and a half years at most.
     expect(t.nukes).toBeLessThanOrEqual(2)
     expect(t.falseAlarms).toBeLessThanOrEqual(3)

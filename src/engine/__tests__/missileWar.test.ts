@@ -4,6 +4,8 @@ import { MISSILES, MISSILE_TYPES } from '../../data/missiles'
 import { SHIELD_STOPS } from '../../data/systems'
 import { clockOf } from '../calendar'
 import { worldTension } from '../crises'
+import { aircraftEffects, pastDefenses } from '../aircraft'
+import { AIRCRAFT_RULES } from '../../data/aircraft'
 import { advanceDay, startLive } from '../live'
 import { getsThrough, launchSite, missileStock, strikeHitsKind, validateMissileStrike } from '../missiles'
 import { answerShot, runFalseAlarms } from '../missileDoctrine'
@@ -13,7 +15,7 @@ import { orderCost, validateOrder } from '../orders'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, MissileType, Order } from '../types'
 import { checkInvariants } from './invariants'
-import { lineMap, setMilitary, startState } from './fixtures'
+import { giveRegions, lineMap, setMilitary, startState } from './fixtures'
 import { withOldMissiles } from './oldMissiles'
 
 vi.setConfig({ testTimeout: 120_000 })
@@ -302,6 +304,21 @@ describe('interceptors: the shield is a store that runs dry', () => {
     expect(salvoDefense(s, 'r0', 'r1', 'r1', 'cruise', 4, true).through).toBeCloseTo(salvoDefense(s, 'r0', 'r1', 'r1', 'cruise', 4).through, 9)
   })
 
+  it('a scrambled wing counts one and a half times: a small wing of hunters covers more of the sky', () => {
+    const s = war()
+    s.nations.r1.systems.shield = 1
+    s.nations.r1.aircraft = { hunters: { done: true } } as never
+    give(s, 'r1', { fighter: 1 })
+    const fx = aircraftEffects(s.nations.r1)
+    const base = getsThrough(1, 'cruise')
+    const hunted = AIRCRAFT_RULES.huntVs.cruise
+    const cold = Math.max(0.05, pastDefenses(base, undefined, fx, 1, hunted))
+    const hotHunters = Math.max(0.05, pastDefenses(base, undefined, fx, 1 * MW.scrambleWing, hunted))
+    expect(salvoDefense(s, 'r0', 'r1', 'r1', 'cruise', 4).through).toBeCloseTo(cold, 12)
+    expect(salvoDefense(s, 'r0', 'r1', 'r1', 'cruise', 4, true).through).toBeCloseTo(hotHunters * (1 - Math.min(0.3, MW.scrambleStop * hunted)), 12)
+    expect(hotHunters).toBeLessThan(cold)
+  })
+
   it('the parts a salvo was stopped by add up to what was stopped', () => {
     const s = war()
     s.nations.r1.systems.shield = 2
@@ -486,6 +503,10 @@ describe('bomber raids', () => {
     const s3 = war()
     ok(s3, raid())
     expect(validateOrder(s3, map, raid())).toMatch(/needs? a month|crews/)
+    const s5 = war()
+    s5.regions.r1.buildings.factory = 0
+    expect(validateOrder(s5, map, raid('site'))).toMatch(/No launch site/)
+    expect(validateOrder(s5, map, raid())).toBeNull()
     const s4 = war()
     s4.truces = { 'r0|r1': s4.turn + 3 }
     expect(validateOrder(s4, map, raid())).toMatch(/ceasefire/)
@@ -525,6 +546,21 @@ describe('doctrine: retaliation, launch on warning, false alarms', () => {
     doctrine(t, 'r0', 'retaliate')
     ok(t, fire('cruise', 4))
     expect(t.salvos!.length).toBe(2)
+  })
+
+  it('in a live game an automatic answer is never answered either, so two retaliating nations stop at two salvos', () => {
+    let s = startLive(war())
+    // r0 has a second launch site, so the counterforce answer that shuts its first one does not stop it answering.
+    giveRegions(s, 'r0', ['r2'])
+    s.regions.r2.buildings.factory = 2
+    s.wars = ['r0|r1']
+    s.nations.r1.arsenal = { cruise: 20 }
+    doctrine(s, 'r1', 'retaliate')
+    doctrine(s, 'r0', 'retaliate')
+    ok(s, fire('cruise', 4))
+    for (let i = 0; i < 12; i++) s = advanceDay(s, map, { planner: () => [] }).state
+    expect(s.flights).toHaveLength(0)
+    expect(s.salvos!.map((r) => [r.from, !!r.auto])).toEqual([['r0', false], ['r1', true]])
   })
 
   it('answers at the launch site that hit it, with counterforce, when that is a country with a factory', () => {

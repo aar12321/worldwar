@@ -1,6 +1,7 @@
 import { expect } from 'vitest'
 import { CAMPAIGNS } from '../../data/society'
 import { MISSILE_PROGRAM } from '../../data/missiles'
+import { MW } from '../../data/missileWar'
 import { LOCAL_IDS } from '../../data/localProjects'
 import { PROJECT_IDS } from '../../data/projects'
 import { levelMonths } from '../industry'
@@ -18,6 +19,17 @@ export function invariantProblems(s: GameState): string[] {
   const bad: string[] = []
   const check = (ok: boolean, what: string) => {
     if (!ok) bad.push(what)
+  }
+  // The missile war: tension in range, rounds and levels sane, reports capped.
+  check(s.missileTension === undefined || (real(s.missileTension) && s.missileTension > 0 && s.missileTension <= 100), `tension ${s.missileTension}`)
+  check((s.salvos?.length ?? 0) <= MW.keepSalvos, `salvo reports ${s.salvos?.length}`)
+  for (const n of Object.values(s.nations)) {
+    const w = n.missileWar
+    if (!w) continue
+    check(w.interceptors === undefined || (real(w.interceptors) && w.interceptors >= 0), `${n.id} interceptors ${w.interceptors}`)
+    check((w.radar ?? 0) <= MW.radarMax && (w.mobile ?? 0) <= MW.mobileMax, `${n.id} radar/mobile level`)
+    for (const [r, lvl] of Object.entries(w.batteries ?? {})) check(Number.isInteger(lvl) && lvl >= 1 && lvl <= MW.batteryMax, `${n.id} battery in ${r}: ${lvl}`)
+    for (const k of Object.keys(w.ledger ?? {}) as (keyof NonNullable<typeof w.ledger>)[]) check(real(w.ledger![k]) && w.ledger![k] >= -1e-9, `${n.id} ledger ${k}`)
   }
   const resources = ['capital', 'food', 'pp', 'tp', 'oil', 'steel', 'goods'] as const
   for (const n of Object.values(s.nations)) {

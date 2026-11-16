@@ -30,8 +30,8 @@ export function missileWarOrders(s: GameState, map: WorldMap, id: NationId, skil
   const home = Object.values(s.regions).filter((r) => r.owner === id).sort((a, b) => b.population - a.population || (a.id < b.id ? -1 : 1))
 
   // 1. De-escalation: as the world climbs the ladder, offer a ceasefire to a rival that would take it.
-  const want = skill === 2 ? 3 : 2
-  if (rung >= want || (skill === 1 && tension >= MW.truceTension[1])) {
+  // The offer is made once the tension reaches what a rival of this difficulty would accept (and only to a rival that would).
+  if (tension >= MW.truceTension[skill]) {
     for (const e of foes) if (trucePair(s, id, e) === null && !s.humans.includes(e) && truceAnswer(s, e).accepts) out.push({ type: 'missileTruce', nationId: id, target: e })
   }
 
