@@ -72,7 +72,28 @@ No kind wins every measure (`damage per money` test, 7 measures): cruise line pe
 counterforce, decoy interceptor drain per money, hypersonic speed (km a day). Hypersonic is the army's own unit and is paid for in the training queue.
 
 ### Sims (docs numbers are reproduced by `src/engine/__tests__/missileWarSim.test.ts`)
-SIM_TABLE
+Real map, bots in every seat, deterministic seeds. "Salvos" counts reports (missile salvos and raids); "counterforce" is strikes the rival ordered at launch
+sites (a doctrine's answer is under "auto"). Dead is millions of civilians killed by missiles and raids in the whole run.
+
+| Run | Months | Salvos | Missiles fired | Counterforce | Raids | Auto (doctrine) | Ceasefires | Nukes | False alarms | Peak tension | Dead (M) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Easy, organic (seed 3) | 60 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Normal, organic (seed 7) | 60 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Hard, organic (seed 5) | 90 | 8 | 3 | 0 | 7 | 0 | 0 | 0 | 0 | 35 | 7.5 |
+| Hard, organic (seed 11) | 58 | 8 | 0 | 0 | 8 | 0 | 0 | 0 | 0 | 5 | 1.6 |
+| Hard, organic (seed 23) | 90 | 11 | 0 | 0 | 11 | 0 | 6 | 0 | 0 | 53 | 13.7 |
+| Easy, stressed world war (seed 3) | 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Normal, stressed (seed 7) | 36 | 23 | 87 | 0 | 2 | 8 | 0 | 0 | 0 | 24 | 68.9 |
+| Hard, stressed (seed 5) | 36 | 32 | 21 | 2 | 28 | 1 | 0 | 0 | 1 | 30 | 17.4 |
+| Hard, stressed (seed 11) | 36 | 54 | 45 | 2 | 43 | 1 | 3 | 0 | 1 | 43 | 53.0 |
+
+"Stressed" gives the eight most populous nations a level-3 missile program, 12 cruise, 12 tactical, 6 ballistic and 12 decoys each, 8 hypersonic, a level-2 shield and
+three bomber and fighter divisions, split into two camps at war. Reading it: **no run reached a nuclear launch** (the bomb keeps its own rules), the world's tension
+stays under 55 (the ladder's top rung opens at 80), false alarms are rare (two in 72 stressed months, none organically), Easy never touches the war, Normal
+defends and answers (and, with the older strike logic it keeps, fires the most missiles and kills the most people, 87 missiles and 69 million dead in the stressed
+world), Hard prefers counterforce and bomber raids at the launchers (a quarter of Normal's dead for the same war) and offers ceasefires as the tension climbs (3 in
+the seed-11 war, 6 in an organic run). In the organic worlds rivals rarely get to missiles at all: a month-by-month war is what turns the game on. A raid is by far
+the most common Hard action; the missile stores of organic rivals are small because they build them only once at war.
 
 ## Tests
 - `missileWar.test.ts` (53): damage per kind, caps, urban, stability and reputation, economy and war score, the combat matrix, interceptors (rounds, decoys,
@@ -80,10 +101,10 @@ SIM_TABLE
   decay, ceasefire, turn/live parity, fuzz of malformed orders, the old rules with the war off.
 - `missileWarUi.test.ts` (17): looks, fx plans and caps, reduced motion, craters fading, radar ring, timeline stages, next steps (each button is a legal order), salvo text.
 - `missileWarSim.test.ts`: the AI by difficulty.
-- **Mutation checks:** 37 rule mutations were applied one at a time (rounds ignored, rounds never spent, batteries or radar stop nothing, counterforce at full harm,
+- **Mutation checks:** 40 rule mutations were applied one at a time (rounds ignored, rounds never spent, batteries or radar stop nothing, counterforce at full harm,
   mobile hide, cities, stability, weariness, ladder crime, counterforce tension, escorts, flak, stealth, raid cooldown, raid site rule, ceasefire, shut sites, answers
   that answer, launch on warning without radar, false-alarm radar and tension, quiet fade, regen, decoy drain, war score, scramble, recon, ceasefire answer and
-  cooling, nuclear tension, shut site, store kill, airfields, fuel): MUTATION_RESULT.
+  cooling, nuclear tension, shut site, store kill, airfields, fuel): every one was caught by a test (three survived the first pass: raid aimed at a country with no factory, an answer that answers an answer in a live game, and the scramble wing multiplier; tests were added and each now fails the mutation). Five AI rules (doctrine orders, counterforce, raids, ceasefire offers, Easy staying out) were mutated the same way against the sims: all caught except the redundant Easy guard inside the planner, which `bot.ts` already enforces.
 
 ## Goldens
 `turnGolden.test.ts`: the Hard-bot world and the small war are re-pinned (the Normal-bot world did not move). Proof: `withOldMissiles` (`MW.enabled = false`, legacy
