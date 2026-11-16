@@ -10,7 +10,7 @@ const sum = (u: Record<string, number>, kinds: string[]) => kinds.reduce((t, k) 
 const round05 = (v: number) => Math.round(v * 20) / 20
 
 /** Most of each arm a rival keeps on station, by skill (Easy, Medium, Hard). The rest stays free to attack with. */
-const CAP = { ground: [0.12, 0.25, 0.4], coastal: [0.25, 0.3, 0.3], subs: [0, 0.2, 0.4], air: [0.15, 0.25, 0.35] }
+const CAP = { ground: [0.1, 0.2, 0.3], coastal: [0.25, 0.3, 0.3], subs: [0, 0.2, 0.4], air: [0.15, 0.25, 0.35] }
 
 /** How much a neighbor worries a nation, from the war, the grievance, the incidents and the size of its army. A friend barely counts. */
 export function borderThreat(s: GameState, id: NationId, x: NationId): number {
@@ -35,7 +35,7 @@ export function plannedPosture(s: GameState, map: WorldMap, id: NationId, skill:
   const force = forceUnits(s, id)
   const atWarNow = s.wars.some((k) => k.split('|').includes(id))
   // A nation set on conquest keeps more of its army free.
-  const eager = atWarNow && n.aggression > 0.6 ? 0.75 : 1
+  const eager = atWarNow && n.aggression > 0.4 ? 0.75 : 1
   const out: Posture = { coastal: 0, subs: 0, air: 0, border: {} }
 
   const fronts = landBorders(s, map, id)

@@ -3,7 +3,7 @@ import { AIRCRAFT_RULES, type AircraftEffects } from '../data/aircraft'
 import { MISSILES, MISSILE_PROGRAM, MISSILE_TYPES, PROGRAM_MISSILES } from '../data/missiles'
 import { aircraftEffects, pastDefenses } from './aircraft'
 import { interceptFactor } from './combat'
-import { airPatrolStop } from './deployment'
+import { airPatrolStop, patrolFighters } from './deployment'
 import { addInfamy, addLog, atWar, canUseUnit, clamp, distanceKm } from './helpers'
 import type { GameState, MissileFlight, MissileType, Nation, NationId, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -107,7 +107,7 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   const fxD = aircraftEffects(victim)
   // The victim's air patrols shoot some of a salvo down before the shield does its work.
   const patrol = airPatrolStop(s, victim.id, kind)
-  const through = getsThrough(victim.systems?.shield ?? 0, kind, fxA || fxD ? { attacker: fxA, defender: fxD, fighters: victim.military.units.fighter } : undefined) * (1 - patrol)
+  const through = getsThrough(victim.systems?.shield ?? 0, kind, fxA || fxD ? { attacker: fxA, defender: fxD, fighters: victim.military.units.fighter + patrolFighters(s, victim.id) } : undefined) * (1 - patrol)
   const stopped = Math.round((1 - through) * 100)
   const parts: string[] = []
   if (spec.line > 0) {

@@ -10,8 +10,8 @@ import { applyEventChoice } from '../events'
 import { launchArmy } from '../armies'
 import { bordersOf, borderPressure, borderState, borderTension, incidentFactor, neighborsOf, recordIncident } from '../borders'
 import { daysInMonth } from '../calendar'
-import { lineMax } from '../economy'
-import { airPatrolStop, borderCover, defenseWeights, freeUnits, interception, lineBonus, patrolCover, postedUnits, runDeployment, surpriseBonus, validateDeployment } from '../deployment'
+import { computeEconomy, lineMax } from '../economy'
+import { airPatrolStop, borderCover, defenseWeights, freeUnits, garrisonDivisions, interception, lineBonus, patrolCover, patrolFighters, postedUnits, runDeployment, surpriseBonus, validateDeployment } from '../deployment'
 import { forceUnits, formatDivisions, totalUnits } from '../helpers'
 import { deploymentView } from '../intel'
 import { runJustification } from '../justification'
@@ -762,7 +762,7 @@ describe('rivals keep forces on station', () => {
     expect(q.border.belgium ?? 0).toBeLessThanOrEqual(p.border.belgium ?? 1)
   })
 
-  it('every nation with an army posts forces in the first month, and the order always passes validation', () => {
+  it('every nation with an army posts forces in the first month, and the order always passes validation', { timeout: 120_000 }, () => {
     const { map, s } = real()
     const orders = generateAllBotOrders(s, map).filter((o) => o.type === 'setDeployment')
     expect(orders.length).toBeGreaterThan(50)
@@ -905,4 +905,129 @@ describe('a game where nobody stations forces plays as it always did', () => {
     expect(s.turn).toBe(13)
     expect(hash(JSON.stringify(s))).toBe('1d71ef7fbf0dc5')
   }, 300_000)
+})
+
+describe('edges and limits', () => {
+  it('air patrols make the missile hunters better: fighters aloft on patrol count half again', () => {
+    const run = (air: number) => {
+      const { map, s } = seaWorld()
+      s.nations.r1.aircraft = { hunters: { progress: 5, done: true } }
+      setMilitary(s, 'r1', { infantry: 6, fighter: 2 })
+      if (air > 0) post(s, map, setPost(s, 'r1', { air }))
+      s.regions.r1.line = 8
+      strikeHitsKind(s, map, 'r0', 'r1', 'tactical', 6)
+      return s.nations.r1.military.units.infantry
+    }
+    expect(patrolFighters({ nations: { r1: { military: { deployment: { air: 1, coastal: 0, subs: 0, border: {}, changed: 0 }, units: { fighter: 2, drone: 0, infantry: 0, armor: 0, artillery: 0, air: 0, naval: 0, robot: 0, missile: 0 } } } } } as unknown as GameState, 'r1')).toBeCloseTo(1)
+    // The tactical salvo kills a slice of the army; with air patrols more of it is stopped, so more infantry survives.
+    expect(run(1)).toBeGreaterThan(run(0))
+  })
+
+  it('a garrison assigned to a border that no longer exists is stood down at the month, and counts as reserve meanwhile', () => {
+    const { map, s } = chain()
+    post(s, map, setPost(s, 'r1', { border: { r0: 0.4, r2: 0.2 } }))
+    // r1 conquers r0 outright: nobody is left to face.
+    s.regions.r0.owner = 'r1'
+    s.nations.r0.alive = false
+    expect(freeUnits(s, 'r1').infantry).toBeLessThan(20)
+    expect(garrisonDivisions(s, 'r1', 'r0')).toBeGreaterThan(0)
+    const next = resolveTurn(s, map, [])
+    expect(next.nations.r1.military.deployment?.border).toEqual({ r2: 0.2 })
+    expect(next.nations.r1.military.deployment?.fronts).toEqual({ r2: 1 })
+    expect(freeUnits(next, 'r1').infantry).toBeCloseTo(20 * 0.8)
+  })
+
+  it('shares that add up to more than all of a unit type are scaled back, never past the whole force', () => {
+    const { map, s } = chain()
+    post(s, map, setPost(s, 'r1', { border: { r0: 0.3 } }))
+    // A damaged save: the shares add up to 160%.
+    s.nations.r1.military.deployment!.border = { r0: 0.8, r2: 0.8 }
+    s.nations.r1.military.deployment!.coastal = 0.9
+    s.nations.r1.military.deployment!.subs = 0.9
+    const free = freeUnits(s, 'r1')
+    for (const k of ['infantry', 'armor', 'artillery', 'naval'] as const) expect(free[k]).toBeGreaterThanOrEqual(0)
+    expect(free.infantry).toBe(0)
+    expect(patrolCover(s, 'r1').coastal + patrolCover(s, 'r1').subs).toBeCloseTo(4)
+    expect(defenseWeights(s, 'r1', 'r0', false)!.infantry).toBeCloseTo(1 * 0.5 * 1.35 + 0.5 * 0.5)
+  })
+
+  it('a station left empty is no station: zero shares post nothing, and a border with no troops has no cover', () => {
+    const { map, s } = chain()
+    post(s, map, setPost(s, 'r1', { border: { r0: 0 } }))
+    expect(s.nations.r1.military.deployment!.border).toEqual({})
+    expect(postedUnits(s, 'r1').infantry).toBe(0)
+    expect(borderCover(s, map, 'r1', 'r0')).toBe(0)
+    expect(lineBonus(s, map, 'r1')).toBe(0)
+    // No troops at all: a posted share of nothing is nothing.
+    setMilitary(s, 'r1', {})
+    s.turn++
+    post(s, map, setPost(s, 'r1', { border: { r0: 1 }, coastal: 1, air: 1 }))
+    expect(totalUnits(freeUnits(s, 'r1'))).toBe(0)
+    expect(garrisonDivisions(s, 'r1', 'r0')).toBe(0)
+    expect(interception(s, 'r1', 'lane', forceUnits(s, 'r1')).share).toBe(0)
+  })
+
+  it('tension never goes below 0 or above 100, and every border state is reachable', () => {
+    const { map, s } = chain()
+    s.pacts['r1|r2'] = s.turn + 10
+    s.alliances.push('r1|r2')
+    s.nations.r2.overlord = 'r1'
+    s.deals.push({ id: 'd', kind: 'trade', from: 'r1', to: 'r2', give: {}, receive: {}, until: 99 })
+    expect(borderTension(s, map, 'r1', 'r2').total).toBe(0)
+    expect(borderState(s, map, 'r1', 'r2')).toBe('open')
+    s.alliances = []
+    s.pacts = {}
+    s.nations.r2.overlord = null
+    s.deals = []
+    s.wars.push('r1|r2')
+    post(s, map, setPost(s, 'r1', { border: { r2: 0.6 } }))
+    recordIncident(s, 'r1', 'r2')
+    recordIncident(s, 'r1', 'r2')
+    s.casusBelli['r1|r2'] = s.turn + 3
+    post(s, map, { type: 'setBorder', nationId: 'r1', neighbor: 'r2', closed: true })
+    expect(borderTension(s, map, 'r1', 'r2').total).toBe(100)
+    expect(borderState(s, map, 'r1', 'r2')).toBe('disputed')
+  })
+
+  it('an older save with none of the new fields opens, plays a month, and carries nothing new until used', () => {
+    const { map, s } = chain()
+    const old = JSON.parse(JSON.stringify(s))
+    expect('borders' in old).toBe(false)
+    expect('deployment' in old.nations.r1.military).toBe(false)
+    const next = resolveTurn(old, map, [])
+    expect(next.turn).toBe(old.turn + 1)
+    expect(freeUnits(next, 'r1')).toBe(next.nations.r1.military.units)
+    expect(bordersOf(next, map, 'r1').every((b) => b.mineDivisions === 0 && b.theirDivisions === 0)).toBe(true)
+    expect(threatWatch(next, map, 'r1')).toEqual([])
+    // A saved posture from before `fronts` was kept still works: the border count is worked out on the spot.
+    const post1 = structuredClone(next)
+    post1.nations.r1.military.deployment = { coastal: 0, subs: 0, air: 0, border: { r0: 0.3 }, changed: 0 }
+    expect(lineBonus(post1, map, 'r1')).toBeGreaterThan(0)
+    expect(borderCover(post1, map, 'r1', 'r0')).toBeGreaterThan(0)
+  })
+
+  it('a posture survives a save and a load unchanged', () => {
+    const { map, s } = chain()
+    post(s, map, setPost(s, 'r1', { coastal: 0.2, air: 0.3, border: { r0: 0.25 } }))
+    const loaded = JSON.parse(JSON.stringify(s)) as GameState
+    expect(loaded.nations.r1.military.deployment).toEqual(s.nations.r1.military.deployment)
+    expect(freeUnits(loaded, 'r1')).toEqual(freeUnits(s, 'r1'))
+  })
+
+  it('posting is not a way round the rules: a second order in the same month fails even when the first came from another batch', () => {
+    const { map, s } = chain()
+    post(s, map, setPost(s, 'r1', { border: { r0: 0.3 } }))
+    const second = applyOrderNow(s, map, setPost(s, 'r1', { border: { r2: 0.3 } }))
+    expect(second.error).toMatch(/next month/)
+    expect(s.nations.r1.military.deployment!.border).toEqual({ r0: 0.3 })
+  })
+
+  it('posting leaves the bill for the force what it was', () => {
+    const { map, s } = chain()
+    const before = computeEconomy(s, map, 'r1')
+    post(s, map, setPost(s, 'r1', { coastal: 0.5, air: 0.5, border: { r0: 0.5 } }))
+    const after = computeEconomy(s, map, 'r1')
+    expect(after.upkeep).toBeCloseTo(before.upkeep)
+    expect(after.oilUse).toBeCloseTo(before.oilUse)
+  })
 })

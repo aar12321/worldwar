@@ -38,6 +38,8 @@ export const STATION = {
   /** Air patrols shoot down this share of a missile salvo for each division on patrol, at most `missileStopMax`, scaled by the missile. */
   missileStopPer: 0.06,
   missileStopMax: 0.3,
+  /** The extra share of a fighter on air patrol that counts toward a missile-hunting wing. */
+  patrolCue: 0.5,
   missileCatch: { cruise: 1, tactical: 0.7, hypersonic: 0.25, ballistic: 0 } as Record<MissileType, number>,
   /** Influence it costs to close a border. Reopening is free. */
   closeCost: 3,

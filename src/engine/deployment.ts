@@ -217,6 +217,13 @@ export function airPatrolStop(s: GameState, victim: NationId, kind: MissileType)
   return Math.min(STATION.missileStopMax, STATION.missileStopPer * patrolCover(s, victim).air) * STATION.missileCatch[kind]
 }
 
+/** What fighters on air patrol add to a missile-hunting wing: they are already aloft and cued by the patrol's radar, so each counts half again. */
+export function patrolFighters(s: GameState, victim: NationId): number {
+  const d = s.nations[victim]?.military.deployment
+  if (!d) return 0
+  return STATION.patrolCue * forceUnits(s, victim).fighter * Math.min(1, d.air)
+}
+
 /**
  * How much stronger a first strike makes `attacker` when it crosses a border `defender` is not guarding, in the first months of a
  * war. Zero for a nation that has no posture, and for a border that is fully guarded.
