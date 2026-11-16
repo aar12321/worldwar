@@ -16,6 +16,8 @@ import { powerView, showPower } from '../engine/intel'
 import { validateOrder } from '../engine/orders'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
 import { garrisonStrength } from '../engine/warfare'
+import { outlookAt, roughOdds } from '../engine/forecast'
+import { commandLevel } from '../engine/commander'
 import { netWarScore } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
@@ -57,6 +59,9 @@ export function CountryPanel() {
   const myPower = militaryPower(game, player.id)
   const theirView = mine ? { value: myPower, exact: true } : powerView(game, player.id, owner.id)
   const theirPower = theirView.value
+  const odds = war ? outlookAt(game, map, player.id, selected) : null
+  const exactOdds = commandLevel(game, player.id) >= 1
+  const oddsText = (f: { winChance: number }) => (exactOdds ? `${Math.round(f.winChance * 100)}%` : roughOdds(game, player.id, selected, f.winChance).text.replace('about ', '~'))
   const settling = region.integration < 1
   const purpose = mine
     ? settling
@@ -107,6 +112,18 @@ export function CountryPanel() {
             <div className="h-2.5 rounded-full bg-[#ff453a]/70 overflow-hidden" role="img" aria-label={`Your strength ${myPower.toFixed(0)} against ${showPower(theirView)}`}>
               <div className="h-full bg-[#0a84ff]" style={{ width: `${(myPower / Math.max(1, myPower + theirPower)) * 100}%` }} />
             </div>
+            {war && (
+              <p className="text-[12.5px] leading-snug text-white/70" title="Strength adds up what each unit is worth. It leaves out their garrison, the terrain, the Defense Line, the stance and how much of your force goes, and the defender wins ties.">
+                Strength is not odds.{' '}
+                {odds ? (
+                  <>
+                    Attacking {mr.name} now: a main force wins <b className="text-white/90">{oddsText(odds.main)}</b>, everything <b className="text-white/90">{oddsText(odds.allin)}</b>.
+                  </>
+                ) : (
+                  'Out of reach for now: odds appear when you can attack. A main force usually needs about twice their strength to be sure.'
+                )}
+              </p>
+            )}
             <div className="flex flex-wrap gap-1.5 pt-0.5">
               {UNIT_TYPES.filter((u) => owner.military.units[u] >= 0.05).map((u) => (
                 <span key={u} className="chip" title={`${owner.name}'s ${u}`}>

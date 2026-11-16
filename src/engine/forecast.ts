@@ -297,6 +297,17 @@ export function forecastMemo(s: GameState, map: WorldMap, nationId: NationId, pl
   return f
 }
 
+/**
+ * What the Military strength bars cannot say: the real chance of winning at one country with a main force and with everything,
+ * from the same fight the battle draws. Strength adds up what each unit is worth; it leaves out the garrison, the terrain, the Defense Line,
+ * the stance, how much of the force goes and that the defender wins ties, so a nation twice as strong can still lose a main-force attack.
+ */
+export function outlookAt(s: GameState, map: WorldMap, nationId: NationId, target: RegionId): { main: Forecast; allin: Forecast } | null {
+  const main = forecastMemo(s, map, nationId, { target, stance: 'assault', commit: 'main' }, 48)
+  const allin = forecastMemo(s, map, nationId, { target, stance: 'assault', commit: 'allin' }, 48)
+  return main && allin ? { main, allin } : null
+}
+
 // --- What a player without AI Battle Command is told -----------------------------------------------------------------
 
 export interface RoughOdds {
