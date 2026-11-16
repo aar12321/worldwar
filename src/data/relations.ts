@@ -131,8 +131,6 @@ export const AID = {
   max: 16,
   needMult: { dire: 2.2, short: 1.4, ok: 1, flush: 0.4 },
   amounts: [8, 16, 32] as const,
-  /** Flat favour for aid to a nation in dire need. */
-  favourAt: 'dire',
 }
 
 /** Gentleness of a venture and of other programs, and what they pay. */
