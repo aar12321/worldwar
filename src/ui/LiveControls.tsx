@@ -3,8 +3,10 @@ import { incomingArmies } from '../engine/armies'
 import { absDay, clockOf, dayDate, daysInMonth } from '../engine/calendar'
 import type { GameState } from '../engine/types'
 import { getWorld } from '../map/world'
+import { incomingMissiles } from '../engine/missiles'
 import { liveHold, useGame, type Hold } from '../store'
 import { liveClock } from './liveClock'
+import { incomingSalvos, incomingText } from './missileText'
 
 /** The short reason, for the button itself. */
 const HOLD_SHORT: Record<Hold, string> = {
@@ -176,6 +178,27 @@ export function NukeChip() {
         NUCLEAR MISSILE from {game.nations[first.nationId]?.name ?? 'an enemy'} · {place} in {days} day{days === 1 ? '' : 's'}
       </span>
       <span className="text-white/65 shrink-0">Offer peace ›</span>
+    </button>
+  )
+}
+
+/** The game while missiles are on their way to the player's countries, else nothing. */
+const struckAt = (s: { game: GameState | null }) => {
+  const g = s.game
+  return g && incomingMissiles(g, g.playerId).length > 0 ? g : null
+}
+
+/** A warning when enemy missiles are in the air toward you: who fired them and how many days are left. Opens the Systems tab (shield, missile program). */
+export function IncomingMissilesChip() {
+  const game = useGame(struckAt)
+  const open = useGame((s) => s.openMilitary)
+  if (!game) return null
+  const salvos = incomingSalvos(game, game.playerId)
+  return (
+    <button className="advice-pill pointer-events-auto live-alert" onClick={() => open('systems')} title="Raise an Interceptor Shield or build missiles to answer" data-alert="missiles">
+      <span className="w-2 h-2 rounded-full shrink-0 bg-[#bf5af2]" />
+      <span className="truncate">{incomingText(salvos)}</span>
+      <span className="text-white/65 shrink-0">Systems ›</span>
     </button>
   )
 }

@@ -6,6 +6,7 @@ import type { Army, BattleReport, GameState, NationId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { battleLine, scenesFor } from './battleText'
 import { useFx } from './globeBridge'
+import { MISSILE_SWATCH, landedEffect, missileName } from './missileText'
 
 type Tone = 'info' | 'error' | 'success'
 
@@ -110,11 +111,14 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
       case 'missile': {
         const target = e.flight.target
         const impact = map.regions[target]
+        const kind = e.flight.kind ?? 'hypersonic'
+        // "4 cruise missiles" / "1 hypersonic missile": the kind and the number, so a retaliation is plain to read.
+        const salvo = `${e.flight.count} ${missileName(kind, e.flight.count)}`
         if (e.landed && impact) {
-          useFx.getState().addRing({ lat: impact.lat, lng: impact.lng, color: '#ff9f0a', maxRadius: 2.6 }, 1600)
-          if (e.flight.nationId === player) say('success', `Your missiles hit ${place(target)}.`)
-          else if (game.regions[target]?.owner === player) say('error', `Missiles from ${nation(e.flight.nationId)} hit ${place(target)}.`)
-        } else if (e.flight.nationId === player) say('error', `Your missiles were wasted: ${e.why === 'taken' ? `${place(target)} was already yours when they landed` : e.why === 'changed' ? `${place(target)} changed hands before they landed` : 'the war ended before they landed'}.`)
+          useFx.getState().addRing({ lat: impact.lat, lng: impact.lng, color: MISSILE_SWATCH[kind], maxRadius: kind === 'ballistic' ? 3.6 : 2.6 }, 1600)
+          if (e.flight.nationId === player) say('success', `Your ${salvo} hit ${place(target)}: ${landedEffect(kind)}.`)
+          else if (game.regions[target]?.owner === player) say('error', `${nation(e.flight.nationId)} struck ${place(target)} with ${salvo}: ${landedEffect(kind)}. Answer from the War Room.`)
+        } else if (e.flight.nationId === player) say('error', `Your ${salvo} were wasted: ${e.why === 'taken' ? `${place(target)} was already yours when they landed` : e.why === 'changed' ? `${place(target)} changed hands before they landed` : 'the war ended before they landed'}.`)
         break
       }
       case 'nukeLaunched': {

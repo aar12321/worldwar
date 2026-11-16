@@ -13,6 +13,7 @@ export function Modal({
   footer,
   onClose,
   wide = false,
+  huge = false,
   tone,
 }: {
   title: string
@@ -22,6 +23,8 @@ export function Modal({
   /** Called on Escape. Leave out for a dialog that must be answered. */
   onClose?: () => void
   wide?: boolean
+  /** Nearly the whole screen: for a big tree or table. */
+  huge?: boolean
   tone?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -63,7 +66,7 @@ export function Modal({
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className={`modal surface ${wide ? 'modal-wide' : ''}`}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className={`modal surface ${wide ? 'modal-wide' : ''} ${huge ? 'modal-huge' : ''}`}>
         <div className="modal-head flex items-start justify-between gap-4">
           <div>
             {kicker && (

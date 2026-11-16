@@ -1,4 +1,5 @@
 import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
+import type { AircraftNodeId } from '../data/aircraft'
 import type { SystemId } from '../data/systems'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
@@ -137,6 +138,13 @@ export interface SocialState {
 export interface CampaignState {
   left: number
   cooldown: number
+}
+
+/** One aircraft development: months of work done, whether it is finished, and whether the work is on hold (which frees its slot). */
+export interface AircraftState {
+  progress: number
+  done: boolean
+  paused?: boolean
 }
 
 export interface ProjectState {
@@ -357,6 +365,8 @@ export interface Nation {
   struckBy?: Record<NationId, number>
   /** The nuclear program of a Superpower: warheads in store and under construction. Absent until the first one is ordered. */
   nuclear?: NuclearState
+  /** Aircraft developments begun or finished (see `data/aircraft.ts`). Absent until the first one is started, so a nation that never uses them is unchanged. */
+  aircraft?: Partial<Record<AircraftNodeId, AircraftState>>
   /** Social programs in force. Absent until the first one is set, so a nation that never uses them is unchanged. */
   social?: Partial<Record<SocialId, SocialState>>
   /** Campaigns running or cooling down. Absent until the first one is run. */
@@ -567,7 +577,7 @@ export type Order =
   | { type: 'marketBuy'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'marketSell'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'setAutoBuy'; nationId: NationId; resources: TradeResource[] }
-  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many missiles to fire in this battle. Left out, a share of them fire with the force sent. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number; /** The coalition strike this attack belongs to: in a live game every attack of one strike leaves on the same day. */ joint?: string }
+  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many hypersonic missiles to fire in this battle. Left out, none: an attack never carries missiles it was not told to. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number; /** The coalition strike this attack belongs to: in a live game every attack of one strike leaves on the same day. */ joint?: string }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'buildCase'; nationId: NationId; target: NationId }
@@ -591,6 +601,10 @@ export type Order =
   | { type: 'buildWarhead'; nationId: NationId }
   /** Fires a nuclear warhead at a country of a nation you are at war with. */
   | { type: 'nuke'; nationId: NationId; target: RegionId }
+  /** Starts an aircraft development (research is paid now, money month by month). */
+  | { type: 'startAircraftDev'; nationId: NationId; node: AircraftNodeId }
+  /** Puts a development on hold, which frees its slot and its monthly bill, or takes it up again. */
+  | { type: 'pauseAircraftDev'; nationId: NationId; node: AircraftNodeId; paused: boolean }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId; /** How many levels to buy at once. One if left out. */ levels?: number }
   | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
   | { type: 'buyShares'; nationId: NationId; company: string; shares: number }

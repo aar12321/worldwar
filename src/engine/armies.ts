@@ -1,4 +1,5 @@
 import { MISSILES } from '../data/missiles'
+import { airReach } from './aircraft'
 import { launchSite, strikeKind } from './missiles'
 import { LIVE } from '../data/live'
 import { GENERAL_TRAITS } from '../data/projects'
@@ -69,7 +70,7 @@ export function launchPoint(s: GameState, map: WorldMap, nationId: NationId, tar
     for (const r of Object.values(s.regions)) {
       if (r.owner !== nationId || !map.regions[r.id]) continue
       const km = distanceKm(map.regions[r.id], t)
-      if (via === 'fleet' ? r.buildings.port > 0 && km <= REACH.seaKm : r.buildings.factory > 0 && km <= REACH.airKm) candidates.push(r.id)
+      if (via === 'fleet' ? r.buildings.port > 0 && km <= REACH.seaKm : r.buildings.factory > 0 && km <= airReach(s.nations[nationId])) candidates.push(r.id)
     }
   }
   let best: RegionId | null = null
@@ -128,12 +129,10 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
     units[k] = take
     n.military.units[k] -= take
   }
-  // The player may choose exactly how many missiles go along. Otherwise they go in the same share as everything else.
-  if (o.missiles !== undefined) {
-    n.military.units.missile += units.missile
-    units.missile = Math.min(Math.max(0, Math.floor(o.missiles)), Math.floor(n.military.units.missile + 1e-9))
-    n.military.units.missile -= units.missile
-  }
+  // Only the missiles the order names go along, none if it names none: a share of the stock never leaves by itself.
+  n.military.units.missile += units.missile
+  units.missile = Math.min(Math.max(0, Math.floor(o.missiles ?? 0)), Math.floor(n.military.units.missile + 1e-9))
+  n.military.units.missile -= units.missile
   const m = n.military
   m.attacksThisTurn = m.lastAttackTurn === s.turn ? m.attacksThisTurn + 1 : 1
   m.lastAttackTurn = s.turn
