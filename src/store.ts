@@ -3,6 +3,7 @@ import { generateAllBotOrders } from './ai/bot'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
 import type { AdviceTarget, PeopleSection } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
+import { factionNews } from './engine/factions'
 import { maxAttacks, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
 import { markMonth, statsOf } from './engine/monthMark'
@@ -33,13 +34,13 @@ export const SLOT_COUNT = 3
 export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 /** The five desks, plus News and Settings which open from the top bar. */
-export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
-export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
+export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'faction' | 'empire' | 'log' | 'settings'
+export type EmpireTab = 'overview' | 'provinces' | 'world' | 'reaction' | 'stats'
 export type { PeopleSection }
-export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
-export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
+export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'space' | 'market' | 'stocks' | 'government'
+export type MilitaryTab = 'forces' | 'deploy' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
-export type MapMode = 'political' | 'relations' | 'fronts'
+export type MapMode = 'political' | 'relations' | 'fronts' | 'borders'
 
 export interface PolicyPatch {
   taxRate?: number
@@ -265,6 +266,8 @@ interface GameStore {
   /** Follows an advisor button to the desk, tab, country or window it points at. */
   goTo(target: AdviceTarget): void
   openDiplomacy(nationId: NationId | null, opts?: { peace?: boolean }): void
+  /** Opens the Faction desk. */
+  openFaction(): void
   issueOrder(order: Order): boolean
   /** Issues several orders at once, one save and one summary. Returns how many went through. */
   issueBatch(orders: Order[]): { done: number; failed: number }
@@ -485,6 +488,7 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'leaveAlliance' || order.type === 'breakPact') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
   if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital') && (order.count === undefined || Number.isInteger(order.count))
+  if (order.type === 'nuke') return typeof order.target === 'string'
   if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)
   if (order.type === 'setDirective') return typeof order.company === 'string' && ['payout', 'expand', 'focus'].includes(order.directive)
   if (order.type === 'operation') return typeof order.target === 'string' && typeof order.op === 'string'
@@ -492,6 +496,13 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'fundAgency') return order.agency === 'foreign' || order.agency === 'domestic'
   if (order.type === 'crisisAction') return typeof order.crisisId === 'string' && ['aid', 'mediate', 'support'].includes(order.action)
   if (order.type === 'eventChoice') return Number.isInteger(order.index)
+  if (order.type === 'factionFound') return typeof order.name === 'string'
+  if (order.type === 'factionJoin') return typeof order.factionId === 'string'
+  if (order.type === 'factionInvite') return typeof order.target === 'string'
+  if (order.type === 'factionLeave') return true
+  if (order.type === 'factionContribute' || order.type === 'factionWithdraw') return !!order.gift && typeof order.gift === 'object'
+  if (order.type === 'factionPropose') return !!order.proposal && (order.proposal.kind === 'war' ? typeof order.proposal.target === 'string' : order.proposal.kind === 'contract' && !!order.proposal.terms)
+  if (order.type === 'factionVote') return typeof order.proposalId === 'string' && (order.vote === 'yes' || order.vote === 'no')
   return false
 }
 
@@ -609,6 +620,8 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
     .sort((a, b) => Number(b.defender.nationId === player && b.attacker.nationId !== 'rebels') - Number(a.defender.nationId === player && a.attacker.nationId !== 'rebels'))
   const fx = scenesFor(settings.battleScenes, player, mine)
   for (const b of mine) if (b.captured) flashCapture(b.regionId, b.defender.nationId === player, next.nations[player]?.color ?? '#fff')
+  // A faction vote that needs you, an invitation, a contract that began or ended: said once, whether the report is on or not.
+  for (const text of factionNews(before === next ? null : before, next, player).slice(0, 3)) toast(text, 'info', 7000)
   // With the report off, the turn's big moments still get a line.
   if (!settings.monthlyReport) {
     const mineNews = next.dispatches.filter((d) => d.to === player || d.from === player)
@@ -982,6 +995,9 @@ export const useGame = create<GameStore>((set, get) => ({
       case 'diplomacy':
         get().openDiplomacy(target.nation ?? null)
         break
+      case 'faction':
+        get().openFaction()
+        break
       case 'warRoom':
         set({ selectedRegion: target.region, warRoom: target.region })
         break
@@ -997,6 +1013,10 @@ export const useGame = create<GameStore>((set, get) => ({
 
   openDiplomacy(nationId, opts) {
     set({ panel: 'diplomacy', diploFocus: nationId, diploPeace: !!opts?.peace })
+  },
+
+  openFaction() {
+    set({ panel: 'faction', diploFocus: null })
   },
 
   issueOrder(order) {
@@ -1030,6 +1050,8 @@ export const useGame = create<GameStore>((set, get) => ({
     if (order.type === 'respond') rest = orders.filter((o) => !(o.type === 'respond' && o.proposalId === order.proposalId))
     // A player can change their mind about a decision until the month ends.
     else if (order.type === 'eventChoice') rest = orders.filter((o) => o.type !== 'eventChoice')
+    // A vote can be changed until the month ends: the last one counts.
+    else if (order.type === 'factionVote') rest = orders.filter((o) => !(o.type === 'factionVote' && o.proposalId === order.proposalId))
     const err = validateOrder(game, map, order, rest)
     if (err) {
       get().toast(err, 'error')
@@ -1165,6 +1187,7 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ warRoom: null, aircraftOpen: false })
     const queue = settings.battleScenes === 'off' ? [] : [result.battle]
     if (result.battle.captured) flashCapture(target, false, next.nations[game.playerId].color)
+    if (result.battle.intercept) get().toast(`Their patrols met your landing at sea and sank ${result.battle.intercept.sunk.toFixed(1)} divisions of it.`, 'error', 5000)
     set({ game: next, fxQueue: [...get().fxQueue, ...queue], fxTotal: get().fxQueue.length + queue.length })
     if (!queue.length) {
       const name = map.regions[target].name
@@ -1240,6 +1263,7 @@ export const useGame = create<GameStore>((set, get) => ({
       // The month's diplomacy still gets a line while the clock runs: wars declared on you, offers, answers.
       const news = step.state.dispatches.filter((d) => d.to === game.playerId || d.from === game.playerId)
       for (const d of news.slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
+      for (const text of factionNews(game, step.state, game.playerId).slice(0, 3)) st.toast(text, 'info', 7000)
       const failed = step.state.log.filter((e) => e.turn === game.turn && e.text.startsWith('Order failed') && e.nations.includes(game.playerId))
       if (failed.length) st.toast(failed.length === 1 ? failed[0].text : `${failed.length} orders failed at the month's end. See the report.`, 'error', 7000)
       save(patch.game!, [])

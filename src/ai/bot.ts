@@ -1,4 +1,7 @@
 import { MISSILE_TYPES } from '../data/missiles'
+import { COALITION } from '../data/coalition'
+import { dueStrike, jointTarget, leadersOf, type ThreatReport } from '../engine/coalition'
+import { aiNuclearOrder } from '../engine/nuclear'
 import { wantedAircraft } from '../engine/aircraft'
 import { buildRoom, fundMissilesCost, missileStock, programLevel, recentAttackers } from '../engine/missiles'
 import { levelCost } from '../data/agencies'
@@ -15,17 +18,20 @@ import { recentlyProposed } from '../engine/diplomacy'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { atWar, clamp, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex } from '../engine/helpers'
 import { homePower, militaryPower } from '../engine/militaryStats'
+import { deploymentOrder } from './deployment'
 import { validateOrder } from '../engine/orders'
 import { clockMonth } from '../engine/calendar'
 import { createRng, type Rng } from '../engine/rng'
 import { MARKET_GOODS, marketPrices, stockOf, tradeRoom, type MarketPrices } from '../engine/trade'
 import type { BuildingType, GameState, MissileType, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
 import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
+import { canAttackRegion } from '../engine/warfare'
 import { MAX_REPARATIONS, puppetValue, regionValue } from '../engine/warscore'
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
 import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
 import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
+import { factionBotOrders } from './factions'
 
 export const BOT = {
   firstWarTurn: 3,
@@ -64,6 +70,8 @@ export interface TurnContext {
   inbox: Map<NationId, number>
   /** Wars already declared on each human. */
   warsOn: Map<NationId, number>
+  /** The human leaders the world is alarmed by, the most alarming first. Empty until a human reaches a Regional power, and always empty on Easy. */
+  leaders: ThreatReport[]
 }
 
 export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
@@ -107,6 +115,7 @@ export function buildTurnContext(s: GameState, map: WorldMap): TurnContext {
     proposalsTo: new Map(s.humans.map((h) => [h, 0])),
     inbox: new Map(s.humans.map((h) => [h, s.proposals.filter((p) => p.to === h).length])),
     warsOn: new Map(s.humans.map((h) => [h, (enemies.get(h) ?? []).filter((e) => !e.startsWith('free-')).length])),
+    leaders: difficultyOf(s.settings.difficulty).coalitions ? leadersOf(s, map, COALITION.allyFrom).map((l) => l.threat) : [],
   }
 }
 
@@ -193,7 +202,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
 
   for (const p of s.proposals) {
     if (p.to !== nationId) continue
-    const v = evaluateProposal(s, map, nationId, p, rng, ctx.prices)
+    const v = evaluateProposal(s, map, nationId, p, rng, ctx.prices, ctx.leaders)
     tryAdd({ type: 'respond', nationId, proposalId: p.id, accept: v.accept })
   }
 
@@ -226,6 +235,11 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   }
 
   if (!n.military.commanderId && n.generals.length > 0) tryAdd({ type: 'assignGeneral', nationId, generalId: n.generals[0].id })
+
+  // Active military: every rival keeps forces on station, more of them and better placed the higher the difficulty. Easy rivals only
+  // post a token garrison and patrol; they also leave the posture alone once set.
+  const posture = deploymentOrder(s, map, nationId, diff.skill as 0 | 1 | 2)
+  if (posture) tryAdd(posture)
 
   const reserve = 15
   let budget = Math.max(0, n.resources.capital - reserve)
@@ -278,6 +292,11 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
           if (money < systemCost(system, n.systems?.[system] ?? 0) + 150) continue
           if (tryAdd({ type: 'fundSystem', nationId, system })) return true
         }
+      }
+      // A Superpower rival builds the bomb when it is rich and at war, and fires it only when it is desperate or provoked.
+      if (diff.skill === 2) {
+        const bomb = aiNuclearOrder(s, map, nationId, rng)
+        if (bomb && tryAdd(bomb)) return true
       }
       // Struck lately? A rival that can answer does, with what it has, at whoever hit it.
       if (diff.skill >= 1) {
@@ -519,6 +538,21 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         }
       }
 
+      // A leader the world is alarmed by draws its rivals together: those near it, or at war with it, look for partners who fear it too.
+      const leader = ctx.leaders.find((l) => l.nation !== nationId && l.pressure >= COALITION.allyFrom)
+      if (leader) {
+        const cap = diff.maxAlliances + (diff.skill === 2 && leader.pressure >= COALITION.extraAlliance ? 1 : 0)
+        const lNeighbors = ctx.neighbors.get(leader.nation) ?? new Set<NationId>()
+        const afraid = (id: NationId) => lNeighbors.has(id) || enemiesOf(leader.nation).includes(id)
+        if (allies.length < cap && afraid(nationId) && rng.chance(COALITION.driveChance * Math.min(1, leader.pressure))) {
+          const partner = [...new Set([...myNeighbors, ...lNeighbors])]
+            .sort()
+            .filter((x) => x !== nationId && x !== leader.nation && s.nations[x]?.alive && !humans.has(x) && afraid(x) && !isAllied(s, nationId, x) && !atWar(s, nationId, x) && alliesOf(x).length < cap && opinion(x) >= -5 && !recentlyProposed(s, nationId, x, 'alliance', 8))
+            .sort((a, b) => perceived(b) - perceived(a) || (a < b ? -1 : 1))[0]
+          if (partner && proposeTo(partner, { kind: 'alliance' })) return true
+        }
+      }
+
       // A skilled bot also looks for a strong friend to stand with, so blocs form even in quiet times.
       if (diff.skill >= 1 && allies.length < diff.maxAlliances && rng.chance(BOT.allyDrive * (diff.skill === 2 ? 1.5 : 1))) {
         const friend = [...myNeighbors]
@@ -541,6 +575,21 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       const maxWars = n.personality === 'turtle' ? 1 : 2
       if (enemies.length >= maxWars || s.turn < BOT.firstWarTurn || mistake === 'hesitant') return false
       if (n.warWeariness > 25) return false
+      const playerCap = diff.maxWarsOnPlayer + (ctx.coalition ? 1 : 0)
+      // The strongest tier presses the war of a friend against a leader the world fears: it opens a front of its own, if it can reach it.
+      if (diff.skill === 2) {
+        for (const lead of ctx.leaders) {
+          const id = lead.nation
+          if (lead.pressure < COALITION.pressFrom || atWar(s, nationId, id) || hasPact(s, nationId, id) || isAllied(s, nationId, id)) continue
+          if (!alliesOf(nationId).some((a) => atWar(s, a, id)) || (ctx.warsOn.get(id) ?? 0) >= playerCap) continue
+          if (!(ctx.regions.get(id) ?? []).some((r) => canAttackRegion(s, map, nationId, r).ok) || !rng.chance(0.4 * Math.min(1, lead.pressure))) continue
+          if (!hasCasusBelli(s, nationId, id)) return tryAdd({ type: 'operation', nationId, op: 'case', target: id }) || tryAdd({ type: 'buildCase', nationId, target: id })
+          if (tryAdd({ type: 'declareWar', nationId, target: id })) {
+            ctx.warsOn.set(id, (ctx.warsOn.get(id) ?? 0) + 1)
+            return true
+          }
+        }
+      }
       // ---- strategy hook: the target is chosen from reach, odds, distraction, threats behind and the posture ----
       const best = chooseWarTarget(sight, strat, mistake)
       if (!best) return false
@@ -568,13 +617,27 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
     if (agenda[item]()) attention--
   }
 
+  // Factions: a rival joins, votes, pays in and (for a leader) puts wars to the vote. Its own random stream, so nothing else in the month moves.
+  if (s.factions?.length || diff.skill >= 1) factionBotOrders(s, map, nationId, tryAdd)
+
   // A war declared on the player gives them a couple of months to raise a military before the first blow.
   // In a live game the plan is for the month about to begin, and its armies march during it. Rests and fronts count from that month.
   const planned = clockMonth(s)
   const warTargets = new Set(enemies.filter((e) => !humans.has(e) || planned - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
   for (const o of orders) if (o.type === 'declareWar' && !humans.has(o.target)) warTargets.add(o.target)
+  // A coalition's joint strike: every member declares and attacks the same shared target this month, whatever else it was planning.
+  let jointDone = false
+  const strike = diff.skill === 2 ? dueStrike(s, nationId) : null
+  if (strike && (humans.has(strike.target) ? (ctx.warsOn.get(strike.target) ?? 0) < diff.maxWarsOnPlayer + 1 || atWar(s, nationId, strike.target) : true)) {
+    const foe = strike.target
+    if (!atWar(s, nationId, foe) && !orders.some((o) => o.type === 'declareWar' && o.target === foe) && tryAdd({ type: 'declareWar', nationId, target: foe })) {
+      if (humans.has(foe)) ctx.warsOn.set(foe, (ctx.warsOn.get(foe) ?? 0) + 1)
+    }
+    const region = jointTarget(s, map, strike, nationId)
+    if (region && (atWar(s, nationId, foe) || orders.some((o) => o.type === 'declareWar' && o.target === foe))) jointDone = tryAdd({ type: 'attack', nationId, target: region, commit: 'main', stance: 'assault', joint: strike.id })
+  }
   // ---- strategy hook: attacks are planned from real battle forecasts (src/ai/strategy.ts). One attack a turn. ----
-  if (mistake !== 'idle' && planned - n.military.lastAttackTurn >= BOT.attackRestTurns && n.military.exposed < 0.05 && warTargets.size > 0) {
+  if (!jointDone && mistake !== 'idle' && planned - n.military.lastAttackTurn >= BOT.attackRestTurns && n.military.exposed < 0.05 && warTargets.size > 0) {
     // The strongest tier on the offensive may open a second front in the same month, if the first needs a third of the army and this one is a near sure thing.
     const twoFronts = diff.skill === 2 && (strat.posture === 'expand' || strat.posture === 'opportunist' || strat.posture === 'revenge')
     const plans = planAttacks(sight, strat, warTargets, mistake, twoFronts ? 4 : 1)

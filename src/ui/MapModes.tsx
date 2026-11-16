@@ -1,11 +1,12 @@
 import { useGame, type MapMode } from '../store'
-import { FRONT_COLORS, RELATION_COLORS } from './colors'
+import { FRONT_COLORS, RELATION_COLORS, tensionColor } from './colors'
 import { MAP_MODE_KEYS } from './shortcuts'
 
 const MODES: { id: MapMode; label: string; hint: string }[] = [
   { id: 'political', label: 'Nations', hint: 'Each nation in its own color. Countries you can attack glow pink.' },
   { id: 'relations', label: 'Relations', hint: 'Who is with you and who is against you.' },
   { id: 'fronts', label: 'Fronts', hint: 'How much Defense Line is left in your countries and your enemies\'.' },
+  { id: 'borders', label: 'Borders', hint: 'Every border colored by its tension, thicker where it is well guarded, with the forces on station and the sea chokepoints.' },
 ]
 
 const LEGEND: Record<MapMode, { color: string; label: string }[]> = {
@@ -21,6 +22,12 @@ const LEGEND: Record<MapMode, { color: string; label: string }[]> = {
     { color: FRONT_COLORS.yours, label: 'Your line, strong' },
     { color: FRONT_COLORS.enemy, label: 'Enemy line, strong' },
     { color: FRONT_COLORS.weak, label: 'Nearly broken' },
+  ],
+  borders: [
+    { color: tensionColor(0), label: 'Calm' },
+    { color: tensionColor(40), label: 'Tense' },
+    { color: tensionColor(70), label: 'Disputed' },
+    { color: '#9ad1ff', label: 'Sea chokepoint' },
   ],
 }
 
@@ -47,6 +54,11 @@ export function MapModes() {
             </li>
           ))}
         </ul>
+      )}
+      {mode === 'borders' && (
+        <p className="px-1.5 pt-1.5 text-[12px] leading-snug text-white/70">
+          Each badge on a border gives its tension and its state: ring open, shield fortified, bar closed, triangle disputed. A thick line is well guarded, a dashed one is closed. Small badges are forces on station.
+        </p>
       )}
     </div>
   )

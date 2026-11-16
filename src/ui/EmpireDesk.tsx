@@ -1,3 +1,4 @@
+import { NUCLEAR } from '../data/nuclear'
 import { COUNCIL, EMPIRE_RULES, OCCUPATION, RESOLUTIONS, TIERS, tierSpec } from '../data/empire'
 import { projectedVote } from '../engine/council'
 import { capitalDistance, capitalsOf, empireCount, tierOf } from '../engine/empire'
@@ -12,11 +13,13 @@ import { Card, Line } from './economy/parts'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import { useState } from 'react'
 import { Spark } from './Charts'
+import { WorldReaction } from './WorldReaction'
 
 const TABS = [
   ['overview', 'Overview'],
   ['provinces', 'Provinces'],
   ['world', 'World'],
+  ['reaction', 'World reaction'],
   ['stats', 'Statistics'],
 ] as const satisfies readonly (readonly [EmpireTab, string])[]
 
@@ -37,6 +40,8 @@ function unlocks(t: ReturnType<typeof tierSpec>): [string, string][] {
     ['Regional capitals', String(t.regionalCapitals)],
     ['World Bank loans', `up to ${t.loanMax}, ${t.loanMonths} months${t.loanPact ? ', with a pact' : ''}`],
     ['World Council', t.council ? `put resolutions (${t.council === 0.5 ? '1/2' : '2/3'} needed)` : 'no'],
+    ['Nuclear weapons', t.id >= NUCLEAR.tier ? 'yes (a program, in the War Room)' : 'no'],
+    ['Rivals band together', ['no', 'barely', 'a little', 'strongly', 'fiercely'][t.id - 1]],
   ]
 }
 
@@ -53,6 +58,13 @@ export function EmpireDesk() {
         {tab === 'overview' && <Overview />}
         {tab === 'provinces' && <Provinces />}
         {tab === 'world' && <World />}
+        {tab === 'reaction' && (
+          <section className="econ-grid">
+            <div className="span-all">
+              <WorldReaction />
+            </div>
+          </section>
+        )}
         {tab === 'stats' && <Statistics />}
       </div>
     </PanelShell>

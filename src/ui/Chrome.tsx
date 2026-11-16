@@ -7,8 +7,9 @@ import { controlled, countriesTaken, goalSentence, populationShare } from '../en
 import { getWorld } from '../map/world'
 import { useGame, type Panel, type ReportDelta } from '../store'
 import { AdviceList } from './Briefing'
+import { factionOf, votesWaiting } from '../engine/factions'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
-import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, MilitaryIcon, ResearchIcon } from './icons'
+import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, FactionIcon, MilitaryIcon, ResearchIcon } from './icons'
 import { Modal } from './Modal'
 import { Spark } from './Charts'
 
@@ -17,6 +18,7 @@ const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
   { panel: 'economy', label: 'Economy', key: 'E', icon: <EconomyIcon /> },
   { panel: 'military', label: 'Military', key: 'M', icon: <MilitaryIcon /> },
   { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <DiplomacyIcon /> },
+  { panel: 'faction', label: 'Faction', key: 'F', icon: <FactionIcon /> },
   { panel: 'empire', label: 'Empire', key: 'I', icon: <EmpireIcon /> },
   { panel: 'tech', label: 'Research', key: 'R', icon: <ResearchIcon /> },
 ]
@@ -30,7 +32,13 @@ export function NavRail() {
     return unanswered.length
   })
   const urgent = useAdvice().filter((a) => a.urgency === 'now').length
-  const badge = (p: Panel) => (p === 'diplomacy' ? offers : p === 'briefing' ? urgent : 0)
+  // Votes waiting on you, and invitations.
+  const factionDue = useGame((s) => {
+    const g = s.game
+    if (!g?.factions?.length) return 0
+    return votesWaiting(g, g.playerId, s.orders).length + g.factions.filter((f) => !factionOf(g, g.playerId) && f.invites.some((i) => i.nation === g.playerId && i.expires >= g.turn)).length
+  })
+  const badge = (p: Panel) => (p === 'diplomacy' ? offers : p === 'briefing' ? urgent : p === 'faction' ? factionDue : 0)
   return (
     <nav className="nav-dock" aria-label="Desks">
       <div className="surface max-h-full overflow-y-auto scroll-thin rounded-[22px] p-1.5 flex flex-col gap-0.5">

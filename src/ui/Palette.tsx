@@ -20,12 +20,14 @@ const ECONOMY: [EconomyTab, string][] = [
   ['bank', 'Bank: rates, printing, bonds'],
   ['business', 'Business and state enterprises'],
   ['projects', 'Projects and public works'],
+  ['space', 'Space program: rockets, missions, labs, colonies'],
   ['market', 'Market'],
   ['stocks', 'Stocks'],
   ['government', 'Government and laws'],
 ]
 const MILITARY: [MilitaryTab, string][] = [
   ['forces', 'Forces and academy'],
+  ['deploy', 'Deployment: patrols, screens, border garrisons'],
   ['wars', 'Wars'],
   ['agencies', 'Agencies'],
   ['systems', 'Frontier systems'],
@@ -86,6 +88,7 @@ function PaletteBody() {
     for (const [t, name] of MILITARY) out.push({ id: `o-m-${t}`, label: `Military: ${name}`, hint: 'M', group: 'Open', run: () => st.openMilitary(t) })
     if (isLive(game)) out.push({ id: 'o-m-armies', label: 'Military: Armies', hint: 'M', group: 'Open', run: () => st.openMilitary('armies') })
     out.push({ id: 'o-dip', label: 'Diplomacy', hint: 'D', group: 'Open', run: () => st.openDiplomacy(null) })
+    out.push({ id: 'o-faction', label: 'Faction: votes, pool and contracts', hint: 'F', group: 'Open', run: () => st.openFaction() })
     for (const [t, name] of EMPIRE) out.push({ id: `o-i-${t}`, label: `Empire: ${name}`, hint: 'I', group: 'Open', run: () => st.openEmpire(t) })
     out.push({ id: 'o-tech', label: 'Research', hint: 'R', group: 'Open', run: () => st.setPanel('tech') })
     out.push({ id: 'o-news', label: 'News', hint: 'N', group: 'Open', run: () => st.setPanel('log') })
