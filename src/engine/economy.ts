@@ -3,6 +3,7 @@ import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, DIPLOMACY, UNIT_SPECS } from '../data/unitTypes'
 import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { EMPIRE, WAR } from '../data/war'
+import { falloutFactor } from '../data/nuclear'
 import { NO_EFFECTS, type PolicyEffects } from '../data/government'
 import { TRAITS, traitOf } from '../data/traits'
 import { agencyUpkeep } from './agencies'
@@ -82,8 +83,8 @@ export function lineMax(s: GameState, map: WorldMap, regionId: string): number {
   return (TRAITS[traitOf(regionId, map.regions[regionId])].line ?? 0) + cityEffects(r).line + localEffects(r, map.regions[regionId]).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
 }
 
-/** Share of a country's output that counts, rising as conquered land is integrated. The occupation policy sets the floor. */
-export const integrationFactor = (r: RegionState, floor: number = WAR.integrationFloor) => floor + (1 - floor) * Math.min(1, Math.max(0, r.integration))
+/** Share of a country's output that counts, rising as conquered land is integrated (and, after a nuclear strike, as the ruins heal). The occupation policy sets the floor. */
+export const integrationFactor = (r: RegionState, floor: number = WAR.integrationFloor) => (floor + (1 - floor) * Math.min(1, Math.max(0, r.integration))) * falloutFactor(r.fallout)
 
 export interface WarBill {
   enemy: NationId

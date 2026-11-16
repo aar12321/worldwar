@@ -261,6 +261,8 @@ export interface RegionState {
   integration: number
   /** Last turn an enemy attacked this country. It heals only in quiet months. */
   attackedTurn: number
+  /** Months of devastation still to run after a nuclear strike: its output stays crippled and heals as they pass. Absent when there is none. */
+  fallout?: number
   cities: City[]
 }
 
@@ -361,6 +363,8 @@ export interface Nation {
   missileBuilt?: { turn: number; count: number }
   /** The last month each nation struck this one with missiles, so it can answer. */
   struckBy?: Record<NationId, number>
+  /** The nuclear program of a Superpower: warheads in store and under construction. Absent until the first one is ordered. */
+  nuclear?: NuclearState
   /** Aircraft developments begun or finished (see `data/aircraft.ts`). Absent until the first one is started, so a nation that never uses them is unchanged. */
   aircraft?: Partial<Record<AircraftNodeId, AircraftState>>
   /** Social programs in force. Absent until the first one is set, so a nation that never uses them is unchanged. */
@@ -592,7 +596,7 @@ export type Order =
   | { type: 'marketBuy'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'marketSell'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'setAutoBuy'; nationId: NationId; resources: TradeResource[] }
-  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many hypersonic missiles to fire in this battle. Left out, none: an attack never carries missiles it was not told to. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number }
+  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many hypersonic missiles to fire in this battle. Left out, none: an attack never carries missiles it was not told to. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number; /** The coalition strike this attack belongs to: in a live game every attack of one strike leaves on the same day. */ joint?: string }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'buildCase'; nationId: NationId; target: NationId }
@@ -612,6 +616,10 @@ export type Order =
   | { type: 'fundMissiles'; nationId: NationId }
   /** Builds missiles of a kind from the program: money and steel (and oil) each. */
   | { type: 'buildMissiles'; nationId: NationId; kind: Exclude<MissileType, 'hypersonic'>; count: number }
+  /** Starts building one nuclear warhead (a Superpower with the missile technology). */
+  | { type: 'buildWarhead'; nationId: NationId }
+  /** Fires a nuclear warhead at a country of a nation you are at war with. */
+  | { type: 'nuke'; nationId: NationId; target: RegionId }
   /** Starts an aircraft development (research is paid now, money month by month). */
   | { type: 'startAircraftDev'; nationId: NationId; node: AircraftNodeId }
   /** Puts a development on hold, which frees its slot and its monthly bill, or takes it up again. */
@@ -846,6 +854,16 @@ export interface GameState {
   launches?: PlannedLaunch[]
   /** Live mode only: hypersonic salvos in the air. */
   flights?: MissileFlight[]
+  /** Live mode only: nuclear warheads in the air. They fly for days, and the target's owner can see them coming. */
+  nukes?: NukeFlight[]
+  /** World tension added by a nuclear strike. It fades every month and is added to the world's tension. */
+  shock?: number
+  /** The turn of the last nuclear strike anywhere in the world, so rivals keep quiet for a while after one. */
+  nukeLast?: number
+  /** Rivals drawing together against a leading nation, and the strikes they have agreed on. Absent until one forms. */
+  coalitions?: CoalitionPlan[]
+  /** The turn each leading nation was last the object of a coalition's plan, so plans do not follow one another at once. */
+  coalitionLast?: Record<NationId, number>
   /** Live mode only: the absolute day whose business waits until the player answers a decision that came with the new month. */
   pendingDay?: number
   /** Live mode only: how the player's nation stood when the month began, and its battles since. It travels with the game, so a month's report is right across a save and a load. The screen keeps it; the clock does not touch it. */
@@ -1050,4 +1068,48 @@ export interface Faction {
   short?: { oil?: boolean; food?: boolean }
   /** What happened lately: votes, wars, contracts, members. */
   history: { turn: number; text: string }[]
+}
+
+/** A nuclear program: warheads built, and the turns the ones under construction are done. */
+export interface NuclearState {
+  warheads: number
+  building: number[]
+  /** The turn of its last launch, for the wait between two. */
+  last?: number
+  /** Warheads fired in all. */
+  fired?: number
+}
+
+/** Live mode: a nuclear warhead on its way. */
+export interface NukeFlight {
+  id: string
+  nationId: NationId
+  from: RegionId
+  target: RegionId
+  launched: number
+  /** Absolute day it lands. */
+  lands: number
+  /** Who held the target when it was fired. */
+  foe?: NationId
+}
+
+/**
+ * Rivals who have agreed to strike a leading nation together: who they are, where they will hit, and when. Hard rivals make these
+ * plans, and the leader sees them coming in the World reaction panel.
+ */
+export interface CoalitionPlan {
+  id: string
+  /** The leading nation they gather against. */
+  target: NationId
+  members: NationId[]
+  /** The target's weakest countries a member can reach, first choice first. Every member attacks the first one it can reach. */
+  focus: RegionId[]
+  /** The turn the plan was made, the month the strike falls, and (live games) the day of that month. */
+  formed: number
+  strikeTurn: number
+  strikeDay: number
+  /** Set once the month of the strike has come and gone. */
+  done?: boolean
+  /** The threat score that brought them together. */
+  threat: number
 }

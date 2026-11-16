@@ -9,7 +9,7 @@ import { tierSpec } from '../data/empire'
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
-import { IncomingChip, IncomingMissilesChip, LiveControls, LiveDate, MonthBar } from './LiveControls'
+import { IncomingChip, IncomingMissilesChip, LiveControls, LiveDate, MonthBar, NukeChip } from './LiveControls'
 import { EventChip } from './EventModal'
 import { OnlinePeople, OnlineStatus } from './Online'
 import { isLive } from '../engine/calendar'
@@ -310,6 +310,7 @@ export function HUD() {
       </div>
       <div className="pill-stack">
         {online && <EventChip />}
+        {live && <NukeChip />}
         {live && <IncomingChip />}
         {live && <IncomingMissilesChip />}
         {top && top.urgency === 'now' && panel === 'none' && !(live && top.id.startsWith('incoming-')) && (

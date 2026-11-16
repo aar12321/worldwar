@@ -13,6 +13,8 @@ import { MISSILES } from '../data/missiles'
 import { AIRCRAFT_NODES } from '../data/aircraft'
 import { applyPauseAircraftDev, applyStartAircraftDev } from './aircraft'
 import { applyBuildMissiles, applyFundMissiles } from './missiles'
+import { applyBuildWarhead, fireNuke, launchNuke, runNuclear } from './nuclear'
+import { runCoalitions } from './coalition'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -174,6 +176,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     }
     case 'strike':
       return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Fire ${o.count ?? 1} ${MISSILES[o.kind ?? 'hypersonic'].name.toLowerCase()}${(o.count ?? 1) === 1 ? '' : 's'} at ${region(o.target)}`
+    case 'buildWarhead':
+      return 'Build a nuclear warhead'
+    case 'nuke':
+      return `Launch a nuclear missile at ${region(o.target)}`
     case 'fundMissiles':
       return 'Raise the missile program'
     case 'buildMissiles':
@@ -256,8 +262,8 @@ const PHASES: Order['type'][][] = [
   ['research', 'researchProgram', 'build', 'startProject', 'pauseProject', 'rushProject', 'setRegionalCapital', 'fundAcademy', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['fundAgency', 'fundSystem'],
-  ['fundMissiles', 'buildMissiles', 'startAircraftDev', 'pauseAircraftDev'],
-  ['operation', 'domestic', 'strike'],
+  ['fundMissiles', 'buildMissiles', 'buildWarhead', 'startAircraftDev', 'pauseAircraftDev'],
+  ['operation', 'domestic', 'strike', 'nuke'],
 ]
 
 /**
@@ -364,6 +370,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runCrises(s, map, rng)
   runStocks(s, map, rng)
   runSystems(s)
+  runNuclear(s)
+  runCoalitions(s, map, rng)
   runWorld(s, gross, workforce)
   updateTiers(s)
   recordHistory(s, gross, net)
@@ -670,6 +678,14 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'buildMissiles':
       applyBuildMissiles(s, n, o)
+      break
+    case 'buildWarhead':
+      applyBuildWarhead(s, n)
+      break
+    case 'nuke':
+      // A live warhead flies for days before it lands. In a turn game it falls at once.
+      if (isLive(s)) launchNuke(s, map, o, clockOf(s))
+      else fireNuke(s, map, o, rng)
       break
     case 'startAircraftDev':
       applyStartAircraftDev(s, n, o)

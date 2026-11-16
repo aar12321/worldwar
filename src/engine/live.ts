@@ -1,13 +1,15 @@
 import { armiesToRecall, holdsBackLaunch } from '../ai/liveBot'
 import { LIVE } from '../data/live'
 import { bringHome, calledOff, sendHome, turnBack, launchArmy } from './armies'
-import { absDay, clockOf, daysInMonth, isLive } from './calendar'
-import { atWar, newId, totalUnits } from './helpers'
+import { absDay, clockOf, dayDate, daysInMonth, isLive } from './calendar'
+import { addLog, atWar, newId, totalUnits } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { runMonth } from './resolveTurn'
 import { createRng } from './rng'
 import { strikeHits } from './systems'
-import type { Army, ArmyOutcome, AttackOrder, BattleReport, GameState, MissileFlight, Order, TrainingJob, WorldMap } from './types'
+import { detonate, nukeCalledOff } from './nuclear'
+import { jointDay } from './coalition'
+import type { Army, ArmyOutcome, AttackOrder, BattleReport, GameState, MissileFlight, NukeFlight, Order, TrainingJob, WorldMap } from './types'
 import { checkOutcome } from './victory'
 import { resolveAttack } from './warfare'
 
@@ -28,6 +30,10 @@ export type LiveEvent =
   | { kind: 'home'; army: Army }
   /** `why` says what happened to a salvo that did not land on an enemy: the country was already its own, changed hands, or the war ended. */
   | { kind: 'missile'; flight: MissileFlight; landed: boolean; why?: 'taken' | 'changed' | 'peace' }
+  /** A nuclear warhead landed (or was called off, with the reason). The flight is as it was in the air. */
+  | { kind: 'nuke'; flight: NukeFlight; landed: boolean; why?: 'taken' | 'changed' | 'peace' }
+  /** A rival launched a nuclear missile as the month turned: the alert, with the day it lands. */
+  | { kind: 'nukeLaunched'; flight: NukeFlight }
   | { kind: 'trained'; jobs: TrainingJob[] }
 
 export interface LiveStep {
@@ -54,13 +60,28 @@ function planLaunches(s: GameState, attacks: AttackOrder[]) {
   if (attacks.length === 0) return
   const rng = createRng((s.seed ^ LIVE.salt) >>> 0, -s.turn)
   const list = (s.launches ??= [])
-  for (const order of attacks) list.push({ id: newId(s, 'l'), at: absDay(s.turn, rng.int(LIVE.launchWindow[0], LIVE.launchWindow[1])), order })
+  for (const order of attacks) {
+    // The attacks of a coalition's joint strike all leave on the day the plan set, so the fronts open together. They draw no random numbers.
+    const joint = jointDay(s, order.joint)
+    list.push({ id: newId(s, 'l'), at: absDay(s.turn, joint ?? rng.int(LIVE.launchWindow[0], LIVE.launchWindow[1])), order })
+  }
+  // The leader is told the day its rivals' armies set out together.
+  const told = new Set<string>()
+  for (const order of attacks) {
+    const day = jointDay(s, order.joint)
+    const plan = day === null ? undefined : s.coalitions?.find((p) => p.id === order.joint)
+    if (!plan || told.has(plan.id)) continue
+    told.add(plan.id)
+    const members = attacks.filter((o) => o.joint === plan.id).map((o) => s.nations[o.nationId]?.name ?? o.nationId)
+    addLog(s, 'news', `JOINT STRIKE: ${members.join(', ')} send their armies against ${s.nations[plan.target]?.name ?? plan.target} on ${dayDate(s.turn, day!)}, all on the same day.`, [plan.target, ...plan.members])
+  }
 }
 
 /** Whether anything needs doing on this day. A quiet day only moves the date. */
 function dueToday(s: GameState, map: WorldMap, today: number): boolean {
   if (s.launches?.some((l) => l.at <= today)) return true
   if (s.flights?.some((f) => f.lands <= today)) return true
+  if (s.nukes?.some((f) => f.lands <= today)) return true
   for (const a of s.armies ?? []) {
     if (a.end <= today) return true
     if (a.phase === 'outbound' && calledOff(s, a)) return true
@@ -172,6 +193,22 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
     }
   }
 
+  // 7. Nuclear warheads land.
+  if (s.nukes?.some((f) => f.lands <= today)) {
+    const landing = s.nukes.filter((f) => f.lands <= today).sort((a, b) => byDue(a, b, a.lands, b.lands))
+    s.nukes = s.nukes.filter((f) => f.lands > today)
+    for (const f of landing) {
+      const why = !s.nations[f.nationId]?.alive ? 'changed' : nukeCalledOff(s, f)
+      if (why) {
+        events.push({ kind: 'nuke', flight: { ...f }, landed: false, why })
+        continue
+      }
+      detonate(s, map, rng, f.nationId, f.target)
+      fought = true
+      events.push({ kind: 'nuke', flight: { ...f }, landed: true })
+    }
+  }
+
   if (fought) s.outcome = checkOutcome(s, map)
 }
 
@@ -202,8 +239,10 @@ export function advanceDay(prev: GameState, map: WorldMap, input: LiveInput = {}
     // For the month's work the clock already reads the 1st of the next month, so missiles fired by the AI count from then.
     s.day = daysInMonth(s.turn)
     const bots = input.planner ? input.planner(s, map) : []
+    const flying = new Set((s.nukes ?? []).map((f) => f.id))
     const { attacks, trained } = runMonth(s, map, [...(input.monthOrders ?? []), ...bots])
     s.day = 0
+    for (const f of s.nukes ?? []) if (!flying.has(f.id)) events.push({ kind: 'nukeLaunched', flight: { ...f } })
     planLaunches(s, attacks)
     if (trained.length) events.push({ kind: 'trained', jobs: trained })
     // A game won or lost at the month's end stays that way, and a decision that came with the month is answered first.

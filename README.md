@@ -59,6 +59,24 @@ A **faction** is a company that countries own together. Open the **Faction** des
 - **No cheating the pool.** Gifts are checked against what you have, counting orders already queued. What you put in is locked for two months and you take back only what you put in, in kind (money for money), shrunk by the same share as everyone's if the pool lost any; soldiers stay while the faction is at war; no one can take another's claim. Money cannot be created, lost or moved between members by contributing and withdrawing, whatever the order.
 - **Contracts.** Members can put a supply contract to the vote (send the pool oil or steel every month, optionally for payment, with collateral). Between any two nations a trade deal becomes a **live contract**: a start up to six months away, collateral held until it ends, and *they join every war I fight*. It runs by itself each month. Breaking it costs the breaker the collateral, reputation, and gives the other side a reason for war.
 
+## The world answers a rising power
+
+As you grow, the rest of the world takes notice. A **threat** (0 to 100) measures how alarming you are: your empire tier, your share of the world's countries, people and output, and your reputation for aggression. The **tier decides how much of the threat turns into action**: a Regional power barely stirs anyone, a Great power draws partners together, a Superpower and a Hegemon unite the world. It is always limited by the difficulty you chose.
+
+- **Easy** rivals never band together against you, whatever you become.
+- **Medium** rivals form alliances and blocs against a growing power (two nations that both border it or fight it ally readily, and a bot looks for such a partner), and join a war against it to defend a friend.
+- **Hard** rivals do both, and also press the war of an ally against you, and **plan pre-emptive joint strikes** once you are a Great power: several rivals that border you (and the allies who can reach you) agree to declare war and attack your weakest border together, in the same month. In a live game every attack of the strike leaves on the same day. The plan is announced in the news, in your advisor and in the **World reaction** tab of the Empire desk with at least two months of warning, and each member has a reason for war on paper and a treaty with the strongest. Rivals rest for 14 months (7 when the world is at its most frightened) before planning again.
+- The **World reaction** tab shows your threat and where it comes from, which blocs and neighbors are drawing together against you, what is coming, and what you can do about it: pacts with the neighbors in the plan, a World Council recognition that lowers your reputation, aid and mediation in crises (Diplomacy desk), and strengthening the borders the plan names.
+
+## Superpower weapons: nuclear strikes
+
+A **Superpower** (25 countries) with Hypersonic Missiles can build **nuclear warheads** in the War Room: one at a time, each costing 450 money, 40 steel and 60 research and four months to build, up to four in store and a little upkeep for each. A warhead can be fired at a **country of a nation you are at war with** (it needs a reason for war like any other, and a country of yours with a factory to launch from; its missile reaches anywhere on Earth).
+
+- **Effect**: the country's buildings, factories and Defense Line fall to almost nothing, about two thirds of its people die, its factories stop for two years and its output stays crippled (a tenth of normal, healing over four years), and rebels rise. The nation's army is destroyed too (97% if it is the capital or a nation of three countries or fewer, 60% if it is part of a larger one). An Interceptor Shield stops only half its own rating (a level 3 shield stops a quarter). The country is left open: any attack takes it, and a nation with nothing else can fall.
+- **Consequences**: your reputation for aggression rises by 60; every nation's opinion of you drops by 50 and recovers over about eleven years; the victim's by 60; **every nation that is not your ally sanctions you for two years**; the world's tension spikes; and **the two strongest alliance blocs (or the two strongest nations, if there are fewer blocs) declare war on you**, each member within its own war limit (Easy rivals send only the first). Another human is never dragged in. A confirmation dialog spells all of this out and asks you to tick a box before the button works. Missile-hunter fighters (aircraft development) catch a warhead only 30% as well as a missile, and stealth takes their share back.
+- **Live mode**: the warhead flies for five days as a visible arc over the globe and the target's owner gets alerts; making peace before it lands calls it off. In a turn game it lands when the month ends.
+- **Rivals**: only **Hard** rivals that are themselves Superpowers build or fire them, only when **desperate** (a broken capital or a force under 40% of the foe's) or **provoked** (struck with missiles or a bomb), no more than once in three years each, and never within eighteen months of any bomb anywhere. Your advisor warns you of a nuclear enemy.
+
 ## Caring for the people, and building for the future
 
 Money is only worth what you do with it. Two Economy tabs are where it goes.
@@ -169,6 +187,8 @@ src/
     aircraft.ts     aircraft development: the tree's rules, slots, monthly work, what finished developments add up to (hunters, stealth, reach, payload); data in data/aircraft.ts
     combat.ts / warfare.ts  3-round battles, whole-country capture, garrisons, rebels
     arms.ts / training.ts   weapon levels, training slots and queue
+    coalition.ts    the threat a leader poses, the pressure it puts on rivals, joint strikes and the World reaction view
+    nuclear.ts      nuclear warheads: the program, strikes and flights, and the world's answer
     economy.ts / diplomacy.ts / espionage.ts / tech.ts / victory.ts
     factions.ts     factions: the pool, ledger and shares, votes, the joint war, contracts with the pool, upkeep (runMonth runs them on the month's schedule)
     society.ts      social programs and campaigns: effects, the care bill, phasing in, orders
