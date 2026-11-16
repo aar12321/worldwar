@@ -13,6 +13,7 @@ import { getWorld, type CountryFeature } from '../map/world'
 import { useGame } from '../store'
 import { useSlowGame } from './hooks'
 import { paintSignature } from './globe/paint'
+import { findRegionParts, paintParts, type RegionParts } from './globe/polygonPaint'
 import { useArmyLayer } from './globe/useArmyLayer'
 import { BORDER_COLORS, NEON, frontColors, mix, relationColors, tint, wash, withAlpha } from './colors'
 import { borderPaths, stationBadges, tensionBadges, type StationBadge } from './globe/borderLayer'
@@ -83,6 +84,8 @@ interface Marker {
   title: string
   yours: boolean
   city?: boolean
+  /** The country a city pin belongs to. */
+  region?: RegionId
   /** A live battle's pin, with its Defense Line bar. */
   battle?: BattleOverlay
   /** A short note floating up over the place, such as "+2 Infantry". */
@@ -162,17 +165,38 @@ function paintMarker(d: object): HTMLElement {
   el.style.borderRadius = '999px'
   el.style.background = m.yours ? 'rgba(196,71,74,0.92)' : 'rgba(21,23,28,0.85)'
   if (m.city) {
+    // Zoomed out, city pins hide, or shrink to dots when their country is picked (see the globe-far rules in index.css).
+    el.className = m.region === useGame.getState().selectedRegion ? 'city-pin city-pin-picked' : 'city-pin'
+    el.dataset.region = m.region
     el.style.fontSize = '11px'
     el.style.padding = '1px 6px'
     el.style.background = 'rgba(10,132,255,0.85)'
   }
   el.style.transform = 'translate(-50%, -50%)'
+  // A city's chip sits clear of its country's name: above its place when the city lies north of the name, below it otherwise.
+  // (The globe rewrites `transform` on every move, so the nudge uses the separate `translate` property.)
+  if (m.city && m.region) el.style.translate = m.lat >= map.regions[m.region].lat ? '0 -11px' : '0 11px'
   el.textContent = m.title
   return el
 }
 
 /** How often a ring pulses. Warning rings repeat faster than the fireworks of a battle. */
 const ringPeriod = (r: object) => (r as { repeat?: number }).repeat ?? 1400
+
+/** Zoomed out beyond this altitude (in globe radii) the city pins hide, so they do not pile onto their country's name. Smaller on short screens. */
+const cityPinAltitude = () => Math.min(1.2, window.innerHeight * 0.0025)
+
+type Pin = HTMLElement & { _facing?: boolean }
+/**
+ * Fades a pin that has turned to the far side of the globe. The globe asks about every pin each time the camera moves, so this writes
+ * to the page only when the answer for that pin changes. It is one function for the whole app, so the globe is not handed a new one on every render.
+ */
+function pinFacing(el: HTMLElement, isVisible: boolean) {
+  const pin = el as Pin
+  if (pin._facing === isVisible) return
+  pin._facing = isVisible
+  el.style.opacity = isVisible ? '1' : '0'
+}
 
 export function WorldGlobe() {
   const game = useSlowGame()
@@ -187,7 +211,9 @@ export function WorldGlobe() {
   const pops = useFx((s) => s.pops)
   const revealedBattleId = useFx((s) => s.revealedBattleId)
   const ref = useRef<GlobeMethods | undefined>(undefined)
-  const [hover, setHover] = useState<RegionId | null>(null)
+  // The country under the mouse lives in a ref. Moving the mouse repaints only the two countries it left and entered (see onPolygonHover), not the whole map.
+  const hoverRef = useRef<RegionId | null>(null)
+  const [hoverRepaint, setHoverRepaint] = useState(0)
   const { w, h } = useWindowSize()
   const reducedRef = useRef(reducedMotion)
   useEffect(() => {
@@ -217,11 +243,18 @@ export function WorldGlobe() {
     controls.dampingFactor = 0.16
     if (!controlsTuned.current) {
       controlsTuned.current = true
+      const scene = api.renderer().domElement.parentElement
+      let far: boolean | undefined
       const tune = () => {
-        const pov = api.pointOfView()
-        if (!pov) return
-        controls.rotateSpeed = Math.min(1.25, 0.5 + pov.altitude * 0.2)
-        controls.zoomSpeed = Math.min(1.5, 0.7 + pov.altitude * 0.12)
+        // The altitude in globe radii, straight from the camera: it runs on every camera move, so it makes no objects.
+        const altitude = api.camera().position.length() / api.getGlobeRadius() - 1
+        controls.rotateSpeed = Math.min(1.25, 0.5 + altitude * 0.2)
+        controls.zoomSpeed = Math.min(1.5, 0.7 + altitude * 0.12)
+        const nowFar = altitude > cityPinAltitude()
+        if (nowFar !== far) {
+          far = nowFar
+          scene?.classList.toggle('globe-far', nowFar)
+        }
       }
       controls.addEventListener('change', tune)
       tune()
@@ -281,16 +314,16 @@ export function WorldGlobe() {
       const hidden = hiddenCaptures.get(id)
       if (game && mapMode !== 'political') {
         const base = modeColor(game, mapMode, id, neighborSet, palette)
-        return id === selectedRegion ? tint(base, 0.14) : id === hover ? tint(base, 0.08) : base
+        return id === selectedRegion ? tint(base, 0.14) : id === hoverRef.current ? tint(base, 0.08) : base
       }
       const base = hidden ? wash(hidden, map.regions[id].terrain) : regionColor(game, id)
-      if (targets.has(id)) return tint(NEON.magenta, hover === id ? 0.14 : 0)
+      if (targets.has(id)) return tint(NEON.magenta, hoverRef.current === id ? 0.14 : 0)
       if (id === selectedRegion) return tint(base, 0.2, 0.1)
-      if (id === hover) return tint(base, 0.1)
+      if (id === hoverRef.current) return tint(base, 0.1)
       return base
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [paintKey, hiddenCaptures, targets, selectedRegion, hover, mapMode, neighborSet, palette],
+    [paintKey, hiddenCaptures, targets, selectedRegion, hoverRepaint, mapMode, neighborSet, palette],
   )
   const polygonSideColor = useCallback((f: object) => tint(polygonColor(f), -0.2), [polygonColor])
   const polygonAltitude = useCallback(
@@ -333,10 +366,39 @@ export function WorldGlobe() {
   const onPolygonClick = useCallback((f: object) => {
     useGame.getState().selectRegion(regionOf(f))
   }, [])
-  const onPolygonHover = useCallback((f: object | null) => {
-    const id = f ? regionOf(f) : null
-    setHover((prev) => (prev === id ? prev : id))
+  // Hover repaints just the two countries involved, straight on their meshes, using the globe's own color accessors (kept in a ref so they are the latest).
+  const paintRef = useRef({ cap: polygonColor, side: polygonSideColor })
+  paintRef.current = { cap: polygonColor, side: polygonSideColor }
+  const partsRef = useRef<Map<RegionId, RegionParts> | null>(null)
+  const paintCountry = useCallback((id: RegionId) => {
+    const api = ref.current
+    if (!api) return false
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const found = (partsRef.current ??= findRegionParts(api.scene(), regionOf)).get(id)
+      if (found && paintParts(found.parts, paintRef.current.cap(found.feature), paintRef.current.side(found.feature))) return true
+      partsRef.current = null // The pieces moved or are not what was expected: look them up afresh once.
+    }
+    return false
   }, [])
+  const onPolygonHover = useCallback(
+    (f: object | null) => {
+      const id = f ? regionOf(f) : null
+      const prev = hoverRef.current
+      if (prev === id) return
+      hoverRef.current = id
+      let painted = true
+      if (prev) painted = paintCountry(prev) && painted
+      if (id) painted = paintCountry(id) && painted
+      // Could not reach the meshes: repaint the whole map the old way.
+      if (!painted) setHoverRepaint((n) => n + 1)
+    },
+    [paintCountry],
+  )
+
+  // The picked country's cities stay on the map when the globe is zoomed out, as dots.
+  useEffect(() => {
+    ref.current?.renderer().domElement.parentElement?.querySelectorAll<HTMLElement>('.city-pin').forEach((el) => el.classList.toggle('city-pin-picked', el.dataset.region === selectedRegion))
+  }, [selectedRegion])
 
   // The name pins keep the same identity until a country or city really changes, so the pins are not rebuilt for nothing.
   const pinsRef = useRef<{ key: string; list: Marker[] }>({ key: '', list: [] })
@@ -348,7 +410,7 @@ export function WorldGlobe() {
       const mr = map.regions[r.id]
       out.push({ key: r.id, lat: mr.lat, lng: mr.lng, title: mr.name, yours: true })
       // Your other big cities show as small dots, so you can see where your country lives.
-      for (const c of r.cities) if (c.lat !== undefined && c.lng !== undefined) out.push({ key: c.id, lat: c.lat, lng: c.lng, title: c.name, yours: false, city: true })
+      for (const c of r.cities) if (c.lat !== undefined && c.lng !== undefined) out.push({ key: c.id, lat: c.lat, lng: c.lng, title: c.name, yours: false, city: true, region: r.id })
     }
     const key = out.map((m) => `${m.key}:${m.title}`).join(';')
     if (key === pinsRef.current.key) return pinsRef.current.list
@@ -416,9 +478,7 @@ export function WorldGlobe() {
       htmlAltitude={0.03}
       htmlElement={paintMarker}
       htmlTransitionDuration={reducedMotion ? 0 : 400}
-      htmlElementVisibilityModifier={(el, isVisible) => {
-        el.style.opacity = isVisible ? '1' : '0'
-      }}
+      htmlElementVisibilityModifier={pinFacing}
       ringsData={allRings}
       ringColor={ringColor}
       ringMaxRadius="maxRadius"

@@ -289,6 +289,19 @@ input[type='range'] {
   color: rgba(235, 235, 245, 0.5);
 }
 
+/* Zoomed out, the city pins would pile onto their country's name: other countries' cities hide, and the picked country's shrink to dots. */
+.globe-far .city-pin:not(.city-pin-picked) {
+  visibility: hidden;
+}
+.globe-far .city-pin {
+  width: 7px;
+  height: 7px;
+  padding: 0 !important;
+  font-size: 0 !important;
+  overflow: hidden;
+  translate: none !important;
+}
+
 @keyframes shake {
   0%,
   100% {
