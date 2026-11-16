@@ -98,6 +98,8 @@ export const WAR = {
   minPowerRatio: 0.5,
   maxPowerRatio: 3,
   maxAttacksPerTurn: 3,
+  /** Fewest divisions an attack may send when the player chooses the units one by one. */
+  minForce: 0.5,
   /** Share of strength committed units lose as defenders until the turn ends. */
   exposedDefenseLoss: 0.5,
   /** Monthly bill per war. */

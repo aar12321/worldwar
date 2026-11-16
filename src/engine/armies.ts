@@ -9,6 +9,7 @@ import { atWar, clamp, distanceKm, emptyUnits, newId, totalUnits } from './helpe
 import { fireMissiles } from './systems'
 import { freeUnits } from './deployment'
 import { canAttackRegion, commitShare } from './warfare'
+import { cleanUnits, shareOf } from './deploy'
 import type { Army, ArmyOutcome, AttackOrder, GameState, GeoPoint, MissileFlight, NationId, Order, RegionId, UnitCounts, UnitType, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
@@ -123,12 +124,14 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
   const commit = o.commit ?? 'main'
   const stance = o.stance ?? 'assault'
   // A live army is away for days or weeks, so even an all-in attack leaves a guard at home.
-  const share = Math.min(commitShare(n, commit, o.share), 1 - LIVE.homeGuard)
   const units = emptyUnits()
   // Only the reserve marches: forces on station keep their posts.
   const free = freeUnits(s, o.nationId)
+  const named = o.units ? cleanUnits(o.units) : null
+  // A force chosen unit by unit takes exactly those divisions (never more than the reserve less the home guard).
+  const share = named ? shareOf(named, free) : Math.min(commitShare(n, commit, o.share), 1 - LIVE.homeGuard)
   for (const k of UNIT_TYPES) {
-    const take = free[k] * share
+    const take = named ? (k === 'missile' ? 0 : Math.min(named[k], free[k] * (1 - LIVE.homeGuard))) : free[k] * share
     units[k] = take
     n.military.units[k] -= take
   }
@@ -147,7 +150,7 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
     commit,
     stance,
     share,
-    ...(o.share !== undefined ? { chosen: true } : {}),
+    ...(o.share !== undefined || named ? { chosen: true } : {}),
     via: trip.via,
     bySea: trip.bySea,
     home: trip.from,

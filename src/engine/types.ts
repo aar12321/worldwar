@@ -306,6 +306,8 @@ export interface Military {
   attacksThisTurn: number
   /** Share of the military committed this turn (0 to 1). Those units defend at half strength until the turn ends. */
   exposed: number
+  /** Divisions sent by name (an attack with `units`) this turn, by kind: they cannot be sent again until the turn ends. Absent unless the player has chosen units. */
+  sent?: UnitCounts
   /** Where the forces stand guard: patrols, the submarine screen, border garrisons. Absent until the nation sets a posture. */
   deployment?: Deployment
 }
@@ -663,7 +665,7 @@ export type Order =
   | { type: 'marketBuy'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'marketSell'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'setAutoBuy'; nationId: NationId; resources: TradeResource[] }
-  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many hypersonic missiles to fire in this battle. Left out, none: an attack never carries missiles it was not told to. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number; /** The coalition strike this attack belongs to: in a live game every attack of one strike leaves on the same day. */ joint?: string }
+  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many hypersonic missiles to fire in this battle. Left out, none: an attack never carries missiles it was not told to. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number; /** Exactly how many divisions of each kind to send (never missiles: those are `missiles`). Replaces the presets and the share. Left out, the commit or the share decides, as it always did. */ units?: Partial<UnitCounts>; /** The coalition strike this attack belongs to: in a live game every attack of one strike leaves on the same day. */ joint?: string }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'buildCase'; nationId: NationId; target: NationId }

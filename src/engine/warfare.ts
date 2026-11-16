@@ -18,6 +18,7 @@ import { lineMax, regionWorkforce } from './economy'
 import { interceptFactor, resolveBattle, type Combatant } from './combat'
 import { createRng } from './rng'
 import { defenseWeights, freeUnits, interception, surpriseBonus } from './deployment'
+import { cleanUnits, shareOf, SENDABLE } from './deploy'
 import { recordBattle } from './warscore'
 import { addInfamy, addLog, atWar, distanceKm, emptyUnits, forceUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
 import { clearPuppetFields } from './puppets'
@@ -325,6 +326,8 @@ interface Setup {
   intercept?: Interception
   /** A first strike on a border nobody guarded: how much stronger it made the attacker. */
   surprise: number
+  /** The units named in the order, as they will fight (before the patrols). Null for a share. */
+  picked: UnitCounts | null
 }
 
 /** Units multiplied by a weight for each kind. */
@@ -346,7 +349,7 @@ function batteryThrough(attacker: Combatant, defender: Combatant, shield: number
 
 /** Builds both sides of an attack, or null if it is not allowed. Shared by the real fight and the forecast. */
 /** `army` is a live-mode army that is fighting: its own units attack, and nothing is taken from the national military. */
-function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, missiles?: number, army?: Army, custom?: number): Setup | null {
+export function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, missiles?: number, army?: Army, custom?: number, named?: Partial<UnitCounts>): Setup | null {
   const attackerNation = s.nations[nationId]
   const targetRegion = s.regions[target]
   const mr = map.regions[target]
@@ -355,10 +358,16 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const defenderNation = s.nations[defenderId]
   if (defenderId === nationId || !defenderNation?.alive || !atWar(s, nationId, defenderId)) return null
   const reach: Reach = army ? { ok: true, bySea: army.bySea, via: army.via } : canAttackRegion(s, map, nationId, target)
-  const share = army ? army.share : commitShare(attackerNation, commit, custom)
   // Only the reserve can attack: what stands on station stays at its post.
   const free = army ? null : freeUnits(s, nationId)
-  if (army ? totalUnits(army.units) < 0.05 : !reach.ok || share < 0.05 || totalUnits(free!) < 0.1) return null
+  // A force chosen unit by unit: what was named, less what this month's earlier named attacks already spent.
+  let picked: UnitCounts | null = null
+  if (named && !army && free) {
+    picked = cleanUnits(named)
+    for (const k of SENDABLE) picked[k] = Math.min(picked[k], Math.max(0, free[k] - (attackerNation.military.sent?.[k] ?? 0)))
+  }
+  const share = army ? army.share : picked ? shareOf(picked, free!) : commitShare(attackerNation, commit, custom)
+  if (army ? totalUnits(army.units) < 0.05 : !reach.ok || share < 0.05 || totalUnits(free!) < 0.1 || (picked !== null && totalUnits(picked) < 0.05)) return null
 
   const spec = blitzSpec(attackerNation, stance)
   const attNotes: string[] = []
@@ -380,7 +389,7 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
       attNotes.push(`surprise on an unguarded border (+${Math.round(surprise * 100)}%)`)
     }
   }
-  const attacker = army ? makeCombatant(attackerNation, { ...attackerNation.military, units: army.units }, null, attNotes, attPenalty, 1) : makeCombatant(attackerNation, free === attackerNation.military.units ? attackerNation.military : { ...attackerNation.military, units: free! }, null, attNotes, attPenalty, share)
+  const attacker = army ? makeCombatant(attackerNation, { ...attackerNation.military, units: army.units }, null, attNotes, attPenalty, 1) : picked ? makeCombatant(attackerNation, { ...attackerNation.military, units: picked }, null, attNotes, attPenalty, 1) : makeCombatant(attackerNation, free === attackerNation.military.units ? attackerNation.military : { ...attackerNation.military, units: free! }, null, attNotes, attPenalty, share)
   // The defender's patrols meet a landing from the sea or the air and sink part of it before it comes ashore.
   let sunk: UnitCounts | null = null
   let intercept: Interception | undefined
@@ -409,7 +418,7 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const defending = weights ? { ...defenderNation.military, units: scaled(defenderNation.military.units, weights) } : defenderNation.military
   if (weights && UNIT_TYPES.some((k) => Math.abs(weights[k] - 1) > 0.02 && defenderNation.military.units[k] >= 0.05)) defNotes.push('forces on station: strongest at their own post')
   const defender = makeCombatant(defenderNation, defending, garrison, defNotes, 1, defendingShare(s, defenderNation, target, defNotes))
-  return { attacker, defender, garrison, share, bySea: reach.bySea, defendShare: defendingShare(s, defenderNation, target, []), via: reach.via, sunk, intercept, surprise }
+  return { attacker, defender, garrison, share, bySea: reach.bySea, defendShare: defendingShare(s, defenderNation, target, []), via: reach.via, sunk, intercept, surprise, picked }
 }
 
 export interface AttackForecast {
@@ -431,8 +440,8 @@ export interface AttackForecast {
 }
 
 /** Plays the attack out several times on fixed seeds, so the War Room can show honest odds without changing the game. */
-export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs?: number, missiles?: number, custom?: number): AttackForecast | null {
-  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, undefined, custom)
+export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, runs?: number, missiles?: number, custom?: number, named?: Partial<UnitCounts>): AttackForecast | null {
+  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, undefined, custom, named)
   if (!setup) return null
   // AI Battle Command plays the fight many more times, so its odds are exact.
   const exact = (s.nations[nationId]?.systems?.ai ?? 0) > 0
@@ -487,8 +496,10 @@ export function resolveAttack(
   army?: Army,
   /** Turn mode: a chosen share of the military, in place of the preset the commit names. */
   custom?: number,
+  /** Turn mode: exactly these units, in place of a share. */
+  named?: Partial<UnitCounts>,
 ): AttackResult | null {
-  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, army, custom)
+  const setup = prepareAttack(s, map, nationId, target, commit, stance, missiles, army, custom, named)
   if (!setup) return null
   const { attacker, defender, garrison, share } = setup
   const attackerNation = s.nations[nationId]
@@ -523,6 +534,11 @@ export function resolveAttack(
     m.attacksThisTurn = m.lastAttackTurn === s.turn ? m.attacksThisTurn + 1 : 1
     m.lastAttackTurn = s.turn
     m.exposed = Math.min(1, m.exposed + share)
+    // A force chosen by name is spent for the month: it cannot be named again until the turn ends.
+    if (setup.picked) {
+      const spent = (m.sent ??= emptyUnits())
+      for (const k of SENDABLE) spent[k] += setup.picked[k]
+    }
   }
   // Machines do not tire a people: robots, drones and missiles lost add no war weariness.
   const machines = (l: UnitCounts) => l.robot + l.drone + l.missile
@@ -550,7 +566,7 @@ export function resolveAttack(
   const captured = outcome.winner === 'attacker' && lineAfter <= 0
   const wasCapital = defenderNation.capital === target
   // A live army says whether its share was chosen; in a turn game the order says so.
-  const chosen = army ? !!army.chosen : custom !== undefined
+  const chosen = army ? !!army.chosen : custom !== undefined || !!setup.picked
   const report: BattleReport = {
     id: newId(s, 'b'),
     turn: s.turn,

@@ -38,6 +38,7 @@ import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
 import { STATION } from '../data/deployment'
 import { freeUnits, validateDeployment } from './deployment'
+import { unitsProblem } from './deploy'
 import { validateSetBorder } from './borders'
 import { annexFactor, governCost, governProblem, lockedByMaster } from './puppets'
 
@@ -561,8 +562,14 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       const live = isLive(s)
       if (n.military.lastAttackTurn === (live ? clockMonth(s) : s.turn) && n.military.attacksThisTurn >= maxAttacks(s, o.nationId)) return live ? `You have already sent ${maxAttacks(s, o.nationId)} armies this month` : `Your military has already attacked ${maxAttacks(s, o.nationId)} times this turn`
       if (totalUnits(freeUnits(s, o.nationId)) < 0.1) return n.military.deployment && totalUnits(n.military.units) >= 0.1 ? 'Your whole force is on station. Free some in Deployment to send it.' : live ? 'No troops at home to send' : 'You have no military to attack with'
-      if (o.share !== undefined && (!Number.isFinite(o.share) || o.share < 0.05 || o.share > 1)) return 'Send between 5% and 100% of your military'
-      if (commitShare(n, o.commit ?? 'main', o.share) < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
+      if (o.units !== undefined) {
+        // A force chosen unit by unit replaces the presets and the share.
+        const why = unitsProblem(s, o, pending, live)
+        if (why) return why
+      } else {
+        if (o.share !== undefined && (!Number.isFinite(o.share) || o.share < 0.05 || o.share > 1)) return 'Send between 5% and 100% of your military'
+        if (commitShare(n, o.commit ?? 'main', o.share) < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
+      }
       if (!canAttackRegion(s, map, o.nationId, o.target).ok) return reachProblem(s, map, o.nationId, o.target)
       if (o.missiles !== undefined) {
         if (!Number.isInteger(o.missiles) || o.missiles < 0) return 'Choose how many missiles to fire'
