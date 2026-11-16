@@ -136,6 +136,11 @@ describe('the invite list never loses a nation', () => {
     expect(rows[1].id).toBe('r1')
     expect(rows[1].problem).toMatch(/puppet/)
     expect(invitablePartners(s, map, 'r0', f).map((c) => c.id)).toEqual(['r2'])
+    // Even when the one that cannot be invited is liked far more.
+    addOpinion(s, 'r1', 'r0', 'Friends', 60, 0.01)
+    const liked = inviteCandidates(s, map, 'r0', f)
+    expect(liked[0].id).toBe('r2')
+    expect(liked[1].id).toBe('r1')
   })
 
   it('every partner of every kind can be invited by the real order, not just listed', () => {
@@ -299,6 +304,16 @@ describe('the advisor and the odds', () => {
     // Once it is in, the tip goes away.
     ok(s, { type: 'factionInvite', nationId: 'r0', target: 'r1' })
     if (factionOf(s, 'r1')) expect(advise(s, map, 'r0', [], 99).some((t) => t.id === 'faction-partner')).toBe(false)
+  })
+
+  it('suggests founding a faction with an ally, but not with a rival that would never join', () => {
+    const s = world()
+    s.alliances.push(pairKey('r0', 'r1'))
+    expect(advise(s, map, 'r0', [], 99).find((t) => t.id === 'faction-found')?.title).toMatch(/Found a faction with/)
+    s.settings.difficulty = 'easy'
+    expect(advise(s, map, 'r0', [], 99).some((t) => t.id === 'faction-found')).toBe(false)
+    s.humans = ['r0', 'r1']
+    expect(advise(s, map, 'r0', [], 99).some((t) => t.id === 'faction-found')).toBe(true)
   })
 
   it('says nothing when no partner can be invited, and on a difficulty that keeps rivals out', () => {
