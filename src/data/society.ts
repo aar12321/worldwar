@@ -71,6 +71,8 @@ export const SOCIAL_RULES = {
   cutStability: 2,
   /** The most stability all programs and projects can add together: 18 at the very most, approached but never reached. */
   stabilityCap: 18,
+  /** The most that programs, projects and campaigns together can take off hunger, plague and rebellion: a share of the trouble, never all of it. */
+  shareCap: 0.9,
 }
 
 /** Strength 0 to 3 (it moves between levels) as a multiple of one unit of effect. */

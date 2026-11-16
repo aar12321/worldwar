@@ -37,6 +37,8 @@ export function softCap(raw: number): number {
   return cap * (1 - Math.exp(-raw / cap))
 }
 
+const CAPPED_SHARES: (keyof SocialEffects)[] = ['famine', 'epidemic', 'order']
+
 type Held = Pick<Nation, 'social' | 'campaigns'> & Partial<Pick<Nation, 'projects'>>
 
 /** Everything a nation's programs and running campaigns do, added up. A nation with none gets the same zeros every time, at no cost. */
@@ -69,6 +71,8 @@ export function societyEffects(n: Held): SocietyReport {
     const level = p.level ?? (p.done ? 1 : 0)
     if (level >= 1) add(spec.effects, PROJECT_LEVELS.power[level], `project:${id}`, spec.name)
   }
+  // These are shares of a trouble that goes away (hunger, plague, rebels): stacked programs, projects and campaigns could pass 100% and turn it into a gain.
+  for (const k of CAPPED_SHARES) social[k] = Math.min(SOCIAL_RULES.shareCap, social[k])
   return { policy, social, stability: softCap(raw), rawStability: raw, sources }
 }
 

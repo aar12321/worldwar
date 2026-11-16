@@ -62,7 +62,7 @@ export const BUILDING_SPECS: Record<BuildingType, BuildingSpec> = {
   factory: { name: 'Factory', cost: 40, max: 5, effect: '+6 money a month per level. Level N lets you buy weapon level N.', description: 'Heavy industry. It pays for everything else, and planes need one.' },
   farm: { name: 'Farm', cost: 25, max: 5, effect: '+3 food a month per level.', description: 'Feeds your people and your soldiers.' },
   university: { name: 'University', cost: 45, max: 5, effect: '+2.5 research a month per level.', description: 'Turns money into new technology.' },
-  barracks: { name: 'Barracks', cost: 30, max: 5, effect: '+1 training slot and +0.75 defenders per level.', description: 'Trains infantry and tanks, and holds the border.' },
+  barracks: { name: 'Barracks', cost: 30, max: 5, effect: '+1 training slot, +0.75 defenders and +0.5 Defense Line per level, and the line heals faster.', description: 'Trains infantry and tanks, and holds the border.' },
   port: { name: 'Port', cost: 35, max: 3, effect: '+3 money from trade per level. Warships and sea attacks need one.', description: 'Trade, warships, and attacks across the sea. Coastal countries only.', requiresCoast: true },
   civic: { name: 'Civic Hall', cost: 30, max: 3, effect: '+0.6 influence and +0.3 research a month per level, and room for more officials.', description: 'Offices and schools.' },
   hospital: { name: 'Hospital', cost: 40, max: 4, effect: 'Raises health while doctors staff it. Needs doctors to work.', description: 'Care for the sick and the wounded.' },
@@ -100,7 +100,7 @@ export const LAW_SPECS: Record<LawId, LawSpec> = {
 }
 
 export const DIPLOMACY = {
-  loan: { min: 30, max: 400, minMonths: 3, maxMonths: 24, interest: 0.007, defaultInfamy: 10, defaultLockMonths: 12 },
+  loan: { min: 30, minMonths: 3, interest: 0.007, defaultInfamy: 10, defaultLockMonths: 12 },
   /** Reputation lost for tearing up a non-aggression pact. */
   pactBreakInfamy: 12,
   sanctions: { cost: 15, months: 12, tradeCut: 0.2, minFloor: 0.2 },
@@ -176,7 +176,6 @@ export function weaponCost(level: number): number {
 
 export interface MarketSpec {
   name: string
-  short: string
   /** Value of one unit in Capital when the resource is at its reference abundance. */
   base: number
   /** Median per-nation stock at which the price equals `base`. */
@@ -185,13 +184,13 @@ export interface MarketSpec {
 
 /** World market. Prices rise when the median nation is short of a resource and fall when it is plentiful. */
 export const MARKET: Record<TradeResource, MarketSpec> = {
-  capital: { name: 'Money', short: 'Money', base: 1, reference: 120 },
-  food: { name: 'Food', short: 'Food', base: 1.3, reference: 60 },
-  tp: { name: 'Research', short: 'Research', base: 2.2, reference: 40 },
-  manpower: { name: 'Soldiers', short: 'Soldiers', base: 0.12, reference: 400 },
-  oil: { name: 'Oil', short: 'Oil', base: 2, reference: 14 },
-  steel: { name: 'Steel', short: 'Steel', base: 1.8, reference: 12 },
-  goods: { name: 'Goods', short: 'Goods', base: 1.1, reference: 20 },
+  capital: { name: 'Money', base: 1, reference: 120 },
+  food: { name: 'Food', base: 1.3, reference: 60 },
+  tp: { name: 'Research', base: 2.2, reference: 40 },
+  manpower: { name: 'Soldiers', base: 0.12, reference: 400 },
+  oil: { name: 'Oil', base: 2, reference: 14 },
+  steel: { name: 'Steel', base: 1.8, reference: 12 },
+  goods: { name: 'Goods', base: 1.1, reference: 20 },
 }
 
 export const TRADE_LIMITS = { maxMonths: 12, maxAmount: 500, /** Live contracts: months before the first delivery, and the most money a nation can post as collateral. */ maxStart: 6, maxCollateral: 500 }
