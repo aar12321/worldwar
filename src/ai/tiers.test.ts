@@ -8,7 +8,7 @@ import { applyEventChoice } from '../engine/events'
 import { resolveTurn } from '../engine/resolveTurn'
 import { createRng } from '../engine/rng'
 import type { GameState, Order } from '../engine/types'
-import { lineMap, setMilitary, startState } from '../engine/__tests__/fixtures'
+import { giveRegions, lineMap, setMilitary, startState } from '../engine/__tests__/fixtures'
 import { getWorld } from '../map/world'
 import { buildTurnContext, generateAllBotOrders, generateBotOrders, peaceTerms } from './bot'
 import { manageCountry, sameSpending, taylorRate, wantedCorporateTax, wantedSpending } from './management'
@@ -89,11 +89,18 @@ describe('bot management', () => {
     expect(hard.has('invest')).toBe(true)
   })
 
-  it('only the top tier turns a crushing win into a puppet', () => {
+  it('Medium and Hard turn a crushing win over a country worth ruling into a puppet, Easy never does', () => {
     const s = startState(map)
+    // r2 holds three countries (land worth ruling); r1 holds as many, so r2 does not out-earn it.
+    giveRegions(s, 'r2', ['r3', 'r4'])
+    giveRegions(s, 'r1', ['r0', 'r5'])
     s.warScore['r1>r2'] = 90
-    expect(peaceTerms(s, map, 'r1', 'r2', 90, false, 1).puppet).toBeUndefined()
+    expect(peaceTerms(s, map, 'r1', 'r2', 90, false, 0).puppet).toBeUndefined()
+    expect(peaceTerms(s, map, 'r1', 'r2', 90, false, 1).puppet).toBe(true)
     expect(peaceTerms(s, map, 'r1', 'r2', 90, false, 2).puppet).toBe(true)
+    // Medium wants a decisive win; Hard settles for a clear one.
+    expect(peaceTerms(s, map, 'r1', 'r2', 28, false, 1).puppet).toBeUndefined()
+    expect(peaceTerms(s, map, 'r1', 'r2', 28, false, 2).puppet).toBe(true)
     s.nations.r2.overlord = 'r3'
     expect(peaceTerms(s, map, 'r1', 'r2', 90, false, 2).puppet).toBeUndefined()
   })
