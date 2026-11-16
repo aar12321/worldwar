@@ -1,6 +1,6 @@
 import { NUCLEAR, NUCLEAR_CONSEQUENCES } from '../data/nuclear'
 import { isLive } from '../engine/calendar'
-import { nuclearAccess, nukeThrough, warheadsBuilding, warheadsOf } from '../engine/nuclear'
+import { nuclearAccess, nukeAir, nukeThrough, warheadsBuilding, warheadsOf } from '../engine/nuclear'
 import type { RegionId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { usePlayerView } from './hooks'
@@ -23,7 +23,7 @@ export function NuclearCard({ target }: { target: RegionId }) {
   const have = warheadsOf(player)
   const building = warheadsBuilding(player)
   const left = building ? Math.max(0, Math.min(...(player.nuclear?.building ?? [game.turn])) - game.turn) : 0
-  const stops = Math.round((1 - nukeThrough(victim.systems?.shield ?? 0)) * 100)
+  const stops = Math.round((1 - nukeThrough(victim.systems?.shield ?? 0, nukeAir(game, player.id, victim.id))) * 100)
 
   return (
     <section className="rounded-2xl border border-[#ff453a]/45 bg-[#ff453a]/8 p-3.5 space-y-2.5" aria-label="Nuclear strike" data-testid="nuclear-card">

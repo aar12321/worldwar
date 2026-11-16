@@ -829,6 +829,9 @@ describe('the confirmation spells out what a nuclear strike costs', () => {
     const ask = confirmFor(s, line, { type: 'nuke', nationId: 'r0', target: 'r1' })
     expect(ask).not.toBeNull()
     expect(ask!.danger).toBe(true)
+    // A deliberate tick is required, under a red banner.
+    expect(ask!.require).toMatch(/I understand/)
+    expect(ask!.warning).toMatch(/cannot be undone/)
     expect(ask!.title).toMatch(/Launch a nuclear missile/)
     const text = ask!.points!.join('\n')
     expect(text).toMatch(/destroyed/)
@@ -843,5 +846,91 @@ describe('the confirmation spells out what a nuclear strike costs', () => {
     // A shield is mentioned honestly.
     s.nations.r1.systems.shield = 3
     expect(confirmFor(s, line, { type: 'nuke', nationId: 'r0', target: 'r1' })!.points!.join(' ')).toMatch(/stops about 25%/)
+  })
+})
+
+describe('edge cases of the world\'s answer', () => {
+  it('with no bloc and no other power at all, nobody is forced and nothing breaks', () => {
+    const s = nuclearWorld()
+    for (const id of ['r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']) s.nations[id].alive = false
+    expect(leadingFactions(s, 'r0', 2, 'r1')).toEqual([])
+    detonate(s, line, createRng(1, 1), 'r0', 'r1')
+    expect(s.infamy.r0).toBe(NUCLEAR.infamy)
+    expect(s.log.some((e) => /cannot go to war/.test(e.text))).toBe(true)
+  })
+
+  it('with only one bloc, the next strongest single nation makes up the second faction', () => {
+    const s = nuclearWorld()
+    for (const id of ['r4', 'r5', 'r6', 'r7', 'r8', 'r9']) setMilitary(s, id, { infantry: 1 })
+    s.alliances.push(pairKey('r2', 'r3'))
+    setMilitary(s, 'r2', { infantry: 30 })
+    setMilitary(s, 'r6', { infantry: 8 })
+    expect(leadingFactions(s, 'r0', 2, 'r1')).toEqual([['r2', 'r3'], ['r6']])
+  })
+
+  it('the victim\'s own allies are never counted among the factions, however strong', () => {
+    const s = nuclearWorld()
+    s.alliances.push(pairKey('r1', 'r2'), pairKey('r4', 'r5'))
+    setMilitary(s, 'r2', { infantry: 60 })
+    setMilitary(s, 'r4', { infantry: 12 })
+    for (const id of ['r3', 'r6', 'r7', 'r8', 'r9']) setMilitary(s, id, { infantry: 1 })
+    const f = leadingFactions(s, 'r0', 2, 'r1').flat()
+    expect(f).not.toContain('r1')
+    expect(f).not.toContain('r2')
+    expect(f).toContain('r4')
+  })
+
+  it('cannot be fired at your own ally, even one at war with someone else', () => {
+    const s = nuclearWorld()
+    s.wars = []
+    s.alliances.push(pairKey('r0', 'r1'))
+    expect(validateOrder(s, line, { type: 'nuke', nationId: 'r0', target: 'r1' })).toMatch(/at war/)
+  })
+
+  it('may be fired at another human in an online game, who is not dragged into other humans\' wars', () => {
+    const s = nuclearWorld()
+    s.humans = ['r0', 'r1']
+    s.multiplayer = true
+    expect(validateOrder(s, line, { type: 'nuke', nationId: 'r0', target: 'r1' })).toBeNull()
+    detonate(s, line, createRng(1, 1), 'r0', 'r1')
+    expect(s.regions.r1.fallout).toBeGreaterThan(0)
+  })
+
+  it('a warhead in the air is called off when its target nation dies before it lands', () => {
+    const s = startLive(nuclearWorld())
+    applyOrderNow(s, line, { type: 'nuke', nationId: 'r0', target: 'r1' })
+    s.nations.r1.alive = false
+    let cur = s
+    const events = []
+    for (let i = 0; i < NUCLEAR.flightDays; i++) {
+      const step = advanceDay(cur, line, {})
+      cur = step.state
+      events.push(...step.events)
+    }
+    expect(events.some((e) => e.kind === 'nuke' && !e.landed && e.why === 'changed')).toBe(true)
+    expect(cur.infamy.r0 ?? 0).toBe(0)
+  })
+
+  it('a nation the strike destroys is gone from the wars and the treaties, and the aggressor keeps the reputation', () => {
+    const s = nuclearWorld()
+    s.alliances.push(pairKey('r1', 'r8'))
+    const next = resolveTurn(s, line, [{ type: 'nuke', nationId: 'r0', target: 'r1' }])
+    expect(next.nations.r1.alive).toBe(false)
+    expect(next.wars.some((w) => w.split('|').includes('r1'))).toBe(false)
+    expect(next.alliances.some((a) => a.split('|').includes('r1'))).toBe(false)
+    expect(next.infamy.r0).toBeGreaterThanOrEqual(NUCLEAR.infamy - 5)
+  })
+
+  it('missile hunters catch some of a warhead, stealth takes it back, and neither is needed for the plain path', () => {
+    const hunters = { hunt: 0.8, pierce: 0, jam: 0 } as never
+    const stealth = { hunt: 0, pierce: 0.5, jam: 0 } as never
+    const plain = nukeThrough(0)
+    const hunted = nukeThrough(0, { defender: hunters, fighters: 4 })
+    expect(plain).toBe(1)
+    expect(hunted).toBeLessThan(plain)
+    // Fighters catch a warhead far worse than a cruise missile: less than the plain hunting share.
+    expect(hunted).toBeGreaterThan(1 - 0.8 * 0.95)
+    expect(nukeThrough(0, { defender: hunters, attacker: stealth, fighters: 4 })).toBeGreaterThan(hunted)
+    expect(nukeThrough(0, { defender: hunters, fighters: 0 })).toBe(1)
   })
 })

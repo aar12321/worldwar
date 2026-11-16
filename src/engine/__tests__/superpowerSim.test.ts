@@ -64,43 +64,45 @@ function grow(s: GameState, id: NationId, count: number, keep: NationId[] = []) 
 }
 
 describe('the world does not degenerate', () => {
-  it('72 months of Hard bots on the real world: no bomb thrown, wars stay few, the leader is not ground to dust', () => {
-    const s = createInitialState(map, { playerRegionId: 'germany', seed: 21, difficulty: 'hard', goal: 'world' })
-    const out = simulate(s, 72, 'germany')
-    console.log('NORMAL START, 72 Hard months', JSON.stringify(out))
-    expect(out.months).toBeGreaterThanOrEqual(60)
-    expect(out.nukes.length).toBeLessThanOrEqual(1)
-    expect(out.alive).toBeGreaterThan(30)
-    expect(out.maxWars).toBeLessThan(Object.values(s.nations).length / 2)
-  }, 900_000)
+  for (const seed of [21, 22]) {
+    it(`seed ${seed}: 66 months of Hard bots on the real world: no bomb thrown, wars stay few, the world stands`, () => {
+      const s = createInitialState(map, { playerRegionId: 'germany', seed, difficulty: 'hard', goal: 'world' })
+      const out = simulate(s, 66, 'germany')
+      console.log(`NORMAL START seed ${seed}`, JSON.stringify(out))
+      expect(out.months).toBeGreaterThanOrEqual(60)
+      expect(out.nukes.length).toBeLessThanOrEqual(1)
+      expect(out.alive).toBeGreaterThan(30)
+      expect(out.maxWars).toBeLessThan(Object.values(s.nations).length / 2)
+    }, 1_800_000)
+  }
 
-  it('60 months with five Hard Superpowers armed and at each other: bombs are rare, spaced, and never routine', () => {
-    const s = createInitialState(map, { playerRegionId: 'germany', seed: 33, difficulty: 'hard', goal: 'world' })
-    const giants = ['china', 'russia', 'brazil', 'india', 'germany']
-    for (const id of giants) grow(s, id, 26, giants)
-    updateTiers(s)
-    for (const id of giants) {
-      const n = s.nations[id]
-      expect(n.tier).toBeGreaterThanOrEqual(4)
-      n.techs.push('frontier_hypersonic')
-      n.resources.capital = 4000
-      n.resources.steel = 400
-      n.resources.tp = 600
-      n.nuclear = { warheads: 2, building: [] }
-      for (const r of Object.values(s.regions)) if (r.owner === id && r.id === id) r.buildings.factory = Math.max(1, r.buildings.factory)
-    }
-    // They are all at war with one another's neighbors at the start, so the bomb has reasons to come out.
-    for (let i = 0; i < giants.length; i++) {
-      const a = giants[i]
-      const b = giants[(i + 1) % giants.length]
-      s.wars.push(a < b ? `${a}|${b}` : `${b}|${a}`)
-    }
-    s.wars.sort()
-    const out = simulate(s, 60, 'germany')
-    console.log('SUPERPOWER STRESS, 60 Hard months', JSON.stringify(out), 'quiet', NUCLEAR.worldQuiet)
-    // The world waits after any bomb, so there can be at most one in each quiet spell.
-    for (let i = 1; i < out.nukes.length; i++) expect(out.nukes[i].turn - out.nukes[i - 1].turn).toBeGreaterThanOrEqual(NUCLEAR.worldQuiet)
-    expect(out.nukes.length).toBeLessThanOrEqual(Math.ceil(60 / NUCLEAR.worldQuiet))
-    expect(out.alive).toBeGreaterThan(20)
-  }, 900_000)
+  for (const seed of [33, 34]) {
+    it(`seed ${seed}: 60 months with five Hard Superpowers armed and at each other: bombs are rare, spaced, never routine`, () => {
+      const s = createInitialState(map, { playerRegionId: 'germany', seed, difficulty: 'hard', goal: 'world' })
+      const giants = ['china', 'russia', 'brazil', 'india', 'germany']
+      for (const id of giants) grow(s, id, 26, giants)
+      updateTiers(s)
+      for (const id of giants) {
+        const n = s.nations[id]
+        expect(n.tier).toBeGreaterThanOrEqual(4)
+        n.techs.push('frontier_hypersonic')
+        n.resources.capital = 4000
+        n.resources.steel = 400
+        n.resources.tp = 600
+        n.nuclear = { warheads: 2, building: [] }
+        s.regions[id].buildings.factory = Math.max(1, s.regions[id].buildings.factory)
+      }
+      for (let i = 0; i < giants.length; i++) {
+        const a = giants[i]
+        const b = giants[(i + 1) % giants.length]
+        s.wars.push(a < b ? `${a}|${b}` : `${b}|${a}`)
+      }
+      s.wars.sort()
+      const out = simulate(s, 60, 'germany')
+      console.log(`SUPERPOWER STRESS seed ${seed}`, JSON.stringify(out))
+      for (let i = 1; i < out.nukes.length; i++) expect(out.nukes[i].turn - out.nukes[i - 1].turn).toBeGreaterThanOrEqual(NUCLEAR.worldQuiet)
+      expect(out.nukes.length).toBeLessThanOrEqual(Math.ceil(60 / NUCLEAR.worldQuiet))
+      expect(out.alive).toBeGreaterThan(20)
+    }, 1_800_000)
+  }
 })

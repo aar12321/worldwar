@@ -4,7 +4,7 @@ import { orderCost } from '../engine/orders'
 import type { GameState, Order, WorldMap } from '../engine/types'
 import { NUCLEAR } from '../data/nuclear'
 import { isLive } from '../engine/calendar'
-import { leadingFactions, nukeThrough } from '../engine/nuclear'
+import { leadingFactions, nukeAir, nukeThrough } from '../engine/nuclear'
 import { formatDivisions, regionsOf, totalUnits } from '../engine/helpers'
 
 export interface PendingConfirm {
@@ -15,6 +15,10 @@ export interface PendingConfirm {
   danger?: boolean
   /** Consequences, one line each, shown as a list under the text. */
   points?: string[]
+  /** A red banner above the text, for the gravest choices. */
+  warning?: string
+  /** A sentence the player must tick before the button works. */
+  require?: string
   run: () => void
 }
 
@@ -40,7 +44,7 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
       const victim = game.nations[r?.owner]
       if (!r || !victim) return null
       const place = map.regions[o.target]?.name ?? o.target
-      const stops = Math.round((1 - nukeThrough(victim.systems?.shield ?? 0)) * 100)
+      const stops = Math.round((1 - nukeThrough(victim.systems?.shield ?? 0, nukeAir(game, o.nationId, victim.id))) * 100)
       const factions = leadingFactions(game, o.nationId, game.settings.difficulty === 'easy' ? NUCLEAR.factionsEasy : NUCLEAR.factions, victim.id).map((m) => (m.length > 1 ? `${name(m[0])} bloc (${m.length} nations)` : name(m[0])))
       const army = formatDivisions(totalUnits(victim.military.units))
       const points = [
@@ -52,7 +56,7 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
         'World tension spikes. This cannot be undone.',
         isLive(game) ? `The warhead flies for ${NUCLEAR.flightDays} days before it lands, and ${victim.name} will see it coming. A war that ends first calls it off.` : 'It lands when the month ends.',
       ]
-      return { title: `Launch a nuclear missile at ${place}?`, text: `A warhead of yours will strike ${victim.name}. Read what follows before you decide.`, label: 'Launch the missile', danger: true, points }
+      return { title: `Launch a nuclear missile at ${place}?`, text: `A warhead of yours will strike ${victim.name}. Read what follows before you decide.`, label: 'Launch the missile', danger: true, points, warning: 'This starts a world war and cannot be undone.', require: 'I understand that the whole world will turn on me, and I want to fire.' }
     }
     case 'strike':
       return o.weapon === 'orbital' ? asks('Fire the orbital weapon?', `${describeOrder(game, map, o)}. It can be used once a year.`, 'Fire', true) : null

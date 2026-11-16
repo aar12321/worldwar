@@ -29,6 +29,8 @@ export const NUCLEAR = {
   flightDays: 5,
   /** The Interceptor Shield stops only a fraction: this much of its own rating, so a level 3 shield (50%) stops 25%. */
   intercept: 0.5,
+  /** How well missile-hunter fighters catch a warhead, against 1 for the missiles they are made for: a warhead is fast and high, so they catch few. */
+  hunted: 0.3,
 
   /** Share of the struck country's buildings destroyed, of its people killed, and how far its Defense Line falls (to the floor). */
   buildings: 1,

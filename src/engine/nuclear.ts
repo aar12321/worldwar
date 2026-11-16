@@ -7,7 +7,8 @@ import { declareWar } from './diplomacy'
 import { tierGate } from './empire'
 import { addInfamy, addLog, alliesOf, atWar, clamp, distanceKm, enemiesOf, grantJustification, hasTech, isAllied, maxWars, newId, regionsOf } from './helpers'
 import { militaryPower } from './militaryStats'
-import { recentAttackers } from './missiles'
+import { aircraftEffects, pastDefenses } from './aircraft'
+import { recentAttackers, type AirDefense } from './missiles'
 import type { Rng } from './rng'
 import type { GameState, NationId, Nation, NukeFlight, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -88,7 +89,19 @@ export function nukeProblem(s: GameState, map: WorldMap, o: Nuke, pending: Order
 }
 
 /** The share of the blast that gets past the victim's Interceptor Shield. The shield stops only a part of its own rating. */
-export const nukeThrough = (shield: number): number => clamp(1 - (1 - interceptFactor(shield)) * NUCLEAR.intercept, 0.05, 1)
+export function nukeThrough(shield: number, air?: AirDefense): number {
+  const base = clamp(1 - (1 - interceptFactor(shield)) * NUCLEAR.intercept, 0.05, 1)
+  if (!air || (!air.attacker && !air.defender)) return base
+  // Missile-hunter fighters and stealth count, as for any missile, but fighters catch a warhead poorly.
+  return clamp(pastDefenses(base, air.attacker, air.defender, air.fighters, NUCLEAR.hunted), 0.05, 1)
+}
+
+/** What a warhead meets besides the shield: the victim's hunters at home and the attacker's stealth. Undefined when neither side has developments, so the plain path is untouched. */
+export function nukeAir(s: GameState, attacker: NationId, victim: NationId): AirDefense | undefined {
+  const fxA = aircraftEffects(s.nations[attacker])
+  const fxD = aircraftEffects(s.nations[victim])
+  return fxA || fxD ? { attacker: fxA, defender: fxD, fighters: s.nations[victim].military.units.fighter } : undefined
+}
 
 /** Takes a warhead out of the store at launch. */
 function spendWarhead(s: GameState, n: Nation) {
@@ -136,7 +149,7 @@ export function detonate(s: GameState, map: WorldMap, rng: Rng, nationId: Nation
   const region = s.regions[target]
   const victim = s.nations[region.owner]
   const place = map.regions[target].name
-  const through = nukeThrough(victim.systems?.shield ?? 0)
+  const through = nukeThrough(victim.systems?.shield ?? 0, nukeAir(s, nationId, victim.id))
   const stopped = Math.round((1 - through) * 100)
 
   // The land: buildings, projects and cities, the people, the line, the factories, the output.
