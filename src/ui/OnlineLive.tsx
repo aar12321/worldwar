@@ -45,12 +45,13 @@ export function OnlineLiveControls() {
 
   return (
     <div className="hud-next hud-live glass rounded-2xl p-2 pointer-events-auto flex flex-col gap-1.5 min-w-[196px] max-w-[260px]" data-testid="online-live">
-      <div className="flex items-center justify-between gap-2 px-1">
+      <div className="flex items-center justify-between gap-2 px-1 max-sm:flex-col max-sm:items-start max-sm:justify-center max-sm:gap-1">
         <span className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.14em] text-[#ff6961]" aria-label="Live game">
           <span className="inline-block w-2 h-2 rounded-full bg-[#ff453a]" aria-hidden="true" />
           LIVE
         </span>
-        <span className="text-[11px] text-white/60 tracking-[0.12em]">Room {online.code}</span>
+        <span className="text-[11px] text-white/60 tracking-[0.12em] max-sm:hidden">Room {online.code}</span>
+        <span className="sm:hidden inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: TONE[sync.tone] }} role="img" aria-label={sync.text} title={sync.text} data-testid="sync-dot" />
       </div>
       <div className="flex items-stretch gap-1.5">
         <button
@@ -74,12 +75,12 @@ export function OnlineLiveControls() {
       <div className="hud-live-status px-1 text-center text-[12px] font-medium" style={{ color: TONE[line.tone] }} role="status" aria-live="polite" data-testid="clock-line">
         {line.text}
       </div>
-      <div className="px-1 text-center text-[11px] leading-tight" style={{ color: TONE[sync.tone] }} role="status" data-testid="sync-line">
+      <div className="hud-live-status px-1 text-center text-[11px] leading-tight" style={{ color: TONE[sync.tone] }} role="status" data-testid="sync-line">
         <span className="inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle" style={{ background: TONE[sync.tone] }} aria-hidden="true" />
         {sync.text}
       </div>
       {pending > 0 && (
-        <div className="px-1 text-center text-[11px] text-white/70" aria-live="polite">
+        <div className="hud-live-status px-1 text-center text-[11px] text-white/70" aria-live="polite">
           {pending} order{pending === 1 ? '' : 's'} on the way to the host
         </div>
       )}
@@ -88,7 +89,9 @@ export function OnlineLiveControls() {
           Read the month’s report
         </button>
       )}
-      <OnlinePeople />
+      <div className="max-sm:w-[96px] max-sm:shrink-0 max-sm:[&>button]:px-2 max-sm:[&>button]:text-[12px] max-sm:[&>button]:leading-tight">
+        <OnlinePeople />
+      </div>
     </div>
   )
 }
