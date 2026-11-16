@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { grossIncome } from '../victory'
 import { generateAllBotOrders, generateBotOrders, peaceTerms } from '../../ai/bot'
 import { evaluateProposal } from '../../ai/diplomat'
 import { wantsTerritory } from '../../ai/territories'
