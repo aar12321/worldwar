@@ -367,7 +367,7 @@ export function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, t
     for (const k of SENDABLE) picked[k] = Math.min(picked[k], Math.max(0, free[k] - (attackerNation.military.sent?.[k] ?? 0)))
   }
   const share = army ? army.share : picked ? shareOf(picked, free!) : commitShare(attackerNation, commit, custom)
-  if (army ? totalUnits(army.units) < 0.05 : !reach.ok || share < 0.05 || totalUnits(free!) < 0.1 || (picked !== null && totalUnits(picked) < 0.05)) return null
+  if (army ? totalUnits(army.units) < 0.05 : !reach.ok || (picked ? totalUnits(picked) < 0.05 : share < 0.05) || totalUnits(free!) < 0.1) return null
 
   const spec = blitzSpec(attackerNation, stance)
   const attNotes: string[] = []

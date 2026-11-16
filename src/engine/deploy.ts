@@ -36,6 +36,14 @@ export function cleanUnits(units: Partial<UnitCounts> | undefined): UnitCounts {
   return out
 }
 
+/** Only the kinds that are actually sent, as an order carries them. */
+export function compactUnits(units: Partial<UnitCounts>): Partial<UnitCounts> {
+  const c = cleanUnits(units)
+  const out: Partial<UnitCounts> = {}
+  for (const k of SENDABLE) if (c[k] > 0) out[k] = c[k]
+  return out
+}
+
 /** The share of the reserve an attack sending `units` is: what it leaves behind as exposure, and what the battle report names. */
 export function shareOf(units: UnitCounts, pool: UnitCounts): number {
   return Math.min(1, totalUnits(units) / Math.max(0.1, totalUnits(pool)))
@@ -74,7 +82,10 @@ export function unitsProblem(s: GameState, o: AttackOrder, pending: Order[], liv
   const raw = o.units
   if (!raw || typeof raw !== 'object') return 'Choose the units to send'
   for (const k of Object.keys(raw)) {
-    if (k === 'missile') return 'Missiles are fired separately: set how many in the missile box'
+    if (k === 'missile') {
+      if (Number(raw.missile ?? 0) > 0) return 'Missiles are fired separately: set how many in the missile box'
+      continue
+    }
     if (!SENDABLE.includes(k as UnitType)) return `Unknown unit: ${k}`
   }
   for (const k of SENDABLE) {
@@ -122,4 +133,12 @@ export function remainder(s: GameState, nationId: NationId, units: UnitCounts): 
   const out = emptyUnits()
   for (const k of UNIT_TYPES) out[k] = Math.max(0, home[k] - (units[k] ?? 0))
   return out
+}
+
+/** What a unit of each kind is worth to raise, in infantry divisions (money, steel at the market's base price, and soldiers). The planner uses it so a tank is not thrown away as freely as a rifleman. */
+const raise = (k: UnitType) => UNIT_SPECS[k].capitalCost + UNIT_SPECS[k].steel * 1.8 + UNIT_SPECS[k].manpowerCost * 0.12
+export function worthOf(units: Partial<UnitCounts>): number {
+  let sum = 0
+  for (const k of UNIT_TYPES) sum += (units[k] ?? 0) * raise(k)
+  return sum / raise('infantry')
 }
