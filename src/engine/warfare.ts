@@ -2,6 +2,7 @@ import { addOpinion, forgetNation } from '../ai/opinion'
 import { BANKING } from '../data/banking'
 import { COMBAT_MEDICINE, DEMAND, MEDICINE } from '../data/people'
 import { GENERAL_TRAITS } from '../data/projects'
+import { startingBank } from './bank'
 import { AIRCRAFT_RULES } from '../data/aircraft'
 import { aircraftEffects, airReach, bomberBonus, pastDefenses } from './aircraft'
 import { updateTiers } from './empire'
@@ -656,6 +657,15 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
     existing.stability = 55
     existing.warWeariness = 0
     existing.military = military
+    // A country brought back from the dead starts clean too: no old debts, no old master, no lender's grudge.
+    existing.overlord = null
+    existing.overlordSince = undefined
+    existing.debt = 0
+    existing.bonds = []
+    existing.redMonths = 0
+    existing.defaultedUntil = 0
+    existing.inDebt = false
+    existing.debtTurns = 0
   } else {
     nationId = `free-${regionId}-${s.turn}`
     const base = existing ?? s.nations[oldOwner]
@@ -667,6 +677,17 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
       overlord: null,
       overlordSince: undefined,
       debt: 0,
+      bonds: [],
+      bank: startingBank(),
+      tier: 1,
+      regionalCapitals: [],
+      projects: {},
+      stateOwned: [],
+      seizedUntil: 0,
+      academy: 0,
+      research2: { productivity: 0, medicine: 0, weapons: 0 },
+      lastOrbital: 0,
+      secureUntil: 0,
       redMonths: 0,
       defaultedUntil: 0,
       subsidies: [],

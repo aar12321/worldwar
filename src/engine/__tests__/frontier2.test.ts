@@ -55,7 +55,7 @@ describe('the new units', () => {
 })
 
 describe('what each new weapon does and what stops it', () => {
-  it('drones take the first losses, so the soldiers behind them live', () => {
+  it('drones take more than their share of the losses, so the soldiers behind them live', () => {
     const att = side({ infantry: 6, drone: 6 })
     const def = side({ infantry: 8, armor: 2 })
     const out = resolveBattle({ attacker: att, defender: def, terrain: 'plains', coastal: false }, createRng(3, 1))

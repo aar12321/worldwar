@@ -34,7 +34,7 @@ function AgencyCard({ id }: { id: AgencyId }) {
         </div>
       </div>
       <div className="text-[13px] text-white/75">
-        Teams this month: {Math.max(0, a.level - used)} of {a.level} · Experience {a.exp} · Costs {fmt(a.level * AGENCY.upkeepPerLevel, 1)} money a month
+        Teams this month: {Math.max(0, a.level - used)} of {a.level}{id === 'foreign' ? ` · Experience ${a.exp}` : ''} · Costs {fmt(a.level * AGENCY.upkeepPerLevel, 1)} money a month
       </div>
       {a.level < AGENCY.maxLevel && (
         <div className="space-y-1.5">

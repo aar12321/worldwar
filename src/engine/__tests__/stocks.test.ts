@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { COMPANY_CAP, STOCKS, TIERS } from '../../data/companies'
 import { getWorld } from '../../map/world'
+import { dividendRate } from '../bank'
 import { computeEconomy } from '../economy'
 import { normalizeGame } from '../migrate'
 import { orderCost, validateOrder } from '../orders'
@@ -247,11 +248,16 @@ describe('what a company does when told to', () => {
     const { s, mine } = exchange()
     own(s, mine, 600)
     const value = 600 * s.stocks.price[mine]
-    expect(portfolio(s, 'r0').dividends).toBeCloseTo(value * STOCKS.dividend.payout)
+    const payout = dividendRate(s, s.nations.r0, 'payout')
+    const focus = dividendRate(s, s.nations.r0, 'focus')
+    // No more than the company's ceilings, and never more than the cheapest bond costs.
+    expect(payout).toBeLessThanOrEqual(STOCKS.dividend.payout)
+    expect(focus).toBeLessThan(payout)
+    expect(portfolio(s, 'r0').dividends).toBeCloseTo(value * payout)
     s.stocks.directive[mine] = 'focus'
-    expect(portfolio(s, 'r0').dividends).toBeCloseTo(value * STOCKS.dividend.focus)
+    expect(portfolio(s, 'r0').dividends).toBeCloseTo(value * focus)
     own(s, mine, 100)
-    expect(portfolio(s, 'r0').dividends).toBeCloseTo(100 * s.stocks.price[mine] * STOCKS.dividend.payout)
+    expect(portfolio(s, 'r0').dividends).toBeCloseTo(100 * s.stocks.price[mine] * payout)
     const before = s.nations.r0.resources.capital
     const next = resolveTurn(s, map, [])
     expect(next.nations.r0.resources.capital).toBeGreaterThan(before)

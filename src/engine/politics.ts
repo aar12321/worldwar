@@ -45,6 +45,12 @@ export function runPolitics(s: GameState, map: WorldMap, rng: Rng) {
   }
 }
 
+/** What a puppet owes its master this month: a share of what its economy earns. */
+export function tributeOf(s: GameState, map: WorldMap, puppetId: string): number {
+  const e = computeEconomy(s, map, puppetId)
+  return Math.max(0, e.taxIncome + e.factoryIncome + e.tradeIncome + e.corporateIncome) * DIPLOMACY.puppet.tribute
+}
+
 /** A puppet pays part of its income to its master, and breaks free when its master dies or it grows strong and restless. */
 function payTribute(s: GameState, map: WorldMap, puppet: Nation, rng: Rng, ledger: Map<string, { gross: number; paid: number }>) {
   const master = s.nations[puppet.overlord ?? '']
@@ -57,8 +63,7 @@ function payTribute(s: GameState, map: WorldMap, puppet: Nation, rng: Rng, ledge
     runPuppetMonth(s, map, puppet, master, rng, ledger)
     return
   }
-  const e = computeEconomy(s, map, puppet.id)
-  const tribute = Math.max(0, e.taxIncome + e.factoryIncome + e.tradeIncome + e.corporateIncome) * DIPLOMACY.puppet.tribute
+  const tribute = tributeOf(s, map, puppet.id)
   puppet.resources.capital -= tribute
   master.resources.capital += tribute
   const strong = militaryPower(s, puppet.id) > militaryPower(s, master.id) * 0.8

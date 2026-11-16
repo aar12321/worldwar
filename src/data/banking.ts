@@ -70,6 +70,4 @@ export const BANKING = {
   reserveCredibility: 0.5,
   /** Printing comes in these shares of a month's income. */
   printSteps: [0.05, 0.1, 0.25],
-  /** Dividends on shares follow the world interest rate, plus this little premium a month, so borrowing to buy shares earns nothing. */
-  dividendPremium: 0.0005,
 }

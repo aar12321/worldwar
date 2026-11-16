@@ -7,6 +7,7 @@ import { startingCities } from '../engine/cities'
 import { CORPORATE_TAX, GOVERNMENTS } from './government'
 import { freshStatecraft, seedPeople } from '../engine/statecraft'
 import { startingWorldStats } from '../engine/bank'
+import { GENERAL_TRAITS as GENERAL_TRAIT_EFFECTS } from './projects'
 import { UNIT_SPECS, emptyTraining } from './unitTypes'
 import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
@@ -19,15 +20,8 @@ import type { Difficulty, GameSettings, GovernmentType, SectorId, GameState, Gen
 
 const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dmitri', 'Saoirse', 'Tariq', 'Mei', 'Lucien', 'Zofia', 'Kwame', 'Elena', 'Hugo', 'Anika', 'Mateo', 'Yara', 'Bogdan', 'Ines']
 const GENERAL_LAST = ['Varga', 'Okafor', 'Takeda', 'Brandt', 'Montoya', 'Haddad', 'Volkov', 'Byrne', 'Rahman', 'Lin', 'Moreau', 'Nowak', 'Mensah', 'Petrova', 'Lindqvist', 'Sato', 'Reyes', 'Kader', 'Horvat', 'Silva']
-/** Names kept for older saves. A general's only effect is free training at home. */
-export const GENERAL_TRAITS: Record<GeneralTrait, { name: string; description: string }> = {
-  mountaineer: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-  logistician: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-  blitz: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-  air_marshal: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-  stalwart: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-}
-const TRAITS = Object.keys(GENERAL_TRAITS) as GeneralTrait[]
+/** The traits a new general may have, in the order their effects are listed (see GENERAL_TRAITS in projects.ts). */
+const TRAITS = Object.keys(GENERAL_TRAIT_EFFECTS) as GeneralTrait[]
 
 function nationColor(index: number): string {
   return mapColor(index)
