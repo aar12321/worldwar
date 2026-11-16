@@ -189,7 +189,11 @@ function VoteCard({ game, f, p, me, orders }: { game: GameState; f: Faction; p: 
   const left = Math.max(0, p.expires - game.turn)
   const title = p.kind === 'war' ? `War on ${game.nations[p.target!]?.name ?? 'a country'}` : 'Supply contract'
   const base = { type: 'factionVote' as const, nationId: me, proposalId: p.id }
-  const cast = (vote: 'yes' | 'no') => (queued === vote ? removeOrder(idx) : issueOrder({ ...base, vote }))
+  const toast = useGame((s) => s.toast)
+  const cast = (vote: 'yes' | 'no') => {
+    if (queued === vote) return removeOrder(idx)
+    if (issueOrder({ ...base, vote })) toast(`Your ${vote} vote on ${title.toLowerCase()} is in. It counts when the month ends.`, 'success', 3500)
+  }
   const verdict = t.outcome === 'pass' ? 'Passes when the month ends' : t.outcome === 'fail' ? 'Fails when the month ends' : `Open: it needs more than half of the ${f.charter.vote === 'weighted' ? 'weight' : 'votes'} to pass`
   return (
     <div className="rounded-2xl border border-[#ffd60a]/50 bg-[#ffd60a]/6 p-4 space-y-3" data-testid="vote-card">

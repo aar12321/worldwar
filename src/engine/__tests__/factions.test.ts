@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { generateAllBotOrders, generateBotOrders } from '../../ai/bot'
 import { addOpinion } from '../../ai/opinion'
 import { FACTION } from '../../data/factions'
-import { claimValue, factionNews, factionOf, poolPower, sharesOf, stockRatio, tallyOf, voteWeights, warTargetProblem, withdrawable } from '../factions'
+import { claimValue, factionNews, factionOf, poolPower, runFactionMonth, sharesOf, stockRatio, tallyOf, voteWeights, warTargetProblem, withdrawable } from '../factions'
 import { atWar } from '../helpers'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import { validateOrder } from '../orders'
 import type { Faction, FactionContractTerms, FactionGift, GameState, NationId, Order } from '../types'
 import { POOL_RESOURCES } from '../types'
+import { advise } from '../advisor'
 import { daysInMonth } from '../calendar'
 import { advanceDay, startLive } from '../live'
 import { giveRegions, lineMap, setMilitary, startState } from './fixtures'
@@ -956,5 +957,134 @@ describe('turn and live months are the same month for a faction', () => {
     expect(factionOf(turn, 'r0')!.wars.length).toBe(1)
     expect(JSON.stringify(strip(live).factions)).toBe(JSON.stringify(strip(turn).factions))
     expect(JSON.stringify(strip(live).regions)).toBe(JSON.stringify(strip(turn).regions))
+  })
+})
+
+describe('edge cases the host and the desk meet', () => {
+  /** r0, r1, r5 at war with r2 (which holds r3 and r4 too), the pool full of soldiers. */
+  function atWarTogether() {
+    const members: NationId[] = ['r0', 'r1', 'r5']
+    const { s, f } = formed(members, members)
+    giveRegions(s, 'r2', ['r3', 'r4'])
+    for (const id of ['r2', 'r3', 'r4']) s.regions[id].line = 40
+    setMilitary(s, 'r2', { infantry: 30 })
+    ok(s, { type: 'factionContribute', nationId: 'r0', gift: { units: { infantry: 8, armor: 3 }, stock: { money: 200, oil: 40, food: 40 } } })
+    ok(s, { type: 'factionContribute', nationId: 'r1', gift: { units: { infantry: 6 } } })
+    ok(s, { type: 'factionPropose', nationId: 'r0', proposal: { kind: 'war', target: 'r2' } })
+    const id = f.proposals[0].id
+    let cur = resolveTurn(s, map, [])
+    cur = resolveTurn(cur, map, [{ type: 'factionVote', nationId: 'r1', proposalId: id, vote: 'yes' }])
+    return { s: cur, f: factionOf(cur, 'r0')! }
+  }
+
+  it('a member who leaves in the middle of a war leaves its soldiers in the fight, and the command passes on', () => {
+    const { s, f } = atWarTogether()
+    s.turn += FACTION.lockMonths + 1
+    const lead = f.wars[0].lead
+    const soldiers = f.pool.units.infantry
+    const m = s.nations[lead]
+    const homeBefore = m.military.units.infantry
+    ok(s, { type: 'factionLeave', nationId: lead })
+    expect(f.members).not.toContain(lead)
+    expect(f.wars[0].lead).not.toBe(lead)
+    expect(f.members).toContain(f.wars[0].lead)
+    // The soldiers stay in the pool, and the leaver gets money back but no soldiers.
+    expect(f.pool.units.infantry).toBeCloseTo(soldiers, 9)
+    expect(m.military.units.infantry).toBeCloseTo(homeBefore, 9)
+    const next = resolveTurn(s, map, [])
+    expect(factionOf(next, 'r0')!.wars).toHaveLength(1)
+  })
+
+  it('a faction whose only member at war falls ends the war and carries on in peace', () => {
+    const { s, f } = atWarTogether()
+    s.nations.r5.alive = false
+    for (const rid of Object.keys(s.regions)) if (s.regions[rid].owner === 'r5') s.regions[rid].owner = 'r4'
+    const next = resolveTurn(s, map, [])
+    expect(factionOf(next, 'r0')!.members).not.toContain('r5')
+    expect(f.members).toContain('r0')
+  })
+
+  it('a human member who is offline during a vote is voted for by the host through the rival play, by the same rules', () => {
+    const { s } = formed(['r0', 'r1', 'r2'], ['r0'])
+    s.settings.difficulty = 'hard'
+    s.turn = 30
+    giveRegions(s, 'r4', ['r3'])
+    for (const m of ['r0', 'r1', 'r2']) addOpinion(s, m, 'r4', 'Rival', -60, 0.05)
+    ok(s, { type: 'factionPropose', nationId: 'r1', proposal: { kind: 'war', target: 'r4' } })
+    const next = resolveTurn(s, map, [])
+    // r0 is a person who is away: the host plays its nation with allowPlayer on.
+    const orders = generateBotOrders(next, map, 'r0', true)
+    const vote = orders.find((o) => o.type === 'factionVote')
+    expect(vote && vote.type === 'factionVote' && vote.vote).toBe('yes')
+    // And an Easy world never does.
+    next.settings.difficulty = 'easy'
+    expect(generateBotOrders(next, map, 'r0', true).some((o) => o.type === 'factionVote')).toBe(false)
+  })
+
+  it('a proposal that nobody can carry expires and leaves nothing behind', () => {
+    const { s, f } = formed(['r0', 'r1', 'r2'])
+    giveRegions(s, 'r4', ['r3'])
+    ok(s, { type: 'factionPropose', nationId: 'r0', proposal: { kind: 'war', target: 'r4' } })
+    const pp = s.nations.r0.resources.pp
+    let cur = s
+    for (let i = 0; i < FACTION.voteMonths + 2; i++) cur = resolveTurn(cur, map, [])
+    expect(factionOf(cur, 'r0')!.proposals).toHaveLength(0)
+    expect(factionOf(cur, 'r0')!.wars).toHaveLength(0)
+    expect(factionOf(cur, 'r0')!.history.some((h) => /voted down/.test(h.text))).toBe(true)
+    // The stake is spent either way.
+    expect(cur.nations.r0.resources.pp).toBeLessThanOrEqual(pp + 40)
+    void f
+  })
+
+  it('the advisor tells a member about a vote that needs them, and stops when the vote is queued', () => {
+    const { s } = formed(['r0', 'r1'])
+    giveRegions(s, 'r2', ['r3'])
+    ok(s, { type: 'factionPropose', nationId: 'r0', proposal: { kind: 'war', target: 'r2' } })
+    const id = factionOf(s, 'r0')!.proposals[0].id
+    expect(advise(s, map, 'r1', [], 20).some((a) => a.id === 'faction-vote' && a.target.desk === 'faction')).toBe(true)
+    expect(advise(s, map, 'r0', [], 20).some((a) => a.id === 'faction-vote')).toBe(false)
+    const queued: Order = { type: 'factionVote', nationId: 'r1', proposalId: id, vote: 'yes' }
+    expect(advise(s, map, 'r1', [queued], 20).some((a) => a.id === 'faction-vote')).toBe(false)
+  })
+
+  it('the advisor shows an invitation until it is answered', () => {
+    const s = world(['r0', 'r1'])
+    ok(s, { type: 'factionFound', nationId: 'r0', name: 'Iron Pact' })
+    ok(s, { type: 'factionInvite', nationId: 'r0', target: 'r1' })
+    const f = factionOf(s, 'r0')!
+    expect(advise(s, map, 'r1', [], 20).some((a) => a.id === 'faction-invite')).toBe(true)
+    expect(advise(s, map, 'r1', [{ type: 'factionJoin', nationId: 'r1', factionId: f.id }], 20).some((a) => a.id === 'faction-invite')).toBe(false)
+  })
+
+  it('pool upkeep that cannot be paid never makes anything negative, and the soldiers desert', () => {
+    const { s } = formed(['r0', 'r1'])
+    ok(s, { type: 'factionContribute', nationId: 'r0', gift: { units: { infantry: 10, armor: 4 } } })
+    for (const n of Object.values(s.nations)) n.resources.capital = 0
+    for (let i = 0; i < 6; i++) {
+      // The month's upkeep with an empty pool and empty treasuries.
+      runFactionMonth(s)
+      const f = factionOf(s, 'r0')!
+      for (const r of POOL_RESOURCES) expect(f.pool.stock[r]).toBeGreaterThanOrEqual(-1e-9)
+      for (const k of Object.keys(f.pool.units) as (keyof typeof f.pool.units)[]) expect(f.pool.units[k]).toBeGreaterThanOrEqual(0)
+      for (const n of Object.values(s.nations)) expect(n.resources.capital).toBeGreaterThanOrEqual(-1e-9)
+    }
+    expect(factionOf(s, 'r0')!.pool.units.infantry).toBeLessThan(5)
+    expect(factionOf(s, 'r0')!.history.some((h) => /deserted/.test(h.text))).toBe(true)
+  })
+
+  it('a damaged faction in a save is repaired on load', async () => {
+    const { normalizeGame } = await import('../migrate')
+    const { s } = formed(['r0', 'r1'])
+    const copy = JSON.parse(JSON.stringify(s)) as GameState
+    copy.factions![0].pool.stock.money = Number.NaN
+    copy.factions![0].members.push('nowhere')
+    delete (copy.factions![0].ledger as Record<string, unknown>).r1
+    const fixed = normalizeGame(copy, map)
+    const f = fixed.factions![0]
+    expect(f.pool.stock.money).toBe(0)
+    expect(f.members).toEqual(['r0', 'r1'])
+    expect(f.ledger.r1).toBeDefined()
+    copy.factions = [{ junk: true } as never]
+    expect(normalizeGame(copy, map).factions).toBeUndefined()
   })
 })

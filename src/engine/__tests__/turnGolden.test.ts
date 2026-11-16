@@ -22,7 +22,7 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * again, so the aircraft rules themselves (stat bonuses, hunters, reach, the monthly bill and research paid at the start) change nothing for a
  * nation that has not started a development; the Normal-bot world and the small war did not move.
  * Pinned once more after the missile program began to pay its research (it was checked but never charged), which changes what Hard bots at war can afford.
- * Pinned again when Medium and Hard rivals learned to found and join factions, pay into them and vote (the bots' faction play uses its own random stream). Checked before pinning: with the faction play switched off, the previous hashes matched exactly, so nothing else moved; a game that never founds a faction carries no `factions` field.
+ * Pinned again when Medium and Hard rivals learned to found and join factions, pay into them and vote (the bots' faction play uses its own random stream). Checked before pinning: with the faction play switched off, the previous hashes matched exactly (1d71ef7fbf0dc5 for the Normal world, and the Hard world's earlier pin after the aircraft and missile changes), so nothing else moved; a game that never founds a faction carries no `factions` field.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -90,7 +90,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('83c1bd342788b')
+    expect(hash(JSON.stringify(s))).toBe('1027e23e3df4b8')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
