@@ -94,7 +94,7 @@ export function freshStatecraft(): Pick<Nation, 'bonds' | 'spending' | 'programs
     bonds: [],
     spending: { ...STANDARD_SPENDING },
     programs: defaultPrograms(),
-    people: { skills: { basic: 0.62, skilled: 0.3, engineers: 0.04, doctors: 0.02, scientists: 0.02 }, schooling: 0.4, health: 0.55, unemployment: 0.05, specialization: 0, focusSince: 0, epidemic: 0, migration: 0 },
+    people: { skills: { basic: 0.62, skilled: 0.3, engineers: 0.04, doctors: 0.02, scientists: 0.02 }, schooling: 0.4, health: 0.55, unemployment: 0.05, specialization: 0, epidemic: 0, migration: 0 },
     bank: startingBank(),
     stateOwned: [],
     seizedUntil: 0,

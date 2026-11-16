@@ -108,8 +108,6 @@ export interface People {
   unemployment: number
   /** How specialized the schools have made the people in their focus, 0 to 1. */
   specialization: number
-  /** Turn the school focus last changed. Specialization starts again from nothing. */
-  focusSince: number
   /** How bad an epidemic is, 0 when there is none. */
   epidemic: number
   /** Last month's people moving in (positive) or out, as a share of the population. */

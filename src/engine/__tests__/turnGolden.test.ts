@@ -37,6 +37,9 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * Re-pinned (all three) when the AI got its strategic layer (src/ai/strategy.ts: postures, attacks and war targets chosen from the War Room's own
  * forecast, peace timing, missile kinds by target) and stale AI wars began to fizzle after a year: bots decide differently on purpose.
  * Checked before pinning: docs/STRATEGY.md has the measured effect (attacks at poor odds from 44% to under 1%, wars shorter, no stalled fronts).
+ * Re-pinned (all three state hashes, not the battle log) by the value audit (docs/VALUE_AUDIT.md) when the never-read field `people.focusSince` was removed.
+ * Checked before pinning: on the code just before the removal, hashing the same states with that one key left out gave exactly these three values
+ * (1b61219982f9c1, ee22ac4b8fdef, 14c280eef9180f), so nothing but that field moved.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -98,7 +101,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('f204c70c0058a')
+    expect(hash(JSON.stringify(s))).toBe('1b61219982f9c1')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -106,12 +109,12 @@ describe('turn mode resolves exactly as pinned', () => {
     expect(battles).toBeGreaterThan(0)
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
-    expect(hash(JSON.stringify(s))).toBe('9630530323146')
+    expect(hash(JSON.stringify(s))).toBe('ee22ac4b8fdef')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('1bb3d6aea64728')
+    expect(hash(JSON.stringify(state))).toBe('14c280eef9180f')
     expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
   })
 

@@ -485,7 +485,6 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       if (focus && focus !== n.programs.focus) {
         // A new focus starts specializing again from nothing.
         n.people.specialization = 0
-        n.people.focusSince = s.turn
       }
       n.programs = { ...n.programs, ...o.programs }
       if (o.rate !== undefined) n.bank.rate = o.rate

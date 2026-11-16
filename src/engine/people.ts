@@ -187,7 +187,7 @@ export function populationGrowth(n: Nation): number {
 export function startingPeople(n: Nation, b: PeopleBasis): People {
   // Everyone starts exactly where standard spending leads them, so nothing drifts in the first months.
   const schooling = schoolingTarget({ ...n, spending: n.spending ?? STANDARD_SPENDING, programs: n.programs }, b.development)
-  const people: People = { skills: { basic: 0.6, skilled: 0.3, engineers: 0.04, doctors: 0.02, scientists: 0.02 }, schooling, health: 0.5, unemployment: PEOPLE.jobsBase, specialization: 0, focusSince: 0, epidemic: 0, migration: 0 }
+  const people: People = { skills: { basic: 0.6, skilled: 0.3, engineers: 0.04, doctors: 0.02, scientists: 0.02 }, schooling, health: 0.5, unemployment: PEOPLE.jobsBase, specialization: 0, epidemic: 0, migration: 0 }
   const shell = { ...n, people } as Nation
   const d = demandOf(shell, b)
   const t = skillTargets(shell)
