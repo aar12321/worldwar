@@ -13,6 +13,9 @@ import { MISSILES } from '../data/missiles'
 import { AIRCRAFT_NODES } from '../data/aircraft'
 import { applyPauseAircraftDev, applyStartAircraftDev } from './aircraft'
 import { applyBuildMissiles, applyFundMissiles } from './missiles'
+import { DEFENSE_TEXT, DOCTRINES } from '../data/missileWar'
+import { applyDefense, applyRecon, applyScramble, applyTruce, runMissileWar, runRaid } from './missileWar'
+import { runFalseAlarms, warnAnswer } from './missileDoctrine'
 import { applyBuildWarhead, fireNuke, launchNuke, runNuclear } from './nuclear'
 import { runCoalitions } from './coalition'
 import { applySpace, describeSpace, runSpaceWorld } from './space'
@@ -205,6 +208,18 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return o.kind === 'exercise' ? 'Hold an exercise' : `Show ${o.kind} force to ${nation(o.target ?? '')}`
     case 'fundMissiles':
       return 'Raise the missile program'
+    case 'missileDefense':
+      return `${DEFENSE_TEXT[o.item].name}${o.item === 'interceptors' ? `: ${o.count} rounds` : o.item === 'battery' ? ` in ${region(o.regionId ?? '')}` : ''}`
+    case 'setDoctrine':
+      return `Doctrine: ${DOCTRINES[o.doctrine]?.name ?? o.doctrine}`
+    case 'scramble':
+      return 'Scramble fighters against a salvo'
+    case 'raid':
+      return `Bomber raid on ${region(o.target)}${o.aim === 'site' ? ' (launch sites)' : ''}`
+    case 'recon':
+      return `Recon flight over ${nation(o.target)}`
+    case 'missileTruce':
+      return `${o.lift ? 'End the missile ceasefire with' : 'Offer a missile ceasefire to'} ${nation(o.target)}`
     case 'buildMissiles':
       return `Build ${o.count} ${MISSILES[o.kind].name.toLowerCase()}${o.count === 1 ? '' : 's'}`
     case 'startAircraftDev':
@@ -294,9 +309,9 @@ const PHASES: Order['type'][][] = [
   ['research', 'researchProgram', 'build', 'startProject', 'pauseProject', 'rushProject', 'setRegionalCapital', 'fundAcademy', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['fundAgency', 'fundSystem'],
-  ['fundMissiles', 'buildMissiles', 'buildWarhead', 'startAircraftDev', 'pauseAircraftDev'],
+  ['fundMissiles', 'buildMissiles', 'missileDefense', 'setDoctrine', 'buildWarhead', 'startAircraftDev', 'pauseAircraftDev'],
   ['space'],
-  ['operation', 'domestic', 'strike', 'nuke'],
+  ['operation', 'domestic', 'recon', 'missileTruce', 'scramble', 'strike', 'raid', 'nuke'],
 ]
 
 /**
@@ -416,6 +431,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runStocks(s, map, rng)
   runSystems(s)
   runNuclear(s)
+  runMissileWar(s)
+  runFalseAlarms(s, map)
   runCoalitions(s, map, rng)
   runSpaceWorld(s)
   runWorld(s, gross, workforce)
@@ -750,6 +767,24 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       if (isLive(s)) launchNuke(s, map, o, clockOf(s))
       else fireNuke(s, map, o, rng)
       break
+    case 'missileDefense':
+      applyDefense(s, o)
+      break
+    case 'setDoctrine':
+      ;(n.missileWar ??= {}).doctrine = o.doctrine
+      break
+    case 'scramble':
+      applyScramble(s, o)
+      break
+    case 'raid':
+      runRaid(s, map, o)
+      break
+    case 'recon':
+      applyRecon(s, o)
+      break
+    case 'missileTruce':
+      applyTruce(s, o)
+      break
     case 'startAircraftDev':
       applyStartAircraftDev(s, n, o)
       break
@@ -758,8 +793,10 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'strike':
       // Live missiles fly for a day before they land. Everything else lands at once.
-      if (isLive(s) && o.weapon === 'missile') launchStrike(s, map, o, clockOf(s))
-      else runStrike(s, map, o)
+      if (isLive(s) && o.weapon === 'missile') {
+        const flight = launchStrike(s, map, o, clockOf(s))
+        if (flight) warnAnswer(s, map, flight)
+      } else runStrike(s, map, o)
       break
     case 'recall': {
       const a = s.armies?.find((x) => x.id === o.armyId)

@@ -11,6 +11,7 @@ export const MISSILE_ARC: Record<MissileType, [string, string]> = {
   tactical: ['rgba(120,255,160,0.95)', 'rgba(48,209,88,0.95)'],
   hypersonic: ['rgba(255,214,10,0.95)', 'rgba(255,69,58,0.95)'],
   ballistic: ['rgba(255,140,220,0.95)', 'rgba(191,90,242,0.95)'],
+  decoy: ['rgba(200,200,210,0.7)', 'rgba(150,150,165,0.7)'],
 }
 
 /** One solid color for a kind (a swatch beside its name). */
@@ -19,6 +20,7 @@ export const MISSILE_SWATCH: Record<MissileType, string> = {
   tactical: '#30d158',
   hypersonic: '#ffd60a',
   ballistic: '#d56bff',
+  decoy: '#9a9aa8',
 }
 
 const pct = (v: number) => `${Math.round(v * 1000) / 10}%`

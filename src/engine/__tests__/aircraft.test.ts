@@ -572,8 +572,8 @@ describe('missile hunters: a real counter to missiles', () => {
     expect(open.regions.r3.line).toBeLessThan(guarded.regions.r3.line)
     // With no fighters at home the hunters have nothing to fly.
     expect(empty.regions.r3.line).toBe(open.regions.r3.line)
-    expect(guarded.log.some((l) => /shield and fighters stopped/.test(l.text))).toBe(true)
-    expect(open.log.some((l) => /shield (and fighters )?stopped/.test(l.text))).toBe(false)
+    expect(guarded.log.some((l) => /stopped by .*fighters/.test(l.text))).toBe(true)
+    expect(open.log.some((l) => /stopped by/.test(l.text))).toBe(false)
   })
 
   // An attack carries only the missiles it names, so this one names all six.

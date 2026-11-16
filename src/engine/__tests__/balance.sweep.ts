@@ -78,8 +78,8 @@ export interface RunResult {
   final: GameState
 }
 
-const KINDS: MissileType[] = ['cruise', 'tactical', 'hypersonic', 'ballistic']
-const zeroKinds = (): Record<MissileType, number> => ({ cruise: 0, tactical: 0, hypersonic: 0, ballistic: 0 })
+const KINDS: MissileType[] = ['cruise', 'tactical', 'hypersonic', 'ballistic', 'decoy']
+const zeroKinds = (): Record<MissileType, number> => ({ cruise: 0, tactical: 0, hypersonic: 0, ballistic: 0, decoy: 0 })
 const pct = (xs: number[], q: number) => {
   const a = [...xs].sort((x, y) => x - y)
   return a.length ? a[Math.min(a.length - 1, Math.floor(q * a.length))] : 0

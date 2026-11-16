@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { MISSILES, MISSILE_PROGRAM } from '../data/missiles'
-import { buildRoom, fundMissilesCost, missileStock, programLevel } from '../engine/missiles'
+import { buildRoom, buildRoomFor, fundMissilesCost, missileStock, programLevel } from '../engine/missiles'
 import type { MissileType } from '../engine/types'
 import { Pips } from './bits'
 import { usePlayerView } from './hooks'
 import { CountPicker } from './MissileSection'
 import { MISSILE_SWATCH, PROGRAM_KINDS, buildCostText, clampCount, effectText } from './missileText'
+import { NextSteps } from './MissileWar'
 import { OrderButton } from './panel'
 
 /** One kind the program builds: what is in store, what one costs, and buttons to build one or a chosen number. */
@@ -16,10 +17,10 @@ function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> }) {
   const spec = MISSILES[kind]
   const level = programLevel(player)
   const open = level >= spec.level
-  const room = buildRoom(player, game.turn)
+  const room = buildRoomFor(player, game.turn, kind)
   const n = clampCount(count, room)
   const build = (c: number) => ({ type: 'buildMissiles' as const, nationId: player.id, kind, count: c })
-  const total = (c: number) => `${spec.money * c} money${spec.steel > 0 ? `, ${spec.steel * c} steel` : ''}${spec.oil > 0 ? `, ${spec.oil * c} oil` : ''}`
+  const total = (c: number) => `${Math.ceil(spec.money * c)} money${spec.steel > 0 ? `, ${spec.steel * c} steel` : ''}${spec.oil > 0 ? `, ${spec.oil * c} oil` : ''}`
   return (
     <div className={`rounded-xl border border-white/10 bg-white/5 p-3 space-y-2 ${open ? '' : 'opacity-70'}`} data-build={kind}>
       <div className="flex items-start justify-between gap-3">
@@ -88,6 +89,7 @@ export function MissileProgramCard() {
         </div>
       </div>
       <Pips value={level} max={max} />
+      <NextSteps limit={4} />
       <p className="text-[13px] text-white/80">
         A level is a team of engineers and test ranges, and the talent for them is the expensive part. Raising the program costs money and research once. It opens the next kind of missile and lets the factories turn out more of them each month. Then every missile costs money and steel (a ballistic one also burns oil), paid when you build it. Hypersonic missiles are different: they come from technology and the training queue, not from here.
       </p>

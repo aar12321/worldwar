@@ -1,6 +1,7 @@
 import { expect } from 'vitest'
 import { CAMPAIGNS } from '../../data/society'
 import { MISSILE_PROGRAM } from '../../data/missiles'
+import { MW } from '../../data/missileWar'
 import { LOCAL_IDS } from '../../data/localProjects'
 import { PROJECT_IDS } from '../../data/projects'
 import { levelMonths } from '../industry'
@@ -18,6 +19,17 @@ export function invariantProblems(s: GameState): string[] {
   const bad: string[] = []
   const check = (ok: boolean, what: string) => {
     if (!ok) bad.push(what)
+  }
+  // The missile war: tension in range, rounds and levels sane, reports capped.
+  check(s.missileTension === undefined || (real(s.missileTension) && s.missileTension > 0 && s.missileTension <= 100), `tension ${s.missileTension}`)
+  check((s.salvos?.length ?? 0) <= MW.keepSalvos, `salvo reports ${s.salvos?.length}`)
+  for (const n of Object.values(s.nations)) {
+    const w = n.missileWar
+    if (!w) continue
+    check(w.interceptors === undefined || (real(w.interceptors) && w.interceptors >= 0), `${n.id} interceptors ${w.interceptors}`)
+    check((w.radar ?? 0) <= MW.radarMax && (w.mobile ?? 0) <= MW.mobileMax, `${n.id} radar/mobile level`)
+    for (const [r, lvl] of Object.entries(w.batteries ?? {})) check(Number.isInteger(lvl) && lvl >= 1 && lvl <= MW.batteryMax, `${n.id} battery in ${r}: ${lvl}`)
+    for (const k of Object.keys(w.ledger ?? {}) as (keyof NonNullable<typeof w.ledger>)[]) check(real(w.ledger![k]) && w.ledger![k] >= -1e-9, `${n.id} ledger ${k}`)
   }
   const resources = ['capital', 'food', 'pp', 'tp', 'oil', 'steel', 'goods'] as const
   for (const n of Object.values(s.nations)) {
@@ -56,11 +68,11 @@ export function invariantProblems(s: GameState): string[] {
       if (!p.done) check(p.progress <= levelMonths(pid, built + 1) + 1e-9 && built + 1 <= 3, `${id} project ${pid} progress ${p.progress} over ${levelMonths(pid, built + 1)} (level ${built + 1})`)
     }
 
-    // Missiles: stock never negative, the program 0-3, and a month's building within its capacity.
+    // Missiles: stock never negative, the program 0-3, and a month's building within its capacity (decoys take a third of a slot, so the count can be fractional).
     for (const [k, v] of Object.entries(n.arsenal ?? {})) check(real(v) && v >= -1e-9, `${id} arsenal ${k} ${v}`)
     const level = n.missileProgram ?? 0
     check(Number.isInteger(level) && level >= 0 && level <= MISSILE_PROGRAM.maxLevel, `${id} missile program ${level}`)
-    if (n.missileBuilt) check(Number.isInteger(n.missileBuilt.count) && n.missileBuilt.count >= 0 && n.missileBuilt.count <= MISSILE_PROGRAM.capacity[Math.max(0, Math.min(3, level))], `${id} built ${n.missileBuilt.count} in a month at program level ${level}`)
+    if (n.missileBuilt) check(real(n.missileBuilt.count) && n.missileBuilt.count >= 0 && n.missileBuilt.count <= MISSILE_PROGRAM.capacity[Math.max(0, Math.min(3, level))] + 1e-9, `${id} built ${n.missileBuilt.count} in a month at program level ${level}`)
   }
 
   for (const r of Object.values(s.regions)) {

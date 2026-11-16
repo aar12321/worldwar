@@ -1,12 +1,13 @@
 import { companyEffects } from './stocks'
-import { strikeHitsKind, strikeKind, takeMissiles, validateMissileStrike } from './missiles'
+import { launchSite, strikeHitsKind, strikeKind, takeMissiles, validateMissileStrike } from './missiles'
+import { answerStrike } from './missileDoctrine'
 import { FRONTIER, SYSTEM_IDS, SYSTEM_MAX, SYSTEM_SPECS, systemsCost, type SystemId } from '../data/systems'
 import { TECH_BY_ID } from '../data/techTree'
 import { addOpinion } from '../ai/opinion'
 import { interceptFactor } from './combat'
 import { projectPower, scaleBonus, scaleFactor } from './industry'
 import { addInfamy, addLog, atWar, hasTech } from './helpers'
-import type { GameState, MissileType, NationId, Order, RegionId, WorldMap } from './types'
+import type { GameState, MissileType, NationId, Order, RegionId, SalvoReport, StrikeAim, WorldMap } from './types'
 
 type Fund = Extract<Order, { type: 'fundSystem' }>
 type Strike = Extract<Order, { type: 'strike' }>
@@ -93,8 +94,8 @@ export function fireMissiles(s: GameState, o: Strike): number {
 }
 
 /** A hypersonic salvo landing (kept for callers that name no kind). */
-export function strikeHits(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, fired: number, kind: MissileType = 'hypersonic') {
-  strikeHitsKind(s, map, nationId, target, kind, fired)
+export function strikeHits(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, fired: number, kind: MissileType = 'hypersonic', opts: { aim?: StrikeAim; scrambled?: boolean; auto?: boolean; origin?: RegionId } = {}): SalvoReport | undefined {
+  return strikeHitsKind(s, map, nationId, target, kind, fired, opts)
 }
 
 export function runStrike(s: GameState, map: WorldMap, o: Strike) {
@@ -104,9 +105,10 @@ export function runStrike(s: GameState, map: WorldMap, o: Strike) {
   const place = map.regions[o.target].name
   const stops = interceptFactor(victim.systems?.shield ?? 0)
   if (o.weapon === 'missile') {
+    const origin = launchSite(s, map, o.nationId, o.target, strikeKind(o)) ?? undefined
     const fired = fireMissiles(s, o)
     if (fired < 1) return
-    strikeHitsKind(s, map, o.nationId, o.target, strikeKind(o), fired)
+    answerStrike(s, map, strikeHitsKind(s, map, o.nationId, o.target, strikeKind(o), fired, { aim: o.aim, origin }))
     return
   }
   const level = n.systems?.orbital ?? 1

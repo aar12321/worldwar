@@ -1,5 +1,6 @@
 import { addOpinion } from '../ai/opinion'
 import { difficultyOf } from '../data/difficulty'
+import { MW } from '../data/missileWar'
 import { NUCLEAR } from '../data/nuclear'
 import { blocsOf } from './blocs'
 import { interceptFactor } from './combat'
@@ -9,6 +10,7 @@ import { addInfamy, addLog, alliesOf, atWar, clamp, distanceKm, enemiesOf, grant
 import { militaryPower } from './militaryStats'
 import { aircraftEffects, pastDefenses } from './aircraft'
 import { recentAttackers, type AirDefense } from './missiles'
+import { trucePair } from './missileWar'
 import type { Rng } from './rng'
 import type { GameState, NationId, Nation, NukeFlight, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -74,6 +76,7 @@ export function nukeSite(s: GameState, map: WorldMap, nationId: NationId, target
 
 export function nukeProblem(s: GameState, map: WorldMap, o: Nuke, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
+  if (trucePair(s, o.nationId, s.regions[o.target]?.owner ?? '') !== null) return 'A missile ceasefire holds with them'
   const access = nuclearAccess(s, o.nationId)
   if (access) return access
   const r = s.regions[o.target]
@@ -226,6 +229,7 @@ export function worldReacts(s: GameState, map: WorldMap, rng: Rng, attacker: Nat
   }
   addOpinion(s, victim, attacker, 'Destroyed us with a nuclear weapon', NUCLEAR.victimOpinion, NUCLEAR.victimDecay)
   s.shock = (s.shock ?? 0) + NUCLEAR.tension
+  if (MW.enabled) s.missileTension = Math.min(100, (s.missileTension ?? 0) + MW.nukeTension)
   s.nukeLast = s.turn
   // Trade is cut off by everyone who is not the attacker's friend.
   const friends = new Set<NationId>([attacker, ...alliesOf(s, attacker)])

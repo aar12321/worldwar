@@ -315,12 +315,12 @@ export function recallProblem(s: GameState, nationId: NationId, armyId: string):
 }
 
 /** Fires a salvo of missiles. They leave now and land after the days their kind takes to fly. Mutates `s`. */
-export function launchStrike(s: GameState, map: WorldMap, o: Strike, today: number): MissileFlight | null {
+export function launchStrike(s: GameState, map: WorldMap, o: Strike, today: number, auto = false): MissileFlight | null {
   const kind = strikeKind(o)
   const from = launchSite(s, map, o.nationId, o.target, kind)
   const fired = fireMissiles(s, o)
   if (fired < 1) return null
-  const flight: MissileFlight = { id: newId(s, 'f'), nationId: o.nationId, from: from ?? o.target, target: o.target, count: fired, ...(kind !== 'hypersonic' ? { kind } : {}), launched: today, lands: today + MISSILES[kind].days, foe: s.regions[o.target]?.owner }
+  const flight: MissileFlight = { id: newId(s, 'f'), nationId: o.nationId, from: from ?? o.target, target: o.target, count: fired, ...(kind !== 'hypersonic' ? { kind } : {}), launched: today, lands: today + MISSILES[kind].days, foe: s.regions[o.target]?.owner, ...(o.aim === 'site' ? { aim: 'site' as const } : {}), ...(auto ? { auto: true } : {}) }
   ;(s.flights ??= []).push(flight)
   return flight
 }
