@@ -55,8 +55,8 @@ describe('the desk registry', () => {
 
 describe('tabs by kind of game', () => {
   it('shows the Armies tab only in a live game', () => {
-    expect(visibleTabs('military', turns).map((t) => t.id)).toEqual(['forces', 'deploy', 'wars', 'agencies', 'systems'])
-    expect(visibleTabs('military', live).map((t) => t.id)).toEqual(['forces', 'deploy', 'armies', 'wars', 'agencies', 'systems'])
+    expect(visibleTabs('military', turns).map((t) => t.id)).toEqual(['forces', 'deploy', 'theatres', 'wars', 'agencies', 'systems'])
+    expect(visibleTabs('military', live).map((t) => t.id)).toEqual(['forces', 'deploy', 'theatres', 'armies', 'wars', 'agencies', 'systems'])
   })
 
   it('writes a count on a tab that has one', () => {

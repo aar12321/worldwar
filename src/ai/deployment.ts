@@ -117,7 +117,8 @@ export function deploymentOrder(s: GameState, map: WorldMap, id: NationId, skill
  * One when presence is off. A multiplier for the odds the nation sees.
  */
 export function postureRead(s: GameState, map: WorldMap, id: NationId, target: NationId, skill: 0 | 1 | 2, aggression: number): number {
-  if (!PRESENCE.on) return 1
+  // A nation that never stationed anything has no guard to read.
+  if (!PRESENCE.on || !s.nations[target]?.military.deployment) return 1
   const land = (landBorders(s, map, id).get(target) ?? 0) > 0
   if (land) {
     const cover = borderCover(s, map, target, id)

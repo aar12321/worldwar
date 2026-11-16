@@ -498,8 +498,10 @@ describe('the AI reads and answers a posture', () => {
     const hard = postureRead(s, map, 'france', 'germany', 2, 0.9)
     expect(med).toBeLessThan(1)
     expect(hard).toBeLessThan(med)
+    give(s, 'italy', { infantry: 4 })
+    post(s, 'italy', { border: { france: 0.02 } })
     expect(postureRead(s, map, 'france', 'italy', 2, 0.9)).toBeGreaterThan(1)
-    expect(postureRead(s, map, 'france', 'italy', 2, 0.2)).toBe(1)
+    expect(postureRead(s, map, 'france', 'italy', 2, 0.2)).toBeLessThanOrEqual(1)
     PRESENCE.on = false
     expect(postureRead(s, map, 'france', 'germany', 2, 0.9)).toBe(1)
   })

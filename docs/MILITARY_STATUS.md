@@ -31,6 +31,9 @@ Read from the code and from 60-month AI games (3 seeds, Easy/Medium/Hard, `strat
 - Goldens (`turnGolden.test.ts`) re-pinned deliberately: bots post at once, so presence moves all three. With `PRESENCE.on = false` the old hashes (7d9d1f55d2a94, 5e24dace6d64b, 1c2e3ffb6159fd) return exactly (a new test), and the old-combat proof still holds with it off.
 - AI sims (3 seeds each, 60 months, before = earlier run, after = with presence): median war length 5 / 5 / 4 months before and 5 / 5 / 5 after; wars over 24 months: 0 in every run; stalled-per-game 0.7/2.3/2.3 before, 2/3/3 after (the strategy harness counts idle-order wars; no war stalled past 18 months). Top nation holds 5.7/6.7/8.7 before, 6/8.3/9.7 after (within seed noise; see the 120-month run below). In a 36-month Medium game the ledgers summed to 366 money of trade protected, 109 of trade denied, 855 intelligence gains, 311 detections, 3032 sorties, 45 deterred, 0 incidents (the AI never raises tension on purpose), 136 nations with a posture, 52 on a non-normal alert.
 
+- 120 months, 3 seeds (run just before one last tweak: the probe/deter reading now applies only to a target that stationed forces, which moved only the Normal-bot golden): median war 5 / 5 / 4 months (Easy/Medium/Hard), mean 6.3 / 6.3 / 5.5, wars over 24 months 0 / 0.33 / 0 per game, open over 18 months 0 / 0.67 / 0, nations alive at the end 95 / 70 / 65, top nation 10.7 / 14.7 / 16.7 countries. The earlier strategy numbers (median 4-5, no stalled wars) hold; Medium shows a rare long war.
+- Full suite: 1397 passed; the 2 failures (registry tab list, a no-posture hash that the probe change moved) were fixed and re-run. The last full run was before those two fixes; only the affected files were re-run after.
+
 ## Not done / unverified
 
 - No AI shows of force or exercises (the AI only reads postures and sets alerts).
