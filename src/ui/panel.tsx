@@ -9,7 +9,7 @@ import { BackIcon, ChevronIcon, PinIcon } from './navIcons'
 import { clampWidth, togglePinned } from './prefs'
 import { crumbs, currentTab, findDesk, findTab, pinId, visibleTabs, type TabMemory } from './registry'
 import { useRegCtx } from './regCtx'
-import { EmptyState, Skeleton } from './widgets'
+import { EmptyState, Skeleton, runWithUndo } from './widgets'
 import { usePlayerView } from './hooks'
 import { speak } from './plain'
 import { confirmFor } from './confirmRules'
@@ -316,7 +316,8 @@ export function OrderButton({
       onClick={() => {
         const ask = confirmFor(view.game, getWorld().map, order)
         // Big or hard-to-reverse orders ask first.
-        if (ask) askConfirm({ ...ask, run: () => issueOrder(order) && onDone?.() })
+        // Big orders ask first, and once done say so with Undo (or Cancel, if it waits for the month end).
+        if (ask) askConfirm({ ...ask, run: () => runWithUndo(label, () => issueOrder(order) && onDone?.()) })
         else if (issueOrder(order)) onDone?.()
       }}
     >

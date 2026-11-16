@@ -8,6 +8,7 @@ import { usePlayerView } from './hooks'
 import { DeskTabs, PanelShell, useDeskTab } from './panel'
 import { KeysSheet } from './Help'
 import { LevelPicker } from './kit'
+import { EmptyState } from './widgets'
 import { SCALES, SCALE_LABELS } from './prefs'
 import { settingDef, type SettingsTab } from './settingsDefs'
 
@@ -73,7 +74,7 @@ export function LogPanel() {
         </div>
       </div>
       <div className="space-y-3">
-        {groups.length === 0 && <p className="text-sm text-white/55">{q || kind !== 'all' ? 'Nothing matches.' : 'No dispatches yet.'}</p>}
+        {groups.length === 0 && (q || kind !== 'all' ? <EmptyState compact title="Nothing matches" body="Try another word, or show all kinds of news." action={<button className="btn" onClick={() => { setQuery(''); setKind('all') }}>Clear search and filter</button>} /> : <EmptyState compact title="No news yet" body="Dispatches from your nation and the world appear here as the months pass." />)}
         {groups.map((g) => (
           <section key={g.turn} className="space-y-1.5">
             <h3 className="label sticky top-0 bg-[#1c1c20]/95 py-1 z-10">{turnDate(g.turn)}</h3>

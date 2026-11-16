@@ -10,22 +10,36 @@ export function normalize(s: string): string {
     .trim()
 }
 
-/** Whether every letter of `needle` appears in `hay` in order ("ecbk" is in "economy bank"). */
+/**
+ * Whether the letters of `needle` appear in `hay` in order, starting at the beginning of a word, with no more than a few
+ * skipped letters between them ("econmy" is in "economy", "bank" is not in "Setting: spacing").
+ */
 function subsequence(needle: string, hay: string): boolean {
-  let i = 0
-  for (let j = 0; j < hay.length && i < needle.length; j++) if (hay[j] === needle[i]) i++
-  return i === needle.length
+  const starts = [...hay.matchAll(/(^| )\S/g)].map((m) => m.index! + m[1].length)
+  for (const start of starts) {
+    if (hay[start] !== needle[0]) continue
+    let i = 1
+    let gap = 0
+    for (let j = start + 1; j < hay.length && i < needle.length; j++) {
+      if (hay[j] === needle[i]) {
+        i++
+        gap = 0
+      } else if (++gap > 2) break
+    }
+    if (i === needle.length) return true
+  }
+  return false
 }
 
 /** How well one typed word matches a text. 0 means it does not. */
-function wordScore(word: string, tokens: string[], whole: string): number {
+function wordScore(word: string, tokens: string[], whole: string, loose = false): number {
   let best = 0
   for (const t of tokens) {
     if (t === word) best = Math.max(best, 100)
     else if (t.startsWith(word)) best = Math.max(best, 80)
     else if (t.includes(word)) best = Math.max(best, 45)
   }
-  if (best === 0 && word.length >= 3 && subsequence(word, whole)) best = 15
+  if (best === 0 && loose && word.length >= 4 && subsequence(word, whole)) best = 15
   return best
 }
 
@@ -43,7 +57,7 @@ export function scoreMatch(query: string, label: string, keywords = ''): number 
   const extraTokens = extra ? extra.split(' ') : []
   let total = 0
   for (const w of words) {
-    const inLabel = wordScore(w, tokens, nl)
+    const inLabel = wordScore(w, tokens, nl, true)
     // A match in the keywords counts, a bit less than one in the name.
     const inExtra = extraTokens.length ? Math.round(wordScore(w, extraTokens, extra) * 0.6) : 0
     const s = Math.max(inLabel, inExtra)

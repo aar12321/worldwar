@@ -31,9 +31,9 @@ export type Loader = () => Promise<{ default: ComponentType }>
 
 /** Where a desk sits in the rail. Groups are shown in this order. */
 export const NAV_GROUPS = [
-  { id: 'home', label: 'Overview' },
-  { id: 'nation', label: 'Your nation' },
-  { id: 'world', label: 'The world' },
+  { id: 'home', label: 'Plan' },
+  { id: 'nation', label: 'Nation' },
+  { id: 'world', label: 'World' },
 ] as const
 export type NavGroupId = (typeof NAV_GROUPS)[number]['id']
 

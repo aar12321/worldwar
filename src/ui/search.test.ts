@@ -30,6 +30,9 @@ describe('scoreMatch', () => {
   it('forgives skipped letters for longer words', () => {
     expect(scoreMatch('econmy', 'Economy')).not.toBeNull()
     expect(scoreMatch('xq', 'Economy')).toBeNull()
+    // ...but not so loosely that a word turns up in unrelated long text.
+    expect(scoreMatch('bank', 'Setting: Spacing')).toBeNull()
+    expect(scoreMatch('bank', 'Setting: Spacing', 'comfortable has room around everything')).toBeNull()
   })
 
   it('treats an empty query as everything', () => {
@@ -46,8 +49,8 @@ describe('rank', () => {
   ]
   const text = (i: { label: string; keywords: string }) => i
 
-  it('returns the best matches first, with loose matches last, and drops the rest', () => {
-    expect(rank(items, 'ger', text).map((i) => i.label)).toEqual(['Germany', 'Diplomacy with Germany', 'Georgia'])
+  it('returns the best matches first and drops the rest', () => {
+    expect(rank(items, 'ger', text).map((i) => i.label)).toEqual(['Germany', 'Diplomacy with Germany'])
     expect(rank(items, 'ghana', text).map((i) => i.label)).toEqual(['Ghana'])
   })
 
