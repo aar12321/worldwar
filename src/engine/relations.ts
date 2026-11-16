@@ -4,7 +4,7 @@ import { INVEST, SECTORS, SECTOR_IDS } from '../data/business'
 import { TECH_BY_ID } from '../data/techTree'
 import { DIPLOMACY } from '../data/unitTypes'
 import { addToSector, investedIn, makeInvestment } from './business'
-import { clockMonth, isLive } from './calendar'
+import { isLive } from './calendar'
 import { nationWorkforce } from './economy'
 import { addLog, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, newId, pairKey } from './helpers'
 import { createRng, type Rng } from './rng'
@@ -713,7 +713,7 @@ export function applyRelate(s: GameState, map: WorldMap, o: RelateOrder): void {
       const p = r.plans.find((x) => x.id === o.id)
       if (!p) return
       const day = isLive(s) ? 8 + (Number.parseInt(p.id.replace(/\D/g, '') || '0', 10) % 12) : undefined
-      p.strike = { region: o.region as string, turn: clockMonth(s), ...(day !== undefined ? { day } : {}) }
+      p.strike = { region: o.region as string, turn: s.turn + (o.months === 1 ? 1 : 0), ...(day !== undefined ? { day } : {}) }
       note(s, o.nationId, p.a === o.nationId ? p.b : p.a, o.act, `${me.name} and its partner will strike ${map.regions[o.region as string]?.name ?? 'the enemy'} together${day !== undefined ? ` on day ${day + 1}` : ' this month'}.`)
       return
     }
@@ -1006,7 +1006,7 @@ export function runRelations(s: GameState, map: WorldMap, rng: Rng): void {
       endPlan(s, p, null, 'time')
       continue
     }
-    if (p.strike && p.strike.turn < clockMonth(s)) delete p.strike
+    if (p.strike && p.strike.turn < s.turn) delete p.strike
     touch(s, p.a, p.b)
   }
   // Treaties: how long they have held, for anniversaries and steadfast friendship.

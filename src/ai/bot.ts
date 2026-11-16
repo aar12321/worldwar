@@ -1,4 +1,5 @@
 import { MW, rungOf } from '../data/missileWar'
+import { relationBotOrders } from './relations'
 import { MISSILE_TYPES } from '../data/missiles'
 import { tensionOf } from '../engine/missileWar'
 import { missileWarOrders } from './missileWar'
@@ -644,6 +645,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
 
   // Factions: a rival joins, votes, pays in and (for a leader) puts wars to the vote. Its own random stream, so nothing else in the month moves.
   if (s.factions?.length || diff.skill >= 1) factionBotOrders(s, map, nationId, tryAdd)
+  // Relationships: a rival tends its friendships, and strikes beside its war-plan partners. Its own random stream.
+  const planStrike = relationBotOrders(s, map, nationId, tryAdd)
 
   // A war declared on the player gives them a couple of months to raise a military before the first blow.
   // In a live game the plan is for the month about to begin, and its armies march during it. Rests and fronts count from that month.
@@ -651,7 +654,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   const warTargets = new Set(enemies.filter((e) => !humans.has(e) || planned - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
   for (const o of orders) if (o.type === 'declareWar' && !humans.has(o.target)) warTargets.add(o.target)
   // A coalition's joint strike: every member declares and attacks the same shared target this month, whatever else it was planning.
-  let jointDone = false
+  let jointDone = planStrike
   const strike = diff.skill === 2 ? dueStrike(s, nationId) : null
   if (strike && (humans.has(strike.target) ? (ctx.warsOn.get(strike.target) ?? 0) < diff.maxWarsOnPlayer + 1 || atWar(s, nationId, strike.target) : true)) {
     const foe = strike.target
