@@ -445,7 +445,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const bloc = blocOf(game, id)
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
   const sanctionedByMe = game.sanctions.some((x) => x.from === player.id && x.to === id && x.until >= game.turn)
-  const status = n.overlord ? `Puppet of ${game.nations[n.overlord]?.name ?? 'someone'}` : war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
+  const status = n.overlord ? `Puppet of ${game.nations[n.overlord]?.name ?? 'someone'}${n.overlord === player.id && n.loyalty !== undefined ? ` · loyalty ${Math.round(n.loyalty)}` : ''}` : war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
   const statusColor = war ? 'text-[#ff8a84]' : allied ? 'text-[#64d2ff]' : pact ? 'text-[#6eeb8a]' : 'text-white/70'
   const toggle = (m: 'trade' | 'peace' | 'money') => setMode((cur) => (cur === m ? 'none' : m))
   return (

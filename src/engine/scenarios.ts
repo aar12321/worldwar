@@ -9,6 +9,7 @@ import { declareWar } from './diplomacy'
 import { startEpidemic } from './epidemics'
 import { addLog, clamp, grantJustification, isAllied, nationNeighborMap, newId, pairKey, regionsOf } from './helpers'
 import { militaryPower } from './militaryStats'
+import { bindPuppet } from './puppets'
 import { createRng } from './rng'
 import type { GameState, NationId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -158,8 +159,7 @@ function run(s: GameState, map: WorldMap, op: ScenarioOp, roles: Roles, rng: Ret
       for (const id of resolve(s, op.puppets, roles)) {
         const p = s.nations[id]
         if (id === master || p.overlord || p.isPlayer || s.wars.includes(pairKey(id, master))) continue
-        p.overlord = master
-        p.overlordSince = s.turn
+        bindPuppet(s, id, master)
         s.alliances = s.alliances.filter((k) => k !== pairKey(id, master))
         did = true
       }

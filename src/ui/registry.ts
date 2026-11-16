@@ -27,6 +27,8 @@ export interface RegCtx {
   wars: number
   /** Armies you have in the field (live games). */
   armies: number
+  /** Puppets you rule. */
+  puppets: number
 }
 
 export type Loader = () => Promise<{ default: ComponentType }>

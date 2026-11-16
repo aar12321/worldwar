@@ -28,6 +28,8 @@ import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
 import { canAttackRegion } from '../engine/warfare'
 import { MAX_REPARATIONS, puppetValue, regionValue } from '../engine/warscore'
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
+import { lockedByMaster } from '../engine/puppets'
+import { managePuppets } from './puppets'
 import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
 import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
@@ -214,10 +216,16 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   // ---- strategy hook: a treasury far beyond need is returned to the people as lower taxes ----
   if (n.resources.capital > 0 && cashMonths(sight) > 12) tax -= 0.03
   tax = clamp(Math.round(tax * 100) / 100, 0.1, 0.4)
-  const draft = atWarNow ? (n.warWeariness > 30 ? 0.07 : 0.1) : 0.05
+  let draft = atWarNow ? (n.warWeariness > 30 ? 0.07 : 0.1) : 0.05
+  // A puppet's master sets its taxes, draft and spending (src/ai/puppets.ts for a bot master); its own bot leaves them alone.
+  const ruled = lockedByMaster(s, n)
+  if (ruled) {
+    tax = n.taxRate
+    draft = n.draftRate
+  }
   if (diff.skill >= 1) {
     // Skilled bots set spending on the people and business tax as well.
-    const spending = wantedSpending(n, econ, atWarNow)
+    const spending = ruled ? n.spending : wantedSpending(n, econ, atWarNow)
     const corp = wantedCorporateTax(n, econ)
     const changed = Math.abs(tax - n.taxRate) > 1e-6 || Math.abs(draft - n.draftRate) > 1e-6 || Math.abs(corp - n.corporateTax) > 0.02 || !sameSpending(spending, n.spending)
     if (changed) tryAdd({ type: 'setPolicy', nationId, taxRate: tax, draftRate: draft, corporateTax: corp, spending })
@@ -248,6 +256,9 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
     const place = owned.reduce((best, id) => (s.regions[id].buildings.farm < s.regions[best].buildings.farm ? id : best), owned[0])
     if (tryAdd({ type: 'build', nationId, regionId: place, building: 'farm' })) budget -= 25
   }
+
+  // A master's puppets: Easy leaves them as they are; Medium sets a moderate tribute; Hard weighs loyalty against what it takes.
+  if (diff.skill >= 1) budget -= managePuppets(s, map, nationId, diff.skill as 1 | 2, rng, tryAdd, budget)
 
   // Cities, laws, business, bonds and investment, for bots that run their whole country.
   if (diff.skill >= 1 && owned.length && rng.chance(0.6)) budget -= manageCountry(s, nationId, econ, diff.skill as 1 | 2, rng, tryAdd, budget, myNeighbors)

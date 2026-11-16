@@ -58,6 +58,7 @@ import { tickTraining, trainMonths } from './training'
 import { UNIT_TYPES, type Army, type AttackOrder, type BattleReport, type GameState, type Order, type TrainingJob, type WorldMap } from './types'
 import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
+import { applyGovern, describePatch } from './puppets'
 
 /** A project's name, whether it is a nation's or a country's. */
 const projectName = (id: string) => (isLocalProject(id) ? LOCAL[id].name : PROJECTS[id as keyof typeof PROJECTS].name)
@@ -161,6 +162,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Build a case against ${nation(o.target)}`
     case 'annexPuppet':
       return `Annex ${nation(o.target)}`
+    case 'governPuppet':
+      return `Rule ${nation(o.target)}: ${describePatch(s, o)}`
     case 'operation':
       return `${FOREIGN_OPS[o.op].name}: ${nation(o.target)}`
     case 'domestic':
@@ -266,7 +269,7 @@ function safeDescribe(s: GameState, map: WorldMap, o: Order): string {
 const PHASES: Order['type'][][] = [
   ['eventChoice'],
   ['respond'],
-  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder'],
+  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder', 'governPuppet'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
   ['factionFound', 'factionJoin', 'factionInvite'],
   ['factionLeave'],
@@ -615,6 +618,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'annexPuppet':
       annexPuppet(s, map, o.nationId, o.target)
+      break
+    case 'governPuppet':
+      applyGovern(s, map, o)
       break
     case 'crisisAction':
       answerCrisis(s, o.nationId, o.crisisId, o.action)

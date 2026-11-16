@@ -20,6 +20,7 @@ import { createRng } from './rng'
 import { defenseWeights, freeUnits, interception, surpriseBonus } from './deployment'
 import { recordBattle } from './warscore'
 import { addInfamy, addLog, atWar, distanceKm, emptyUnits, forceUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
+import { clearPuppetFields } from './puppets'
 import type { Rng } from './rng'
 import type { Army, BattleReport, GameState, Interception, Military, Nation, NationId, RegionId, UnitCounts, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -115,6 +116,11 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
   const n = s.nations[id]
   if (!n.alive) return
   n.alive = false
+  // A fallen puppet is nobody's puppet if it ever rises again.
+  if (n.loyalty !== undefined) {
+    n.overlord = null
+    clearPuppetFields(n)
+  }
   n.military = emptyMilitary()
   s.trainingQueue = (s.trainingQueue ?? []).filter((job) => job.nationId !== id)
   // Live mode: whatever the fallen nation had in the field or in the air is lost with it.

@@ -6,6 +6,8 @@ import type { GameState, Order, WorldMap } from '../engine/types'
 import { NUCLEAR } from '../data/nuclear'
 import { isLive } from '../engine/calendar'
 import { leadingFactions, nukeAir, nukeThrough } from '../engine/nuclear'
+import { PUPPET } from '../data/puppets'
+import { previewGovern } from '../engine/puppets'
 import { formatDivisions, regionsOf, totalUnits } from '../engine/helpers'
 
 export interface PendingConfirm {
@@ -36,6 +38,18 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
       return asks('Change the government?', `${describeOrder(game, map, o)}. Stability drops at once and you cannot change it again for two years.`, 'Change it', true)
     case 'annexPuppet':
       return asks(`Annex ${name(o.target)}?`, 'Its land, army and treasury become yours, and the world takes note.', 'Annex')
+    case 'governPuppet': {
+      const pv = previewGovern(game, map, o.nationId, o.target, o.patch)
+      // Only a harsh change asks: one that would leave the puppet on the edge of revolt, or shocks it badly at once.
+      if (pv.settlesAfter >= PUPPET.rebelBelow && pv.shock > -6) return null
+      return {
+        ...asks(`Press ${name(o.target)} this hard?`, `${describeOrder(game, map, o)}.`, 'Do it', true),
+        points: [
+          `Its loyalty drops by ${Math.abs(pv.shock).toFixed(1)} at once, from ${Math.round(pv.loyalty)}.`,
+          `It would settle near ${Math.round(pv.settlesAfter)}${pv.settlesAfter < PUPPET.rebelBelow ? ': rebels, and a growing chance it breaks free' : ''}.`,
+        ],
+      }
+    }
     case 'breakPact':
       return asks(`Break the pact with ${name(o.target)}?`, 'They will remember it, and so will every other nation.', 'Break it', true)
     case 'leaveAlliance':

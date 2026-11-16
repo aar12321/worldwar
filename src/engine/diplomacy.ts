@@ -9,6 +9,7 @@ import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, Worl
 import { clearWarScore, REPARATION_MONTHS, validatePeaceTerms } from './warscore'
 import { transferRegion } from './warfare'
 import { tierOf } from './empire'
+import { bindPuppet, clearPuppetFields, freePuppet, puppetJoinsWar, willFollow } from './puppets'
 
 export const TRUCE_TURNS = 12
 export const PACT_TURNS = 24
@@ -61,13 +62,20 @@ export function annexPuppet(s: GameState, map: WorldMap, master: NationId, puppe
   for (const l of s.launches ?? []) if (l.order.nationId === puppet) l.order.nationId = master
   m.resources.capital += Math.max(0, p.resources.capital)
   p.resources.capital = Math.min(0, p.resources.capital)
-  for (const id of Object.keys(s.regions).sort()) if (s.regions[id].owner === puppet) transferRegion(s, map, id, master, false)
+  const loyalty = p.loyalty
+  for (const id of Object.keys(s.regions).sort()) {
+    if (s.regions[id].owner !== puppet) continue
+    transferRegion(s, map, id, master, false)
+    // A people that never accepted its master settles slowly under him: loyal land comes in as it was, restive land half as well settled as loyalty allows.
+    if (loyalty !== undefined && loyalty < 50) s.regions[id].integration *= Math.max(0.2, loyalty / 50)
+  }
+  clearPuppetFields(p)
   addInfamy(s, master, EMPIRE.annexInfamy)
 }
 
 /** A master lets its puppet go. */
 export function releasePuppet(s: GameState, master: NationId, puppet: NationId) {
-  s.nations[puppet].overlord = null
+  freePuppet(s, puppet)
   addOpinion(s, puppet, master, 'Set us free', 25, 0.2)
   addLog(s, 'diplomacy', `${name(s, master)} set ${name(s, puppet)} free.`, [master, puppet])
 }
@@ -106,12 +114,12 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   for (const [side, foe] of [[a, b], [b, a]] as const) {
     for (const puppet of puppetsOf(s, side)) {
       if (puppet === foe || atWar(s, puppet, foe) || !s.nations[puppet]?.alive) continue
-      const pk = pairKey(puppet, foe)
-      s.wars.push(pk)
-      s.wars.sort()
-      s.warStarted[pk] = s.turn
-      delete s.pacts[pk]
-      addLog(s, 'war', `${name(s, puppet)} follows its overlord ${name(s, side)} into the war against ${name(s, foe)}.`, [puppet, side, foe])
+      // A puppet that has lost its loyalty will not fight for its master (see puppets.ts).
+      if (!willFollow(s.nations[puppet])) {
+        addLog(s, 'war', `${name(s, puppet)} refuses to follow ${name(s, side)} into the war against ${name(s, foe)}.`, [puppet, side, foe])
+        continue
+      }
+      puppetJoinsWar(s, puppet, side, foe)
     }
   }
   if (!callAllies) return
@@ -277,8 +285,7 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
         if (s.nations[owner].capital !== id) transferRegion(s, map, id, receiver, false)
       }
       if (p.terms.puppet) {
-        s.nations[p.to].overlord = p.from
-        s.nations[p.to].overlordSince = s.turn
+        bindPuppet(s, p.to, p.from)
         addOpinion(s, p.to, p.from, 'Our overlord', -10, 0.1)
         addLog(s, 'war', `${name(s, p.to)} is now a puppet state of ${name(s, p.from)}.`, [p.from, p.to])
       }

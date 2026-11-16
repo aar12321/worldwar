@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { enemiesOf } from '../engine/helpers'
+import { enemiesOf, puppetsOf } from '../engine/helpers'
 import { factionOf, votesWaiting } from '../engine/factions'
 import type { GameState, Order } from '../engine/types'
 import { isLive } from '../engine/calendar'
@@ -28,6 +28,7 @@ export function regCtxOf(game: GameState | null, orders: readonly Order[] = [], 
       : 0,
     wars: enemiesOf(game, game.playerId).length,
     armies: game.armies?.filter((a) => a.nationId === game.playerId).length ?? 0,
+    puppets: puppetsOf(game, game.playerId).length,
   }
 }
 

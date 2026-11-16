@@ -339,3 +339,42 @@ Left as designed: a nuclear strike makes the leading factions declare war within
 
 Test changes: the order-wiring test knows faction orders live in `factions.ts`; the AI retaliation test looks across eight months (which agenda action a bot takes in a month is a seeded draw).
 Full-suite failures seen under heavy machine load were all timeouts, never assertions; the new test files set a longer test timeout.
+
+## 12. Puppet states (loyalty, ruling, tribute)
+
+What was built: `engine/puppets.ts` (rules) and `data/puppets.ts` (every number). A puppet made by a peace deal or a scenario has a **loyalty** (0 to 100, starts at 60). Each month it moves by the **pressure** of how the master rules it (tax above 25%, draft above 5%, six laws, spending on its people, the tribute taken, an empty treasury, unrest, being stronger than the master; against aid, the master's investment and a garrison on its border) and is pulled back 3% of the way to 60, so it settles at `60 + pressure / 0.03` and loyalty above 60 must be paid for every month. Nothing grows without limit: loyalty is clamped, pressure parts are capped, aid has a falling return and a ceiling of 95, and **everything a master takes from all its puppets together is held to 25% of its own gross (the rest paid at half)**.
+
+| loyalty | effect |
+| --- | --- |
+| 75 and up | pays tribute at 1.2x, counts 60% of its countries toward the master's tier (half is the old rule), annexing costs as little as half |
+| 35 to 75 | the old behaviour: counts half, pays at 0.7 to 1.2x by loyalty |
+| under 35 | loses stability each month (0.04 a point below 35) |
+| under 25 | rebels in the land, refuses to join the master's wars, counts 35%, the world gets a reason for war to free it ("Free X from Y", 12 months, with opinion losses) and a rival at war with the master may free it outright (20% a month) |
+| under 15 | may break free: 4% plus 1.2% a point below 15 each month (half with a garrison of one division or more) |
+
+A puppet that has no `loyalty` (made before this) keeps the old flat rules (12% of income, stability under 30 or strength over 80% of the master's gives a 5% monthly break) until its master first rules it, then gains a loyalty of 60. A nation that is not a puppet never has any of the new fields, so untouched games are unchanged.
+
+**Goldens.** None changed. Checked: `turnGolden.test.ts` and the deployment no-posture hash pass unchanged. In 3 seeds x 2 difficulties x 60 months of all-bot worlds on the real map (Normal and Hard) **no bot made a puppet at all** (0 puppets, 0 `governPuppet` orders, 0 invariant violations), so the new rules and the bots' puppet play do not touch any pinned game. The old hashes therefore return trivially; there is nothing to switch off.
+
+**Twin runs** (`puppets.sweep.ts`; real map; Normal bots in every seat; France either takes nothing, conquers Spain outright, or holds it as a puppet ruled in one of five ways; 60 months, seeds 11, 12, 13, means). Gross is the master's gross income a month at month 60; tribute is the money-equivalent of everything the puppet paid in over the 60 months; wealth is treasury less debt.
+
+| France ... | gross | tribute paid (60 months) | puppet loyalty at the end | broke free or fell (of 3) | wealth |
+| --- | --- | --- | --- | --- | --- |
+| has no puppet | 62 | 0 | | | 38 |
+| **conquers Spain** | **208** | 0 | | | **179** |
+| holds a puppet nobody rules (hands off) | 95 | 311 | 57 | 1 | 129 |
+| puppet ruled by the Medium bot | 146 | 437 | 48 | 0 | 140 |
+| squeezed (tax 45%, draft 20%, tribute 30%, conscription) | 102 | 181 | 0 | 3 (after 7 to 16 months) | 70 |
+| balanced (tax 25%, tribute 20%, aid when loyalty is under 55) | 95 | 616 | 47 | 1 | 127 |
+| invested (tax 20%, draft 4%, tribute 16%, housing, aid) | 107 | 538 | 62 | 0 | 125 |
+
+Reading it: a puppet is clearly worth having (**+87 to +100 wealth** over no puppet, about 5 to 10 money a month in tribute on a gross of about 100, plus a nation that fights beside you and counts toward your tier) and a well-run one pays about **twice** what a hands-off one does (616 against 311). Conquest is worth about **twice as much again** (gross 208 against 95 to 146, wealth 179). A squeeze is the worst way to run one: all three puppets broke free within 16 months and paid a fraction of the tribute. So puppets farm cannot out-earn conquest. Caveats: three seeds, one master and one puppet; the Medium bot's row is higher in gross than the scripted ones for a reason these runs do not separate from seed noise (the bot also runs the rest of France, and it differs in each run), and in seed 12 the no-puppet France was destroyed, so the "none" row is a lower bound.
+
+**Left as designed / not changed**
+- The tribute cap (25% of the master's gross) never bound in these runs (a single puppet pays 5 to 12% of gross); it matters only for a master with many puppets, and is covered by a unit test.
+- `victory.ts` still counts a puppet as half a country for the World Conquest goal and the "your share of the world" measures, whatever its loyalty (only the empire tier uses the loyalty weights).
+- Garrisons are the master's border troops facing the puppet (the existing Deployment posture): only a puppet that shares a land border can be garrisoned.
+- Online: a puppet run by another human keeps its own government (the master's `governPuppet` is refused with a reason; its tax, draft, laws and spending stay its own and its own bot does not apply). It still pays tribute (money, 12%) and its loyalty still moves from what it chooses.
+- A nation that becomes a puppet passes its own puppets up to its new master (loyalty -10): no puppet of a puppet.
+
+**Mutation checks.** 21 deliberate breaks of the rules were each run against `puppets.test.ts`, `puppetsParity.test.ts` and `ui/puppets.test.ts` (compliance inverted, flat annex price, flat tier weights, once-a-month removed in either place, no breaking free, puppets always following, no lock on the puppet's bot, human puppets ruled, no extraction cap, no settling, no unrest, no tax bound, no aid ceiling, aid that never arrives, no law cap, a free order, a peace deal that gives no loyalty, a dead master that leaves fields, no call for help). 20 were caught; the first run left 6 alive (settling, unrest, aid arriving, the law cap, the peace deal, annexation), five of them now have a test and are caught; the sixth (annexation leaving the loyalty fields behind) is an equivalent mutant, because `killNation` clears them for the emptied puppet anyway.
