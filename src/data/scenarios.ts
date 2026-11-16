@@ -375,3 +375,19 @@ export function scenarioGoalSentence(g: ScenarioGoal): string | null {
       return null
   }
 }
+
+/** The goal in a few words for a card: "Survive 5 years", "Take 3 countries". */
+export function scenarioGoalShort(g: ScenarioGoal): string {
+  switch (g.kind) {
+    case 'world':
+      return 'Hold every country'
+    case 'classic':
+      return g.victoryShare <= 0.25 ? 'Take 3 countries' : g.victoryShare >= 0.6 ? 'Take 12 countries' : 'Take 6 countries'
+    case 'survive':
+      return g.months % 12 === 0 ? `Survive ${g.months / 12} years` : `Survive ${g.months} months`
+    case 'tier':
+      return `Grow to ${TIER_NAMES[g.tier]}`
+    case 'economy':
+      return `${(g.share * 100).toFixed(1)}% of world output`
+  }
+}

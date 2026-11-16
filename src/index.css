@@ -1227,3 +1227,27 @@ select option:disabled {
   gap: 10px;
   padding: 2px 14px 14px;
 }
+
+.scenario-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.scenario-facts .label {
+  display: block;
+  margin-bottom: 1px;
+}
+@media (max-width: 420px) {
+  .scenario-facts {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .scenario-facts > :first-child {
+    grid-column: 1 / -1;
+  }
+}

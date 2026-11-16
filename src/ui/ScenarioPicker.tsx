@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DIFFICULTY } from '../data/difficulty'
-import { SCENARIOS, STANDARD_SCENARIO, type ScenarioDef } from '../data/scenarios'
+import { SCENARIOS, STANDARD_SCENARIO, scenarioGoalShort, type ScenarioDef } from '../data/scenarios'
 import { getWorld } from '../map/world'
 import { Modal } from './Modal'
 
@@ -9,15 +9,32 @@ const nationName = (id: string) => getWorld().map.regions[id]?.name ?? id
 
 /** The scenario's one-line promise and what it asks, as a card the player can read at a glance. */
 function Facts({ def }: { def: ScenarioDef }) {
+  const std = def.id === STANDARD_SCENARIO
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
+    <>
+      <div className="scenario-facts" aria-label="At a glance">
+        <span>
+          <span className="label">Win</span>
+          {scenarioGoalShort(def.goal)}
+        </span>
+        <span>
+          <span className="label">Rivals</span>
+          {std ? 'Your choice' : DIFFICULTY[def.recommended.difficulty].name}
+        </span>
+        <span>
+          <span className="label">Play as</span>
+          {std ? 'Any nation' : nationName(def.recommended.nation)}
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
       {def.tags.map((t) => (
         <span key={t} className="chip">
           {t}
         </span>
       ))}
       <span className="chip">{def.length}</span>
-    </div>
+      </div>
+    </>
   )
 }
 

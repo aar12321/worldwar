@@ -114,6 +114,7 @@ export function assessStrategy(sight: Sight): Strategy {
   let worstNet = 0
   for (const e of enemies) worstNet = Math.min(worstNet, netWarScore(s, id, e))
   const atWarNow = enemies.length > 0
+  const held = Object.values(s.regions).filter((r) => r.owner === id).length
   const unsettled = Object.values(s.regions).filter((r) => r.owner === id && r.integration < 0.85).length
   const broke = econ.netCapital < 0 && n.resources.capital < 40
   const grudge = grudgeOf(sight, myPower)
@@ -137,7 +138,7 @@ export function assessStrategy(sight: Sight): Strategy {
   } else if (grudge && !broke && n.stability >= 40 && n.warWeariness < 25 && myPower >= sight.perceived(grudge) * 0.9) {
     posture = 'revenge'
     why = `wants its land back from ${s.nations[grudge].name}`
-  } else if (unsettled > 3 + Math.floor(Object.values(s.regions).filter((r) => r.owner === id).length / 4) || n.warWeariness > 28 || n.stability < 40 || broke) {
+  } else if (unsettled > 1 + Math.floor(held / 8) || n.warWeariness > 28 || n.stability < 40 || broke) {
     posture = 'consolidate'
     why = broke ? 'short of money' : n.stability < 40 ? 'its people are restless' : n.warWeariness > 28 ? 'its people are weary of war' : 'too much newly conquered land to digest'
   } else if (threat) {
@@ -155,11 +156,13 @@ export function assessStrategy(sight: Sight): Strategy {
   }
 
   const rules = POSTURE_RULES[posture]
+  // Officials can only run so much: the bigger the empire, the less eager it is to take more (the game's own administration strain, felt by the AI too).
+  const overreach = held > 4 ? Math.max(0.3, 1 - (held - 4) * 0.09) : 1
   const minOdds = MIN_ODDS[diff.skill] + rules.odds
   return {
     posture,
     why,
-    appetite: rules.appetite,
+    appetite: rules.appetite * overreach,
     minOdds,
     maxCommit: rules.commit,
     peaceDrive: rules.peace,
@@ -233,6 +236,8 @@ export function chooseWarTarget(sight: Sight, strat: Strategy, mistake: string |
     if (distracted > 0) ratio *= (n.personality === 'opportunist' || strat.posture === 'opportunist' ? 1.15 : 1.05) + Math.min(0.3, distracted * 0.2)
     if (alliesOf(id).some((a) => atWar(s, a, target))) ratio *= diff.skill === 2 ? 1.25 : diff.skill === 1 ? 1.12 : 1
     if (ctx.coalition && humans.has(target)) ratio *= 1.2
+    // A runaway leader draws its neighbors: skilled rivals gang up on a nation holding eight or more countries.
+    if (diff.skill >= 1 && (ctx.regions.get(target)?.length ?? 0) >= 8) ratio *= 1.2
     if (isGrudge) ratio *= 1.3 * strat.appetite
     // An opportunist only strikes a neighbor that is in trouble.
     if (strat.posture === 'opportunist' && distracted < 0.15 && t.warWeariness < 12 && !isGrudge && ratio < diff.warDeclarePowerRatio * 1.4) continue
@@ -413,7 +418,7 @@ export function readyToStrike(plan: AttackPlan, strat: Strategy, baseChance: num
   const boost = plan.odds >= 0.9 ? 1.5 : plan.odds >= 0.75 ? 1.2 : 1
   const posture = strat.posture === 'revenge' ? 1.3 : strat.posture === 'defend' ? 0.7 : 1
   const chance = baseChance * boost * posture
-  return rng.chance(Math.min(0.9, warAge <= 2 && strat.posture !== 'defend' ? Math.max(chance, 0.65) : chance))
+  return rng.chance(Math.min(0.9, warAge <= 2 && strat.posture !== 'defend' ? Math.max(chance, 0.4) : chance))
 }
 
 /** An alliance is worth having with a nation of weight, that is not already sinking, and not one that would only drag the bot into its wars. */

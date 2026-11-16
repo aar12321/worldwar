@@ -202,6 +202,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   else if (econ.netCapital < 0 || n.resources.capital < 15) tax += 0.05
   else if (tax > 0.27) tax -= 0.02
   else if (tax < 0.23) tax += 0.02
+  // ---- strategy hook: a treasury far beyond need is returned to the people as lower taxes ----
+  if (n.resources.capital > 0 && cashMonths(sight) > 12) tax -= 0.03
   tax = clamp(Math.round(tax * 100) / 100, 0.1, 0.4)
   const draft = atWarNow ? (n.warWeariness > 30 ? 0.07 : 0.1) : 0.05
   if (diff.skill >= 1) {
@@ -391,7 +393,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       if (!wantsArmy || upkeepRoom <= 0) return used
       // Raise units, up to the queue limit, scaled by income and the difficulty.
       let room = upkeepRoom
-      const maxRecruits = clamp(Math.round((income / 30) * diff.production * strat.recruit), BOT.minRecruitsPerTurn, BOT.maxRecruitsPerTurn)
+      const maxRecruits = clamp(Math.round((income / 30) * diff.production * strat.recruit * (cashMonths(sight) > 12 ? 2 : 1)), BOT.minRecruitsPerTurn, BOT.maxRecruitsPerTurn)
       let recruited = 0
       let steelBought = 0
       const foe = diff.skill === 2 ? [...enemies].sort((a, b) => (ctx.power.get(b) ?? 0) - (ctx.power.get(a) ?? 0) || (a < b ? -1 : 1))[0] : undefined
@@ -573,8 +575,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   for (const o of orders) if (o.type === 'declareWar' && !humans.has(o.target)) warTargets.add(o.target)
   // ---- strategy hook: attacks are planned from real battle forecasts (src/ai/strategy.ts). One attack a turn. ----
   if (mistake !== 'idle' && planned - n.military.lastAttackTurn >= BOT.attackRestTurns && n.military.exposed < 0.05 && warTargets.size > 0) {
-    // A skilled bot on the offensive may open a second front in the same month, if the first needs a third of the army and this one is a near sure thing.
-    const twoFronts = diff.skill >= 1 && (strat.posture === 'expand' || strat.posture === 'opportunist' || strat.posture === 'revenge')
+    // The strongest tier on the offensive may open a second front in the same month, if the first needs a third of the army and this one is a near sure thing.
+    const twoFronts = diff.skill === 2 && (strat.posture === 'expand' || strat.posture === 'opportunist' || strat.posture === 'revenge')
     const plans = planAttacks(sight, strat, warTargets, mistake, twoFronts ? 4 : 1)
     const plan = plans[0]
     if (plan && readyToStrike(plan, strat, BOT.attackChance * diff.aggression, rng, planned - (s.warStarted[pairKey(nationId, s.regions[plan.target].owner)] ?? planned))) {
