@@ -104,7 +104,9 @@ describe('turn mode resolves exactly as pinned', () => {
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('df245a2f24bc9')
+    // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
+    // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
+    expect(hash(JSON.stringify(s))).toBe('9630530323146')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
