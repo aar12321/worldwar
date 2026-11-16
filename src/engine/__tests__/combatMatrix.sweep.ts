@@ -4,13 +4,14 @@
  *
  *   // src/engine/__tests__/x.scratch.test.ts   (delete it afterwards)
  *   import { it } from 'vitest'
- *   import { printMatrix, printCurve } from './combatMatrix.sweep'
- *   it('sweep', () => { printCurve(); printMatrix() }, 600_000)
+ *   import { printBeforeAfter } from './combatMatrix.sweep'
+ *   it('sweep', () => { printBeforeAfter() }, 600_000)
  */
 import { UNIT_SPECS } from '../../data/unitTypes'
 import { resolveBattle, type Combatant } from '../combat'
 import { emptyUnits, totalUnits } from '../helpers'
 import { createRng } from '../rng'
+import { withOldCombat } from './oldCombat'
 import type { Terrain, UnitCounts, UnitType } from '../types'
 import { UNIT_TYPES } from '../types'
 
@@ -160,6 +161,20 @@ export function efficiencyTable(kinds: UnitType[] = ['infantry', 'armor', 'artil
   const out: Efficiency[] = []
   for (const kind of kinds) for (const terrain of TERRAIN_LIST) out.push({ kind, terrain, attack: budgetToWin(kind, terrain), defence: budgetToHold(kind, terrain) })
   return out
+}
+
+/** The cost-efficiency and recipe tables before (the old rules put back) and after the tuning. */
+export function printBeforeAfter() {
+  console.log('=== BEFORE (old combat rules) ===')
+  withOldCombat(() => {
+    printRecipes()
+    printEfficiency()
+    printCurve()
+  })
+  console.log('=== AFTER ===')
+  printRecipes()
+  printEfficiency()
+  printCurve()
 }
 
 export function printEfficiency() {

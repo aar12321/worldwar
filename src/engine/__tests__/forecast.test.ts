@@ -26,12 +26,14 @@ describe('the forecast is the real fight', () => {
     expect(rows.length).toBeGreaterThan(N * 0.8)
     const mean = rows.reduce((a, r) => a + r.diff, 0) / rows.length
     const worst = Math.max(...rows.map((r) => r.diff))
-    const inRange = rows.filter((r) => r.sim >= r.low - 0.045 && r.sim <= r.high + 0.045).length / rows.length
+    const inRange = rows.filter((r) => r.sim >= r.low - 0.02 && r.sim <= r.high + 0.02).length / rows.length
     console.log(`forecast vs simulated win frequency, ${rows.length} scenarios x ${SIMS} fights: mean abs error ${(mean * 100).toFixed(2)} points, worst ${(worst * 100).toFixed(1)}, simulated value inside the stated range (plus simulation noise) ${(inRange * 100).toFixed(0)}%`)
     console.log(rows.map((r) => `${r.name.padEnd(28)} forecast ${(r.forecast * 100).toFixed(1).padStart(5)}  simulated ${(r.sim * 100).toFixed(1).padStart(5)}`).join('\n'))
     expect(mean).toBeLessThan(0.025)
     expect(worst).toBeLessThan(0.08)
-    expect(inRange).toBeGreaterThan(0.9)
+    expect(inRange).toBeGreaterThan(0.85)
+    // A stated range is a real one, not a rounding of the number.
+    for (const r of rows.filter((x) => x.forecast > 0.05 && x.forecast < 0.95)) expect(r.high - r.low).toBeGreaterThan(0.015)
     // The scenarios span the whole range, not only sure things.
     expect(rows.filter((r) => r.sim > 0.15 && r.sim < 0.85).length).toBeGreaterThan(rows.length * 0.25)
   }, 240_000)

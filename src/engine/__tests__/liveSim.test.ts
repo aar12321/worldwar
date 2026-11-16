@@ -51,7 +51,8 @@ describe('a year of a live game, played by the AI', () => {
     }
     expect(problems).toEqual([])
     expect(monthEnds).toBeGreaterThanOrEqual(11)
-    expect(battles).toBeGreaterThan(10)
+    // A floor, not a target: the combat tuning (a fortune of the day, tougher heavy units) makes the AI's forecasts less sure, so it picks fewer fights (10 in this year, was more).
+    expect(battles).toBeGreaterThanOrEqual(8)
     // A day tick copies the state when something happens, and costs almost nothing when it does not.
     const sorted = [...ms].sort((a, b) => a - b)
     const median = sorted[Math.floor(sorted.length / 2)]

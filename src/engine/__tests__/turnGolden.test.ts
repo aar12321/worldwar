@@ -6,6 +6,7 @@ import { applyEventChoice } from '../events'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
+import { withOldCombat } from './oldCombat'
 
 /**
  * Pins exactly how turn-based months resolve, so a change that was not meant to alter the rules (a refactor, a cache) shows up here.
@@ -37,6 +38,10 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * Re-pinned (all three) when the AI got its strategic layer (src/ai/strategy.ts: postures, attacks and war targets chosen from the War Room's own
  * forecast, peace timing, missile kinds by target) and stale AI wars began to fizzle after a year: bots decide differently on purpose.
  * Checked before pinning: docs/STRATEGY.md has the measured effect (attacks at poor odds from 44% to under 1%, wars shorter, no stalled fronts).
+ * Re-pinned (all three, and the log of the small war) for the combat tuning of the War Room work (docs/WAR_STATUS.md): a fortune of the day in every battle
+ * (COMBAT.luck), units that soak up damage in proportion to what they cost (UNIT_SPECS.toughness), robots at 1.8 attack, and Siege and Blitz
+ * rebalanced. Checked before pinning: with those numbers put back (withOldCombat) the old hashes return exactly, in the last test of this file,
+ * so the new unit orders, the forecast, the planner and the auto-command change nothing for a game that does not use them.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -98,22 +103,36 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('f204c70c0058a')
+    expect(hash(JSON.stringify(s))).toBe('11eb718f19436f')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
+    // Re-pinned again for the combat tuning (docs/WAR_STATUS.md): see 'the combat tuning is the only thing that moved them' below.
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
-    expect(hash(JSON.stringify(s))).toBe('9630530323146')
+    expect(hash(JSON.stringify(s))).toBe('18e8d940ed7c0f')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('1bb3d6aea64728')
-    expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
+    expect(hash(JSON.stringify(state))).toBe('ac246a089dc1f')
+    expect(hash(JSON.stringify(log))).toBe('17e9fe7b927733')
   })
+
+  it('the combat tuning is the only thing that moved them: with the old numbers put back the old hashes return', () => {
+    // Fortune of the day off, every division as tough as every other, robots at 1.6, Siege and Blitz as they were (see oldCombat.ts).
+    withOldCombat(() => {
+      const normal = botWorld(7, 'normal', 'poland', 12).s
+      expect(hash(JSON.stringify(normal))).toBe('f204c70c0058a')
+      const hard = botWorld(5, 'hard', 'china', 30).s
+      expect(hash(JSON.stringify(hard))).toBe('9630530323146')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('1bb3d6aea64728')
+      expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
+    })
+  }, 400_000)
 
   it('a turn game carries none of the live fields', () => {
     const { state } = smallWar()
