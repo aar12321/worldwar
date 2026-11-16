@@ -1,4 +1,5 @@
 import { MISSILE_TYPES } from '../data/missiles'
+import { wantedAircraft } from '../engine/aircraft'
 import { buildRoom, fundMissilesCost, missileStock, programLevel, recentAttackers } from '../engine/missiles'
 import { levelCost } from '../data/agencies'
 import { systemCost, type SystemId } from '../data/systems'
@@ -307,6 +308,11 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
           const kind = programLevel(n) >= 2 && rng.chance(0.4) ? 'tactical' : 'cruise'
           if (tryAdd({ type: 'buildMissiles', nationId, kind, count: Math.max(1, Math.min(3, buildRoom(n, s.turn))) })) return true
         }
+      }
+      // A Hard rival at war, or facing missiles, develops its aircraft: interceptors first when missiles threaten it.
+      if (diff.skill === 2 && enemies.length > 0) {
+        const node = wantedAircraft(s, n, enemies)
+        if (node && tryAdd({ type: 'startAircraftDev', nationId, node })) return true
       }
       // Hard rivals strike first with missiles and, once a year, from orbit.
       if (diff.skill === 2 && enemies.length > 0 && rng.chance(0.35)) {

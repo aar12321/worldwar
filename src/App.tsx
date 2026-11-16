@@ -31,6 +31,7 @@ const MilitaryPanel = lazy(() => import('./ui/MilitaryPanel').then((m) => ({ def
 const EconomyDesk = lazy(() => import('./ui/EconomyDesk').then((m) => ({ default: m.EconomyDesk })))
 const TechTree = lazy(() => import('./ui/TechTree').then((m) => ({ default: m.TechTree })))
 const EmpireDesk = lazy(() => import('./ui/EmpireDesk').then((m) => ({ default: m.EmpireDesk })))
+const AircraftDev = lazy(() => import('./ui/AircraftDev').then((m) => ({ default: m.AircraftDev })))
 
 function useShortcuts() {
   useEffect(() => {
@@ -53,8 +54,13 @@ function useShortcuts() {
       if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') return
       const st = useGame.getState()
       if (!st.game) return
+      // The aircraft screen closes on Escape even when a button inside it has just gone away and focus fell to the page.
+      if (e.key === 'Escape' && st.aircraftOpen) {
+        st.setAircraftOpen(false)
+        return
+      }
       // A dialog is open: it handles its own keys.
-      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom || st.confirm || st.paletteOpen) return
+      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom || st.aircraftOpen || st.confirm || st.paletteOpen) return
       const mapMode = mapModeForKey(e.key)
       if (e.key === 'Escape') {
         if (st.panel !== 'none') st.setPanel(st.panel)
@@ -143,6 +149,7 @@ export default function App() {
   const online = useGame((s) => !!s.online)
   const panel = useGame((s) => s.panel)
   const live = useGame((s) => !!s.game && isLive(s.game) && !s.online)
+  const aircraftOpen = useGame((s) => s.aircraftOpen)
   useShortcuts()
   useFlushOnExit()
   useLiveClock(live)
@@ -182,6 +189,11 @@ export default function App() {
           {panel === 'none' && <ArmiesDock />}
           <OrdersTray />
           <WarRoom />
+          {aircraftOpen && (
+            <Suspense fallback={null}>
+              <AircraftDev />
+            </Suspense>
+          )}
           <BattleFX />
           <TurnSummary />
           <EventModal />

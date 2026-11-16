@@ -1,6 +1,7 @@
 import { agencyName } from '../data/agencies'
 import { ELECTION } from '../data/government'
 import { SECTORS, SECTOR_IDS } from '../data/business'
+import { MISSILES, MISSILE_TYPES } from '../data/missiles'
 import { TECHS } from '../data/techTree'
 import { BUILDING_SPECS, UNIT_SPECS, buildingCost, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from './arms'
@@ -11,6 +12,7 @@ import { cityDevelopCost } from './cities'
 import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
 import { factionOf, votesWaiting } from './factions'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
+import { fundMissilesCost, launchSite, missileStock, programLevel, recentAttackers } from './missiles'
 import { validateOrder } from './orders'
 import { monthsToElection } from './politics'
 import { ACADEMY, PROJECT_LEVELS, PROJECTS, programCost } from '../data/projects'
@@ -83,6 +85,47 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       action: 'See the armies',
       target: { desk: 'military', tab: 'armies' },
     })
+  }
+
+  // Struck with missiles lately: answer in kind if you can, or build the means. The same goes for turn and live games.
+  for (const attackerId of recentAttackers(s, n, 2)) {
+    const ago = s.turn - (n.struckBy?.[attackerId] ?? s.turn)
+    const foe = s.nations[attackerId]?.name ?? 'An enemy'
+    const stocked = MISSILE_TYPES.filter((k) => missileStock(n, k) >= 1)
+    // The country that took the most damage to answer at: the foe's strongest line that one of your missiles reaches.
+    const answer = Object.values(s.regions)
+      .filter((r) => r.owner === attackerId && map.regions[r.id])
+      .sort((a, b) => b.line - a.line || (a.id < b.id ? -1 : 1))
+      .find((r) => stocked.some((k) => launchSite(s, map, nationId, r.id, k)))
+    const urgency = ago <= 1 ? 'now' : 'soon'
+    if (answer) {
+      const held = stocked.map((k) => `${missileStock(n, k)} ${MISSILES[k].name.toLowerCase()}${missileStock(n, k) === 1 ? '' : 's'}`).join(', ')
+      add(urgency, 85 - ago * 10, {
+        id: `struck-${attackerId}`,
+        title: `${foe} struck you with missiles`,
+        detail: `You hold ${held}. Answer from the War Room: ${name(answer.id)} is in range${(n.systems?.shield ?? 0) < 1 && n.techs.includes('frontier_missile_defense') ? ', and an Interceptor Shield would stop part of what comes next' : ''}.`,
+        action: 'Answer in the War Room',
+        target: { desk: 'warRoom', region: answer.id },
+      })
+    } else {
+      const level = programLevel(n)
+      const cost = fundMissilesCost(n)
+      const afford = level < 3 && money >= cost.capital && n.resources.tp >= cost.tp
+      add(urgency, 80 - ago * 10, {
+        id: `struck-${attackerId}`,
+        title: `${foe} struck you with missiles`,
+        detail:
+          stocked.length > 0
+            ? `You hold missiles but none reach ${foe} from a country with a factory. Build in range, or raise the missile program for longer reach.`
+            : level === 0
+              ? `You have none to answer with. Raise the missile program (${cost.capital} money, ${cost.tp} research) to build cruise missiles${(n.systems?.shield ?? 0) < 1 && n.techs.includes('frontier_missile_defense') ? ', and buy an Interceptor Shield to stop part of theirs' : ''}.`
+              : afford
+                ? `You have none left. Build more from the program, or raise it to level ${level + 1} for ${cost.capital} money and ${cost.tp} research.`
+                : `You have none left. Build more from the program.`,
+        action: level === 0 || afford ? 'Open the program' : 'Build missiles',
+        target: { desk: 'military', tab: 'systems' },
+      })
+    }
   }
 
   // Food
