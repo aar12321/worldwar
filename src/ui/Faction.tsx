@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { opinionLabel, opinionOf } from '../ai/opinion'
 import { CHARTER_TEXT, FACTION, POOL_NAMES } from '../data/factions'
 import { PROPOSAL_COSTS, UNIT_SPECS } from '../data/unitTypes'
+import { FactionNotices } from './FactionLinks'
+import { inviteCandidates } from '../engine/partners'
+import { inviteItems, nationItems, pickerMatches, type PickerItem } from './pickerItems'
 import { claimValue, describeContract, factionOf, lockLeft, poolPower, poolUnits, poolValue, sharesOf, tallyOf, warInfluence, warTargetProblem, withdrawable, withdrawableUnits } from '../engine/factions'
-import { alliesOf, atWar, clamp, regionsOf, turnDate } from '../engine/helpers'
+import { atWar, clamp, regionsOf, turnDate } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { powerView, showPower } from '../engine/intel'
 import type { Deal, Faction, FactionCharter, FactionGift, FactionProposal, GameState, NationId, Order, PoolResource, ResourceBundle, TradeResource, UnitType } from '../engine/types'
@@ -16,7 +19,6 @@ import { Bar, StatTile, Tiles } from './kit'
 import { UnitIcon } from './icons'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import { usePlayerView } from './hooks'
-import { rankNations } from './nationList'
 
 type FactionTab = 'council' | 'pool' | 'contracts' | 'log'
 
@@ -38,49 +40,65 @@ function Dot({ color }: { color: string }) {
   return <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
 }
 
-/** A list of countries you can search, with the readable names the dropdowns lacked. Rows that cannot be chosen say why. */
-export interface PickerItem {
-  id: NationId
-  name: string
-  /** Right-hand text: size, strength, the odds. */
-  note?: string
-  /** A small coloured chip. */
-  chip?: { text: string; tone: 'good' | 'warn' | 'bad' | 'none' }
-  /** Why it cannot be chosen, or null. */
-  why?: string | null
-  color?: string
-}
+const CHIP_CLASS = { good: 'chip-green', warn: '', bad: 'chip-red', none: '' }
 
-export function NationPicker({ items, value, onChange, placeholder = 'Search countries', label, max = 260 }: { items: PickerItem[]; value: NationId | null; onChange: (id: NationId | null) => void; placeholder?: string; label: string; max?: number }) {
+export function NationPicker({ items, value, onChange, placeholder = 'Search countries', label, max = 260, reveal = null }: { items: PickerItem[]; value: NationId | null; onChange: (id: NationId | null) => void; placeholder?: string; label: string; max?: number; reveal?: NationId | null }) {
   const [query, setQuery] = useState('')
+  const [blocked, setBlocked] = useState<PickerItem | null>(null)
   const q = query.trim().toLowerCase()
-  const shown = q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items
-  const chipClass = { good: 'chip-green', warn: '', bad: 'chip-red', none: '' }
+  const shown = items.filter((i) => pickerMatches(i, q))
+  const picked = useRef<HTMLButtonElement>(null)
+  // A choice made elsewhere (coming from the Diplomacy desk) is scrolled into view.
+  useEffect(() => {
+    picked.current?.scrollIntoView({ block: 'nearest' })
+    const it = reveal ? items.find((x) => x.id === reveal) : null
+    if (it?.why) setBlocked(it)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, reveal])
   return (
     <div className="space-y-2">
       <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} aria-label={`Search: ${label}`} className="field w-full px-3 py-2 text-[15px]" />
       <div role="listbox" aria-label={label} className="rounded-xl bg-black/35 border border-white/10 overflow-y-auto scroll-thin p-1" style={{ maxHeight: max }}>
         {shown.length === 0 && <div className="px-3 py-3 text-[14px] text-white/65">No country matches.</div>}
-        {shown.map((i) => (
-          <button
-            key={i.id}
-            role="option"
-            aria-selected={value === i.id}
-            aria-disabled={!!i.why}
-            onClick={() => onChange(value === i.id ? null : i.id)}
-            className={`w-full text-left rounded-lg px-3 py-2 flex items-center gap-2.5 transition-colors ${value === i.id ? 'bg-[#0a84ff]/30 ring-1 ring-[#0a84ff]/70' : 'hover:bg-white/8'} ${i.why ? 'opacity-70' : ''}`}
-            title={i.why ?? undefined}
-          >
-            {i.color && <Dot color={i.color} />}
-            <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-semibold text-white truncate">{i.name}</span>
-              {i.why && <span className="block text-[12px] text-[#ffb4ae] leading-snug">{i.why}</span>}
-            </span>
-            {i.chip && <span className={`chip ${chipClass[i.chip.tone]}`}>{i.chip.text}</span>}
-            {i.note && <span className="text-[12px] text-white/70 tabular-nums whitespace-nowrap">{i.note}</span>}
-          </button>
+        {shown.map((i, n) => (
+          <div key={i.id}>
+            {i.group && i.group !== shown[n - 1]?.group && <div role="presentation" className="label px-3 pt-2 pb-1">{i.group}</div>}
+            <button
+              ref={value === i.id || reveal === i.id ? picked : undefined}
+              role="option"
+              aria-selected={value === i.id}
+              aria-disabled={!!i.why}
+              onClick={() => {
+                // A row that cannot be chosen never becomes the choice; it says why instead.
+                if (i.why) return setBlocked(blocked?.id === i.id ? null : i)
+                setBlocked(null)
+                onChange(value === i.id ? null : i.id)
+              }}
+              className={`w-full text-left rounded-lg px-3 py-2 flex items-center gap-2.5 transition-colors ${value === i.id ? 'bg-[#0a84ff]/30 ring-1 ring-[#0a84ff]/70' : 'hover:bg-white/8'} ${i.why ? 'opacity-70' : ''}`}
+              title={i.why ?? undefined}
+            >
+              {i.color && <Dot color={i.color} />}
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-semibold text-white truncate">{i.name}</span>
+                {(i.chip || (i.chips?.length ?? 0) > 0) && (
+                  <span className="flex flex-wrap gap-1 mt-0.5">
+                    {[...(i.chip ? [i.chip] : []), ...(i.chips ?? [])].map((c) => (
+                      <span key={c.text} className={`chip ${CHIP_CLASS[c.tone]}`}>{c.text}</span>
+                    ))}
+                  </span>
+                )}
+                {i.why && <span className="block text-[12px] text-[#ffb4ae] leading-snug mt-0.5">{i.why}</span>}
+              </span>
+              {i.note && <span className="text-[12px] text-white/70 tabular-nums text-right">{i.note}</span>}
+            </button>
+          </div>
         ))}
       </div>
+      {blocked && (
+        <p className="text-[13px] text-[#ffb4ae]" role="status">
+          {blocked.name} cannot be chosen: {blocked.why}.
+        </p>
+      )}
     </div>
   )
 }
@@ -165,15 +183,6 @@ function Members({ game, f, me }: { game: GameState; f: Faction; me: NationId })
 }
 
 // ---- votes ----
-
-/** The list rows for some nations, strongest start first (the order of the new-game list). */
-function nationItems(game: GameState, ids: NationId[], extra: (id: NationId) => Partial<PickerItem>): PickerItem[] {
-  const rank = new Map(rankNations(getWorld().map).map((x, i) => [x.r.id, i] as const))
-  return ids
-    .filter((id) => game.nations[id]?.alive)
-    .sort((a, b) => (rank.get(a) ?? 999) - (rank.get(b) ?? 999) || (a < b ? -1 : 1))
-    .map((id) => ({ id, name: game.nations[id].name, color: game.nations[id].color, ...extra(id) }))
-}
 
 function VoteCard({ game, f, p, me, orders }: { game: GameState; f: Faction; p: FactionProposal; me: NationId; orders: Order[] }) {
   const issueOrder = useGame((s) => s.issueOrder)
@@ -266,7 +275,7 @@ function ProposeCountry({ game, f, me, orders }: { game: GameState; f: Faction; 
         <h3 className="text-[19px] font-semibold tracking-tight">Propose a country</h3>
         <p className="text-[13px] text-white/70">Choose who the faction should go to war with. Members vote; if it passes, every member that can joins and the pooled army attacks as one.</p>
       </div>
-      <NationPicker label="Countries to propose" items={items} value={pick} onChange={(id) => { const it = items.find((x) => x.id === id); setPick(it?.why ? pick : id) }} placeholder="Search for a country" />
+      <NationPicker label="Countries to propose" items={items} value={pick} onChange={setPick} placeholder="Search for a country" />
       {target ? (
         <div className="rounded-xl bg-black/30 p-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
@@ -414,23 +423,40 @@ function PoolTab({ game, f, me, orders }: { game: GameState; f: Faction; me: Nat
 }
 
 function InviteBox({ game, f, me, orders }: { game: GameState; f: Faction; me: NationId; orders: Order[] }) {
+  const focus = useGame((s) => s.factionFocus)
   const [pick, setPick] = useState<NationId | null>(null)
-  const ids = useMemo(() => Object.keys(game.nations).filter((id) => game.nations[id].alive && !factionOf(game, id) && id !== me), [game, me])
+  const [reveal, setReveal] = useState<NationId | null>(null)
   const { map } = getWorld()
-  const items = useMemo(() => nationItems(game, ids, (id) => {
-    const op = opinionOf(game, map, id, me, { coalition: false })
-    const pending = f.invites.some((i) => i.nation === id && i.expires >= game.turn)
-    const atWarWith = f.members.some((m) => atWar(game, id, m))
-    return { why: pending ? 'Already invited' : atWarWith ? 'At war with a member' : game.nations[id].overlord ? 'A puppet' : null, note: opinionLabel(op), chip: alliesOf(game, me).includes(id) ? { text: 'Ally', tone: 'good' as const } : undefined }
-  }), [game, ids, map, f, me])
-  if (f.members.length >= FACTION.maxMembers) return null
+  const rows = useMemo(() => inviteCandidates(game, map, me, f, orders), [game, map, me, f, orders])
+  const items = useMemo(() => inviteItems(game, rows), [game, rows])
+  const box = useRef<HTMLElement>(null)
+  // Coming from a country's card in Diplomacy: that country is picked, or its row says why it cannot be.
+  const [seen, setSeen] = useState<NationId | null>(null)
+  if (!focus && seen) setSeen(null)
+  if (focus && focus !== seen) {
+    setSeen(focus)
+    setReveal(focus)
+    if (!items.find((x) => x.id === focus)?.why) setPick(focus)
+  }
+  useEffect(() => {
+    if (!focus) return
+    box.current?.scrollIntoView({ block: 'start' })
+    useGame.setState({ factionFocus: null })
+  }, [focus])
+  const partners = rows.filter((r) => r.relations.length > 0).length
+  const open = rows.filter((r) => !r.problem).length
+  const full = f.members.length >= FACTION.maxMembers
   return (
-    <section className="space-y-2" aria-label="Invite a nation">
+    <section ref={box} className="space-y-2" aria-label="Invite a nation">
       <div className="label">Invite a nation</div>
+      <p className="text-[13px] text-white/70">
+        {full ? `${f.name} is full (${f.members.length} of ${FACTION.maxMembers} members), so nobody can be invited. ` : ''}
+        {partners > 0 ? 'Your partners from the Diplomacy desk come first. ' : 'Nations you make a pact, alliance, guarantee or trade deal with come first. '}
+        {open} of {rows.length} nations can be invited now; the rest say why not.
+      </p>
       {f.invites.length > 0 && <p className="text-[13px] text-white/70">Waiting for an answer: {f.invites.map((i) => game.nations[i.nation]?.name).join(', ')}</p>}
-      <NationPicker label="Nations to invite" items={items} value={pick} onChange={(id) => { const it = items.find((x) => x.id === id); setPick(it?.why ? pick : id) }} placeholder="Search for a nation to invite" max={200} />
-      {pick && <OrderButton order={{ type: 'factionInvite', nationId: me, target: pick }} label={`Invite ${game.nations[pick].name}`} effect="A rival answers when the month ends; a player sees it at once next month" onDone={() => setPick(null)} className="w-full" />}
-      <p className="sr-only">{orders.length} orders waiting</p>
+      <NationPicker label="Nations to invite" items={items} value={pick} onChange={setPick} reveal={reveal} placeholder="Search for a nation to invite" max={320} />
+      {pick && <OrderButton order={{ type: 'factionInvite', nationId: me, target: pick }} label={`Invite ${game.nations[pick].name}`} cost="free" effect={game.humans.includes(pick) || game.nations[pick].isPlayer ? 'A player sees it at once next month' : 'A rival answers when the month ends'} onDone={() => setPick(null)} className="w-full" />}
     </section>
   )
 }
@@ -646,7 +672,7 @@ function LogTab({ game, f }: { game: GameState; f: Faction }) {
 function Found({ game, me }: { game: GameState; me: NationId }) {
   const [name, setName] = useState('')
   const [charter, setCharter] = useState<FactionCharter>({ vote: 'majority', spoils: 'share', exit: 'refund' })
-  const invites = (game.factions ?? []).filter((g) => g.invites.some((i) => i.nation === me && i.expires >= game.turn))
+  const focus = useGame((st) => st.factionFocus)
   const others = game.factions ?? []
   const choice = <K extends keyof FactionCharter>(key: K, label: string) => (
     <div className="space-y-1">
@@ -663,6 +689,7 @@ function Found({ game, me }: { game: GameState; me: NationId }) {
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-white/14 bg-white/5 p-4 space-y-3">
+        {focus && game.nations[focus] && <p className="rounded-lg bg-[#0a84ff]/12 border border-[#0a84ff]/40 px-3 py-2 text-[13px] text-white/85">You came from {game.nations[focus].name}. Found the faction now; when it exists, {game.nations[focus].name} is already picked in the invitation list on the Pool and members tab.</p>}
         <h3 className="text-[20px] font-semibold tracking-tight">Pool your strength with friends</h3>
         <p className="text-[14px] text-white/80">A faction works like a company owned by countries. Members put in money, oil, steel, goods, food and soldiers; the pool grows into a shared army and treasury. Your share of it follows what you put in. The members vote together to go to war with a country, and the pooled army attacks as one. Conquered land is split by share.</p>
         <label className="block space-y-1">
@@ -674,21 +701,7 @@ function Found({ game, me }: { game: GameState; me: NationId }) {
         {choice('exit', 'Leaving')}
         <OrderButton order={{ type: 'factionFound', nationId: me, name, charter }} label="Found the faction" cost={`${FACTION.foundInfluence} influence`} effect="It exists when the month ends; then invite others" tone="btn-primary" className="w-full" />
       </section>
-      {invites.length > 0 && (
-        <section className="space-y-2" aria-label="Invitations">
-          <div className="label text-[#ffd60a]">You are invited</div>
-          {invites.map((g) => (
-            <div key={g.id} className="rounded-xl border border-[#ffd60a]/50 bg-[#ffd60a]/6 p-3 space-y-2">
-              <div className="flex justify-between gap-2">
-                <span className="font-semibold text-[16px]">{g.name}</span>
-                <span className="text-white/65 text-[13px]">{g.members.length} members</span>
-              </div>
-              <div className="text-[13px] text-white/75">{g.members.map((m) => game.nations[m]?.name).join(', ')} · {CHARTER_TEXT.vote[g.charter.vote].toLowerCase()}</div>
-              <OrderButton order={{ type: 'factionJoin', nationId: me, factionId: g.id }} label={`Join ${g.name}`} effect="You join when the month ends" tone="btn-primary" />
-            </div>
-          ))}
-        </section>
-      )}
+      <FactionNotices game={game} me={me} />
       {others.length > 0 && (
         <section className="space-y-2" aria-label="Factions in the world">
           <div className="label">Factions in the world</div>
@@ -699,6 +712,10 @@ function Found({ game, me }: { game: GameState; me: NationId }) {
                 <span className="text-white/65">{g.members.length} members · pool {num(poolValue(g))}</span>
               </div>
               <div className="text-white/75">{g.members.map((m) => game.nations[m]?.name).join(', ')}{g.wars.length ? ` · at war with ${g.wars.map((w) => game.nations[w.target]?.name).join(', ')}` : ''}</div>
+              <div className="text-[12.5px] text-white/60 mt-0.5">{CHARTER_TEXT.vote[g.charter.vote]} · {CHARTER_TEXT.spoils[g.charter.spoils]} · {CHARTER_TEXT.exit[g.charter.exit]}</div>
+              <div className="mt-2">
+                <OrderButton order={{ type: 'factionRequest', nationId: me, factionId: g.id }} label={`Ask to join ${g.name}`} cost={`${FACTION.requestInfluence} influence`} effect={g.members.some((m) => game.humans.includes(m) || game.nations[m]?.isPlayer) ? 'A member who is a player decides' : 'Its members answer when the month ends'} />
+              </div>
             </div>
           ))}
         </section>
@@ -710,6 +727,15 @@ function Found({ game, me }: { game: GameState; me: NationId }) {
 export function FactionPanel() {
   const view = usePlayerView()
   const [tab, setTab] = useState<FactionTab>('council')
+  const focus = useGame((s) => s.factionFocus)
+  const hasFaction = !!view && !!factionOf(view.game, view.game.playerId)
+  // Coming from a country's card in Diplomacy, the invitation list is the one to show.
+  const [seenFocus, setSeenFocus] = useState<NationId | null>(null)
+  if (!focus && seenFocus) setSeenFocus(null)
+  if (focus && hasFaction && focus !== seenFocus) {
+    setSeenFocus(focus)
+    setTab('pool')
+  }
   if (!view) return null
   const { game, orders } = view
   const me = game.playerId
@@ -726,6 +752,7 @@ export function FactionPanel() {
       {f && tab === 'council' && (
         <div className="space-y-5">
           <FactionCard game={game} f={f} me={me} />
+          <FactionNotices game={game} me={me} />
           {f.proposals.length > 0 && (
             <section className="space-y-3" aria-label="Votes">
               <div className="label text-[#ffd60a]">Votes</div>

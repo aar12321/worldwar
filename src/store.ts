@@ -217,6 +217,8 @@ export interface GameStore {
   openAgencies(target?: NationId): void
   mapMode: MapMode
   diploFocus: NationId | null
+  /** A nation to pick in the Faction desk's invitation list, set when you come from its Diplomacy card. */
+  factionFocus: NationId | null
   /** Opening Diplomacy from a war: the peace composer opens by itself on that nation. */
   diploPeace: boolean
   /** Battles waiting to play in the battle window. The first one is showing. */
@@ -291,7 +293,7 @@ export interface GameStore {
   goTo(target: AdviceTarget): void
   openDiplomacy(nationId: NationId | null, opts?: { peace?: boolean }): void
   /** Opens the Faction desk. */
-  openFaction(): void
+  openFaction(nation?: NationId | null): void
   issueOrder(order: Order): boolean
   /** Issues several orders at once, one save and one summary. Returns how many went through. */
   issueBatch(orders: Order[]): { done: number; failed: number }
@@ -833,6 +835,7 @@ export const useGame = create<GameStore>((set, get) => ({
   agencyTarget: null,
   mapMode: 'political',
   diploFocus: null,
+  factionFocus: null,
   diploPeace: false,
   fxQueue: [],
   fxTotal: 0,
@@ -1059,7 +1062,7 @@ export const useGame = create<GameStore>((set, get) => ({
         get().openDiplomacy(target.nation ?? null)
         break
       case 'faction':
-        get().openFaction()
+        get().openFaction(target.nation)
         break
       case 'warRoom':
         set({ selectedRegion: target.region, warRoom: target.region })
@@ -1078,8 +1081,8 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ panel: 'diplomacy', diploFocus: nationId, diploPeace: !!opts?.peace })
   },
 
-  openFaction() {
-    set({ panel: 'faction', diploFocus: null })
+  openFaction(nation) {
+    set({ panel: 'faction', diploFocus: null, factionFocus: nation ?? null })
   },
 
   issueOrder(order) {

@@ -27,6 +27,9 @@ import { useGame } from '../store'
 import { useHumanName, usePlayerView } from './hooks'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import { Ledger } from './Ledger'
+import { FactionNotices, FactionRow } from './FactionLinks'
+import { factionChip } from './pickerItems'
+import { closeNations } from './diplomacyList'
 
 const opinionColor = (v: number) => (v >= 25 ? '#34d399' : v >= 5 ? '#a7f3d0' : v > -5 ? '#94a3b8' : v > -25 ? '#fbbf24' : '#fb7185')
 
@@ -468,6 +471,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const persona = PERSONALITIES[n.personality]
   const human = useHumanName(id)
   const bloc = blocOf(game, id)
+  const inFaction = factionChip(game, id, player.id)
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
   const sanctionedByMe = game.sanctions.some((x) => x.from === player.id && x.to === id && x.until >= game.turn)
   const status = n.overlord ? `Puppet of ${game.nations[n.overlord]?.name ?? 'someone'}${n.overlord === player.id && n.loyalty !== undefined ? ` · loyalty ${Math.round(n.loyalty)}` : ''}` : war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
@@ -496,6 +500,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           </span>
         )}
         {bloc && <span className="chip chip-blue">{bloc.name}</span>}
+        {inFaction && <span className={`chip ${inFaction.tone === 'good' ? 'chip-green' : ''}`} title="Their faction">{inFaction.text}</span>}
         <span>
           {regionsOf(game, id).length === 1 ? '1 country' : `${regionsOf(game, id).length} countries`} · strength {showPower(seen)} ({power > ctx.myPower ? 'stronger than you' : 'weaker than you'})
         </span>
@@ -508,6 +513,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
       )}
       <OpinionMeter report={report} />
       {war && <WarScoreBar target={id} />}
+      <FactionRow id={id} />
       <div className="flex flex-wrap gap-1.5">
         {war ? (
           <button className={`btn btn-primary ${mode === 'peace' ? 'bg-[#0a84ff]/25' : ''}`} onClick={() => toggle('peace')}>
@@ -682,10 +688,8 @@ export function DiplomacyPanel() {
   const world = game.dispatches.filter((d) => d.from !== me && d.to !== me)
   const blocs = blocsOf(game)
 
-  const close = new Set<NationId>([...ctx.neighbors, ...enemiesOf(game, me), ...alliesOf(game, me)])
-  for (const d of deals) close.add(d.from === me ? d.to : d.from)
-  if (focus && focus !== me && game.nations[focus]?.alive) close.add(focus)
-  const closeList = [...close].filter((id) => game.nations[id]?.alive).sort((a, b) => Number(atWar(game, me, b)) - Number(atWar(game, me, a)) || Number(isAllied(game, me, b)) - Number(isAllied(game, me, a)) || game.nations[a].name.localeCompare(game.nations[b].name))
+  const closeList = closeNations(game, me, ctx.neighbors, focus)
+  const close = new Set<NationId>(closeList)
   const majors = Object.values(game.nations)
     .filter((n) => n.alive && n.id !== me && !close.has(n.id))
     .sort((a, b) => regionsOf(game, b.id).length - regionsOf(game, a.id).length || powerView(game, me, b.id).value - powerView(game, me, a.id).value)
@@ -714,6 +718,7 @@ export function DiplomacyPanel() {
           ))}
         </section>
       )}
+      <FactionNotices game={game} me={me} />
       <AnimatePresence initial={false}>
         {inbox.length > 0 && (
           <motion.section key="inbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
