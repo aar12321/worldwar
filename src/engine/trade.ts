@@ -99,9 +99,16 @@ export function validateTradeTerms(s: GameState, terms: TradeTerms, proposer: Na
       if (v === undefined) continue
       if (!Number.isFinite(v) || v < 0 || v > TRADE_LIMITS.maxAmount) return 'Invalid amount'
     }
-  if (bundleEmpty(terms.give) && bundleEmpty(terms.receive)) return 'The deal is empty'
+  const live = terms.start !== undefined || terms.collateral !== undefined || !!terms.joinWars
+  if (live) {
+    if (terms.months < 1) return 'A live contract runs for at least a month'
+    if (terms.start !== undefined && (!Number.isInteger(terms.start) || terms.start < 0 || terms.start > TRADE_LIMITS.maxStart)) return `A contract can start up to ${TRADE_LIMITS.maxStart} months from now`
+    if (terms.collateral !== undefined && (!Number.isFinite(terms.collateral) || terms.collateral < 0 || terms.collateral > TRADE_LIMITS.maxCollateral)) return `Collateral goes up to ${TRADE_LIMITS.maxCollateral} money`
+  }
+  if (bundleEmpty(terms.give) && bundleEmpty(terms.receive) && !terms.joinWars) return 'The deal is empty'
   const mine = shortfall(s.nations[proposer], terms.give)
   if (mine) return `Not enough ${MARKET[mine].name.toLowerCase()}`
+  if ((terms.collateral ?? 0) > 0 && s.nations[proposer].resources.capital < (terms.collateral ?? 0) + (terms.give.capital ?? 0)) return 'Not enough money for the collateral'
   const theirs = shortfall(s.nations[target], terms.receive)
   if (theirs) return `${s.nations[target].name} does not have enough ${MARKET[theirs].name.toLowerCase()}`
   return null

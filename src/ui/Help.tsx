@@ -1,7 +1,10 @@
+import { useEffect } from 'react'
 import { isLive } from '../engine/calendar'
 import { useGame } from '../store'
 import { Modal } from './Modal'
-import { shortcutsFor } from './shortcuts'
+import { Tabs } from './panel'
+import { regCtxOf } from './regCtx'
+import { shortcutRows, shortcutsFor } from './shortcuts'
 
 const TURN = [
   { title: 'Read the Briefing', body: 'Your advisor lists what needs you this month, most urgent first. Every item has a button that takes you to the fix.' },
@@ -13,10 +16,12 @@ const LIVE_STEPS = [
   { title: 'Press play', body: 'Time flows by itself: a month takes about a minute. Pause any time with Space, and speed it up with 1, 2 and 3. The clock stops while you plan an attack or decide an event, and a new game starts paused.' },
   { title: 'Give your orders', body: 'Upgrades, training, trades, shares and war work the moment you press the button. Research, taxes, the draft and offers to other nations take effect on the 1st of the next month, and the Orders bar says when.' },
   { title: 'Send armies', body: 'An attack in the War Room sends an army out of your military. It marches for days, fights when it arrives, and comes home. Units that are away do not defend your country. Recall an army while it is still on its way out.' },
-  { title: 'Watch for armies marching on you', body: 'An enemy army shows in red with the days left. You have that time to recall your own armies, raise shields, fire missiles or make peace, which turns armies back.' },
+  { title: 'Watch for armies and missiles coming', body: 'An enemy army shows in red with the days left. You have that time to recall your own armies, raise shields, fire missiles or make peace, which turns armies back. Missiles in the air toward you show as a purple alert with who fired them and the days left; each kind flies for its own number of days.' },
 ]
 
-const TERMS: [string, string][] = [
+/** The words the game explains. The help window lists them; `Term` (widgets.tsx) shows the same text on hover, focus or tap. */
+// oxlint-disable-next-line react/only-export-components
+export const TERMS: [string, string][] = [
   ['Money', 'Comes from taxes, factories and ports. Pays for upgrades, units, their upkeep and your wars.'],
   ['Food', 'Farms grow it; people and soldiers eat it. Run out and your military fights 30% weaker.'],
   ['Influence', 'Political capital. You spend it to declare war, pass laws, sign treaties and put down rebels.'],
@@ -33,40 +38,112 @@ const TERMS: [string, string][] = [
   ['Business', 'Six private sectors grow on their own. Lower business tax, calm people and new technology make them grow faster.'],
   ['Bonds and credit', 'Borrow with bonds and pay interest at the rate fixed when you sold them. A bond that comes due is rolled over while lenders still lend, or paid from the treasury. A nation in the red for 3 months with debt defaults: half of every bond is written off and nobody lends to it for two years.'],
   ['Spending', 'Real money for schools, health and public works (levels 0 to 4) and for pensions, jobless support and housing (0 to 2). More costs more and buys a better life; less saves money and lets things slip.'],
+  ['Programs for the people', 'The People tab has 22 programs in five groups: health, learning, work, family and safety. Each is Off, Pilot, National or Universal. Raising one costs influence and then money every month by its level, and its effect phases in over a few months. Cutting one costs stability at once. Programs for calm cost; programs for growth, like courts, public transport and small-business loans, earn most of their cost back. Stability from care has a ceiling, so the first programs help most.'],
+  ['Why stability moves', 'The People tab lists every cause of stability with its points, so you can see which lever to pull: taxes, hunger, war weariness, rebels, stretched officials, programs. A campaign (a celebration, a vaccination drive) is a one-off bill for a burst of effect, with a long wait before the next.'],
   ['People and skills', 'Your workers are basic workers, skilled workers, engineers, doctors and scientists. Factories need engineers, universities need scientists, hospitals need doctors. Schools, and the focus you give them, decide the mix. Only people with jobs pay tax.'],
   ['Health and epidemics', 'Healthy people live longer, have more children and riot less. Poor health invites epidemics, which spread to neighbors and cost lives, output and calm. Doctors, health spending, a quarantine and medicine end them.'],
   ['Medicine', 'A seventh research column: Sanitation, Vaccines, Surgery, Genomics and Longevity. Surgery lets doctors return wounded soldiers to the ranks. The last two need a Medical Research Centre or doctors for every need.'],
   ['The bank', 'From a Regional power up you set the interest rate: higher cools prices, lower warms them. You can print money (money now, inflation later), sell bonds for 1, 3 or 5 years, sell war bonds in wartime, steer credit to one sector, and keep a wealth fund. A weak currency makes exports cheap and imports dear.'],
-  ['Projects and public works', 'Seven national projects (rail, power grid, ports, science park, medical centre, digital government, space complex) take many months and money, and engineers set their pace. Public works spending speeds projects, trade and factories, and makes building cheaper.'],
+  ['Projects and public works', 'Seventeen national projects, from a rail network and a water network to a fusion plant and a Mars mission, each open at a different size of empire. Each can be built up to three levels: every level costs and takes more, and is worth more but not in proportion. Engineers set the pace, so building many at once slows them all. You can rush a project: pay four months of its bill to bring it two months closer, once a month. Public works spending speeds projects, trade and factories, and makes building cheaper.'],
+  ['The space program', 'Economy, Space. Needs Fifth-Generation Fighters. An agency of engineers and astronauts (they come out of the same specialists your factories use, and are paid every month), a launch site, and rockets you develop once (sounding, orbital, heavy-lift, deep-space, interplanetary) and then build one at a time: every launch uses a rocket up. Fly missions up a ladder: a test flight, satellites (communications lift trade and research, weather calm the country, reconnaissance sees every enemy), a crewed orbit, then the Moon, asteroids, Mars and the outer planets. A flight takes months: build, launch, travel, arrive, and a seeded roll decides the launch and the arrival. A failure loses the rocket and payload, costs standing, and can kill a crew. Each mission can be flown in-house (cheap, needs a rocket, talent and experience, and builds experience that makes every launch safer) or hired from a private company (a fixed premium, faster to build, no experience, and companies grow better and cheaper as the world flies more rockets). Probes bring home samples; the Labs turn samples into discoveries (cheaper and safer rockets, life support, in-situ resource use, and spillovers: output, medicine, even a new Frontier technology). To take a world: survey it, land, claim it (influence, and nobody else may build there), then fly the cargo that founds an outpost. Outposts grow into stations and colonies, and carry mines that take years to build: metal for steel, rare metals for money, water and volatiles for oil and cheaper upkeep, helium-3 for the grid and a fusion plant. It is a long-term investment: a mine and its outpost take about ten years to pay back what they cost (about six with the right discoveries), before the rockets and staff that got you there, and an outpost the treasury cannot supply shrinks.'],
+  ['Projects in your countries', 'Each country you hold can have its own projects: an industrial park, a tech hub, irrigation, a dam, a resort, a cultural centre, a border fortress, a special economic zone, a mine. Some need a coast, hills, a port or a university. They cost and give more in a bigger country, and they stay with the land if it is conquered. A cultural centre helps conquered land settle.'],
   ['State enterprises', 'The state can buy or seize a business sector and keep most of its profit. It grows at half speed, and seizing one frightens investors.'],
   ['Empire tiers', 'Holding 4, 10, 25 and 60 countries makes you a Regional power, Great power, Superpower and Hegemon. Each tier widens what you can do: interest rates, printing, bonds, projects, laws, the wealth fund, capitals, loans and the World Council. Each country a puppet holds counts as half. You keep a tier until you fall a tenth below its line.'],
   ['Administration', 'Your officials can run only so many countries at once. Beyond that, stability and output fall. Civic halls, governors, skilled workers, regional capitals and digital government raise the limit. Capitals carry no load.'],
   ['Occupation policy', 'How you hold conquered land: Standard, Autonomy (slow, few rebels), Assimilate (fast, more rebels), or Settle (costly, quick and calm). Bigger empires have more choices.'],
+  ['World reaction', 'The bigger you grow, the more the world fears you. Your threat (0 to 100) comes from your empire tier, your share of the world\'s countries, people and output, and your reputation for aggression, and the tier decides how much of it turns into action. Easy rivals never band together. Medium rivals form alliances and blocs against you and join their friends\' wars. Hard rivals also plan joint strikes: several of them declare war and attack your weakest border in the same month (in a live game, on the same day), with at least two months of warning. The Empire desk\'s World reaction tab shows the threat, who is drawing together, what is coming and what you can do: pacts, aid, a better reputation, a Council recognition.'],
+  ['Nuclear weapons', 'A Superpower (25 countries) with Hypersonic Missiles can build warheads, one at a time over four months, for money, steel and research, and keep four. From the War Room, a warhead can be fired at any country of a nation you are at war with, so a war with a reason comes first. It destroys the country\'s buildings, factories and army, kills about two thirds of its people, cripples its output for years and leaves rebels in the ruins; an Interceptor Shield stops only a quarter and missile hunters catch few. You must tick a box to confirm. The world never forgives it: your reputation soars, every nation despises you and sanctions you, world tension spikes, and the two strongest alliance blocs declare war on you at once. In a live game it flies for five days and its target sees it coming; making peace before it lands calls it off. Hard rivals that are Superpowers may do the same, but only when desperate or provoked, and never twice in three years.'],
   ['World Council', 'A Superpower may put resolutions to every nation: sanctions on a target, a ceasefire between two others, recognition that clears its reputation, or a trade accord. Votes are weighted by income and you see the projected result first.'],
   ['Academy and commander', 'A military academy sends recruits out already drilled, makes drill cheaper and sharpens combined arms. A commander has a trait: mountains, logistics, blitz, air power or defense.'],
-  ['Puppet state', 'Win a war big enough and you can make the loser a puppet: it keeps its land, pays you 12% of its income, and fights beside you in every war. After a year you can annex it: its land, army and treasury join yours.'],
+  ['Puppet state', 'Win a war big enough and you can make the loser a puppet: it keeps its land, pays you tribute, and fights beside you in every war while it is loyal. After a year you can annex it: its land, army and treasury join yours (cheap when it is loyal, dear and slow to settle when it is restive).'],
+  ['Ruling a puppet', 'Empire, Puppets (it shows once you have one). Each puppet has a loyalty from 0 to 100. Heavy tax, a big draft, harsh laws (martial law, rationing, austerity) and a heavy tribute lower it every month; aid, your investment in its businesses, your troops on its border and fair taxes raise it, and it is always pulled back toward 60, so loyalty above that must be paid for again each month. A loyal puppet (75 and up) pays more tribute and counts for more toward your tier; a wavering one (under 35) loses stability; under 25 it rebels, will not follow you to war and the world may get a reason to free it; under 15 it can break free. You may change one puppet once a month, for influence: its tax (to 45%), draft, one law of six, its welfare spending, the form of its tribute (money, oil, steel or soldiers) and aid. The card shows the price, the loyalty it settles at and the tribute it will pay before you press the button. What you take from all your puppets together is held to a quarter of your own income; the rest is paid at half. A puppet run by another player in an online game keeps its own government. Its own bot no longer sets the taxes, draft or laws you control.'],
+  ['Forces on station', 'In Military, Deployment, you post part of your fleet on coastal patrol or in a submarine screen, part of your fighters and drones on air patrol, and part of your ground troops on each border. What stands on station cannot attack (only the reserve can) and still costs its upkeep and oil. It still defends: a garrison fights 35% harder on its own border and at half strength on any other, and patrols fight 35% harder against a landing. Every rival keeps forces on station too, more of them and better placed on Hard. You see what they keep only with intelligence: otherwise it is a rounded guess. Moving forces takes a month.'],
+  ['Patrols and garrisons', 'Patrols sink part of a landing from the sea or air before it comes ashore: coastal patrols against a crossing over a sea lane, the submarine screen against a fleet on the open ocean, air patrols against an airborne landing. Air patrols also shoot down part of a cruise missile salvo. In a live game your patrols sight a landing force the day it sets out. A garrison adds Defense Line to the countries on its border and makes a surprise attack harder in the first months of a war: a border nobody guards is a weak spot.'],
+  ['Borders', 'Every pair of neighbors, by land or across the sea, has a border that is open, fortified, closed or disputed, with a tension from 0 to 100. War, troops massed on either side, incidents, a closed border and grievances raise it; pacts, alliances and trade lower it. The Borders map (key 7) colors every border by its tension, draws the forces on station and marks the sea chokepoints. Troops massed on a border make incidents likelier, a garrison turns provocations back, and a border incident is a valid reason for war. Closing a border costs 3 influence: it halves the provocations and adds cover, but it adds tension and the neighbor will not like it.'],
   ['Reason for war', 'A war needs a reason: a border incident, an attack on your ally, a spy caught, sanctions, or a case you build in three months. Without one it costs far more, hurts stability and makes the world distrust you.'],
+  ['Scenarios', 'On the main menu, Scenario starts you in a ready-made situation: a cold war, a tiny country among giants, a collapsing neighbor, a plague year and more. Each has a briefing, its own way to win (survive a number of months, grow to a Regional power, out-earn the world, or the usual goals) and a suggested nation and rival skill. The Briefing desk shows the goal and your progress.'],
+  ['How rivals think', 'Each rival picks a posture every month: expand, opportunist, consolidate, defend, turtle or revenge. It chooses attacks from the same odds the War Room shows you, sends no more than it can spare, asks for peace when it is losing, weary or stuck, and wants its land back after a defeat. Easy rivals wait for a sure thing, Hard ones accept a fair fight. Nobody gets a hidden bonus.'],
   ['Reputation', 'Starting wars and taking land make other nations uneasy about you. It fades over a couple of years.'],
-  ['Reach', 'You attack across a border or a short sea lane. A port plus warships reaches any coast in the world, and fighters or strike aircraft with a factory as a base reach anything within 7000 km. Ships or planes must be at least a twentieth of your military to carry it. Overseas attacks fight with a penalty.'],
+  ['Reach', 'You attack across a border or a short sea lane. A port plus warships reaches any coast in the world, and fighters or strike aircraft with a factory as a base reach anything within 7000 km (aerial refuelling and strategic bombers push that out). Ships or planes must be at least a twentieth of your military to carry it. Overseas attacks fight with a penalty.'],
   ['Agencies', 'An intelligence service works abroad (intelligence, cases for war, sabotage, rebels, coups, theft) and a security service works at home. Each level adds a team. Odds are shown first.'],
-  ['Frontier weapons', 'Drone Swarms take half as much again as their share of the losses, so soldiers live, and shred tanks. Robot Infantry need no soldiers and never tire your people. Hypersonic missiles strike first and crack the Defense Line. You choose how many to fire in a battle or a strike, as often as you have missiles, and each one fired is used up. Each has a counter: shields, fighters, and Cyber Command.'],
+  ['Frontier weapons', 'Drone Swarms take half as much again as their share of the losses, so soldiers live, and shred tanks. Robot Infantry need no soldiers and never tire your people. Missiles are described below. Each weapon has a counter: shields, fighters, and Cyber Command.'],
+  ['Missiles', 'Four kinds, each hurting a country differently. Cruise missiles are cheap and wear down the Defense Line and the factories. Tactical missiles kill a slice of the defender\'s army and do nothing to the land. Hypersonic missiles (from technology and the training queue) crack the Defense Line fast. Ballistic missiles break the line, destroy buildings and kill people, and the world will not forgive them. Fire them from the Missiles section of the War Room: Fire 1, or a Custom number. An attack on land never carries missiles by itself, and each one fired is used up. In a live game a salvo flies for its kind\'s days and lands; in a turn game it lands when the month ends. An Interceptor Shield stops a share, and cruise missiles are the easiest to stop.'],
+  ['Missile program', 'In Military, Systems. Each level (1 to 3) costs money and research, opens cruise, then tactical, then ballistic missiles, and sets how many the program can build a month (5, 10, 18). Each missile then costs money and steel, and a ballistic one burns oil. A nation you strike remembers it and will answer, and a rival at war can answer you in kind: keep a shield up and some missiles in store.'],
+  ['Aircraft development', 'On Military, Forces, press Develop to open the aircraft tree: sixteen developments in four branches. Interceptors (radar, long-range air-to-air missiles, missile-hunter fighters, an integrated air shield): fighters at home shoot down a share of incoming missiles and drones, so they counter missile strikes and drone swarms (three fighters at home cover everything; slow cruise missiles are easiest to catch, ballistic warheads hardest). Stealth and electronic war: bombers keep their strength when the enemy rules the air, shields and hunters stop less of your strikes, and enemy interceptors go blind. Range and payload: airbases reach farther than 7000 km, landings by air lose less, and bombers push a Defense Line back harder. Unmanned wingmen: stronger drones and fighters. Each development pays its research the day it starts and its money month by month, takes months of work, needs earlier developments, a technology and an empire tier, and uses one of your slots (one at first, two as a Great power). Pause one to free its slot. The attack and defense on the screen are exactly what battles use.'],
   ['Systems', 'Cyber Command, Interceptor Shield, AI Battle Command, Quantum Codebreaking, Orbital Network and Nano-armor are programs you buy in three levels. They cost upkeep and each has a weakness.'],
   ['Stocks', 'Made-up companies in the countries you hold, at most two in a very developed one. Buy shares to take a stake: a board seat at 25% lets you tell a company what to do (pay dividends, expand its sector, or specialize for research, cheaper units, income and more), at full strength from 51%. If another nation takes the country, it takes your shares.'],
+  ['Factions', 'The Faction desk (F) lets countries work like a company they own together. Found one (15 influence), invite friends or rivals, and members put in money, oil, steel, goods, food and soldiers: the common pool. Your ownership share grows with what you put in. Votes follow the charter: one member one vote, or weighted by share. Anyone can propose a country; members vote Yes or No, and a notice tells you when a vote needs you. A vote passes the moment more than half of the weight says yes, fails on a tie or when half says no, and at the end of its second month it is decided by the votes cast if at least half the weight spoke.'],
+  ['Joint wars', 'A passed war vote declares the war: a member with a reason declares it (the proposer pays 10 influence with a reason, 60 without, and carries the blame for aggression), and every member that is free to joins. The pooled soldiers attack as one army each month, with the lead member\'s training, weapons and technology. Conquered countries go to members by ownership share (or to the proposer, by charter), and so does the treasure. The pool pays the army\'s upkeep and buys its oil and food; if it cannot, members are charged by share and unpaid soldiers desert. Pooled soldiers do not defend their home country.'],
+  ['Taking money out', 'What you put in is locked for two months. You take back what you put in, in kind: money for money, tanks for tanks. If the pool lost anything in war or upkeep, every claim shrinks by the same share. Soldiers stay while the faction is at war. Leaving returns your claim less 10% (or nothing, under a forfeiting charter); you cannot pull money out of a faction in any other way.'],
+  ['Live contracts', 'A trade deal can be a live contract: a start up to six months away, collateral that is held until it ends, and a promise to join the other side\'s wars. It runs by itself every month. A nation that breaks it loses the collateral, its reputation, and hands the other side a reason for war. Members can also put a supply contract to the faction vote: send the pool oil or steel every month, and be paid for it.'],
   ['Empire and governors', 'Every country you hold is listed together in Economy. A governor upgrades a country each month on a plan you pick.'],
 ]
+
+/** Every key the game answers, built from the registry, so a new desk or tab lists its key here by itself. */
+export function KeysSheet({ live }: { live: boolean }) {
+  const game = useGame((s) => s.game)
+  const orders = useGame((s) => s.orders)
+  const rows = shortcutRows(regCtxOf(game, orders)).filter((r) => live || r.group !== 'Live games')
+  const groups = [...new Set(rows.map((r) => r.group))]
+  return (
+    <div className="space-y-5">
+      <p className="text-[14px] text-white/80">
+        Keys work when you are not typing in a box. <kbd className="kbd">Ctrl</kbd> + <kbd className="kbd">K</kbd> or <kbd className="kbd">/</kbd> opens the jump window, which finds every desk, tab, setting, nation and country by name.
+      </p>
+      {groups.map((g) => (
+        <section key={g} aria-label={g}>
+          <h3 className="text-[15px] font-semibold mb-1.5">{g}</h3>
+          <dl className="keys-grid">
+            {rows
+              .filter((r) => r.group === g)
+              .map((r) => (
+                <div key={r.label + r.keys.join()} className="keys-row">
+                  <dt className="flex flex-wrap items-center gap-1">
+                    {r.keys.map((k, i) => (
+                      <span key={k} className="inline-flex items-center gap-1">
+                        {i > 0 && <span className="text-[12px] text-white/60">or</span>}
+                        <kbd className="kbd">{k}</kbd>
+                      </span>
+                    ))}
+                  </dt>
+                  <dd className="text-[14px] text-white/85">{r.label}</dd>
+                </div>
+              ))}
+          </dl>
+        </section>
+      ))}
+    </div>
+  )
+}
 
 export function Help() {
   const open = useGame((s) => s.helpOpen)
   const setHelp = useGame((s) => s.setHelp)
+  const tab = useGame((s) => s.helpTab)
+  const setTab = useGame((s) => s.setHelpTab)
   const game = useGame((s) => (s.helpOpen ? s.game : null))
   const online = useGame((s) => s.online?.status === 'playing')
+  // ? flips between the guide and the list of keys while the window is open.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (e.key === '?' && t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && t.tagName !== 'SELECT') {
+        e.preventDefault()
+        const st = useGame.getState()
+        st.setHelpTab(st.helpTab === 'keys' ? 'guide' : 'keys')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
   if (!open || !game) return null
   const live = isLive(game)
   const steps = live ? LIVE_STEPS : TURN
   const total = Object.keys(game.regions).length
   return (
     <Modal
-      title="How the game works"
+      title={tab === 'keys' ? 'Keyboard shortcuts' : 'How the game works'}
       kicker="Worlds of Others"
       onClose={() => setHelp(false)}
       footer={
@@ -75,6 +152,23 @@ export function Help() {
         </button>
       }
     >
+      <div className="mb-4">
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          label="Help"
+          options={
+            [
+              ['guide', 'How to play'],
+              ['keys', 'Keyboard shortcuts'],
+            ] as const
+          }
+        />
+      </div>
+      {tab === 'keys' ? (
+        <KeysSheet live={live} />
+      ) : (
+        <>
       <p className="text-[15px] text-white/85">
         You run a country{live ? ' as the days pass' : ', one month at a time'}. <strong>To win</strong>, hold the whole world: all {total} countries yours or puppets of yours. It is a long game. A war needs a reason, so build a case, use your agencies and answer the crises in the news. You lose if your nation is wiped out.
       </p>
@@ -92,7 +186,7 @@ export function Help() {
       </ol>
       {online && (
         <p className="mt-3 text-[14px] text-white/80 rounded-xl bg-[#0a84ff]/15 border border-[#0a84ff]/40 px-3 py-2.5">
-          <strong>Playing with friends.</strong> Everyone plans the same month at once. Press <strong>Ready</strong> when you are done (press it again to keep planning). The month moves on when everyone is ready or the timer ends. Attacks are planned now and play out at month end, so nobody wins by clicking faster.
+          <strong>Playing with friends.</strong> Everyone plans the same month at once. Press <strong>Ready</strong> when you are done (press it again to keep planning). The month moves on when everyone is ready or the timer ends. Attacks are planned now and play out at month end, so nobody wins by clicking faster. A surprise decision comes to each player separately and never holds the month: if you do not choose, your ministers take the first option. There is no undo online, since your orders are already on their way. If everyone leaves, any player can reopen the room from <strong>Saved games</strong> under Play with friends, and the others take their seats back with the same code.
         </p>
       )}
       <h3 className="text-[16px] font-semibold mt-5 mb-2">Words you will see</h3>
@@ -106,6 +200,8 @@ export function Help() {
       </dl>
       <h3 className="text-[16px] font-semibold mt-5 mb-1">Keys</h3>
       <p className="text-[14px] text-white/75">{shortcutsFor(isLive(game))}</p>
+        </>
+      )}
     </Modal>
   )
 }

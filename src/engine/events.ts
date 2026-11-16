@@ -14,6 +14,25 @@ export const FIRST_EVENT_TURN = 8
 /** Months between surprise decisions once they start. */
 export const EVENT_GAP_TURNS = 12
 
+/**
+ * A bigger empire has more going on and more at stake. Its decisions come sooner (the gap shrinks with the countries held), and the
+ * flat sums in them (money, influence, food) grow with the square root of its size, so a late decision weighs what an early one did.
+ * Amounts per worker already scale, and shares of an army or a pool do too: only the flat ones need this.
+ */
+export const EVENT_SCALE = { perRoot: 0.4, gaps: [[25, 6], [10, 8], [4, 10]] as [number, number][] }
+
+/** Months until a nation's next decision. 12 for a small country, 6 for an empire of 25 or more. */
+export function eventGap(s: GameState, nationId: NationId): number {
+  const held = regionsOf(s, nationId).length
+  for (const [countries, gap] of EVENT_SCALE.gaps) if (held >= countries) return gap
+  return EVENT_GAP_TURNS
+}
+
+/** How much heavier the flat sums in a decision are for this nation: 1 for a single country, about 2.2 for ten, 3 for twenty-five. */
+export function eventScale(s: GameState, nationId: NationId): number {
+  return 1 + EVENT_SCALE.perRoot * Math.sqrt(Math.max(0, regionsOf(s, nationId).length - 1))
+}
+
 function availableTechs(s: GameState, nationId: NationId): string[] {
   const n = s.nations[nationId]
   return TECHS.filter((t) => !n.techs.includes(t.id) && t.requires.every((r) => n.techs.includes(r))).map((t) => t.id)
@@ -67,26 +86,27 @@ export function scheduleEvent(s: GameState, map: WorldMap, nationId: NationId, r
   return null
 }
 
-export function fillEventText(text: string, s: GameState, map: WorldMap, ev: PendingEvent): string {
+export function fillEventText(text: string, s: GameState, map: WorldMap, ev: PendingEvent, nationId: NationId = s.playerId): string {
   return text
     .replaceAll('{region}', ev.regionId ? map.regions[ev.regionId].name : 'the provinces')
     .replaceAll('{rival}', ev.rivalId ? s.nations[ev.rivalId].name : 'a rival nation')
-    .replaceAll('{nation}', s.nations[s.playerId].name)
+    .replaceAll('{nation}', s.nations[nationId].name)
 }
 
-export function effectAmount(e: Extract<EventEffect, { type: 'resource' }>, workforce: number): number {
-  return Math.round(e.amount + (e.perWorkforce ?? 0) * workforce)
+export function effectAmount(e: Extract<EventEffect, { type: 'resource' }>, workforce: number, scale = 1): number {
+  return Math.round(e.amount * scale + (e.perWorkforce ?? 0) * workforce)
 }
 
 export function describeEffect(e: EventEffect, workforce: number, s: GameState, map: WorldMap, ev: PendingEvent): string {
   const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`)
   const labels = { capital: 'money', food: 'food', pp: 'influence', tp: 'research', oil: 'oil', steel: 'steel', goods: 'goods' }
   const rival = ev.rivalId ? s.nations[ev.rivalId].name : 'Rival'
+  const scale = eventScale(s, s.playerId)
   switch (e.type) {
     case 'opinion':
       return `${rival}'s opinion of you ${sign(e.amount)}`
     case 'rivalResource': {
-      const v = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce)
+      const v = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce, scale)
       return `${rival} ${v >= 0 ? 'receives' : 'loses'} ${Math.abs(v)} ${labels[e.key]}`
     }
     case 'clearCasusBelli':
@@ -94,7 +114,7 @@ export function describeEffect(e: EventEffect, workforce: number, s: GameState, 
     case 'embargo':
       return `Port trade -${Math.round((1 - ECON.embargoTradeMult) * 100)}% for ${e.turns} months`
     case 'resource':
-      return `${sign(effectAmount(e, workforce))} ${labels[e.key]}`
+      return `${sign(effectAmount(e, workforce, scale))} ${labels[e.key]}`
     case 'stability':
       return `${sign(e.amount)} Stability`
     case 'militaryPool':
@@ -131,24 +151,42 @@ export function describeEffect(e: EventEffect, workforce: number, s: GameState, 
   }
 }
 
-export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: number): GameState {
+/** A small stable number from a nation's id, so each human's decision rolls its own dice in a multiplayer game. */
+function idSalt(id: string): number {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0
+  return Math.abs(h) % 9973
+}
+
+/**
+ * Answers the decision waiting for a nation. In a one-player game that is `pendingEvent` and the answer is the player's; in a
+ * multiplayer game it is that human's entry in `pendingEvents`, which is cleared without touching anyone else's.
+ */
+export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: number, forNation?: NationId): GameState {
   const s = structuredClone(state)
-  const ev = s.pendingEvent
-  if (!ev) return state
+  if (!resolveEvent(s, map, optionIndex, forNation ?? s.playerId, false)) return state
+  return s
+}
+
+/** Plays out a decision on a state the caller owns. `byDefault` says the nation's ministers chose because the player did not. Returns false when nothing was waiting. */
+export function resolveEvent(s: GameState, map: WorldMap, optionIndex: number, nationId: NationId, byDefault: boolean): boolean {
+  const multi = !!s.multiplayer
+  const ev = multi ? s.pendingEvents?.[nationId] : s.pendingEvent
+  if (!ev) return false
   const def = EVENT_BY_ID[ev.eventId]
-  const option = def.options[optionIndex]
-  if (!option) return state
-  const nationId = s.playerId
+  const option = def?.options[optionIndex]
+  if (!option) return false
   const n = s.nations[nationId]
-  const rng = createRng(s.seed, s.turn * 977 + 13)
+  const rng = createRng(s.seed, s.turn * 977 + 13 + (multi ? idSalt(nationId) : 0))
   const workforce = computeEconomy(s, map, nationId).workforce
+  const scale = eventScale(s, nationId)
   const region = ev.regionId ? s.regions[ev.regionId] : null
 
   for (const e of option.effects) {
     switch (e.type) {
       case 'resource':
         // Money can go into the red: a choice that costs money is not free for a nation that has none.
-        n.resources[e.key] = e.key === 'capital' ? n.resources.capital + effectAmount(e, workforce) : Math.max(0, n.resources[e.key] + effectAmount(e, workforce))
+        n.resources[e.key] = e.key === 'capital' ? n.resources.capital + effectAmount(e, workforce, scale) : Math.max(0, n.resources[e.key] + effectAmount(e, workforce, scale))
         break
       case 'stability':
         n.stability = clamp(n.stability + e.amount, 0, 100)
@@ -196,7 +234,7 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
       case 'rivalResource': {
         const rival = ev.rivalId ? s.nations[ev.rivalId] : null
         if (rival?.alive) {
-          const amount = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce)
+          const amount = effectAmount({ type: 'resource', key: e.key, amount: e.amount, perWorkforce: e.perWorkforce }, workforce, scale)
           rival.resources[e.key] = Math.max(e.key === 'capital' ? -9999 : 0, rival.resources[e.key] + amount)
         }
         break
@@ -236,7 +274,28 @@ export function applyEventChoice(state: GameState, map: WorldMap, optionIndex: n
         break
     }
   }
-  addLog(s, 'event', `${def.title}: you chose "${option.label}".`, [nationId])
-  s.pendingEvent = null
-  return s
+  addLog(s, 'event', byDefault ? `${def.title}: nobody decided, so your ministers chose "${option.label}".` : `${def.title}: you chose "${option.label}".`, [nationId])
+  if (multi) delete s.pendingEvents![nationId]
+  else s.pendingEvent = null
+  return true
+}
+
+/** Multiplayer, once a month's orders are in: every decision nobody answered takes its first option, and a fallen nation's is dropped. */
+export function settleUnanswered(s: GameState, map: WorldMap) {
+  if (!s.multiplayer || !s.pendingEvents) return
+  for (const id of Object.keys(s.pendingEvents).sort()) {
+    if (!s.nations[id]?.alive) delete s.pendingEvents[id]
+    else resolveEvent(s, map, 0, id, true)
+  }
+}
+
+/** Multiplayer: each living human gets a decision of their own, drawn with their own dice. Nobody waits for anybody. */
+export function scheduleHumanEvents(s: GameState, map: WorldMap, rng: Rng) {
+  s.pendingEvents ??= {}
+  for (const id of [...s.humans].sort()) {
+    if (!s.nations[id]?.alive || s.eliminated.includes(id)) continue
+    const ev = scheduleEvent(s, map, id, rng)
+    if (ev) s.pendingEvents[id] = ev
+  }
+  s.nextEventTurn = s.turn + Math.min(EVENT_GAP_TURNS, ...s.humans.filter((id) => s.nations[id]?.alive).map((id) => eventGap(s, id)))
 }

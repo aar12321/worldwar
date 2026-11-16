@@ -5,6 +5,7 @@ import { mapColor } from '../data/mapColors'
 import { TERRAIN } from '../data/terrain'
 import { powerView, showPower } from '../engine/intel'
 import { lineMax } from '../engine/economy'
+import { freeUnits } from '../engine/deployment'
 import { atWar, hasPact, isAllied, totalUnits } from '../engine/helpers'
 import type { GameState, RegionId } from '../engine/types'
 import { attackableRegions } from '../engine/warfare'
@@ -13,7 +14,9 @@ import { useGame } from '../store'
 import { useSlowGame } from './hooks'
 import { paintSignature } from './globe/paint'
 import { useArmyLayer } from './globe/useArmyLayer'
-import { FRONT_COLORS, NEON, RELATION_COLORS, mix, tint, wash, withAlpha } from './colors'
+import { BORDER_COLORS, NEON, frontColors, mix, relationColors, tint, wash, withAlpha } from './colors'
+import { borderPaths, stationBadges, tensionBadges, type StationBadge } from './globe/borderLayer'
+import { neighborsOf } from '../engine/borders'
 import { globeBridge, useFx, type BattleOverlay } from './globeBridge'
 
 const { map, features } = getWorld()
@@ -52,10 +55,14 @@ function regionColor(game: GameState | null, id: RegionId): string {
 }
 
 /** What a country's color means in a map mode other than Political. */
-function modeColor(game: GameState, mode: 'relations' | 'fronts', id: RegionId): string {
+function modeColor(game: GameState, mode: 'relations' | 'fronts' | 'borders', id: RegionId, neighbors?: Set<string>, palette: 'standard' | 'colorblind' = 'standard'): string {
+  const RELATION_COLORS = relationColors(palette)
+  const FRONT_COLORS = frontColors(palette)
   const r = game.regions[id]
   const me = game.playerId
   const mine = r.owner === me
+  // Borders mode keeps the land quiet (yours, your neighbors', the rest) so the lines drawn on it read.
+  if (mode === 'borders') return mine ? BORDER_COLORS.yours : neighbors?.has(r.owner) ? BORDER_COLORS.neighbor : BORDER_COLORS.other
   if (mode === 'relations') {
     if (mine) return RELATION_COLORS.yours
     if (atWar(game, me, r.owner)) return RELATION_COLORS.war
@@ -80,6 +87,32 @@ interface Marker {
   battle?: BattleOverlay
   /** A short note floating up over the place, such as "+2 Infantry". */
   pop?: string
+  /** Forces on station, drawn as a small badge. */
+  station?: StationBadge
+}
+
+const GLYPHS: Record<StationBadge['glyph'], string> = {
+  ship: '<path d="M3 15l2 4h14l2-4zM12 4v8M12 5l6 6h-6" />',
+  sub: '<ellipse cx="12" cy="14" rx="9" ry="4" /><path d="M9 10h5l1 4M12 10V6h3" />',
+  air: '<path d="M12 3l2 7 8 4v2l-8-2-1 5 3 2v1l-4-1-4 1v-1l3-2-1-5-8 2v-2l8-4z" />',
+  guard: '<path d="M12 3l8 3v6c0 4.5-3.4 7.8-8 9-4.6-1.2-8-4.5-8-9V6z" />',
+  open: '<circle cx="12" cy="12" r="7" fill="none" />',
+  fortified: '<path d="M12 3l8 3v6c0 4.5-3.4 7.8-8 9-4.6-1.2-8-4.5-8-9V6z" />',
+  closed: '<rect x="4" y="9" width="16" height="6" rx="1" />',
+  disputed: '<path d="M12 3l10 18H2z" /><path d="M12 10v5M12 18v.5" stroke="#14171c" />',
+}
+
+/** A small badge for forces on station: an icon and the divisions, in the nation's color. */
+function paintStation(b: StationBadge): HTMLElement {
+  const el = document.createElement('div')
+  el.className = 'station-badge'
+  el.style.setProperty('--badge', b.color)
+  if (b.edge) el.style.setProperty('--edge', b.edge)
+  el.dataset.mine = b.mine ? '1' : '0'
+  el.dataset.guess = b.guess ? '1' : '0'
+  el.title = b.title
+  el.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="rgba(255,255,255,0.9)" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">${GLYPHS[b.glyph]}</svg><span>${escapeHtml(b.text)}</span>`
+  return el
 }
 
 /** The pin for a live battle: its name, a Defense Line bar that drains from before to after, and who won. */
@@ -110,6 +143,7 @@ function paintBattle(b: BattleOverlay, reduced: boolean): HTMLElement {
 
 function paintMarker(d: object): HTMLElement {
   const m = d as Marker
+  if (m.station) return paintStation(m.station)
   if (m.battle) return paintBattle(m.battle, useGame.getState().settings.reducedMotion)
   if (m.pop) {
     const el = document.createElement('div')
@@ -222,7 +256,7 @@ export function WorldGlobe() {
   const targets = useMemo(() => {
     const me = game?.nations[game.playerId]
     // Nothing left at home to send (a spent turn, or every unit away in a live game) lights no targets.
-    if (!game || !me || game.outcome !== 'playing' || me.military.exposed >= 0.95 || totalUnits(me.military.units) < 0.1) {
+    if (!game || !me || game.outcome !== 'playing' || me.military.exposed >= 0.95 || totalUnits(freeUnits(game, game.playerId)) < 0.1) {
       targetsRef.current = { key: '', set: EMPTY_REGIONS }
       return EMPTY_REGIONS
     }
@@ -233,7 +267,12 @@ export function WorldGlobe() {
     return targetsRef.current.set
   }, [game])
   // What the colors depend on. The accessors below read the game from a ref and change only when this does.
-  const paintKey = useMemo(() => paintSignature(game, mapMode), [game, mapMode])
+  const palette = useGame((s) => s.settings.ui.palette)
+  const paintKey = useMemo(() => `${paintSignature(game, mapMode)}|${palette}`, [game, mapMode, palette])
+
+  // The nations that touch the player's, for the Borders map's quiet colors.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const neighborSet = useMemo(() => (game && mapMode === 'borders' ? new Set(neighborsOf(game, map, game.playerId).map((x) => x.id)) : undefined), [paintKey, mapMode])
 
   const polygonColor = useCallback(
     (f: object) => {
@@ -241,7 +280,7 @@ export function WorldGlobe() {
       const game = gameRef.current
       const hidden = hiddenCaptures.get(id)
       if (game && mapMode !== 'political') {
-        const base = modeColor(game, mapMode, id)
+        const base = modeColor(game, mapMode, id, neighborSet, palette)
         return id === selectedRegion ? tint(base, 0.14) : id === hover ? tint(base, 0.08) : base
       }
       const base = hidden ? wash(hidden, map.regions[id].terrain) : regionColor(game, id)
@@ -251,7 +290,7 @@ export function WorldGlobe() {
       return base
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [paintKey, hiddenCaptures, targets, selectedRegion, hover, mapMode],
+    [paintKey, hiddenCaptures, targets, selectedRegion, hover, mapMode, neighborSet, palette],
   )
   const polygonSideColor = useCallback((f: object) => tint(polygonColor(f), -0.2), [polygonColor])
   const polygonAltitude = useCallback(
@@ -316,17 +355,38 @@ export function WorldGlobe() {
     pinsRef.current = { key, list: out }
     return out
   }, [game])
+  // Forces on station, as badges. They keep their identity until something about them changes.
+  const stationsRef = useRef<{ key: string; list: Marker[] }>({ key: '', list: [] })
+  const stationMarkers = useMemo<Marker[]>(() => {
+    if (!game) return []
+    const badges = [...stationBadges(game, map, game.playerId, mapMode === 'borders'), ...(mapMode === 'borders' ? tensionBadges(game, map, game.playerId) : [])]
+    const key = badges.map((b) => `${b.key}:${b.text}:${b.color}:${b.guess}`).join(';')
+    if (key === stationsRef.current.key) return stationsRef.current.list
+    stationsRef.current = { key, list: badges.map((b) => ({ key: `station:${b.key}`, lat: b.lat, lng: b.lng, title: b.title, yours: b.mine, station: b })) }
+    return stationsRef.current.list
+  }, [game, mapMode])
   const overlayPins = useRef(new Map<string, Marker>())
   const markers = useMemo<Marker[]>(() => {
     const kept = new Map<string, Marker>()
     for (const b of battles) kept.set(`battle:${b.id}`, overlayPins.current.get(`battle:${b.id}`) ?? { key: `battle:${b.id}`, lat: b.lat, lng: b.lng, title: b.place, yours: true, battle: b })
     for (const p of pops) kept.set(`pop:${p.id}`, overlayPins.current.get(`pop:${p.id}`) ?? { key: `pop:${p.id}`, lat: p.lat, lng: p.lng, title: p.text, yours: true, pop: p.text })
     overlayPins.current = kept
-    return kept.size ? [...pins, ...kept.values()] : pins
-  }, [pins, battles, pops])
+    const base = stationMarkers.length ? [...pins, ...stationMarkers] : pins
+    return kept.size ? [...base, ...kept.values()] : base
+  }, [pins, stationMarkers, battles, pops])
 
   const army = useArmyLayer(ref, reducedMotion)
-  const allRings = useMemo(() => (army.threatRings.length ? [...rings, ...army.threatRings] : rings), [rings, army.threatRings])
+  // The Borders map draws every border in the colors of its tension, over the army routes.
+  const borderLines = useMemo(() => {
+    const g = gameRef.current
+    return g && mapMode === 'borders' ? borderPaths(g, map, g.playerId) : []
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paintKey, mapMode])
+  const pathsData = useMemo(() => (borderLines.length ? [...(army.props.pathsData as object[]), ...borderLines] : army.props.pathsData), [army.props.pathsData, borderLines])
+  // Your launch site pulses purple while a flight of yours is under way.
+  const launchSite = game?.nations[game.playerId]?.space?.missions.length ? game.nations[game.playerId].capital : ''
+  const spaceRings = useMemo(() => (launchSite && map.regions[launchSite] ? [{ lat: map.regions[launchSite].lat, lng: map.regions[launchSite].lng, color: '#bf5af2', maxRadius: 3.2, repeat: 2200 }] : []), [launchSite])
+  const allRings = useMemo(() => (army.threatRings.length || spaceRings.length ? [...rings, ...army.threatRings, ...spaceRings] : rings), [rings, army.threatRings, spaceRings])
 
   const ringColor = useCallback((r: object) => (t: number) => withAlpha((r as { color: string }).color, Math.max(0, 1 - t)), [])
 
@@ -365,6 +425,7 @@ export function WorldGlobe() {
       ringPropagationSpeed={3}
       ringRepeatPeriod={ringPeriod}
       {...army.props}
+      pathsData={pathsData}
     />
   )
 }

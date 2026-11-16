@@ -98,9 +98,9 @@ export function AgenciesTab() {
         <h3 className="text-[16px] font-semibold tracking-tight">Abroad: {agencyName(player.name, 'foreign')}</h3>
         <label className="block">
           <span className="label">Target nation</span>
-          <div className="mt-1.5 flex gap-2">
+          <div className="mt-1.5 flex flex-wrap gap-2">
             <input className="field px-3 py-2 text-[14px] w-40" placeholder="Search nations" aria-label="Search for a target nation" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <select className="field flex-1 px-3 py-2 text-[14px]" value={chosen ?? ''} onChange={(e) => setTarget(e.target.value)} aria-label="Target nation">
+            <select className="field flex-1 min-w-0 max-w-full px-3 py-2 text-[14px]" value={chosen ?? ''} onChange={(e) => setTarget(e.target.value)} aria-label="Target nation">
               {list.length === 0 && <option value="">No nation matches</option>}
               {list.map((n) => (
                 <option key={n.id} value={n.id}>

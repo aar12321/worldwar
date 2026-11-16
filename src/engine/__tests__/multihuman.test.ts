@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { generateAllBotOrders } from '../../ai/bot'
 import { createInitialState } from '../../data/startingNations'
 import { normalizeGame } from '../migrate'
+import { validateOrder } from '../orders'
 import { resolveTurn } from '../resolveTurn'
 import { checkOutcome, humanStatus } from '../victory'
 import { lineMap, startState } from './fixtures'
@@ -41,12 +42,57 @@ describe('more than one human', () => {
     }
   })
 
-  it('has no random events, since a pause for one player would stall the others', () => {
+  it('gives each human a decision of their own, and no month waits for it', () => {
+    const { map, s } = twoHumans()
+    expect(s.multiplayer).toBe(true)
+    s.nextEventTurn = 0
+    const next = resolveTurn(s, map, [])
+    // Nothing blocks: the single-player slot stays empty and the month moved on.
+    expect(next.pendingEvent).toBeNull()
+    expect(next.turn).toBe(s.turn + 1)
+    const waiting = Object.keys(next.pendingEvents ?? {})
+    expect(waiting.length).toBeGreaterThan(0)
+    for (const id of waiting) expect(next.humans).toContain(id)
+    expect(next.nextEventTurn).toBeGreaterThan(next.turn)
+  })
+
+  it('a decision nobody answers is made by the ministers, and the month still resolves', () => {
     const { map, s } = twoHumans()
     s.nextEventTurn = 0
     const next = resolveTurn(s, map, [])
+    const after = resolveTurn(next, map, [])
+    expect(after.turn).toBe(next.turn + 1)
+    expect(Object.keys(after.pendingEvents ?? {})).toEqual([])
+    expect(after.log.some((l) => l.text.includes('your ministers chose'))).toBe(true)
+  })
+
+  it('a player\'s own answer is used, only for their nation', () => {
+    const { map, s } = twoHumans()
+    s.nextEventTurn = 0
+    const next = resolveTurn(s, map, [])
+    const [id] = Object.keys(next.pendingEvents ?? {})
+    const other = next.humans.find((h) => h !== id)!
+    const orders = [{ type: 'eventChoice' as const, nationId: id, index: 1 }]
+    expect(validateOrder(next, map, orders[0])).toBeNull()
+    // A bad option and an order for a decision that is not there are refused.
+    expect(validateOrder(next, map, { ...orders[0], index: 7 })).not.toBeNull()
+    if (!next.pendingEvents?.[other]) expect(validateOrder(next, map, { type: 'eventChoice', nationId: other, index: 0 })).not.toBeNull()
+    const after = resolveTurn(next, map, orders)
+    expect(after.log.some((l) => l.text.includes('you chose') && l.nations?.includes(id))).toBe(true)
+  })
+
+  it('one human left never freezes the month (a fallen rival, or a room of one)', () => {
+    const { map, s } = twoHumans()
+    s.humans = ['r3']
+    s.nextEventTurn = 0
+    const next = resolveTurn(s, map, [])
     expect(next.pendingEvent).toBeNull()
-    expect(next.nextEventTurn).toBe(0)
+    const again = resolveTurn(next, map, [])
+    expect(again.turn).toBe(next.turn + 1)
+    const solo = createInitialState(map, { playerRegionId: 'r0', seed: 2, victoryShare: 2, online: true })
+    expect(solo.multiplayer).toBe(true)
+    solo.nextEventTurn = 0
+    expect(resolveTurn(solo, map, []).pendingEvent).toBeNull()
   })
 
   it('still schedules events with one human', () => {

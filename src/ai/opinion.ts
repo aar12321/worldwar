@@ -2,6 +2,8 @@ import { PERSONALITIES } from '../data/personalities'
 import { atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
 import type { GameState, NationId, OpinionModifier, WorldMap } from '../engine/types'
 import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
+import { sameFaction } from '../engine/factions'
+import { FACTION } from '../data/factions'
 
 /** A coalition forms against the player once they hold this fraction of their victory target. */
 export const COALITION_THRESHOLD = 0.35
@@ -115,6 +117,7 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   const mine = ctx.enemies ? (ctx.enemies.get(holder) ?? []) : enemiesOf(s, holder)
   const shared = mine.filter((e) => theirEnemies.includes(e)).length
   push('Common enemy', Math.min(30, shared * 15))
+  if (sameFaction(s, holder, target)) push('Faction partners', FACTION.opinionBonus)
   const borders = ctx.borders ?? nationNeighbors(s, map, holder).has(target)
   if (borders) push('Border tensions', h.personality === 'expansionist' ? -14 : -6)
   if (hasCasusBelli(s, holder, target)) push('Grievance', -15)

@@ -1,7 +1,7 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
-import { EMPIRE, JUSTIFY } from '../data/war'
+import { EMPIRE, JUSTIFY, WAR } from '../data/war'
 import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, maxWars, newId, pairKey, puppetsOf } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
@@ -9,6 +9,7 @@ import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, Worl
 import { clearWarScore, REPARATION_MONTHS, validatePeaceTerms } from './warscore'
 import { transferRegion } from './warfare'
 import { tierOf } from './empire'
+import { bindPuppet, clearPuppetFields, freePuppet, puppetJoinsWar, willFollow } from './puppets'
 
 export const TRUCE_TURNS = 12
 export const PACT_TURNS = 24
@@ -55,16 +56,26 @@ export function annexPuppet(s: GameState, map: WorldMap, master: NationId, puppe
     m.military.units[k] += p.military.units[k]
     p.military.units[k] = 0
   }
+  // Live mode: its armies in the field and salvos in the air are the master's now, and its planned attacks go with them.
   for (const a of s.armies ?? []) if (a.nationId === puppet) a.nationId = master
+  for (const f of s.flights ?? []) if (f.nationId === puppet) f.nationId = master
+  for (const l of s.launches ?? []) if (l.order.nationId === puppet) l.order.nationId = master
   m.resources.capital += Math.max(0, p.resources.capital)
   p.resources.capital = Math.min(0, p.resources.capital)
-  for (const id of Object.keys(s.regions).sort()) if (s.regions[id].owner === puppet) transferRegion(s, map, id, master, false)
+  const loyalty = p.loyalty
+  for (const id of Object.keys(s.regions).sort()) {
+    if (s.regions[id].owner !== puppet) continue
+    transferRegion(s, map, id, master, false)
+    // A people that never accepted its master settles slowly under him: loyal land comes in as it was, restive land half as well settled as loyalty allows.
+    if (loyalty !== undefined && loyalty < 50) s.regions[id].integration *= Math.max(0.2, loyalty / 50)
+  }
+  clearPuppetFields(p)
   addInfamy(s, master, EMPIRE.annexInfamy)
 }
 
 /** A master lets its puppet go. */
 export function releasePuppet(s: GameState, master: NationId, puppet: NationId) {
-  s.nations[puppet].overlord = null
+  freePuppet(s, puppet)
   addOpinion(s, puppet, master, 'Set us free', 25, 0.2)
   addLog(s, 'diplomacy', `${name(s, master)} set ${name(s, puppet)} free.`, [master, puppet])
 }
@@ -103,12 +114,12 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   for (const [side, foe] of [[a, b], [b, a]] as const) {
     for (const puppet of puppetsOf(s, side)) {
       if (puppet === foe || atWar(s, puppet, foe) || !s.nations[puppet]?.alive) continue
-      const pk = pairKey(puppet, foe)
-      s.wars.push(pk)
-      s.wars.sort()
-      s.warStarted[pk] = s.turn
-      delete s.pacts[pk]
-      addLog(s, 'war', `${name(s, puppet)} follows its overlord ${name(s, side)} into the war against ${name(s, foe)}.`, [puppet, side, foe])
+      // A puppet that has lost its loyalty will not fight for its master (see puppets.ts).
+      if (!willFollow(s.nations[puppet])) {
+        addLog(s, 'war', `${name(s, puppet)} refuses to follow ${name(s, side)} into the war against ${name(s, foe)}.`, [puppet, side, foe])
+        continue
+      }
+      puppetJoinsWar(s, puppet, side, foe)
     }
   }
   if (!callAllies) return
@@ -236,9 +247,12 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
     case 'trade': {
       const { give, receive, months } = p.terms
       const span = months > 0 ? ` every month for ${months} months` : ''
-      if (bundleEmpty(receive)) return `${name(s, p.from)} offers ${describeBundle(give)}${span} as a gift`
-      if (bundleEmpty(give)) return `${name(s, p.from)} demands ${describeBundle(receive)}${span}`
-      return `${name(s, p.from)} gives ${describeBundle(give)} for ${describeBundle(receive)}${span}`
+      const live = [p.terms.start ? `starting in ${p.terms.start} month${p.terms.start === 1 ? '' : 's'}` : '', p.terms.collateral ? `${name(s, p.from)} puts up ${Math.round(p.terms.collateral)} money as collateral` : '', p.terms.joinWars ? `${name(s, p.to)} joins every war ${name(s, p.from)} fights` : ''].filter(Boolean)
+      const tail = live.length ? `; ${live.join('; ')}` : ''
+      if (bundleEmpty(receive) && bundleEmpty(give)) return `${name(s, p.to)} fights beside ${name(s, p.from)} in every war${span}${live.length > 1 ? `; ${live.filter((x) => !x.includes('joins every war')).join('; ')}` : ''}`
+      if (bundleEmpty(receive)) return `${name(s, p.from)} offers ${describeBundle(give)}${span} as a gift${tail}`
+      if (bundleEmpty(give)) return `${name(s, p.from)} demands ${describeBundle(receive)}${span}${tail}`
+      return `${name(s, p.from)} gives ${describeBundle(give)} for ${describeBundle(receive)}${span}${tail}`
     }
     case 'callToArms':
       return `Declare war on ${name(s, p.enemy)} at ${name(s, p.from)}'s side`
@@ -271,8 +285,7 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
         if (s.nations[owner].capital !== id) transferRegion(s, map, id, receiver, false)
       }
       if (p.terms.puppet) {
-        s.nations[p.to].overlord = p.from
-        s.nations[p.to].overlordSince = s.turn
+        bindPuppet(s, p.to, p.from)
         addOpinion(s, p.to, p.from, 'Our overlord', -10, 0.1)
         addLog(s, 'war', `${name(s, p.to)} is now a puppet state of ${name(s, p.from)}.`, [p.from, p.to])
       }
@@ -292,7 +305,9 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
       return null
     case 'trade': {
       const { give, receive, months } = p.terms
-      if (bundleEmpty(receive)) {
+      if (bundleEmpty(receive) && bundleEmpty(give)) {
+        // A pledge to fight beside the proposer, with nothing else changing hands.
+      } else if (bundleEmpty(receive)) {
         const value = bundleValue(give, marketPrices(s)) * Math.max(1, months)
         addOpinion(s, p.to, p.from, 'Generous gifts', Math.min(30, 4 + value / 6), 0.5)
       } else if (bundleEmpty(give)) {
@@ -305,6 +320,12 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
       if (months === 0) {
         transferBundle(s, p.from, p.to, give)
         transferBundle(s, p.to, p.from, receive)
+      } else if (p.terms.start !== undefined || p.terms.collateral !== undefined || p.terms.joinWars) {
+        // A live contract: it starts on a later month if asked, and the proposer's collateral is held until it ends.
+        const start = s.turn + (p.terms.start ?? 0)
+        const held = p.terms.collateral ?? 0
+        s.nations[p.from].resources.capital -= held
+        startDeal(s, { kind: 'trade', from: p.from, to: p.to, give, receive, until: start + months - 1, contract: { start, held, poster: p.from, ...(p.terms.joinWars ? { joins: p.to } : {}) } })
       } else {
         startDeal(s, { kind: 'trade', from: p.from, to: p.to, give, receive, until: s.turn + months - 1 })
       }
@@ -384,6 +405,12 @@ export function cancelDeal(s: GameState, nationId: NationId, dealId: string) {
   if (!d) return
   s.deals = s.deals.filter((x) => x.id !== dealId)
   const partner = d.from === nationId ? d.to : d.from
+  // A contract's collateral: whoever walks away from a running contract loses it; before it starts it comes back.
+  if (d.contract && d.contract.held > 0) {
+    const forfeits = d.contract.poster === nationId && s.turn >= d.contract.start
+    const to = s.nations[forfeits ? partner : d.contract.poster]
+    if (to?.alive) to.resources.capital += d.contract.held
+  }
   if (d.kind === 'reparations') {
     addOpinion(s, partner, nationId, 'Forgave our debts', 15, 0.3)
     pushDispatch(s, { kind: 'completed', from: nationId, to: partner, proposalKind: 'deal', text: `${name(s, nationId)} forgave ${name(s, partner)}'s war reparations.` })
@@ -423,16 +450,58 @@ export function leaveAlliance(s: GameState, a: NationId, b: NationId) {
   pushDispatch(s, { kind: 'broken', from: a, to: b, proposalKind: 'alliance', text: `${name(s, a)} has walked out of its alliance with ${name(s, b)}.` })
 }
 
-/** Monthly payments for trade deals and reparations. A side that cannot pay breaks the deal. */
-export function applyDeals(s: GameState) {
+/** A nation joins a war its partner is fighting, if it is free to. */
+function joinWarOf(s: GameState, map: WorldMap, rng: Rng, joiner: NationId, enemy: NationId): boolean {
+  const n = s.nations[joiner]
+  const e = s.nations[enemy]
+  if (!n?.alive || !e?.alive || joiner === enemy) return false
+  if (atWar(s, joiner, enemy)) return true
+  if (n.overlord || e.overlord === joiner || isAllied(s, joiner, enemy) || hasPact(s, joiner, enemy)) return false
+  if (enemiesOf(s, joiner).length >= maxWars(s, joiner) || enemiesOf(s, enemy).length >= maxWars(s, enemy)) return false
+  declareWar(s, map, joiner, enemy, rng, false)
+  return atWar(s, joiner, enemy)
+}
+
+/** Monthly payments for trade deals and reparations. A side that cannot pay breaks the deal. Live contracts also start late, fight beside a partner, and hold collateral. */
+export function applyDeals(s: GameState, map?: WorldMap, rng?: Rng) {
   const kept: Deal[] = []
   for (const d of [...s.deals].sort((x, y) => (x.id < y.id ? -1 : 1))) {
     const from = s.nations[d.from]
     const to = s.nations[d.to]
-    if (!from?.alive || !to?.alive) continue
-    const defaulter = shortfall(from, d.give) ? d.from : shortfall(to, d.receive) ? d.to : null
+    const c = d.contract
+    if (!from?.alive || !to?.alive) {
+      // A contract's collateral goes back to its poster if the poster is still there.
+      if (c && c.held > 0 && s.nations[c.poster]?.alive) s.nations[c.poster].resources.capital += c.held
+      continue
+    }
+    // A contract that has not started yet only waits.
+    if (c && s.turn < c.start) {
+      kept.push(d)
+      continue
+    }
+    // The duty to fight beside a partner: the joiner takes up each of the partner's wars, or breaks the contract.
+    let refused: NationId | null = null
+    if (c?.joins && map && rng) {
+      const other = c.joins === d.from ? d.to : d.from
+      for (const e of [...enemiesOf(s, other)].sort()) {
+        if (!joinWarOf(s, map, rng, c.joins, e)) {
+          refused = c.joins
+          break
+        }
+      }
+    }
+    const defaulter = refused ?? (shortfall(from, d.give) ? d.from : shortfall(to, d.receive) ? d.to : null)
     if (defaulter) {
       const victim = defaulter === d.from ? d.to : d.from
+      if (c) {
+        // A broken contract is worse than a missed payment: the victim has a reason for war, and the collateral changes hands.
+        addOpinion(s, victim, defaulter, 'Broke a contract', -40, 0.3)
+        grantJustification(s, victim, defaulter, 'Broke a contract', JUSTIFY.reasonTurns)
+        addInfamy(s, defaulter, 2)
+        if (c.held > 0) s.nations[defaulter === c.poster ? victim : c.poster].resources.capital += c.held
+        pushDispatch(s, { kind: 'broken', from: defaulter, to: victim, proposalKind: 'deal', text: `${name(s, defaulter)} ${refused ? `refused to join ${name(s, victim)}'s war` : 'could not deliver'} and broke its contract with ${name(s, victim)}${c.held > 0 && defaulter === c.poster ? `. The ${Math.round(c.held)} money in collateral goes to ${name(s, victim)}` : ''}.` })
+        continue
+      }
       addOpinion(s, victim, defaulter, 'Defaulted on a deal', -30, 0.4)
       pushDispatch(s, { kind: 'broken', from: defaulter, to: victim, proposalKind: 'deal', text: `${name(s, defaulter)} could not pay and defaulted on its ${dealLabel(d.kind)} with ${name(s, victim)}.` })
       continue
@@ -444,7 +513,8 @@ export function applyDeals(s: GameState) {
         addOpinion(s, d.from, d.to, 'Honored our deal', 10, 0.3)
         addOpinion(s, d.to, d.from, 'Honored our deal', 10, 0.3)
       }
-      pushDispatch(s, { kind: 'completed', from: d.from, to: d.to, proposalKind: 'deal', text: `The ${dealLabel(d.kind)} between ${from.name} and ${to.name} has been fulfilled.` })
+      if (c && c.held > 0) s.nations[c.poster].resources.capital += c.held
+      pushDispatch(s, { kind: 'completed', from: d.from, to: d.to, proposalKind: 'deal', text: `The ${c ? 'contract' : dealLabel(d.kind)} between ${from.name} and ${to.name} has been fulfilled.` })
       continue
     }
     kept.push(d)
@@ -493,4 +563,22 @@ export function expireDiplomacy(s: GameState) {
   s.proposals = kept
   for (const [k, turn] of Object.entries(s.proposalMemory)) if (s.turn - turn > 24) delete s.proposalMemory[k]
   decayOpinions(s)
+  fizzleStaleWars(s)
+}
+
+/**
+ * A war between two AI nations in which neither side's countries have been attacked for a year is over in all but name: it holds
+ * a war slot, ties down allies and puts off every pact. It ends in the usual truce. A war a human is in is never ended for them.
+ */
+export function fizzleStaleWars(s: GameState) {
+  for (const key of [...s.wars]) {
+    const [a, b] = key.split('|')
+    if (s.humans.includes(a) || s.humans.includes(b)) continue
+    if (s.turn - (s.warStarted[key] ?? s.turn) < WAR.staleMonths) continue
+    let last = -Infinity
+    for (const r of Object.values(s.regions)) if (r.owner === a || r.owner === b) last = Math.max(last, r.attackedTurn)
+    if (s.turn - last < WAR.staleMonths) continue
+    makePeace(s, a, b)
+    addLog(s, 'diplomacy', `The war between ${name(s, a)} and ${name(s, b)} has fizzled out: nobody has fought for a year.`, [a, b])
+  }
 }

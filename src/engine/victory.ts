@@ -1,4 +1,6 @@
+import { scenarioGoalSentence } from '../data/scenarios'
 import { UNIT_SPECS } from '../data/unitTypes'
+import { tierSpec } from '../data/empire'
 import { forceUnits, puppetsOf, regionsOf, totalUnits } from './helpers'
 import { computeEconomy } from './economy'
 import type { GameState, NationId, WorldMap } from './types'
@@ -79,6 +81,14 @@ export function humanStatus(s: GameState, id: NationId, map?: WorldMap): 'playin
   // Losing the capital only ends the game once there is nothing left to fight back with.
   const canRebuild = (s.trainingQueue ?? []).some((job) => job.nationId === id) || p.resources.capital >= UNIT_SPECS.infantry.capitalCost
   if (capitalLost && totalUnits(forceUnits(s, id)) < 0.1 && !canRebuild) return 'lost'
+  // A scenario's own goal (survive, grow, out-earn), checked in place of the game's.
+  const sg = s.scenario?.goal
+  if (sg && (sg.kind === 'survive' || sg.kind === 'tier' || sg.kind === 'economy')) {
+    const months = s.turn - s.scenario!.start
+    if (sg.kind === 'survive') return months >= sg.months ? 'won' : 'playing'
+    if (sg.kind === 'tier' ? p.tier >= sg.tier : !!map && economicShare(s, map, id) >= sg.share) return 'won'
+    return sg.deadline !== undefined && months >= sg.deadline ? 'lost' : 'playing'
+  }
   if (s.settings.goal === 'world') return holdsTheWorld(s, id) ? 'won' : 'playing'
   if (countriesTaken(s, id) >= conquestGoal(s.settings.victoryShare)) return 'won'
   if (populationShare(s, id) >= s.settings.victoryShare) return 'won'
@@ -106,4 +116,26 @@ export function checkOutcome(s: GameState, map?: WorldMap): GameState['outcome']
     if (s.nations[id]) s.nations[id].isPlayer = false
   }
   return 'playing'
+}
+
+/** The win condition in plain words, from the game's own rules. */
+export function goalSentence(s: GameState): string {
+  const own = s.scenario ? scenarioGoalSentence(s.scenario.goal) : null
+  if (own) return own
+  if (s.settings.goal !== 'classic') return 'hold every country in the world, yours or puppets of yours'
+  return `take ${conquestGoal(s.settings.victoryShare)} countries, hold ${Math.round(s.settings.victoryShare * 100)}% of the world's people, or reach ${Math.round(economicGoal(s.settings.victoryShare) * 100)}% of its output`
+}
+
+/** How close a nation is to winning, 0 to 1: the nearest of the goals that count in this game. */
+export function goalProgress(s: GameState, map: WorldMap, id: NationId): number {
+  const sg = s.scenario?.goal
+  if (sg?.kind === 'survive') return Math.min(1, Math.max(0, (s.turn - s.scenario!.start) / sg.months))
+  if (sg?.kind === 'tier') return Math.min(1, Math.max(0, (s.nations[id]?.tier ?? 1) >= sg.tier ? 1 : controlled(s, id) / Math.max(1, tierSpec(sg.tier).countries)))
+  if (sg?.kind === 'economy') return Math.min(1, economicShare(s, map, id) / sg.share)
+  if (s.settings.goal !== 'classic') {
+    const lands = Object.keys(s.regions).length
+    return lands > 0 ? Math.min(1, controlled(s, id) / lands) : 0
+  }
+  const share = s.settings.victoryShare
+  return Math.min(1, Math.max(countriesTaken(s, id) / conquestGoal(share), populationShare(s, id) / share, economicShare(s, map, id) / Math.max(0.0001, economicGoal(share))))
 }

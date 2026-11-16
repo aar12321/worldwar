@@ -5,6 +5,10 @@
 /** Your country. Warm crimson, so a large nation never turns the map into the sea. */
 export const PLAYER_COLOR = '#c4474a'
 
+/** Players of an online game, one color each (the first is the usual player color), so the globe and the lists tell them apart. */
+export const HUMAN_COLORS = [PLAYER_COLOR, '#2f8fd6', '#38b27a', '#a463d6']
+export const humanColor = (index: number) => HUMAN_COLORS[index] ?? PLAYER_COLOR
+
 export const MAP_PALETTE = [
   '#e0a31a',
   '#3e9a62',

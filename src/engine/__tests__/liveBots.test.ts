@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { generateAllBotOrders, generateBotOrders } from '../../ai/bot'
 import { LIVE } from '../../data/live'
-import { createInitialState } from '../../data/startingNations'
-import { getWorld } from '../../map/world'
 import { absDay, daysInMonth } from '../calendar'
-import { applyEventChoice } from '../events'
 import { advanceDay, type LiveEvent } from '../live'
-import { resolveTurn } from '../resolveTurn'
 import type { Army, GameState, Order } from '../types'
+import { playAttacks } from './attackRate'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { startLive } from '../live'
 
@@ -86,35 +82,18 @@ describe('the AI in a live game', () => {
 })
 
 describe('the AI attacks about as often live as in turns', () => {
-  const { map: world } = getWorld()
-
-  function play(mode: 'turns' | 'live', months: number) {
-    let s = createInitialState(world, { playerRegionId: 'china', seed: 5, difficulty: 'hard', goal: 'classic', victoryShare: 2, mode })
-    const planner = (st: GameState, m: typeof world) => [...generateAllBotOrders(st, m), ...generateBotOrders(st, m, st.playerId, true)]
-    let battles = 0
-    if (mode === 'turns') {
-      for (let i = 0; i < months && s.outcome === 'playing'; i++) {
-        if (s.pendingEvent) s = applyEventChoice(s, world, 0)
-        s = resolveTurn(s, world, planner(s, world))
-        battles += s.battles.filter((b) => b.attacker.nationId !== 'rebels').length
-      }
-    } else {
-      while (s.turn <= months && s.outcome === 'playing') {
-        if (s.pendingEvent) s = applyEventChoice(s, world, 0)
-        const step = advanceDay(s, world, { planner })
-        s = step.state
-        battles += step.events.filter((e) => e.kind === 'battle').length
-      }
-    }
-    return battles
-  }
-
+  /**
+   * The cheap, always-on half of the attack-rate check; the 36-month, three-seed ±20% one is in longSim.test.ts. One seed over a year
+   * and a half swings more than three over three years, so the band is wider. Measured per seed at 18 months, live over turns ran
+   * from 0.73 to 1.13 across Hard seeds 1 to 6 and Normal seeds 1 to 3 (this seed, 5 on Hard: 101 live to 139 turns). The band is
+   * 0.6 to 1.4: loose enough for that noise, tight enough to catch live attacking half as often, or half as much again.
+   */
   it('over a year and a half on the real world', () => {
-    const turns = play('turns', 18)
-    const live = play('live', 18)
+    const turns = playAttacks('turns', { seed: 5, difficulty: 'hard', months: 18 }).battles
+    const live = playAttacks('live', { seed: 5, difficulty: 'hard', months: 18 }).battles
     expect(turns).toBeGreaterThan(20)
     expect(live).toBeGreaterThan(turns * 0.6)
-    expect(live).toBeLessThan(turns * 1.6)
+    expect(live).toBeLessThan(turns * 1.4)
   }, 120_000)
 })
 

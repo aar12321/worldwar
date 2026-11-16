@@ -1,4 +1,8 @@
 import { TECH_BY_ID } from '../data/techTree'
+import { EVENT_BY_ID } from '../data/events'
+import { campaignPrice, campaignProblem, socialCost, socialProblem } from './society'
+import { isLocalProject } from '../data/localProjects'
+import { localProblem, rushCost, rushProblem } from './works'
 import { BUILDING_SPECS, COSTS, DRAFT_LIMITS, LAW_SPECS, MARKET, DIPLOMACY, PROPOSAL_COSTS, TAX_LIMITS, TRAIN_QUEUE_LIMIT, TRAINING, UNIT_SPECS, buildingCost, trainingCost, weaponCost } from '../data/unitTypes'
 import { CITY_RULES, FOCUS } from '../data/cities'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS } from '../data/business'
@@ -15,6 +19,11 @@ import { nextWeaponLevel } from './arms'
 import { companyEffects, tradeValue, validateDirective, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
+import { FACTION_ORDERS, factionOrderCost, factionProblem, isFactionOrder, sameFaction } from './factions'
+import { spaceCost, spaceProblem } from './space'
+import { pauseAircraftDevProblem, startAircraftDevCost, startAircraftDevProblem } from './aircraft'
+import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
+import { buildWarheadCost, buildWarheadProblem, nukeProblem } from './nuclear'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
@@ -27,12 +36,16 @@ import type { GameState, Nation, Order, Programs, SpendingKey, UnitType, WorldMa
 import { canAttackRegion, commitShare, reachProblem } from './warfare'
 import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
+import { STATION } from '../data/deployment'
+import { freeUnits, validateDeployment } from './deployment'
+import { validateSetBorder } from './borders'
+import { annexFactor, governCost, governProblem, lockedByMaster } from './puppets'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'operation', 'domestic', 'strike', 'nuke', 'eventChoice', ...FACTION_ORDERS])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
-const LIVE_NOW = new Set<Order['type']>(['strike', 'respond', 'propose'])
+const LIVE_NOW = new Set<Order['type']>(['strike', 'nuke', 'respond', 'propose'])
 
 /**
  * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, an answer to an offer
@@ -43,9 +56,11 @@ export function isMonthEndOrder(s: Pick<GameState, 'settings'>, type: Order['typ
   return MONTH_END_ORDERS.has(type)
 }
 
-/** Influence to annex a puppet: more for a bigger one. */
+/** Influence to annex a puppet: more for a bigger one, half for a devoted one and half as much again for a restive one. */
 export function annexCost(s: GameState, target: string): number {
-  return EMPIRE.annexCost * Math.max(1, Object.values(s.regions).filter((r) => r.owner === target).length)
+  const base = EMPIRE.annexCost * Math.max(1, Object.values(s.regions).filter((r) => r.owner === target).length)
+  const f = annexFactor(s.nations[target])
+  return f === 1 ? base : Math.max(1, Math.round(base * f))
 }
 
 /** Influence a war on `target` costs `nationId` right now: little with a reason, a great deal without one. */
@@ -152,6 +167,12 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'annexPuppet':
       c.pp = annexCost(s, o.target)
       break
+    case 'governPuppet': {
+      const k = governCost(s, o)
+      c.capital = k.capital
+      c.pp = k.pp
+      break
+    }
     case 'crisisAction': {
       const k = crisisCost(o.action)
       c.capital = k.capital
@@ -170,6 +191,39 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'fundSystem':
       c.capital = fundSystemCost(s, o)
       break
+    case 'space': {
+      const k = s.nations[o.nationId] ? spaceCost(s, s.nations[o.nationId], o.action) : c
+      c.capital = k.capital
+      c.tp = k.tp
+      c.pp = k.pp
+      c.steel = k.steel
+      break
+    }
+    case 'setBorder':
+      c.pp = o.closed ? STATION.closeCost : 0
+      break
+    case 'fundMissiles': {
+      const k = fundMissilesCost(s.nations[o.nationId])
+      c.capital = k.capital
+      c.tp = k.tp
+      break
+    }
+    case 'buildMissiles': {
+      const k = buildMissilesCost(o)
+      c.capital = k.capital
+      c.steel = k.steel
+      break
+    }
+    case 'buildWarhead': {
+      const k = buildWarheadCost()
+      c.capital = k.capital
+      c.steel = k.steel
+      c.tp = k.tp
+      break
+    }
+    case 'startAircraftDev':
+      c.tp = startAircraftDevCost(o).tp
+      break
     case 'strike': {
       const k = strikeCost(o)
       c.capital = k.capital
@@ -187,9 +241,27 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'enactLaw':
       c.pp = LAW_SPECS[o.law].cost
       break
+    case 'rushProject':
+      c.capital = rushCost(s, s.nations[o.nationId], o.project, o.regionId)
+      break
+    case 'setSocial':
+      c.pp = s.nations[o.nationId] ? socialCost(s.nations[o.nationId], o.policy, o.level) : 0
+      break
+    case 'campaign':
+      c.capital = s.nations[o.nationId] ? campaignPrice(s, s.nations[o.nationId], o.campaign) : 0
+      break
     case 'suppressRebels':
       c.pp = COSTS.suppressRebels
       break
+    case 'factionFound':
+    case 'factionContribute':
+    case 'factionPropose': {
+      const k = factionOrderCost(s, o)
+      c.capital = k.capital
+      c.pp = k.pp
+      c.steel = k.steel
+      break
+    }
     default:
       break
   }
@@ -237,14 +309,28 @@ export function programsProblem(s: GameState, n: Nation, p: Partial<Programs>, r
   return null
 }
 
-/** Returns a human readable reason the order is invalid, or null if it can be issued. */
+/**
+ * Returns a human readable reason the order is invalid, or null if it can be issued. An order with a missing or nonsense field (a
+ * damaged save, or a friend's plan online) is simply refused: it must never stop the month for everyone.
+ */
 export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Order[] = []): string | null {
+  try {
+    return validateOrderChecked(s, map, o, pending)
+  } catch (e) {
+    // The reason is kept so a real bug in a rule is easy to find, not only a damaged plan.
+    return `That order makes no sense (${e instanceof Error ? e.message : 'unknown error'})`
+  }
+}
+
+function validateOrderChecked(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
   if (!n?.alive) return 'Your nation has fallen.'
   const ruleError = checkRules(s, map, o, pending)
   if (ruleError) return ruleError
   const spent = committedCost(s, pending)
   const cost = orderCost(s, o)
+  // A price that is not a number (a missing field in a damaged plan) would poison the treasury.
+  if (![cost.capital, cost.pp, cost.tp, cost.manpower, cost.steel].every(Number.isFinite)) return 'That order makes no sense'
   if (cost.capital > 0 && n.resources.capital - spent.capital < cost.capital) return `Not enough money (costs ${cost.capital})`
   if (cost.pp > 0 && n.resources.pp - spent.pp < cost.pp) return `Not enough influence (costs ${cost.pp})`
   if (cost.tp > 0 && n.resources.tp - spent.tp < cost.tp) return `Not enough research (costs ${cost.tp})`
@@ -257,9 +343,19 @@ export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Or
 
 function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
+  if (isFactionOrder(o)) return factionProblem(s, map, o, pending)
   switch (o.type) {
+    case 'eventChoice': {
+      const ev = s.pendingEvents?.[o.nationId]
+      if (!ev) return 'No decision is waiting'
+      if (!Number.isInteger(o.index) || o.index < 0 || o.index >= (EVENT_BY_ID[ev.eventId]?.options.length ?? 0)) return 'Choose one of the options'
+      return null
+    }
     case 'setPolicy': {
+      if (lockedByMaster(s, n) && (Math.abs(o.taxRate - n.taxRate) > 1e-9 || Math.abs(o.draftRate - n.draftRate) > 1e-9 || (o.spending && Object.entries(o.spending).some(([k, v]) => v !== n.spending[k as SpendingKey]))))
+        return `${s.nations[n.overlord ?? '']?.name ?? 'Your overlord'} sets your taxes, draft and spending`
       const maxDraft = n.laws.includes('conscription_act') ? DRAFT_LIMITS.maxWithConscription : DRAFT_LIMITS.max
+      if (!Number.isFinite(o.taxRate) || !Number.isFinite(o.draftRate)) return 'Tax and draft rates must be numbers'
       if (o.taxRate < TAX_LIMITS.min || o.taxRate > TAX_LIMITS.max) return 'Tax rate out of range'
       if (o.draftRate < DRAFT_LIMITS.min || o.draftRate > maxDraft + 1e-9) return 'Draft rate out of range'
       if (o.corporateTax !== undefined && (!Number.isFinite(o.corporateTax) || o.corporateTax < CORPORATE_TAX.min || o.corporateTax > CORPORATE_TAX.max + 1e-9)) return 'Business tax out of range'
@@ -281,12 +377,14 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'setStateOwned':
       return enterpriseProblem(s, n, o.sector, o.mode)
     case 'startProject':
-      return projectProblem(s, map, n, o.project)
+      return isLocalProject(o.project) ? localProblem(s, map, n, o.project, o.regionId) : projectProblem(s, map, n, o.project)
     case 'pauseProject': {
-      const p = n.projects?.[o.project]
+      const p = isLocalProject(o.project) ? (o.regionId && s.regions[o.regionId]?.owner === n.id ? s.regions[o.regionId].works?.[o.project] : undefined) : n.projects?.[o.project]
       if (!p || p.done) return 'That project is not under way'
       return null
     }
+    case 'rushProject':
+      return rushProblem(s, n, o.project, o.regionId)
     case 'moveCapital': {
       const gate = tierOf(n).moveCapital ? null : tierGate(s, o.nationId, 3)
       if (gate) return gate
@@ -441,7 +539,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
       const live = isLive(s)
       if (n.military.lastAttackTurn === (live ? clockMonth(s) : s.turn) && n.military.attacksThisTurn >= maxAttacks(s, o.nationId)) return live ? `You have already sent ${maxAttacks(s, o.nationId)} armies this month` : `Your military has already attacked ${maxAttacks(s, o.nationId)} times this turn`
-      if (totalUnits(n.military.units) < 0.1) return live ? 'No troops at home to send' : 'You have no military to attack with'
+      if (totalUnits(freeUnits(s, o.nationId)) < 0.1) return n.military.deployment && totalUnits(n.military.units) >= 0.1 ? 'Your whole force is on station. Free some in Deployment to send it.' : live ? 'No troops at home to send' : 'You have no military to attack with'
       if (o.share !== undefined && (!Number.isFinite(o.share) || o.share < 0.05 || o.share > 1)) return 'Send between 5% and 100% of your military'
       if (commitShare(n, o.commit ?? 'main', o.share) < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
       if (!canAttackRegion(s, map, o.nationId, o.target).ok) return reachProblem(s, map, o.nationId, o.target)
@@ -455,6 +553,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'assignGeneral':
       if (o.generalId && !n.generals.some((g) => g.id === o.generalId)) return 'Unknown commander'
       return null
+    case 'governPuppet':
+      return governProblem(s, o, pending)
     case 'annexPuppet': {
       const t = s.nations[o.target]
       if (!t?.alive || t.overlord !== o.nationId) return 'They are not your puppet'
@@ -486,6 +586,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (t.overlord === o.nationId) return 'They are your puppet. Set them free first.'
       if (isAllied(s, o.nationId, o.target)) return 'You are allied'
       if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
+      if (sameFaction(s, o.nationId, o.target)) return 'You are in the same faction. Leave it first.'
       const pendingWars = pending.filter((p) => p.type === 'declareWar').length
       if (enemiesOf(s, o.nationId).length + pendingWars >= maxWars(s, o.nationId)) return `You are already fighting ${maxWars(s, o.nationId)} wars. End one first.`
       if (enemiesOf(s, o.target).length >= maxWars(s, o.target)) return `${t.name} is already fighting ${maxWars(s, o.target)} wars`
@@ -528,6 +629,24 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return validateFundSystem(s, o, pending)
     case 'strike':
       return validateStrike(s, map, o, pending)
+    case 'buildWarhead':
+      return buildWarheadProblem(s, o, pending)
+    case 'nuke':
+      return nukeProblem(s, map, o, pending)
+    case 'space':
+      return spaceProblem(s, n, o.action, nationWorkforce(s, map, o.nationId), pending.filter((p): p is Extract<Order, { type: 'space' }> => p.type === 'space' && p.nationId === o.nationId).map((p) => p.action))
+    case 'setDeployment':
+      return validateDeployment(s, map, o, pending)
+    case 'setBorder':
+      return validateSetBorder(s, map, o)
+    case 'fundMissiles':
+      return fundMissilesProblem(n)
+    case 'buildMissiles':
+      return buildMissilesProblem(s, o, pending)
+    case 'startAircraftDev':
+      return startAircraftDevProblem(s, n, o, pending)
+    case 'pauseAircraftDev':
+      return pauseAircraftDevProblem(n, o, pending)
     case 'buyShares':
     case 'sellShares':
       return validateTrade(s, o, pending)
@@ -540,9 +659,18 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'fundAgency':
       return validateFund(s, o, pending)
     case 'enactLaw':
+      if (lockedByMaster(s, n)) return `${s.nations[n.overlord ?? '']?.name ?? 'Your overlord'} decides your laws`
       if (pending.some((p) => p.type === 'enactLaw')) return 'One new law a month'
       return lawProblem(n, o.law)
+    case 'setSocial':
+      // Two changes to one program in the same batch would both pass the once-a-month rule: the second is refused.
+      if (pending.some((p) => p.type === 'setSocial' && p.policy === o.policy)) return 'Already changed this month'
+      return socialProblem(s, n, o.policy, o.level)
+    case 'campaign':
+      if (pending.some((p) => p.type === 'campaign' && p.campaign === o.campaign)) return 'Already running'
+      return campaignProblem(n, o.campaign)
     case 'repealLaw':
+      if (lockedByMaster(s, n)) return `${s.nations[n.overlord ?? '']?.name ?? 'Your overlord'} decides your laws`
       return n.laws.includes(o.law) ? null : 'Not enacted'
     case 'suppressRebels': {
       const r = s.regions[o.regionId]

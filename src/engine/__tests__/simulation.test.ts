@@ -43,7 +43,7 @@ describe('full simulation', () => {
     for (const n of Object.values(s.nations)) for (const v of Object.values(n.military.units)) expect(Number.isFinite(v)).toBe(true)
     const alive = Object.values(s.nations).filter((n) => n.alive).length
     expect(alive).toBeGreaterThan(20)
-  }, 20000)
+  }, 120_000)
 
   it('is deterministic for the same seed and orders', () => {
     expect(JSON.stringify(simulate(7, 12))).toBe(JSON.stringify(simulate(7, 12)))

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { createInitialState } from '../../data/startingNations'
+import { getWorld } from '../../map/world'
 import { advise } from '../advisor'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import { lineMap, setMilitary, startState } from './fixtures'
@@ -111,6 +113,72 @@ describe('the advisor on the new systems', () => {
     const list = ids(advise(s, map, 'r0', [], 20))
     expect(list).toContain('city')
     expect(list).toContain('business')
+  })
+})
+
+describe('the advisor on care for the people and projects', () => {
+  const big = lineMap(8)
+  const rich = () => {
+    const s = startState(big)
+    s.nations.r0.resources.capital = 900
+    s.nations.r0.resources.pp = 100
+    s.nations.r0.taxRate = 0.25
+    return s
+  }
+
+  it('says why stability is slipping, and points at the breakdown', () => {
+    const s = rich()
+    s.nations.r0.stability = 25
+    const list = advise(s, big, 'r0', [], 30)
+    const unrest = list.find((a) => a.id === 'unrest')!
+    expect(unrest.target).toEqual({ desk: 'economy', tab: 'people', section: 'overview' })
+    expect(unrest.action).toBe('See why')
+  })
+
+  it('suggests spending on calm when stability is middling and nothing is being done about it', () => {
+    const s = rich()
+    s.nations.r0.stability = 50
+    const hint = advise(s, big, 'r0', [], 30).find((a) => a.id === 'calm-programs')
+    expect(hint?.target).toEqual({ desk: 'economy', tab: 'people', section: 'safety' })
+    // Once a program is running the nudge goes quiet.
+    s.nations.r0.social = { festivals: { level: 1, strength: 1, changed: -1 } }
+    expect(ids(advise(s, big, 'r0', [], 30))).not.toContain('calm-programs')
+  })
+
+  it('suggests a celebration when calm is low and it is available, but not while one is running', () => {
+    const s = rich()
+    s.nations.r0.stability = 40
+    expect(ids(advise(s, big, 'r0', [], 30))).toContain('celebration')
+    s.nations.r0.campaigns = { celebration: { left: 3, cooldown: 10 } }
+    expect(ids(advise(s, big, 'r0', [], 30))).not.toContain('celebration')
+  })
+
+  it('suggests a cultural centre for conquered land that is still settling', () => {
+    const s = rich()
+    s.regions.r1.owner = 'r0'
+    s.regions.r1.integration = 0.2
+    const hint = advise(s, big, 'r0', [], 30).find((a) => a.id === 'cultural-centre')
+    expect(hint?.target).toMatchObject({ desk: 'economy', tab: 'projects', region: 'r1' })
+    s.regions.r1.works = { culturalCentre: { progress: 1, done: false, by: 'r0' } }
+    expect(ids(advise(s, big, 'r0', [], 30))).not.toContain('cultural-centre')
+  })
+
+  it('suggests building up a project once every open one is built', () => {
+    // On the real map, where a country has a real surplus to spend.
+    const world = getWorld().map
+    const s = createInitialState(world, { playerRegionId: 'france', seed: 5, victoryShare: 0.4, goal: 'world', difficulty: 'normal' })
+    s.nextEventTurn = 9999
+    const n = s.nations[s.playerId]
+    n.resources.capital = 3000
+    for (const id of ['rail', 'grid', 'waterNetwork', 'stadium', 'broadband', 'grainReserve'] as const) n.projects[id] = { progress: 99, done: true }
+    const list = advise(s, world, s.playerId, [], 40)
+    expect(ids(list)).not.toContain('project')
+    const up = list.find((a) => a.id === 'project-up')
+    expect(up?.title).toMatch(/^Build up the /)
+    expect(up?.target).toEqual({ desk: 'economy', tab: 'projects' })
+    // Not with an empty purse.
+    n.resources.capital = 100
+    expect(ids(advise(s, world, s.playerId, [], 40))).not.toContain('project-up')
   })
 })
 

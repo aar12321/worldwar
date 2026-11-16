@@ -8,7 +8,7 @@ export function scenesFor(mode: 'all' | 'mine' | 'off', player: NationId, battle
 }
 
 /** One line for a battle the player was in, and whether it went their way. */
-export function battleLine(b: BattleReport, game: GameState, player: NationId): { text: string; good: boolean } {
+export function battleLine(b: BattleReport, game: Pick<GameState, 'nations'>, player: NationId): { text: string; good: boolean } {
   const place = getWorld().map.regions[b.regionId]?.name ?? 'the front'
   const line = b.lineBefore !== undefined && b.lineAfter !== undefined ? ` (Defense Line ${b.lineBefore.toFixed(1)} → ${b.lineAfter.toFixed(1)})` : ''
   const won = b.winner === 'attacker'

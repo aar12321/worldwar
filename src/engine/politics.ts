@@ -3,6 +3,7 @@ import { DIPLOMACY } from '../data/unitTypes'
 import { computeEconomy } from './economy'
 import { addLog, clamp } from './helpers'
 import { militaryPower } from './militaryStats'
+import { freePuppet, runPuppetMonth } from './puppets'
 import { electionNeed } from './people'
 import type { Rng } from './rng'
 import type { GameState, Nation, WorldMap } from './types'
@@ -13,9 +14,10 @@ import type { GameState, Nation, WorldMap } from './types'
  * A junta whose people are close to revolt can be overthrown.
  */
 export function runPolitics(s: GameState, map: WorldMap, rng: Rng) {
+  const ledger = new Map<string, { gross: number; paid: number }>()
   for (const n of Object.values(s.nations)) {
     if (!n.alive) continue
-    if (n.overlord) payTribute(s, map, n, rng)
+    if (n.overlord) payTribute(s, map, n, rng, ledger)
     const gov = GOVERNMENTS[n.government]
     if (gov.election > 0 && n.nextElection > 0 && s.turn >= n.nextElection) {
       n.nextElection = s.turn + gov.election
@@ -50,10 +52,15 @@ export function tributeOf(s: GameState, map: WorldMap, puppetId: string): number
 }
 
 /** A puppet pays part of its income to its master, and breaks free when its master dies or it grows strong and restless. */
-function payTribute(s: GameState, map: WorldMap, puppet: Nation, rng: Rng) {
+function payTribute(s: GameState, map: WorldMap, puppet: Nation, rng: Rng, ledger: Map<string, { gross: number; paid: number }>) {
   const master = s.nations[puppet.overlord ?? '']
   if (!master?.alive) {
-    puppet.overlord = null
+    freePuppet(s, puppet.id)
+    return
+  }
+  // A puppet with a loyalty follows the rules in puppets.ts; one made before loyalty existed keeps the flat ones below.
+  if (puppet.loyalty !== undefined) {
+    runPuppetMonth(s, map, puppet, master, rng, ledger)
     return
   }
   const tribute = tributeOf(s, map, puppet.id)
@@ -61,7 +68,7 @@ function payTribute(s: GameState, map: WorldMap, puppet: Nation, rng: Rng) {
   master.resources.capital += tribute
   const strong = militaryPower(s, puppet.id) > militaryPower(s, master.id) * 0.8
   if ((puppet.stability < 30 || strong) && rng.chance(DIPLOMACY.puppet.breakChance)) {
-    puppet.overlord = null
+    freePuppet(s, puppet.id)
     addLog(s, 'war', `${puppet.name} threw off ${master.name}'s rule and is independent again.`, [puppet.id, master.id])
   }
 }

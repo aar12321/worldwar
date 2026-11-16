@@ -4,6 +4,7 @@ import { COMMITS, STANCES, type Commit, type Stance } from '../data/war'
 import { planTrip, tripSchedule } from '../engine/armies'
 import { absDate, clockOf, isLive } from '../engine/calendar'
 import { computeEconomy } from '../engine/economy'
+import { freeUnits } from '../engine/deployment'
 import { formatDivisions, maxAttacks, totalUnits } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { forecastAttack } from '../engine/warfare'
@@ -11,12 +12,11 @@ import type { GameState, NationId, RegionId } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { FRONTIER } from '../data/systems'
-import { missilesLeft } from '../engine/systems'
 import { usePlayerView } from './hooks'
-import { OrderButton } from './panel'
 import { UnitIcon } from './icons'
 import { MilitaryCompare } from './MilitaryCompare'
+import { NuclearCard } from './NuclearCard'
+import { MissileSection } from './MissileSection'
 import { Modal } from './Modal'
 import { speak } from './plain'
 
@@ -64,14 +64,11 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   // A chosen share of the military, in percent. null means one of the three presets.
   const [custom, setCustom] = useState<number | null>(null)
   const customShare = custom === null ? undefined : custom / 100
-  // null means the default: the share of the missiles that goes with the force sent.
-  const [fire, setFire] = useState<number | null>(null)
-  const [salvo, setSalvo] = useState(1)
   const { map } = getWorld()
   const game = view?.game
   const player = view?.player
-  const free = game && player ? missilesLeft(player.military.units.missile, view?.orders ?? [], player.id) : 0
-  const missiles = free > 0 ? Math.min(free, fire ?? Math.min(free, Math.ceil(free * (customShare ?? COMMITS[commit].share)))) : undefined
+  // An attack on land never carries missiles by itself. They are fired on purpose, from the Missiles section below.
+  const missiles = 0
   const forecasts = useMemo(() => {
     if (!game || !player) return null
     return Object.fromEntries(STANCE_KEYS.map((st) => [st, forecastAttack(game, map, player.id, target, commit, st, undefined, missiles, customShare)])) as Record<Stance, ReturnType<typeof forecastAttack>>
@@ -97,17 +94,12 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const aiLevel = player.systems?.ai ?? 0
   // AI Battle Command recommends the stance with the best mix of line damage, odds and losses.
   const bestStance = aiLevel >= 2 && forecasts ? STANCE_KEYS.reduce((best, st) => (score(forecasts[st]) > score(forecasts[best]) ? st : best), STANCE_KEYS[0]) : null
-  // Missiles the attack itself will fire are not free for a strike.
-  const strikeMax = Math.max(0, free - (missiles ?? 0))
-  const salvoSize = Math.max(1, Math.min(salvo, Math.max(1, strikeMax)))
-  const strikeOrders = [
-    { type: 'strike' as const, nationId: player.id, target, weapon: 'missile' as const, count: salvoSize },
-    { type: 'strike' as const, nationId: player.id, target, weapon: 'orbital' as const },
-  ]
-  const hasStrikeWeapons = player.military.units.missile >= 1 || (player.systems?.orbital ?? 0) > 0
   const bill = computeEconomy(game, map, player.id).warBills.find((b) => b.enemy === owner.id)?.amount ?? 0
   const nominal = customShare ?? COMMITS[commit].share
-  const sent = totalUnits(player.military.units) * (f?.share ?? nominal)
+  // Only the reserve can be sent: forces on station keep their posts.
+  const reserve = freeUnits(game, player.id)
+  const onStation = !!player.military.deployment
+  const sent = totalUnits(reserve) * (f?.share ?? nominal)
   const away = Math.min(1, player.military.exposed + (f?.share ?? nominal))
   const lineNow = f?.lineBefore ?? region.line
   const lineMaxNow = f?.lineMax ?? lineNow
@@ -115,7 +107,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const trip = live ? planTrip(game, map, player.id, target) : null
   const when = trip ? tripSchedule(trip, today) : null
   const share = f?.share ?? nominal
-  const sentAway = totalUnits(player.military.units) * share
+  const sentAway = totalUnits(reserve) * share
   const stayHome = totalUnits(player.military.units) - sentAway
   const sentThisMonth = player.military.lastAttackTurn === game.turn ? player.military.attacksThisTurn : 0
   const route = trip ? (trip.via === 'land' ? 'by land' : trip.via === 'lane' ? 'across the sea' : trip.via === 'fleet' ? 'by sea' : 'by air') : ''
@@ -171,6 +163,11 @@ function WarRoomDialog({ target }: { target: RegionId }) {
 
         <section className="space-y-2">
           <h3 className="text-[15px] font-semibold">How much to send</h3>
+          {onStation && (
+            <p className="text-[12px] text-white/70">
+              Shares are of your reserve, {formatDivisions(totalUnits(reserve))} divisions. {formatDivisions(totalUnits(player.military.units) - totalUnits(reserve))} stay on station: patrols, screens and garrisons cannot attack.
+            </p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Force size">
             {COMMIT_KEYS.map((c) => {
               const share = Math.min(COMMITS[c].share, 1 - player.military.exposed)
@@ -189,12 +186,12 @@ function WarRoomDialog({ target }: { target: RegionId }) {
                     {COMMITS[c].name}
                     {bestCommit === c && <span className="ml-1.5 rounded-full bg-[#30d158]/25 px-1.5 py-0.5 text-[10px] font-semibold text-[#6eeb8a]">AI recommends</span>}
                   </div>
-                  <div className="text-[12px] text-white/75 tabular-nums">{formatDivisions(totalUnits(player.military.units) * share)} divisions</div>
+                  <div className="text-[12px] text-white/75 tabular-nums">{formatDivisions(totalUnits(reserve) * share)} divisions</div>
                   <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[12px] text-white/80 tabular-nums">
-                    {UNIT_TYPES.filter((u) => player.military.units[u] * share >= 0.05).map((u) => (
+                    {UNIT_TYPES.filter((u) => reserve[u] * share >= 0.05).map((u) => (
                       <span key={u} className="inline-flex items-center gap-1">
                         <UnitIcon unit={u} size={13} />
-                        {formatDivisions(player.military.units[u] * share)}
+                        {formatDivisions(reserve[u] * share)}
                       </span>
                     ))}
                   </div>
@@ -208,8 +205,8 @@ function WarRoomDialog({ target }: { target: RegionId }) {
               className={`rounded-xl p-2.5 text-left border ${custom !== null ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/6 hover:bg-white/10'}`}
             >
               <div className="text-[14px] font-semibold">Choose</div>
-              <div className="text-[12px] text-white/75 tabular-nums">{custom !== null ? `${formatDivisions(totalUnits(player.military.units) * Math.min(custom / 100, 1 - player.military.exposed))} divisions` : 'Any amount'}</div>
-              <div className="mt-1 text-[12px] text-white/80">{custom !== null ? `${custom}% of your military` : 'Pick a share yourself'}</div>
+              <div className="text-[12px] text-white/75 tabular-nums">{custom !== null ? `${formatDivisions(totalUnits(reserve) * Math.min(custom / 100, 1 - player.military.exposed))} divisions` : 'Any amount'}</div>
+              <div className="mt-1 text-[12px] text-white/80">{custom !== null ? `${custom}% of your ${onStation ? 'reserve' : 'military'}` : 'Pick a share yourself'}</div>
             </button>
           </div>
           {custom !== null && (
@@ -240,19 +237,6 @@ function WarRoomDialog({ target }: { target: RegionId }) {
                 : ''}
           </p>
         </section>
-
-        {free > 0 && (
-          <section className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <h3 className="text-[15px] font-semibold">Missiles to fire</h3>
-              <span className="text-[14px] tabular-nums text-white/80">
-                {missiles ?? 0} of {free}
-              </span>
-            </div>
-            <input type="range" className="w-full" min={0} max={free} step={1} value={missiles ?? 0} onChange={(e) => setFire(+e.target.value)} aria-label="Missiles to fire in this battle" />
-            <p className="text-[13px] text-white/70">They strike first, before the air war, and crack the Defense Line directly. Each one fired is used up. A shield stops part of them.</p>
-          </section>
-        )}
 
         <section className="space-y-2">
           <h3 className="text-[15px] font-semibold">How to fight</h3>
@@ -288,28 +272,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </div>
         </section>
 
-        {hasStrikeWeapons && (
-          <section className="space-y-2">
-            <h3 className="text-[15px] font-semibold">Strike from afar</h3>
-            <p className="text-[13px] text-white/70">{live ? 'Weapons that need no army. Missiles leave at once and land a day later; an orbital strike hits at once. An Interceptor Shield stops part of them.' : 'Weapons that need no army. They resolve when the month ends, and an Interceptor Shield stops part of them.'}</p>
-            {player.military.units.missile >= 1 && (
-              <div className="space-y-1">
-                <div className="flex items-baseline justify-between text-[14px]">
-                  <span>Missiles in this strike</span>
-                  <span className="tabular-nums text-white/80">
-                    {Math.min(salvoSize, Math.max(1, strikeMax))} of {strikeMax} free this month
-                  </span>
-                </div>
-                <input type="range" className="w-full" min={1} max={Math.max(1, strikeMax)} step={1} value={Math.min(salvoSize, Math.max(1, strikeMax))} onChange={(e) => setSalvo(+e.target.value)} aria-label="Missiles in this strike" />
-                <p className="text-[12px] text-white/65">You can fire as many strikes {live ? '' : 'a month '}as you have missiles. Each missile fired is used up.</p>
-              </div>
-            )}
-            <div className="grid gap-2 sm:grid-cols-2">
-              {player.military.units.missile >= 1 && <OrderButton order={strikeOrders[0]} label={`Fire ${salvoSize} missile${salvoSize === 1 ? '' : 's'}`} cost={`${FRONTIER.strikeMoney} money`} effect="Cuts the Defense Line and stops factories for 2 months." />}
-              {(player.systems?.orbital ?? 0) > 0 && <OrderButton order={strikeOrders[1]} label="Orbital strike" cost={`${FRONTIER.orbitalMoney} money, ${FRONTIER.orbitalPP} influence`} effect="Once a year. Cuts the line hard, wrecks a building, and shames you." />}
-            </div>
-          </section>
-        )}
+        <MissileSection game={game} player={player} target={target} orders={view.orders} live={live} />
 
         {f && (
           <section className="inset-card p-3.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[14px]">
@@ -331,6 +294,9 @@ function WarRoomDialog({ target }: { target: RegionId }) {
             <span className="text-right tabular-nums">{bill.toFixed(1)} money every month</span>
           </section>
         )}
+
+        {/* Superpower weapon: its own section and component, so nothing above depends on it. */}
+        <NuclearCard target={target} />
       </div>
     </Modal>
   )
