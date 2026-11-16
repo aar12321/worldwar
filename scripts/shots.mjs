@@ -119,6 +119,8 @@ export async function openGame(browser, baseUrl, opts = {}) {
       await page.setViewportSize(view)
       return out
     },
+    /** Closes the monthly report / open window (Escape), e.g. before a clean shot after advance(). */
+    dismiss: async () => { await page.keyboard.press('Escape'); await page.waitForTimeout(300) },
     click: (name) => page.getByRole('button', { name }).first().click({ timeout: 15_000 }),
   }
 }
