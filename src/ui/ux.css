@@ -1141,3 +1141,28 @@ body.resizing {
     left: 120px !important;
   }
 }
+
+/* Narrow screens (and the largest text size on them): a setting with a control beside it wraps the control underneath
+   instead of squeezing the words to one per line, and HUD labels clip with an ellipsis instead of running together. */
+@media (max-width: 900px) {
+  .setting-row.inline {
+    flex-wrap: wrap;
+  }
+  .setting-row.inline > .min-w-0 {
+    flex: 1 1 11rem;
+  }
+  .hud-resources .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+}
+
+/* The room code and its hint sit over the globe: a soft shadow keeps them readable on any colour. */
+.lobby-title {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.75);
+}
+.lobby-title .lobby-sub {
+  color: rgba(255, 255, 255, 0.88);
+}
