@@ -20,6 +20,7 @@ import { INVEST, SECTORS, SECTOR_IDS } from '../data/business'
 import { TRADE_RESOURCES } from '../engine/types'
 import { LIBERATE_TEXT } from '../data/puppets'
 import { liberablePuppets } from '../engine/puppets'
+import { WarPicture } from './WarPicture'
 import { MAX_REPARATIONS, liberateValue, netWarScore, puppetValue, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
@@ -96,10 +97,13 @@ function WarScoreBar({ target }: { target: NationId }) {
         <span className="text-white/70">War score</span>
         <span style={{ color }}>
           {net > 0 ? '+' : ''}
-          {net} {net > 10 ? '(winning)' : net < -10 ? '(losing)' : '(stalemate)'}
+          {net}
         </span>
       </div>
       <SignedBar value={net} color={color} />
+      <div className="mt-2">
+        <WarPicture enemyId={target} />
+      </div>
     </div>
   )
 }

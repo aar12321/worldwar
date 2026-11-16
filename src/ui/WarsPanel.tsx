@@ -12,6 +12,7 @@ import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { usePlayerView } from './hooks'
 import { LineBar } from './WarRoom'
+import { WarPicture } from './WarPicture'
 
 /** Every war you are in (up to three): what it costs, how it is going, and where the front is. */
 export function WarsTab() {
@@ -113,6 +114,7 @@ function EnemyCard({ enemyId, reachable, bill }: { enemyId: NationId; reachable:
           Make peace
         </button>
       </div>
+      <WarPicture enemyId={enemyId} />
       {rows.length === 0 ? (
         <p className="text-[13px] text-white/70">No front yet. You can only attack countries that touch land you hold, or that a port of yours can reach.</p>
       ) : (
