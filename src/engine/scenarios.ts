@@ -10,6 +10,7 @@ import { startEpidemic } from './epidemics'
 import { addLog, clamp, grantJustification, isAllied, nationNeighborMap, newId, pairKey, regionsOf } from './helpers'
 import { militaryPower } from './militaryStats'
 import { bindPuppet } from './puppets'
+import { bindTerritory, territoryProblem } from './territories'
 import { empireCount } from './empire'
 import { createRng } from './rng'
 import type { GameState, NationId, WorldMap } from './types'
@@ -161,6 +162,20 @@ function run(s: GameState, map: WorldMap, op: ScenarioOp, roles: Roles, rng: Ret
         const p = s.nations[id]
         if (id === master || p.overlord || p.isPlayer || s.wars.includes(pairKey(id, master))) continue
         bindPuppet(s, id, master)
+        s.alliances = s.alliances.filter((k) => k !== pairKey(id, master))
+        did = true
+      }
+      return did
+    }
+    case 'territory': {
+      const master = first(s, op.master, roles)
+      if (!master || s.nations[master].overlord || s.nations[master].territoryOf) return false
+      let did = false
+      for (const id of resolve(s, op.territories, roles)) {
+        const t = s.nations[id]
+        if (id === master || t.overlord || t.territoryOf || t.isPlayer || s.humans.includes(id) || s.wars.includes(pairKey(id, master))) continue
+        if (territoryProblem(s, master, id)) continue
+        bindTerritory(s, id, master)
         s.alliances = s.alliances.filter((k) => k !== pairKey(id, master))
         did = true
       }

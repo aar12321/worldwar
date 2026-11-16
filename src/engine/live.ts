@@ -5,6 +5,7 @@ import { fightFactionArmy, launchFactionArmies } from './factions'
 import { absDay, clockOf, dayDate, daysInMonth, isLive } from './calendar'
 import { addLog, atWar, newId, totalUnits } from './helpers'
 import { orderCost, validateOrder } from './orders'
+import { asCommand } from './territories'
 import { runMonth } from './resolveTurn'
 import { createRng } from './rng'
 import { interception } from './deployment'
@@ -108,7 +109,9 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
     const due = s.launches.filter((l) => l.at <= today).sort((a, b) => byDue(a, b, a.at, b.at))
     s.launches = s.launches.filter((l) => l.at > today)
     for (const l of due) {
-      if (!s.nations[l.order.nationId]?.alive || validateOrder(s, map, l.order)) continue
+      // An attack a master planned for its territory was checked when it was given; it leaves as the territory's.
+      const planned = s.nations[l.order.nationId]
+      if (!planned?.alive || (planned.territoryOf ? asCommand(() => validateOrder(s, map, l.order)) : validateOrder(s, map, l.order))) continue
       // A rival that is about to be attacked keeps its army at home.
       if (holdsBackLaunch(s, map, l.order.nationId)) continue
       // The AI pays for its stance, as the player does.

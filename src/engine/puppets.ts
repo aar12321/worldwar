@@ -9,6 +9,7 @@ import { addLog, atWar, clamp, enemiesOf, grantJustification, hasPact, justifica
 import { militaryPower } from './militaryStats'
 import { cleanSpending } from './people'
 import type { Rng } from './rng'
+import { passUpTerritories } from './territories'
 import type { GameState, LawId, Nation, NationId, Order, PuppetPatch, Spending, TributeForm, WorldMap } from './types'
 
 /**
@@ -334,6 +335,8 @@ export function bindPuppet(s: GameState, puppetId: NationId, masterId: NationId)
     q.overlordSince = s.turn
     if (q.loyalty !== undefined) q.loyalty = Math.max(0, q.loyalty - 10)
   }
+  // Territories it held pass up to the master too.
+  passUpTerritories(s, puppetId, masterId)
   p.overlord = masterId
   p.overlordSince = s.turn
   p.loyalty = PUPPET.start

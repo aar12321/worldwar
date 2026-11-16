@@ -1,3 +1,4 @@
+import { TERRITORY } from '../../data/territories'
 import { describe, expect, it } from 'vitest'
 import { peaceTerms } from '../../ai/bot'
 import { PUPPET_GARRISON_CAP, deploymentOrder, plannedPosture } from '../../ai/deployment'
@@ -43,9 +44,16 @@ describe('bots make puppets at the peace table', () => {
 
   it('the terms are valid peace terms and the war score pays for them', () => {
     const s = world()
-    const t = peaceTerms(s, map, 'r0', 'r4', 80, false, 2)
-    expect(t.puppet).toBe(true)
-    expect(validatePeaceTerms(s, map, t, 'r0', 'r4')).toBeNull()
+    // These tests are about puppets: a Hard bot that could ask for a territory instead is switched off from that here (see territories.test.ts).
+    const keep = TERRITORY.ai.maxTerritories
+    TERRITORY.ai.maxTerritories = [0, 0, 0]
+    try {
+      const t = peaceTerms(s, map, 'r0', 'r4', 80, false, 2)
+      expect(t.puppet).toBe(true)
+      expect(validatePeaceTerms(s, map, t, 'r0', 'r4')).toBeNull()
+    } finally {
+      TERRITORY.ai.maxTerritories = keep
+    }
   })
 
   it('not a tiny nation: a country of little worth is taken, not ruled', () => {

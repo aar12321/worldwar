@@ -29,7 +29,7 @@ export function borderThreat(s: GameState, id: NationId, x: NationId): number {
   t += 0.6 * clamp(totalUnits(forceUnits(s, x)) / mine, 0, 2)
   // Troops massed across the border worry it: it matches a build-up (so build-ups feed on each other).
   if (PRESENCE.on) t += PRESENCE.mirror * clamp(garrisonDivisions(s, x, id) / mine, 0, 1.5)
-  if (isAllied(s, id, x) || s.nations[x]?.overlord === id || s.nations[id]?.overlord === x) t *= 0.1
+  if (isAllied(s, id, x) || s.nations[x]?.overlord === id || s.nations[id]?.overlord === x || s.nations[x]?.territoryOf === id || s.nations[id]?.territoryOf === x) t *= 0.1
   else if (hasPact(s, id, x)) t *= 0.4
   return t
 }

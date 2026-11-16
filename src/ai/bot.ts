@@ -38,6 +38,7 @@ import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from 
 import { coalitionActive, opinionOf } from './opinion'
 import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
 import { factionBotOrders } from './factions'
+import { territoryOrders, wantsTerritory } from './territories'
 
 export const BOT = {
   firstWarTurn: 3,
@@ -151,6 +152,12 @@ const SURPLUS: Record<TradeResource, number> = { capital: 80, food: 40, tp: 60, 
 type Agenda = 'agency' | 'peace' | 'allies' | 'research' | 'economy' | 'military' | 'trade' | 'diplomacy' | 'war' | 'crisis'
 
 export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer = false, context?: TurnContext): Order[] {
+  // A territory's army answers to its master: a bot master gives the orders its territory's bot plans.
+  if (s.nations[nationId]?.territoryOf) return territoryOrders(s, nationId, () => botOrders(s, map, nationId, allowPlayer, context))
+  return botOrders(s, map, nationId, allowPlayer, context)
+}
+
+function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer: boolean, context?: TurnContext): Order[] {
   const n = s.nations[nationId]
   if (!n?.alive || (n.isPlayer && !allowPlayer)) return []
   const ctx = context ?? buildTurnContext(s, map)
@@ -685,6 +692,7 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
 /** What a bot asks for at the peace table: land if it is winning, a white peace or payment if it is losing. */
 export function peaceTerms(s: GameState, map: WorldMap, me: NationId, enemy: NationId, net: number, desperate: boolean, skill = 0): PeaceTerms {
   // The strongest tier prefers a tributary to a ruin when it is winning big.
+  if (wantsTerritory(s, map, me, enemy, net, skill as 0 | 1 | 2)) return { cede: [], reparations: 0, territory: true }
   if (wantsPuppet(s, map, me, enemy, net, skill as 0 | 1 | 2)) return { cede: [], reparations: 0, puppet: true }
   if (net >= 12) {
     let budget = Math.floor(net * 0.85)

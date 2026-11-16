@@ -26,7 +26,7 @@ import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { annexPuppet, applyDeals, breakPact, cancelDeal, declareWar, expireDiplomacy, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
+import { annexPuppet, applyDeals, breakPact, cancelDeal, declareWar, expireDiplomacy, forceDeal, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
 import { addToSector, cleanInvestments, makeInvestment } from './business'
 import { applyEconomy, computeEconomy, nationWorkforce } from './economy'
 import { BANKING } from '../data/banking'
@@ -66,6 +66,7 @@ import { fadeWarScore } from './warscore'
 import { applyGovern, describePatch } from './puppets'
 import { applyRelate, runRelations } from './relations'
 import { describeRelate } from './relationsView'
+import { annexTerritory, commanded, releaseTerritory, runTerritoryMonth } from './territories'
 
 /** A project's name, whether it is a nation's or a country's. */
 const projectName = (id: string) => (isLocalProject(id) ? LOCAL[id].name : PROJECTS[id as keyof typeof PROJECTS].name)
@@ -267,6 +268,14 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     }
     case 'relate':
       return describeRelate(s, map, o)
+    case 'commandTerritory':
+      return `Command ${nation(o.territory)}: ${o.order ? describeOrder(s, map, o.order) : 'an order'}`
+    case 'forceTrade':
+      return `Force ${nation(o.territory)} into a trade deal with ${nation(o.partner)}`
+    case 'releaseTerritory':
+      return `Set ${nation(o.target)} free`
+    case 'annexTerritory':
+      return `Annex ${nation(o.target)}`
     case 'factionFound':
       return `Found the faction ${o.name}`
     case 'factionJoin':
@@ -309,11 +318,11 @@ const PHASES: Order['type'][][] = [
   ['factionContribute', 'factionWithdraw'],
   ['factionPropose'],
   ['factionVote'],
-  ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose', 'resolution'],
+  ['declareWar', 'buildCase', 'annexPuppet', 'annexTerritory', 'forceTrade', 'crisisAction', 'propose', 'resolution'],
   ['relate'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy', 'sellShares', 'buyShares'],
-  ['issueBonds', 'repayDebt', 'printMoney', 'wealthFund', 'setStateOwned', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
+  ['issueBonds', 'repayDebt', 'printMoney', 'wealthFund', 'setStateOwned', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet', 'releaseTerritory'],
   ['research', 'researchProgram', 'build', 'startProject', 'pauseProject', 'rushProject', 'setRegionalCapital', 'fundAcademy', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['fundAgency', 'fundSystem'],
@@ -356,14 +365,16 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
 
   for (const phase of PHASES) {
     for (const o of all) {
-      if (!phase.includes(o.type)) continue
+      // An order given to a territory is carried out as the territory's own, in the phase of the order it carries.
+      const act = commanded(o)
+      if (!phase.includes(act.type)) continue
       const err = validateOrder(s, map, o)
       if (err) {
         if (s.nations[o.nationId].isPlayer) addLog(s, 'info', `Order failed: ${safeDescribe(s, map, o)} (${err}).`, [o.nationId])
         continue
       }
-      const n = s.nations[o.nationId]
-      const cost = orderCost(s, o)
+      const n = s.nations[act.nationId]
+      const cost = orderCost(s, act)
       n.resources.capital -= cost.capital
       n.resources.pp -= cost.pp
       n.militaryPool -= cost.manpower
@@ -371,11 +382,11 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
       // A plan sent over the network is not trusted: one with nonsense in it costs its sender the order, not everyone the month.
       if (s.humans?.includes(o.nationId)) {
         try {
-          executeOrder(s, map, o, rng)
+          executeOrder(s, map, act, rng)
         } catch (e) {
           addLog(s, 'info', `Order failed: ${safeDescribe(s, map, o)} (it makes no sense: ${e instanceof Error ? e.message : 'unknown error'}).`, [o.nationId])
         }
-      } else executeOrder(s, map, o, rng)
+      } else executeOrder(s, map, act, rng)
     }
   }
 
@@ -389,13 +400,15 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
 
   // Each nation's one attack for the turn. The AI goes in a seeded order.
   const marching = isLive(s)
-  for (const o of all) {
+  for (const given of all) {
+    const o = commanded(given)
     if (o.type !== 'attack') continue
     if (marching) {
+      if (given !== o && validateOrder(s, map, given)) continue
       attacks.push(o)
       continue
     }
-    if (validateOrder(s, map, o)) continue
+    if (validateOrder(s, map, given)) continue
     resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles, undefined, o.share, o.units)
   }
   // The pooled armies of factions at war attack as one.
@@ -433,6 +446,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runFactionMonth(s)
   runRelations(s, map, rng)
   runPolitics(s, map, rng)
+  runTerritoryMonth(s, map)
   runEpidemics(s, map, nationNeighborMap(s, map), doctors)
   runDeployment(s, map)
   runPresence(s, map, gross)
@@ -473,9 +487,11 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
  * Mutates `s`; the caller passes a copy. An attack also returns its battle report.
  */
 /** `pending` are month-end orders already queued: their costs are held back from what this order may spend. */
-export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Order[] = []): { error: string | null; battle?: BattleReport; army?: Army } {
-  const err = validateOrder(s, map, o, pending)
+export function applyOrderNow(s: GameState, map: WorldMap, given: Order, pending: Order[] = []): { error: string | null; battle?: BattleReport; army?: Army } {
+  const err = validateOrder(s, map, given, pending)
   if (err) return { error: err }
+  // An order given to a territory is paid for and carried out as the territory's.
+  const o = commanded(given)
   const n = s.nations[o.nationId]
   const cost = orderCost(s, o)
   n.resources.capital -= cost.capital
@@ -665,6 +681,15 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'governPuppet':
       applyGovern(s, map, o)
+      break
+    case 'forceTrade':
+      forceDeal(s, map, o.territory, o.partner, o.terms, rng)
+      break
+    case 'releaseTerritory':
+      releaseTerritory(s, o.nationId, o.target)
+      break
+    case 'annexTerritory':
+      annexTerritory(s, map, o.nationId, o.target)
       break
     case 'crisisAction':
       answerCrisis(s, o.nationId, o.crisisId, o.action)

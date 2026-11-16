@@ -386,7 +386,7 @@ export function validateShow(s: GameState, map: WorldMap, o: Show, pending: Orde
   const t = o.target ? s.nations[o.target] : undefined
   if (!o.target || !t?.alive || o.target === o.nationId) return 'Choose a neighboring nation to show force to'
   if (!neighborsOf(s, map, o.nationId).some((x) => x.id === o.target)) return `${t.name} is not your neighbor`
-  if (isAllied(s, o.nationId, o.target) || t.overlord === o.nationId || n.overlord === o.target) return `${t.name} is a friend`
+  if (isAllied(s, o.nationId, o.target) || t.overlord === o.nationId || n.overlord === o.target || t.territoryOf === o.nationId || n.territoryOf === o.target) return `${t.name} is a friend`
   if (atWar(s, o.nationId, o.target)) return 'You are already at war with them'
   const last = rec?.showAt?.[o.target]
   if (last !== undefined && s.turn - last < PRESENCE.show.cooldown) return `You showed force to ${t.name} recently. Again in ${PRESENCE.show.cooldown - (s.turn - last)} months.`

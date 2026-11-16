@@ -5,7 +5,7 @@ import { DEFAULT_CHARTER, FACTION, FACTION_WORDS, POOL_NAMES } from '../data/fac
 import { COSTS, UNIT_SPECS } from '../data/unitTypes'
 import { JUSTIFY, REACH } from '../data/war'
 import { declareWar } from './diplomacy'
-import { addLog, atWar, distanceKm, emptyUnits, enemiesOf, hasCasusBelli, hasPact, isAllied, maxWars, newId, regionsOf, totalUnits } from './helpers'
+import { addLog, atWar, distanceKm, emptyUnits, enemiesOf, hasCasusBelli, hasPact, isAllied, maxWars, newId, regionsOf, territoriesOf, totalUnits } from './helpers'
 import { militaryPower } from './militaryStats'
 import type { Rng } from './rng'
 import { marketPrices } from './trade'
@@ -54,6 +54,9 @@ const newLedger = (turn: number): FactionLedger => ({ stock: emptyStock(), units
 
 export const factionOf = (s: Pick<GameState, 'factions'>, id: NationId): Faction | null => s.factions?.find((f) => f.members.includes(id)) ?? null
 export const sameFaction = (s: Pick<GameState, 'factions'>, a: NationId, b: NationId) => !!s.factions?.length && a !== b && !!s.factions.find((f) => f.members.includes(a) && f.members.includes(b))
+/** Seats a faction has used: territories sit in their master's faction without taking one. */
+export const seatsUsed = (s: Pick<GameState, 'nations'>, f: Faction): number => f.members.filter((m) => !s.nations[m]?.territoryOf).length
+
 export const factionById = (s: Pick<GameState, 'factions'>, id: string): Faction | null => s.factions?.find((f) => f.id === id) ?? null
 
 // ---- the pool, the ledger and the shares ----
@@ -82,19 +85,21 @@ export function claimValue(f: Faction, id: NationId): number {
 }
 
 /** Each member's ownership share, from 0 to 1. With nothing in the pool the members own it equally. */
-export function sharesOf(f: Faction): Record<NationId, number> {
+export function sharesOf(f: Faction, s?: Pick<GameState, 'nations'>): Record<NationId, number> {
   const out: Record<NationId, number> = {}
-  const values = f.members.map((m) => [m, claimValue(f, m)] as const)
+  // A territory has no say and no claim of its own: its master speaks for it.
+  const voters = f.members.filter((m) => !s?.nations[m]?.territoryOf)
+  const values = f.members.map((m) => [m, voters.includes(m) ? claimValue(f, m) : 0] as const)
   const total = values.reduce((a, [, v]) => a + v, 0)
-  for (const [m, v] of values) out[m] = total > EPS ? v / total : 1 / Math.max(1, f.members.length)
+  for (const [m, v] of values) out[m] = !voters.includes(m) ? 0 : total > EPS ? v / total : 1 / Math.max(1, voters.length)
   return out
 }
 
 /** Votes: a member's share under a weighted charter, one each otherwise. */
-export function voteWeights(f: Faction): Record<NationId, number> {
-  if (f.charter.vote === 'weighted') return sharesOf(f)
+export function voteWeights(f: Faction, s?: Pick<GameState, 'nations'>): Record<NationId, number> {
+  if (f.charter.vote === 'weighted') return sharesOf(f, s)
   const out: Record<NationId, number> = {}
-  for (const m of f.members) out[m] = 1
+  for (const m of f.members) out[m] = s?.nations[m]?.territoryOf ? 0 : 1
   return out
 }
 
@@ -199,6 +204,7 @@ function cannotFight(s: GameState, m: NationId, target: NationId): string | null
   if (!n?.alive || !t?.alive || m === target) return 'Not a nation'
   if (n.overlord) return 'a puppet'
   if (t.overlord === m) return 'their overlord'
+  if (t.territoryOf === m) return 'their master'
   if (isAllied(s, m, target)) return 'allied with them'
   if (hasPact(s, m, target)) return 'under a pact with them'
   return null
@@ -261,7 +267,7 @@ export function warTargetProblem(s: GameState, map: WorldMap, f: Faction, by: Na
   if (f.members.includes(target)) return 'They are in the faction'
   if (f.wars.some((w) => w.target === target)) return 'The faction is already fighting them'
   if (f.proposals.some((p) => p.kind === 'war' && p.target === target) || pending.some((p) => p.type === 'factionPropose' && p.nationId !== by && p.proposal.kind === 'war' && p.proposal.target === target && factionOf(s, p.nationId)?.id === f.id)) return 'The faction is already voting on them'
-  if (f.members.some((m) => t.overlord === m)) return 'They are a puppet of a member'
+  if (f.members.some((m) => t.overlord === m || t.territoryOf === m)) return 'They are a puppet or territory of a member'
   if (f.members.every((m) => atWar(s, m, target))) return 'Every member is already at war with them'
   const can = ableToJoin(s, f, target)
   const already = f.members.filter((m) => atWar(s, m, target))
@@ -325,7 +331,7 @@ export function factionProblem(s: GameState, map: WorldMap, o: FactionOrder, pen
       if (!f) return 'No such faction'
       if (n.overlord) return 'A puppet cannot join a faction'
       if (!f.invites.some((i) => i.nation === o.nationId && i.expires >= s.turn)) return 'You have not been invited'
-      if (f.members.length >= FACTION.maxMembers) return 'The faction is full'
+      if (seatsUsed(s, f) >= FACTION.maxMembers) return 'The faction is full'
       if (atWarWithAny(s, o.nationId, f)) return 'You are at war with a member'
       if (pending.some((p) => p.type === 'factionJoin')) return 'Already queued'
       return null
@@ -337,7 +343,8 @@ export function factionProblem(s: GameState, map: WorldMap, o: FactionOrder, pen
       const theirs = factionOf(s, o.target)
       if (theirs) return `${t.name} is already in a faction (${theirs.id === mine.id ? 'yours' : theirs.name})`
       if (t.overlord) return `${t.name} is a puppet`
-      if (mine.members.length >= FACTION.maxMembers) return 'The faction is full'
+      if (t.territoryOf) return `${t.name} is a territory of ${nm(s, t.territoryOf)} and sits in its faction`
+      if (seatsUsed(s, mine) >= FACTION.maxMembers) return 'The faction is full'
       const foe = mine.members.find((m) => atWar(s, o.target, m))
       if (foe) return `${t.name} is at war with a member (${nm(s, foe)})`
       if (mine.invites.some((i) => i.nation === o.target && i.expires >= s.turn) || pending.some((p) => p.type === 'factionInvite' && p.target === o.target)) return 'Already invited'
@@ -350,7 +357,7 @@ export function factionProblem(s: GameState, map: WorldMap, o: FactionOrder, pen
       if (n.overlord) return 'A puppet cannot join a faction'
       const f = factionById(s, o.factionId)
       if (!f) return 'No such faction'
-      if (f.members.length >= FACTION.maxMembers) return `${f.name} is full`
+      if (seatsUsed(s, f) >= FACTION.maxMembers) return `${f.name} is full`
       const foe = f.members.find((m) => atWar(s, o.nationId, m))
       if (foe) return `You are at war with ${nm(s, foe)}, a member of ${f.name}`
       if (f.invites.some((i) => i.nation === o.nationId && i.expires >= s.turn)) return `${f.name} has already invited you: join it`
@@ -360,6 +367,7 @@ export function factionProblem(s: GameState, map: WorldMap, o: FactionOrder, pen
     }
     case 'factionLeave': {
       if (!mine) return 'You are not in a faction'
+      if (territoriesOf(s, o.nationId).some((q) => mine.members.includes(q))) return 'Your territories sit in this faction and must stay in yours. Release them first.'
       if (pending.some((p) => p.type === 'factionLeave')) return 'Already queued'
       return null
     }
@@ -470,23 +478,7 @@ export function executeFactionOrder(s: GameState, map: WorldMap, o: FactionOrder
   const n = s.nations[o.nationId]
   switch (o.type) {
     case 'factionFound': {
-      const f: Faction = {
-        id: newId(s, 'F'),
-        name: pickName(o.name),
-        founder: o.nationId,
-        founded: s.turn,
-        charter: { ...DEFAULT_CHARTER, ...(o.charter ?? {}) },
-        members: [o.nationId],
-        pool: { stock: emptyStock(), units: emptyUnits() },
-        ledger: { [o.nationId]: newLedger(s.turn) },
-        proposals: [],
-        contracts: [],
-        invites: [],
-        wars: [],
-        history: [],
-      }
-      ;(s.factions ??= []).push(f)
-      say(s, f, `${n.name} founded ${f.name}.`)
+      found(s, o.nationId, pickName(o.name), o.charter)
       break
     }
     case 'factionJoin': {
@@ -500,7 +492,7 @@ export function executeFactionOrder(s: GameState, map: WorldMap, o: FactionOrder
       const f = factionOf(s, o.nationId)!
       const t = s.nations[o.target]
       // It asked to come in, and a member now says yes: it is in.
-      if (f.requests?.some((r) => r.nation === o.target && r.expires >= s.turn) && !factionOf(s, o.target) && f.members.length < FACTION.maxMembers) {
+      if (f.requests?.some((r) => r.nation === o.target && r.expires >= s.turn) && !factionOf(s, o.target) && seatsUsed(s, f) < FACTION.maxMembers) {
         join(s, f, o.target)
         tell(s, 'accepted', o.target, o.nationId, `${t.name} is now in ${f.name}: ${n.name} took its request.`)
         break
@@ -589,7 +581,7 @@ export function executeFactionOrder(s: GameState, map: WorldMap, o: FactionOrder
         created: s.turn,
         expires: s.turn + FACTION.voteMonths,
         votes: { [o.nationId]: 'yes' },
-        ...(f.charter.vote === 'weighted' ? { weights: sharesOf(f) } : {}),
+        ...(f.charter.vote === 'weighted' ? { weights: sharesOf(f, s) } : {}),
         ...(d.kind === 'war' ? { target: d.target } : { terms: d.terms }),
       }
       f.proposals.push(p)
@@ -605,6 +597,47 @@ export function executeFactionOrder(s: GameState, map: WorldMap, o: FactionOrder
   }
 }
 
+/** Founds a faction with `founder` as its only member. */
+function found(s: GameState, founder: NationId, name: string, charter?: Partial<FactionCharter>): Faction {
+  const f: Faction = {
+    id: newId(s, 'F'),
+    name,
+    founder,
+    founded: s.turn,
+    charter: { ...DEFAULT_CHARTER, ...(charter ?? {}) },
+    members: [founder],
+    pool: { stock: emptyStock(), units: emptyUnits() },
+    ledger: { [founder]: newLedger(s.turn) },
+    proposals: [],
+    contracts: [],
+    invites: [],
+    wars: [],
+    history: [],
+  }
+  ;(s.factions ??= []).push(f)
+  say(s, f, `${nm(s, founder)} founded ${f.name}.`)
+  return f
+}
+
+/**
+ * A territory sits in its master's faction: the master's faction is founded if it has none (default charter), the territory leaves any other
+ * faction first, and it takes no seat. It cannot leave afterwards (see `factionProblem` and `ownOrderProblem`).
+ */
+export function adoptTerritory(s: GameState, master: NationId, id: NationId) {
+  const old = factionOf(s, id)
+  let f = factionOf(s, master)
+  if (old && old.id === f?.id) return
+  if (old) leave(s, old, id, 'released')
+  f = factionOf(s, master) ?? found(s, master, newFactionName(s, master))
+  join(s, f, id)
+}
+
+/** A territory is let go: it leaves its master's faction. */
+export function dismissTerritory(s: GameState, id: NationId) {
+  const f = factionOf(s, id)
+  if (f) leave(s, f, id, 'released')
+}
+
 function join(s: GameState, f: Faction, id: NationId) {
   f.members.push(id)
   f.ledger[id] = newLedger(s.turn)
@@ -614,7 +647,7 @@ function join(s: GameState, f: Faction, id: NationId) {
 }
 
 /** A member goes. Under a refunding charter it takes back what is left of its claim, less a fee; soldiers do not leave in the middle of a war. */
-export function leave(s: GameState, f: Faction, id: NationId, how: 'left' | 'fell') {
+export function leave(s: GameState, f: Faction, id: NationId, how: 'left' | 'fell' | 'released') {
   const n = s.nations[id]
   const l = f.ledger[id]
   const last = f.members.length === 1
@@ -655,7 +688,7 @@ export function leave(s: GameState, f: Faction, id: NationId, how: 'left' | 'fel
   for (const p of f.proposals) delete p.votes[id]
   for (const w of f.wars) if (w.lead === id) w.lead = bestLead(s, f.members.filter((m) => atWar(s, m, w.target))) ?? f.members[0]
   const took = giftStock(got).length > 0 || giftUnits(got).length > 0
-  const text = how === 'fell' ? `${nm(s, id)} fell and is no longer in ${f.name}.` : `${nm(s, id)} left ${f.name}${took ? `, taking back ${describeGift(got)}` : ''}.`
+  const text = how === 'released' ? `${nm(s, id)} is no longer in ${f.name}: it is free of its master.` : how === 'fell' ? `${nm(s, id)} fell and is no longer in ${f.name}.` : `${nm(s, id)} left ${f.name}${took ? `, taking back ${describeGift(got)}` : ''}.`
   if (f.members.length === 0) {
     s.factions = (s.factions ?? []).filter((x) => x.id !== f.id)
     if (!s.factions.length) delete s.factions
@@ -663,7 +696,7 @@ export function leave(s: GameState, f: Faction, id: NationId, how: 'left' | 'fel
     return
   }
   if (f.founder === id) {
-    const sh = sharesOf(f)
+    const sh = sharesOf(f, s)
     f.founder = [...f.members].sort((a, b) => sh[b] - sh[a] || (a < b ? -1 : 1))[0]
   }
   if (how === 'left') {
@@ -687,12 +720,14 @@ export interface Tally {
 
 /** The count of a proposal, and what would happen to it at the end of the month. */
 export function tallyOf(s: GameState, f: Faction, p: FactionProposal): Tally {
-  const w = f.charter.vote === 'weighted' && p.weights ? p.weights : voteWeights(f)
+  const w = f.charter.vote === 'weighted' && p.weights ? p.weights : voteWeights(f, s)
   let yes = 0
   let no = 0
   let total = 0
   const waiting: NationId[] = []
   for (const m of f.members) {
+    // A territory does not vote: it is counted with its master.
+    if (s.nations[m]?.territoryOf) continue
     total += w[m] ?? 0
     const v = p.votes[m]
     if (v === 'yes') yes += w[m] ?? 0
@@ -929,7 +964,7 @@ export function fightFactionArmy(s: GameState, map: WorldMap, army: Army, rng: R
   const spoils = Math.max(0, lead.resources.capital - moneyBefore)
   if (spoils > 1e-9) {
     lead.resources.capital -= spoils
-    const sh = sharesOf(f)
+    const sh = sharesOf(f, s)
     for (const m of f.members) if (s.nations[m]?.alive) s.nations[m].resources.capital += spoils * sh[m]
   }
   if (taken.length) shareOutLand(s, map, f, war, taken)
@@ -938,7 +973,7 @@ export function fightFactionArmy(s: GameState, map: WorldMap, army: Army, rng: R
 
 /** Hands each captured country to a member: by ownership share (the member furthest behind its share gets the next), or to the proposer by charter. */
 function shareOutLand(s: GameState, map: WorldMap, f: Faction, war: FactionWar, regions: RegionId[]) {
-  const sh = sharesOf(f)
+  const sh = sharesOf(f, s)
   for (const id of [...regions].sort()) {
     let owner: NationId
     if (f.charter.spoils === 'proposer' && s.nations[war.proposer]?.alive && f.members.includes(war.proposer)) owner = war.proposer
@@ -1040,7 +1075,7 @@ function runUpkeep(s: GameState, f: Faction) {
   const shortfall = need - fromPool
   let owed = shortfall
   if (shortfall > EPS) {
-    const sh = sharesOf(f)
+    const sh = sharesOf(f, s)
     for (const m of [...f.members].sort()) {
       const n = s.nations[m]
       if (!n?.alive) continue

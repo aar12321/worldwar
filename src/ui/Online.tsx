@@ -1,11 +1,12 @@
 import { motion } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DIFFICULTY } from '../data/difficulty'
+import { dayDate } from '../engine/calendar'
 import { turnDate } from '../engine/helpers'
 import type { Difficulty } from '../engine/types'
 import { conquestGoal, economicGoal } from '../engine/victory'
 import { getWorld } from '../map/world'
-import { MAX_PLAYERS, type RoomSettings } from '../net/protocol'
+import { MAX_PLAYERS, isLiveRoom, type ClockControl, type LiveSpeed, type RoomSettings } from '../net/protocol'
 import { deleteOnlineSave, listOnlineSaves } from '../net/saves'
 import { supabaseConfigured } from '../net/transport'
 import { rememberedName, useGame } from '../store'
@@ -29,6 +30,20 @@ function goalText(s: RoomSettings): string {
   if (g === 'world') return 'Hold every country in the world, yours or puppets of yours. The longest game.'
   return `First to take ${conquestGoal(s.victoryShare)} countries, or hold ${Math.round(s.victoryShare * 100)}% of the world's people, or ${Math.round(economicGoal(s.victoryShare) * 100)}% of its output.`
 }
+
+const MODES: { value: 'live' | 'turns'; label: string }[] = [
+  { value: 'live', label: 'Live' },
+  { value: 'turns', label: 'Turns' },
+]
+const SPEEDS: { value: LiveSpeed; label: string }[] = [
+  { value: 1, label: '1×' },
+  { value: 2, label: '2×' },
+  { value: 4, label: '4×' },
+]
+const CONTROLS: { value: ClockControl; label: string }[] = [
+  { value: 'host', label: 'Host only' },
+  { value: 'vote', label: 'Players vote' },
+]
 
 const TIMERS: { value: RoomSettings['timer']; label: string }[] = [
   { value: 0, label: 'No timer' },
@@ -70,7 +85,7 @@ export function OnlineEntry({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="Play with friends" kicker="Two to four players. Everyone plans the same month, then presses Ready." onClose={onClose} footer={<button className="btn px-5 py-2.5 text-[15px]" onClick={onClose}>Back</button>}>
+    <Modal title="Play with friends" kicker="Two to four players. Play live on one shared clock, or by turns." onClose={onClose} footer={<button className="btn px-5 py-2.5 text-[15px]" onClick={onClose}>Back</button>}>
       <div className="space-y-5">
         <label className="block">
           <span className="label">Your name</span>
@@ -87,7 +102,7 @@ export function OnlineEntry({ onClose }: { onClose: () => void }) {
               <div key={sv.code} className="rounded-xl bg-white/5 p-3 space-y-2">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="text-[16px] font-semibold tracking-[0.16em]">{sv.code}</span>
-                  <span className="text-[12px] text-white/65">{turnDate(sv.turn)} · saved {new Date(sv.savedAt).toLocaleDateString()}</span>
+                  <span className="text-[12px] text-white/65">{sv.live ? `Live · ${dayDate(sv.turn, sv.day ?? 0)}` : turnDate(sv.turn)} · saved {new Date(sv.savedAt).toLocaleDateString()}</span>
                 </div>
                 <div className="text-[12px] text-white/65">Open it as:</div>
                 <div className="flex flex-wrap gap-1.5">
@@ -122,7 +137,7 @@ export function OnlineEntry({ onClose }: { onClose: () => void }) {
           <button
             className="btn btn-primary w-full py-2.5 text-[15px]"
             disabled={!ready || busy}
-            onClick={() => void run(() => create(name, { difficulty: 'normal', victoryShare: 0.4, goal: 'world', timer: 0, seed: Math.floor(Math.random() * 1e6) }))}
+            onClick={() => void run(() => create(name, { difficulty: 'normal', victoryShare: 0.4, goal: 'world', timer: 0, seed: Math.floor(Math.random() * 1e6), mode: 'live', liveSpeed: 1, liveControl: 'host' }))}
           >
             Create a room
           </button>
@@ -253,6 +268,15 @@ export function Lobby() {
           {online.code}
         </button>
         <p className="lobby-sub text-[14px] text-white/70">Share this code with up to {MAX_PLAYERS - 1} friends.</p>
+        <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-white/8 px-3 py-1 text-[12px] font-semibold tracking-[0.1em]" data-testid="lobby-mode">
+          {isLiveRoom(lobby.settings) ? (
+            <>
+              <span className="inline-block w-2 h-2 rounded-full bg-[#ff453a]" aria-hidden="true" /> LIVE · {lobby.settings.liveSpeed ?? 1}× · {(lobby.settings.liveControl ?? 'host') === 'host' ? 'host sets the clock' : 'players vote on the clock'}
+            </>
+          ) : (
+            'TURNS'
+          )}
+        </p>
       </motion.div>
 
       <motion.div initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="lobby-list glass pointer-events-auto absolute left-6 top-40 bottom-6 w-[380px] rounded-[22px] flex flex-col overflow-hidden">
@@ -314,6 +338,13 @@ export function Lobby() {
           <div className="text-[17px] font-semibold tracking-tight">Rules</div>
           <div className="text-[12px] text-white/65">{isHost ? 'You set these' : 'The host sets these'}</div>
         </div>
+        <SettingRow<'live' | 'turns'> label="How the game runs" value={isLiveRoom(settings) ? 'live' : 'turns'} disabled={!isHost} options={MODES} onChange={(mode) => change({ mode })} />
+        {isLiveRoom(settings) && (
+          <>
+            <SettingRow<LiveSpeed> label="Clock speed at the start" value={settings.liveSpeed ?? 1} disabled={!isHost} options={SPEEDS} onChange={(liveSpeed) => change({ liveSpeed })} />
+            <SettingRow<ClockControl> label="Who can pause the clock" value={settings.liveControl ?? 'host'} disabled={!isHost} options={CONTROLS} onChange={(liveControl) => change({ liveControl })} />
+          </>
+        )}
         <SettingRow<Difficulty>
           label="Rival nations"
           value={settings.difficulty}
@@ -321,7 +352,7 @@ export function Lobby() {
           options={(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => ({ value: d, label: DIFFICULTY[d].name }))}
           onChange={(difficulty) => change({ difficulty })}
         />
-        <SettingRow<number> label="Time to plan each month" value={settings.timer} disabled={!isHost} options={TIMERS} onChange={(timer) => change({ timer: timer as RoomSettings['timer'] })} />
+        {!isLiveRoom(settings) && <SettingRow<number> label="Time to plan each month" value={settings.timer} disabled={!isHost} options={TIMERS} onChange={(timer) => change({ timer: timer as RoomSettings['timer'] })} />}
         <SettingRow<Goal>
           label="How to win"
           value={goalOf(settings)}
@@ -330,7 +361,11 @@ export function Lobby() {
           onChange={(g) => change(g === 'world' ? { goal: 'world' } : { goal: 'classic', victoryShare: GOAL_SHARE[g] })}
         />
         <p className="rounded-xl bg-white/5 px-3 py-2 text-[13px] text-white/80">{goalText(settings)} A player whose nation falls can keep watching.</p>
-        <p className="text-[13px] text-white/65 leading-snug">Everyone plans at once. The month moves on when every player is Ready, or when the timer ends. Nations nobody picks are run by the AI.</p>
+        <p className="text-[13px] text-white/65 leading-snug">
+          {isLiveRoom(settings)
+            ? 'Time flows for everyone at once. Armies march, missiles fly, and your orders reach the host as you give them. The clock starts when the host presses Play. Nations nobody picks are run by the AI, and so is yours if you go away.'
+            : 'Everyone plans at once. The month moves on when every player is Ready, or when the timer ends. Nations nobody picks are run by the AI.'}
+        </p>
         <div className="flex gap-2">
           <button className="btn flex-1 py-3" onClick={leave}>
             Leave
@@ -468,7 +503,7 @@ export function OnlinePeople() {
                       {p.clientId === online.lobby!.host && <span className="ml-1 text-[11px] font-semibold text-[#64a8ff]">Host</span>}
                       <span className="text-white/65"> · {nation?.name}</span>
                     </span>
-                    <span className="text-[12px] shrink-0 text-white/70">{out ? 'Out' : !here ? 'Away (AI plays)' : done ? 'Ready' : 'Planning'}</span>
+                    <span className="text-[12px] shrink-0 text-white/70">{out ? 'Out' : !here ? 'Away (AI plays)' : online.lobby!.settings.mode === 'live' ? 'Playing' : done ? 'Ready' : 'Planning'}</span>
                     {online.host && p.clientId !== online.clientId && (
                       <button
                         className="btn btn-quiet text-[12px] shrink-0 px-2.5 py-1"

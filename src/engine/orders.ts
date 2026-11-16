@@ -45,9 +45,11 @@ import { unitsProblem } from './deploy'
 import { validateSetBorder } from './borders'
 import { annexFactor, governCost, governProblem, lockedByMaster } from './puppets'
 import { inPlanTogether, relationCost, relationProblem } from './relations'
+import { annexTerritoryCost, commandProblem, forceTradeProblem, ownOrderProblem } from './territories'
+import { TERRITORY } from '../data/territories'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'operation', 'domestic', 'strike', 'raid', 'nuke', 'eventChoice', ...FACTION_ORDERS])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'forceTrade', 'releaseTerritory', 'annexTerritory', 'operation', 'domestic', 'strike', 'raid', 'nuke', 'eventChoice', ...FACTION_ORDERS])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
 const LIVE_NOW = new Set<Order['type']>(['strike', 'raid', 'nuke', 'respond', 'propose'])
@@ -56,7 +58,9 @@ const LIVE_NOW = new Set<Order['type']>(['strike', 'raid', 'nuke', 'respond', 'p
  * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, an answer to an offer
  * counts at once, and an offer reaches a rival at once and is answered the same day, so peace can turn armies back before they arrive.
  */
-export function isMonthEndOrder(s: Pick<GameState, 'settings'>, type: Order['type']): boolean {
+export function isMonthEndOrder(s: Pick<GameState, 'settings'>, type: Order['type'], o?: Order): boolean {
+  // An order given to a territory waits or not as the order it carries does.
+  if (type === 'commandTerritory' && o?.type === 'commandTerritory' && o.order && typeof o.order.type === 'string') return isMonthEndOrder(s, o.order.type)
   if (isLive(s) && LIVE_NOW.has(type)) return false
   return MONTH_END_ORDERS.has(type)
 }
@@ -68,6 +72,7 @@ export function isMonthEndOrder(s: Pick<GameState, 'settings'>, type: Order['typ
  * A live attack is only an army that has not yet marched; everything else is plain bookkeeping and can be undone.
  */
 export function undoable(s: Pick<GameState, 'settings'>, o: Order): boolean {
+  if (o.type === 'commandTerritory' && o.order && typeof o.order === 'object') return undoable(s, o.order)
   switch (o.type) {
     case 'nuke':
     case 'strike':
@@ -85,6 +90,9 @@ export function undoable(s: Pick<GameState, 'settings'>, o: Order): boolean {
       return true
   }
 }
+
+/** The kind of order that is really meant: what a command to a territory carries, or the order's own kind. */
+export const innerType = (o: Order): Order['type'] => (o.type === 'commandTerritory' && o.order && typeof o.order.type === 'string' ? o.order.type : o.type)
 
 /** Influence to annex a puppet: more for a bigger one, half for a devoted one and half as much again for a restive one. */
 export function annexCost(s: GameState, target: string): number {
@@ -196,6 +204,9 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     case 'annexPuppet':
       c.pp = annexCost(s, o.target)
+      break
+    case 'annexTerritory':
+      c.pp = annexTerritoryCost(s, o.target)
       break
     case 'governPuppet': {
       const k = governCost(s, o)
@@ -397,6 +408,9 @@ function validateOrderChecked(s: GameState, map: WorldMap, o: Order, pending: Or
 
 function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
+  // A territory's military, wars, diplomacy and faction are its master's to give orders for.
+  const own = ownOrderProblem(s, o)
+  if (own) return own
   if (isFactionOrder(o)) return factionProblem(s, map, o, pending)
   switch (o.type) {
     case 'relate':
@@ -617,6 +631,21 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return null
     case 'governPuppet':
       return governProblem(s, o, pending)
+    case 'commandTerritory':
+      return commandProblem(s, o, pending, validateOrder, map)
+    case 'forceTrade':
+      return forceTradeProblem(s, o, pending)
+    case 'releaseTerritory':
+      return s.nations[o.target]?.alive && s.nations[o.target].territoryOf === o.nationId ? null : 'They are not your territory'
+    case 'annexTerritory': {
+      const t = s.nations[o.target]
+      if (!t?.alive || t.territoryOf !== o.nationId) return 'They are not your territory'
+      const served = s.turn - (s.territories?.[o.target]?.since ?? 0)
+      if (served < TERRITORY.annexMonths) return `A territory must serve ${TERRITORY.annexMonths} months first (${TERRITORY.annexMonths - served} to go)`
+      if (atWar(s, o.target, o.nationId)) return 'They are at war with you'
+      if (pending.some((p) => p.type === 'annexTerritory' && p.target === o.target)) return 'Already ordered'
+      return null
+    }
     case 'annexPuppet': {
       const t = s.nations[o.target]
       if (!t?.alive || t.overlord !== o.nationId) return 'They are not your puppet'
@@ -637,6 +666,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (isAllied(s, o.nationId, o.target)) return 'You are allied'
       if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
       if (t.overlord === o.nationId) return 'They are your puppet'
+      if (t.territoryOf === o.nationId || n.territoryOf === o.target) return 'They are your territory or your master'
       if ((s.cases ?? []).some((c) => c.holder === o.nationId && c.target === o.target) || pending.some((p) => p.type === 'buildCase' && p.target === o.target)) return 'You are already building a case against them'
       return null
     }
@@ -646,6 +676,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (atWar(s, o.nationId, o.target)) return 'Already at war'
       if (n.overlord) return `As ${s.nations[n.overlord]?.name ?? 'your overlord'}'s puppet you cannot declare war`
       if (t.overlord === o.nationId) return 'They are your puppet. Set them free first.'
+      if (t.territoryOf === o.nationId) return 'They are your territory. Release them first.'
+      if (n.territoryOf === o.target) return 'They are your master'
       if (isAllied(s, o.nationId, o.target)) return 'You are allied'
       if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
       if (sameFaction(s, o.nationId, o.target)) return 'You are in the same faction. Leave it first.'

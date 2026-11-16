@@ -21,6 +21,8 @@ import { INVEST, SECTORS, SECTOR_IDS } from '../data/business'
 import { TRADE_RESOURCES } from '../engine/types'
 import { LIBERATE_TEXT } from '../data/puppets'
 import { liberablePuppets } from '../engine/puppets'
+import { TERRITORY, TERRITORY_TEXT } from '../data/territories'
+import { annexTerritoryCost, territoryProblem, territoryValue } from '../engine/territories'
 import { WarPicture } from './WarPicture'
 import { MAX_REPARATIONS, liberateValue, netWarScore, puppetValue, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
 import { getWorld } from '../map/world'
@@ -294,13 +296,15 @@ function PeaceComposer({ target }: { target: NationId }) {
   const [cede, setCede] = useState<RegionId[]>([])
   const [reparations, setReparations] = useState(0)
   const [puppet, setPuppet] = useState(false)
+  const [territory, setTerritory] = useState(false)
   const [general, setGeneral] = useState(false)
   const [free, setFree] = useState<NationId | ''>('')
   const ties = generalPeaceTies(game, player.id, target)
   const freeable = liberablePuppets(game, player.id, target)
   const hasPuppets = puppetsOf(game, target).length > 0
+  const territoryWhy = territoryProblem(game, player.id, target)
   const live = cede.filter((id) => game.regions[id] && (game.regions[id].owner === target || game.regions[id].owner === player.id))
-  const terms = { cede: live, reparations, ...(puppet ? { puppet: true } : {}), ...(free && freeable.includes(free) ? { liberate: free } : {}), ...(general && ties.length ? { general: true } : {}) }
+  const terms = { cede: live, reparations: territory ? Math.min(0, reparations) : reparations, ...(puppet ? { puppet: true } : {}), ...(territory ? { territory: true } : {}), ...(free && freeable.includes(free) ? { liberate: free } : {}), ...(general && ties.length ? { general: true } : {}) }
   const net = netWarScore(game, player.id, target)
   const budget = Math.max(0, net)
   const { demand, concession } = termsCost(game, map, terms, player.id, target)
@@ -338,11 +342,22 @@ function PeaceComposer({ target }: { target: NationId }) {
       </div>
       {!game.nations[target].overlord && !player.overlord && (
         <label className="flex items-start gap-2 text-[14px]">
-          <input type="checkbox" className="mt-1" checked={puppet} onChange={(e) => setPuppet(e.target.checked)} />
+          <input type="checkbox" className="mt-1" checked={puppet} onChange={(e) => { setPuppet(e.target.checked); if (e.target.checked) setTerritory(false) }} />
           <span>
             Make them a puppet state
             <span className="block text-[12px] text-white/65">
               They keep their land but pay you {Math.round(DIPLOMACY.puppet.tribute * 100)}% of their income and cannot declare war. It costs {puppetValue(game, map, target)} war score, and they may break free if they grow strong or restless.
+            </span>
+          </span>
+        </label>
+      )}
+      {!game.nations[target].overlord && !game.nations[target].territoryOf && !player.overlord && !player.territoryOf && (
+        <label className={`flex items-start gap-2 text-[14px] ${territoryWhy ? 'opacity-60' : ''}`} data-testid="territory-term">
+          <input type="checkbox" className="mt-1" checked={territory && !territoryWhy} disabled={!!territoryWhy} onChange={(e) => { setTerritory(e.target.checked); if (e.target.checked) { setPuppet(false); setFree('') } }} />
+          <span>
+            {TERRITORY_TEXT.term}
+            <span className="block text-[12px] text-white/65">
+              {territoryWhy ? territoryWhy : `${TERRITORY_TEXT.hint} It costs ${territoryValue(game, map, target)} war score (a puppet would cost ${puppetValue(game, map, target)}).`}
             </span>
           </span>
         </label>
@@ -377,7 +392,7 @@ function PeaceComposer({ target }: { target: NationId }) {
       )}
       <OrderButton
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
-        label={live.length === 0 && reparations === 0 && !puppet && !terms.liberate && !terms.general ? 'Offer peace with no terms' : 'Send terms'}
+        label={live.length === 0 && reparations === 0 && !puppet && !territory && !terms.liberate && !terms.general ? 'Offer peace with no terms' : 'Send terms'}
         cost={`${PROPOSAL_COSTS.peace} influence`}
         effect={human ? `${human} sees it when the next month begins` : 'They answer when the month ends'}
         tone="btn-primary"
@@ -476,7 +491,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const inFaction = factionChip(game, id, player.id)
   const callable = allied ? enemiesOf(game, player.id).filter((e) => !atWar(game, id, e) && !isAllied(game, id, e) && !hasPact(game, id, e)) : []
   const sanctionedByMe = game.sanctions.some((x) => x.from === player.id && x.to === id && x.until >= game.turn)
-  const status = n.overlord ? `Puppet of ${game.nations[n.overlord]?.name ?? 'someone'}${n.overlord === player.id && n.loyalty !== undefined ? ` · loyalty ${Math.round(n.loyalty)}` : ''}` : war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
+  const status = n.territoryOf ? `Territory of ${game.nations[n.territoryOf]?.name ?? 'someone'}${n.territoryOf === player.id ? ' · yours' : ''}` : n.overlord ? `Puppet of ${game.nations[n.overlord]?.name ?? 'someone'}${n.overlord === player.id && n.loyalty !== undefined ? ` · loyalty ${Math.round(n.loyalty)}` : ''}` : war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
   const statusColor = war ? 'text-[#ff8a84]' : allied ? 'text-[#64d2ff]' : pact ? 'text-[#6eeb8a]' : 'text-white/70'
   const toggle = (m: 'trade' | 'peace' | 'money') => setMode((cur) => (cur === m ? 'none' : m))
   return (
@@ -505,6 +520,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           </span>
         )}
         {bloc && <span className="chip chip-blue">{bloc.name}</span>}
+        {n.territoryOf && <span className="chip chip-blue" title={`Held for ever by ${game.nations[n.territoryOf]?.name}: ${Math.round(TERRITORY.cut * 100)}% of its revenue goes to its master, it fights in every war and sits in its master's faction.`}>Territory of {game.nations[n.territoryOf]?.name}</span>}
         {inFaction && <span className={`chip ${inFaction.tone === 'good' ? 'chip-green' : ''}`} title="Their faction">{inFaction.text}</span>}
         <span>
           {regionsOf(game, id).length === 1 ? '1 country' : `${regionsOf(game, id).length} countries`} · strength {showPower(seen)} ({power > ctx.myPower ? 'stronger than you' : 'weaker than you'})
@@ -543,6 +559,9 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
                 effect={cb ? `Reason: ${justificationOf(game, player.id, id)?.reason}. Then attack from the War Room.` : 'No reason to fight: costs stability and the world will distrust you. Build a case first.'}
                 tone="btn-red"
               />
+            )}
+            {n.territoryOf === player.id && (
+              <OrderButton order={{ type: 'annexTerritory', nationId: player.id, target: id }} label="Annex" cost={`${annexTerritoryCost(game, id)} influence`} effect={`Its land, army and treasury join yours. A territory must serve ${TERRITORY.annexMonths} months first.`} />
             )}
             {n.overlord === player.id && (
               <OrderButton order={{ type: 'annexPuppet', nationId: player.id, target: id }} label="Annex" cost={`${annexCost(game, id)} influence`} effect={`Its land, army and treasury join yours. A puppet must serve ${EMPIRE.annexMonths} months first.`} />
@@ -599,6 +618,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
               />
             )
           )}
+          {n.territoryOf === player.id && <OrderButton order={{ type: 'releaseTerritory', nationId: player.id, target: id }} label="Release" effect="It leaves your faction and keeps all it earns" />}
           {n.overlord === player.id && <OrderButton order={{ type: 'releasePuppet', nationId: player.id, target: id }} label="Set free" effect="They stop paying tribute and will thank you" />}
         </div>
       )}

@@ -9,6 +9,12 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:fast": "VITEST_SET=fast vitest run",
+    "test:changed": "vitest run --changed",
+    "test:golden": "VITEST_SET=golden vitest run",
+    "test:sims": "VITEST_SET=sims vitest run",
+    "test:times": "node scripts/test-times.mjs",
+    "check": "tsc -b && npm run lint && npm run test:fast",
     "typecheck": "tsc -b"
   },
   "dependencies": {

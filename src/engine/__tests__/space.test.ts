@@ -246,7 +246,7 @@ describe('missions: phases, rolls and rewards', () => {
     const all = new Set<string>()
     for (let seed = 1; seed <= 8; seed++) all.add(outcome(seed))
     expect(all.size).toBeGreaterThan(1)
-  }, 60_000)
+  })
 
   it('failures lose the rocket and payload, cost standing, and a crewed failure kills astronauts', () => {
     // Find seeds that fail at the launch pad and on arrival, among many.
@@ -280,7 +280,7 @@ describe('missions: phases, rolls and rewards', () => {
     // A whole crew is lost on arrival; half the crew on the pad.
     expect(sp(arriveFail!).astronauts).toBe(6 - MISSIONS.lunar_landing.crew)
     expect(sp(launchFail!).astronauts).toBe(6 - Math.ceil(MISSIONS.lunar_landing.crew * SPACE.launchCrewLoss))
-  }, 60_000)
+  })
 
   it('missions are gated by what came before and by experience', () => {
     const s = world()
@@ -689,14 +689,14 @@ describe('outposts and mining: a long investment', () => {
     const base = breakEven('asteroids', 'metals', ['isru'], 220)
     expect(base).toBeGreaterThan(84)
     expect(base).toBeLessThan(200)
-  }, 60_000)
+  })
 
   it('discoveries shorten the payback, but never to a quick profit', () => {
     const base = breakEven('asteroids', 'metals', ['isru'], 220)
     const lab = breakEven('asteroids', 'metals', ['isru', 'asteroid_metallurgy', 'propellant', 'automation', 'life_support', 'closed_loop'], 220)
     expect(lab).toBeLessThan(base)
     expect(lab).toBeGreaterThan(48)
-  }, 60_000)
+  })
 })
 
 describe('the AI runs a space program inside its means', () => {
@@ -791,7 +791,7 @@ describe('turn and live months are the same month, space included', () => {
     expect(live.nations.r0.space).toEqual(turn.nations.r0.space)
     expect(live.nations.r0.resources).toEqual(turn.nations.r0.resources)
     expect(live.space).toEqual(turn.space)
-  }, 60_000)
+  })
 })
 
 describe('the advisor and the screen read the same state', () => {

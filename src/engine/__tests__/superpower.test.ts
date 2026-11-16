@@ -475,7 +475,7 @@ describe('the threat a leading nation poses', () => {
     }
     expect(pressures[3]).toBeLessThanOrEqual(THREAT.maxPressure)
     expect(pressures[0]).toBeLessThan(0.15)
-  }, 60_000)
+  })
 
   it('grows with the share of the world and with a reputation for aggression, and has a level name', () => {
     const calm = threatOf(leaderWorld(10, 'hard', 0), map, 'germany')
@@ -501,7 +501,7 @@ describe('the threat a leading nation poses', () => {
     expect(t.pressure).toBe(0)
     expect(pressureOf(s, map, 'germany')).toBe(0)
     expect(leadersOf(s, map)).toHaveLength(0)
-  }, 60_000)
+  })
 
   it('Medium and Hard feel it, scaled by tier, and the panel says what each does', () => {
     for (const d of ['normal', 'hard'] as const) {
@@ -511,7 +511,7 @@ describe('the threat a leading nation poses', () => {
       expect(view.stance).toBe(d === 'hard' ? 'coordinated' : 'defensive')
     }
     expect(worldReaction(leaderWorld(25, 'easy'), map, 'germany').stance).toBe('none')
-  }, 60_000)
+  })
 })
 
 describe('rivals partnering against a leader, within their difficulty', () => {

@@ -7,6 +7,7 @@ import { incomingMissiles } from '../engine/missiles'
 import { liveHold, useGame, type Hold } from '../store'
 import { liveClock } from './liveClock'
 import { incomingSalvos, incomingText } from './missileText'
+import { OnlineLiveControls } from './OnlineLive'
 
 /** The short reason, for the button itself. */
 const HOLD_SHORT: Record<Hold, string> = {
@@ -93,8 +94,13 @@ function LiveStatus() {
   )
 }
 
-/** The live game's clock: play and pause, how fast, and what is holding it. Replaces Next turn. */
+/** The live game's clock: play and pause, how fast, and what is holding it. Replaces Next turn. With friends online it is the room's shared clock instead. */
 export function LiveControls() {
+  const withFriends = useGame((s) => s.online?.status === 'playing')
+  return withFriends ? <OnlineLiveControls /> : <SoloLiveControls />
+}
+
+function SoloLiveControls() {
   const running = useGame((s) => s.running)
   const speed = useGame((s) => s.settings.liveSpeed)
   const hold = useGame((s) => liveHold(s))

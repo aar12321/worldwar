@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { LIVE } from '../data/live'
 import { clockOf, isLive } from '../engine/calendar'
-import { liveHold, useGame } from '../store'
+import { liveHold, onlineDayFraction, useGame } from '../store'
 
 type Listener = (t: number) => void
 
@@ -55,6 +55,24 @@ export function useLiveClock(active: boolean) {
         }
         const game = st.game
         if (game) liveClock.set(clockOf(game) + Math.min(0.999, acc / LIVE.msPerDay), Math.min(0.999, acc / LIVE.msPerDay))
+      }
+      raf = requestAnimationFrame(frame)
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [active])
+}
+
+/** The clock of a live game with friends. The host's session moves the days; this only draws the time between them. */
+export function useOnlineClock(active: boolean) {
+  useEffect(() => {
+    if (!active) return
+    let raf = 0
+    const frame = () => {
+      const game = useGame.getState().game
+      if (game && isLive(game)) {
+        const f = Math.min(0.999, Math.max(0, onlineDayFraction()))
+        liveClock.set(clockOf(game) + f, f)
       }
       raf = requestAnimationFrame(frame)
     }

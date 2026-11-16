@@ -16,7 +16,7 @@ import { useFx } from './ui/globeBridge'
 import { Help } from './ui/Help'
 import { HUD } from './ui/HUD'
 import { MissileAlert } from './ui/MissileAlert'
-import { useLiveClock } from './ui/liveClock'
+import { useLiveClock, useOnlineClock } from './ui/liveClock'
 import { MapModes } from './ui/MapModes'
 import { Setup } from './ui/Setup'
 import { belongsToControl, mapModeForKey, stepIndex } from './ui/shortcuts'
@@ -165,11 +165,13 @@ export default function App() {
   const online = useGame((s) => !!s.online)
   const panel = useGame((s) => s.panel)
   const live = useGame((s) => !!s.game && isLive(s.game) && !s.online)
+  const liveOnline = useGame((s) => !!s.game && isLive(s.game) && s.online?.status === 'playing')
   const aircraftOpen = useGame((s) => s.aircraftOpen)
   useShortcuts()
   usePrefsEffects()
   useFlushOnExit()
   useLiveClock(live)
+  useOnlineClock(liveOnline)
   const reduced = useGame((s) => s.settings.reducedMotion)
 
   return (
