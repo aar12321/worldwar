@@ -1027,6 +1027,10 @@ export interface GameState {
   pendingDay?: number
   /** Live mode only: how the player's nation stood when the month began, and its battles since. It travels with the game, so a month's report is right across a save and a load. The screen keeps it; the clock does not touch it. */
   monthStart?: MonthMark
+  /** Live games played by several people online: each human's orders that wait for the 1st of the next month, in the order the host took them. */
+  liveOrders?: Record<NationId, Order[]>
+  /** Live games played by several people online: the human nations the AI plays right now because their players are away. */
+  liveAi?: NationId[]
 }
 
 /** The numbers the monthly report compares: how the player's nation stood at one moment. */

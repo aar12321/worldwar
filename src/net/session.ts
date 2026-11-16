@@ -1,8 +1,13 @@
 import { generateAllBotOrders, generateBotOrders } from '../ai/bot'
 import { createInitialState } from '../data/startingNations'
+import { LIVE } from '../data/live'
+import { clockOf } from '../engine/calendar'
+import type { LiveStep } from '../engine/live'
 import { resolveTurn } from '../engine/resolveTurn'
 import type { GameState, NationId, Order, WorldMap } from '../engine/types'
-import { decodeState, encodeState, MAX_PLAYERS, type ChatMessage, type ClientId, type Lobby, type NetMessage, type OpenSeat, type RoomSettings } from './protocol'
+import { liveFingerprint } from './fingerprint'
+import { applyCommand, checkCommand, humanOrder, stepRoomDay, votesNeeded } from './liveRoom'
+import { decodeState, encodeState, isLiveRoom, MAX_PLAYERS, type ChatMessage, type ClientId, type ClockRequest, type ClockView, type Lobby, type NetMessage, type OpenSeat, type RoomSettings, type StreamItem } from './protocol'
 import type { Transport, TransportStatus } from './transport'
 
 /** Heartbeats keep everyone's list of who is here. A player not heard from in this long is treated as gone. */
@@ -39,6 +44,18 @@ export interface SessionEvents {
   onKicked?(): void
   /** The host sent the room back to the lobby for another game. */
   onRematch?(): void
+  /** Live rooms: a day passed on this screen. `step.state` is this screen's copy of the game after it. */
+  onDay?(prev: GameState, step: LiveStep): void
+  /** Live rooms: an order was taken into the game (anyone's). */
+  onOrder?(e: OrderEvent): void
+  /** Live rooms: the host answered one of this screen's orders. */
+  onAck?(cid: number, ok: boolean, reason: string | undefined, order: Order): void
+  /** Live rooms: the shared clock changed. */
+  onClock?(clock: ClockView): void
+  /** Live rooms: the connection to the shared game changed (lag, a hidden host, a resync). */
+  onLive?(status: LiveStatus): void
+  /** Live rooms, host only: a friend asked for a clock change the rules leave to the host. */
+  onClockRequest?(name: string, req: ClockRequest): void
 }
 
 export interface SessionOptions {
@@ -52,14 +69,53 @@ export interface SessionOptions {
   autoTick?: boolean
 }
 
-/** A seeded shuffle of the humans, so nobody gains from sending orders a moment sooner. */
-export function humanOrder(seed: number, turn: number, ids: NationId[]): NationId[] {
-  const key = (id: NationId) => {
-    let h = 2166136261 ^ seed ^ Math.imul(turn, 2654435761)
-    for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619)
-    return h >>> 0
-  }
-  return [...ids].sort((a, b) => key(a) - key(b) || (a < b ? -1 : 1))
+export { humanOrder }
+
+/** Live rooms. A day's worth of the clock is never lost, but the host catches up at most this many days in one go, so a sleeping tab wakes up without lurching. */
+export const MAX_DAYS_PER_TICK = 12
+/** The most game time the host's clock holds in reserve while its timers are slow (a hidden tab). */
+export const MAX_BACKLOG_DAYS = 60
+/** A host that was away this long (the computer slept) stops the clock instead of racing to catch up. */
+export const ASLEEP_MS = 10 * 60_000
+/** The host checks the game against everyone's every this many days. */
+export const CHECK_EVERY_DAYS = 10
+/** A guest that misses a message waits this long for it before asking for the whole game. */
+export const GAP_MS = 1500
+/** An order the host has not answered is sent again after this long, and given up on after the second. */
+export const CMD_RESEND_MS = 2500
+export const CMD_GIVE_UP_MS = 25_000
+/** A proposal to pause or change speed lapses after this long without enough votes. */
+export const VOTE_MS = 20_000
+/** Host orders wait for at most this long, so they do not beat a friend's order sent at the same moment by more than the line allows. */
+const MAX_SELF_DELAY_MS = 250
+const RESULTS_KEPT = 200
+
+/** What a live screen can say about its connection to the shared game. */
+export interface LiveStatus {
+  /** The host's tab is in the background: its clock may run in bursts. */
+  hostHidden: boolean
+  /** Nothing heard from the host for a while. */
+  hostAway: boolean
+  /** How long a message takes to the host and back, in ms. Null until measured. For the host, the slowest friend's. */
+  rttMs: number | null
+  /** False while this screen waits for the host's game after a gap or a mismatch. */
+  inSync: boolean
+  /** Times this screen found itself out of step with the host and fetched the game again. */
+  resyncs: number
+  /** Orders this screen sent that the host has not answered yet. */
+  pending: number
+}
+
+/** One order as it happened, for the screen to say so. */
+export interface OrderEvent {
+  by: ClientId
+  nation: NationId
+  order: Order
+  /** True for this screen's own order. */
+  own: boolean
+  /** The game after it. */
+  state: GameState
+  queued: boolean
 }
 
 interface Plan {
@@ -114,6 +170,36 @@ export class OnlineSession {
   private offline = false
   closed = false
 
+  // ---- live rooms ----
+  /** The shared clock as the host last set it. On a guest, as the host last told it. */
+  clock: ClockView = { running: false, speed: 1, by: '', why: 'start' }
+  /** Host: game time not yet turned into days, in ms. */
+  private acc = 0
+  private clockAt = 0
+  private hostSeq = 0
+  private outbox: StreamItem[] = []
+  private votes = new Map<NationId, { req: ClockRequest; at: number; name: string }>()
+  private results = new Map<ClientId, Map<number, { ok: boolean; reason?: string }>>()
+  private checkedAt = -Infinity
+  private selfQueue: { due: number; cid: number; order: Order }[] = []
+  private rtts = new Map<ClientId, number>()
+  private hidden = false
+  /** Guest: the last stream message applied, or -1 before the game has arrived. */
+  private lastSeq = -1
+  private held = new Map<number, Extract<NetMessage, { t: 'stream' }>>()
+  private gapAt = 0
+  /** Guest: waiting for the host's game, so stream messages are kept, not applied. */
+  private syncing = false
+  private dayAt = 0
+  private nextCid = 1
+  private pendingCmds = new Map<number, { order: Order; at: number; first: number }>()
+  private rtt: number | null = null
+  private hostHidden = false
+  resyncs = 0
+  private liveKey = ''
+  /** Guest: how far through the day the clock stood when it stopped. */
+  private frozen = 0
+
   constructor(opts: SessionOptions) {
     this.clientId = opts.clientId
     this.transport = opts.transport
@@ -123,7 +209,7 @@ export class OnlineSession {
     this.now = opts.now ?? Date.now
     this.transport.onMessage((m) => void this.receive(m))
     this.transport.onStatus((s) => this.connection(s))
-    if (opts.autoTick !== false) this.timer = setInterval(() => this.tick(), 500)
+    if (opts.autoTick !== false) this.timer = setInterval(() => this.tick(), 200)
   }
 
   get isHost() {
@@ -137,6 +223,11 @@ export class OnlineSession {
 
   private get term() {
     return this.lobby?.term ?? 1
+  }
+
+  /** Whether this room plays on the live clock. */
+  get liveRoom(): boolean {
+    return !!this.lobby && isLiveRoom(this.lobby.settings)
   }
 
   private send(msg: NetMessage) {
@@ -159,6 +250,9 @@ export class OnlineSession {
       if (!this.lobby) return
       if (this.isHost) this.broadcastLobby()
       else {
+        // A live game moved on while this screen heard nothing: what it holds is stale, and the host's answer to hello brings the game.
+        if (this.liveRoom && this.lobby.phase === 'playing') this.startSync()
+        for (const p of this.pendingCmds.values()) p.at = -Infinity
         this.send({ t: 'hello', from: this.clientId, name: this.name })
         const plan = this.lastPlan
         if (plan && this.game && plan.turn === this.game.turn) {
@@ -199,6 +293,7 @@ export class OnlineSession {
     this.armTimer()
     this.broadcastLobby()
     this.events.onHost?.(true)
+    if (this.liveRoom) this.beginLive()
     this.events.onStart?.(this.viewOf(game))
     this.emitReady()
     return null
@@ -252,11 +347,13 @@ export class OnlineSession {
     const humans = lobby.players.map((p) => p.nationId)
     if (humans.some((h) => !h)) return 'Everyone needs to pick a nation first'
     const ids = humans as NationId[]
-    const state = createInitialState(this.map, { playerRegionId: ids[0], humans: ids, seed: lobby.settings.seed, victoryShare: lobby.settings.victoryShare, goal: lobby.settings.goal ?? 'world', difficulty: lobby.settings.difficulty, online: true })
+    const live = isLiveRoom(lobby.settings)
+    const state = createInitialState(this.map, { playerRegionId: ids[0], humans: ids, seed: lobby.settings.seed, victoryShare: lobby.settings.victoryShare, goal: lobby.settings.goal ?? 'world', difficulty: lobby.settings.difficulty, online: true, ...(live ? { mode: 'live' as const } : {}) })
     lobby.phase = 'playing'
     this.game = state
     this.plans.clear()
     this.armTimer()
+    if (live) this.beginLive()
     this.broadcastLobby()
     await this.broadcastState()
     this.events.onStart?.(this.viewOf(state))
@@ -272,6 +369,7 @@ export class OnlineSession {
     this.plans.clear()
     this.deadlineAt = null
     this.remainingMs = null
+    this.resetLive()
     // Players who left in the meantime are dropped, and the world is new.
     const players = lobby.players.filter((p) => !p.clientId.startsWith(OPEN_PREFIX))
     this.lobby = { ...lobby, phase: 'lobby', players, settings: { ...lobby.settings, seed: Math.floor((lobby.settings.seed * 16807 + 12345) % 1_000_000) } }
@@ -291,6 +389,7 @@ export class OnlineSession {
     else this.lobby = { ...lobby, players: lobby.players.map((x) => (x === p ? { ...x, clientId: `${OPEN_PREFIX}${x.nationId ?? x.clientId}`, name: `${x.name} (left)` } : x)) }
     this.broadcastLobby()
     this.checkResolve()
+    this.syncAi()
   }
 
   // ---- play ----
@@ -344,6 +443,7 @@ export class OnlineSession {
   }
 
   private emitReady() {
+    if (this.liveRoom) return
     const ready = this.readyNations()
     const remaining = this.deadlineAt === null ? null : Math.max(0, this.deadlineAt - this.now())
     this.remainingMs = remaining
@@ -352,20 +452,20 @@ export class OnlineSession {
   }
 
   private checkResolve() {
-    if (!this.isHost || !this.game || this.game.outcome !== 'playing' || this.resolving) return
+    if (!this.isHost || !this.game || this.game.outcome !== 'playing' || this.resolving || this.liveRoom) return
     const waiting = this.humansHere().filter((h) => this.connected(h.clientId) && !(this.plans.get(h.nationId)?.ready && this.plans.get(h.nationId)?.turn === this.game!.turn))
     if (waiting.length === 0) void this.resolve()
   }
 
   private armTimer() {
-    const seconds = this.lobby?.settings.timer ?? 0
+    const seconds = this.liveRoom ? 0 : (this.lobby?.settings.timer ?? 0)
     this.deadlineAt = seconds > 0 ? this.now() + seconds * 1000 : null
   }
 
   /** Host: plays the month. Anyone who has not sent a plan stays idle, unless they have left, and then the AI plays for them. */
   async resolve() {
     const game = this.game
-    if (!this.isHost || !game || game.outcome !== 'playing' || this.resolving) return
+    if (!this.isHost || !game || game.outcome !== 'playing' || this.resolving || this.liveRoom) return
     this.resolving = true
     try {
       const orders: Order[] = []
@@ -392,16 +492,436 @@ export class OnlineSession {
   private async broadcastState(to?: ClientId) {
     const game = this.game
     if (!game) return
+    // A live game keeps moving while the game is squeezed, so where the host's stream stood is fixed before waiting.
+    const live = this.liveRoom ? { liveSeq: this.hostSeq, clock: this.clockView() } : {}
     const parts = await encodeState(game)
     const id = `${game.turn}-${this.now().toString(36)}-${this.stateSeq++}`
     const remainingMs = this.deadlineAt === null ? null : Math.max(0, this.deadlineAt - this.now())
-    parts.forEach((data, part) => this.send({ t: 'state', from: this.clientId, id, part, parts: parts.length, data, turn: game.turn, remainingMs, hostTerm: this.term, ...(to ? { to } : {}) }))
+    parts.forEach((data, part) => this.send({ t: 'state', from: this.clientId, id, part, parts: parts.length, data, turn: game.turn, remainingMs, hostTerm: this.term, ...(to ? { to } : {}), ...live }))
   }
 
   /** This screen's copy of a game: the same, but `playerId` says whose screen it is. */
   private viewOf(state: GameState): GameState {
     const me = this.me
     return me ? { ...state, playerId: me } : state
+  }
+
+  // ---- live rooms ----
+
+  /** Host: a live game is about to begin (or begin again from a save). The clock starts stopped, so nobody is caught out. */
+  private beginLive() {
+    this.hostSeq = 0
+    this.outbox = []
+    this.acc = 0
+    this.clockAt = this.now()
+    this.votes.clear()
+    this.results.clear()
+    this.selfQueue = []
+    this.checkedAt = -Infinity
+    this.syncing = false
+    this.clock = { running: false, speed: this.lobby?.settings.liveSpeed ?? 1, by: '', why: 'start' }
+  }
+
+  /** Everything a live game keeps about itself, dropped, for a rematch. */
+  private resetLive() {
+    this.lastSeq = -1
+    this.held.clear()
+    this.syncing = false
+    this.pendingCmds.clear()
+    this.outbox = []
+    this.selfQueue = []
+    this.votes.clear()
+    this.results.clear()
+    this.acc = 0
+    this.hostSeq = 0
+    this.clock = { running: false, speed: 1, by: '', why: 'start' }
+  }
+
+  /** Guest: what this screen holds is not to be trusted. Messages from the host are kept until its game arrives. */
+  private startSync() {
+    this.syncing = true
+    this.lastSeq = -1
+    this.gapAt = 0
+    this.askedAt = -Infinity
+  }
+
+  /** This screen found it is out of step with the host: it fetches the game again. */
+  private desync() {
+    if (this.syncing) return
+    this.resyncs++
+    this.startSync()
+    this.catchUp()
+    this.emitLive(true)
+  }
+
+  /** The shared clock as screens show it, with any proposal still short of votes. */
+  clockView(): ClockView {
+    const votes = [...this.votes.values()]
+    const vote = votes.length ? { req: votes[0].req, by: votes.map((v) => v.name), need: votesNeeded(this.hereCount()) } : null
+    return { ...this.clock, vote }
+  }
+
+  /** Players of the game who are here now. */
+  private hereCount(): number {
+    const game = this.game
+    return this.humansHere().filter((h) => this.connected(h.clientId) && !game?.eliminated.includes(h.nationId)).length
+  }
+
+  private push(...items: StreamItem[]) {
+    this.outbox.push(...items)
+  }
+
+  /** Host: sends what happened since the last message, as one message, numbered. */
+  private flush() {
+    if (!this.outbox.length) return
+    const items = this.outbox
+    this.outbox = []
+    this.send({ t: 'stream', from: this.clientId, term: this.term, seq: ++this.hostSeq, items })
+  }
+
+  private pushClock() {
+    const view = this.clockView()
+    this.push({ k: 'clock', clock: view })
+    this.events.onClock?.(view)
+    this.emitLive(true)
+  }
+
+  private setClock(patch: Partial<ClockView>) {
+    this.clock = { ...this.clock, ...patch }
+    this.pushClock()
+    this.flush()
+  }
+
+  // -- orders --
+
+  /**
+   * Sends this player's order to the host, which is the only one that puts it into the game. Returns the order's number, or why it
+   * cannot be sent. The answer arrives in `onAck`; the order itself arrives in the game with the host's next message.
+   */
+  sendCommand(order: Order): { cid: number; error: string | null } {
+    const game = this.game
+    if (!this.liveRoom || !game || !this.me) return { cid: 0, error: 'There is no live game to send that to' }
+    if (order.nationId !== this.me) return { cid: 0, error: 'That order is for another nation' }
+    const bad = checkCommand(game, this.map, order)
+    if (bad) return { cid: 0, error: bad }
+    const cid = this.nextCid++
+    const t = this.now()
+    this.pendingCmds.set(cid, { order, at: t, first: t })
+    if (this.isHost) {
+      const delay = this.selfDelay()
+      if (delay > 0) this.selfQueue.push({ due: t + delay, cid, order })
+      else this.hostCommand(this.clientId, cid, order)
+    } else this.send({ t: 'cmd', from: this.clientId, cid, order })
+    this.emitLive()
+    return { cid, error: null }
+  }
+
+  /** The host lets its own orders wait about as long as the slowest friend's take to arrive, so being the host is not an edge. */
+  private selfDelay(): number {
+    let worst = 0
+    for (const [id, r] of this.rtts) if (this.connected(id)) worst = Math.max(worst, r)
+    return worst >= 60 ? Math.min(MAX_SELF_DELAY_MS, Math.round(worst / 2)) : 0
+  }
+
+  private remember(from: ClientId, cid: number, result: { ok: boolean; reason?: string }) {
+    let mine = this.results.get(from)
+    if (!mine) this.results.set(from, (mine = new Map()))
+    mine.set(cid, result)
+    if (mine.size > RESULTS_KEPT) mine.delete(mine.keys().next().value as number)
+  }
+
+  private ack(to: ClientId, cid: number, ok: boolean, reason?: string) {
+    if (to === this.clientId) this.handleAck(cid, ok, reason)
+    else this.send({ t: 'ack', from: this.clientId, to, cid, ok, ...(reason ? { reason } : {}) })
+  }
+
+  private handleAck(cid: number, ok: boolean, reason?: string) {
+    const p = this.pendingCmds.get(cid)
+    if (!p) return
+    this.pendingCmds.delete(cid)
+    this.events.onAck?.(cid, ok, reason, p.order)
+    this.emitLive()
+  }
+
+  /** Host: one player's order. It is checked against the game as it is now, and taken in or turned down with a reason. */
+  private hostCommand(from: ClientId, cid: number, order: Order) {
+    const game = this.game
+    const lobby = this.lobby
+    if (!this.isHost || !game || !lobby || !this.liveRoom || lobby.phase !== 'playing') return
+    const done = this.results.get(from)?.get(cid)
+    if (done) return this.ack(from, cid, done.ok, done.reason)
+    const p = lobby.players.find((x) => x.clientId === from)
+    let result: { ok: boolean; reason?: string }
+    if (!p?.nationId) result = { ok: false, reason: 'You do not have a nation in this game' }
+    else if (!order || order.nationId !== p.nationId) result = { ok: false, reason: 'That order is for another nation' }
+    else {
+      const r = applyCommand(game, this.map, order)
+      if (r.error) result = { ok: false, reason: r.error }
+      else {
+        this.game = r.state
+        this.push({ k: 'cmd', by: from, cid, order })
+        this.events.onOrder?.({ by: from, nation: p.nationId, order, own: from === this.clientId, state: this.viewOf(r.state), queued: !!r.queued })
+        result = { ok: true }
+      }
+    }
+    this.remember(from, cid, result)
+    this.flush()
+    this.ack(from, cid, result.ok, result.reason)
+  }
+
+  // -- the clock --
+
+  /** Asks to pause, resume or change the speed. The rules of the room decide who gets it. */
+  controlClock(req: ClockRequest) {
+    if (!this.liveRoom || !this.game) return
+    if (this.isHost) this.handleClockRequest(this.clientId, req)
+    else this.send({ t: 'clock-req', from: this.clientId, req })
+  }
+
+  private handleClockRequest(from: ClientId, req: ClockRequest) {
+    const game = this.game
+    const lobby = this.lobby
+    if (!this.isHost || !game || !lobby || !this.liveRoom || game.outcome !== 'playing') return
+    const p = lobby.players.find((x) => x.clientId === from)
+    if (!p?.nationId || !game.humans.includes(p.nationId) || !req) return
+    if (req.kind === 'speed' ? ![1, 2, 4].includes(req.speed) : req.kind !== 'pause' && req.kind !== 'resume') return
+    // Asking for what already is does nothing.
+    if ((req.kind === 'pause' && !this.clock.running) || (req.kind === 'resume' && this.clock.running) || (req.kind === 'speed' && req.speed === this.clock.speed)) return
+    if ((lobby.settings.liveControl ?? 'host') === 'host') {
+      if (from === this.clientId) this.applyClock(req, p.name)
+      else this.events.onClockRequest?.(p.name, req)
+      return
+    }
+    const key = (r: ClockRequest) => (r.kind === 'speed' ? `speed${r.speed}` : r.kind)
+    // A new proposal replaces one that is still open.
+    for (const [id, v] of this.votes) if (key(v.req) !== key(req)) this.votes.delete(id)
+    this.votes.set(p.nationId, { req, at: this.now(), name: p.name })
+    const agreed = [...this.votes.values()].filter((v) => key(v.req) === key(req)).length
+    if (agreed >= votesNeeded(this.hereCount())) this.applyClock(req, [...this.votes.values()].map((v) => v.name).join(' and '))
+    else {
+      this.pushClock()
+      this.flush()
+    }
+  }
+
+  private applyClock(req: ClockRequest, by: string) {
+    this.votes.clear()
+    if (req.kind === 'speed') this.clock = { ...this.clock, speed: req.speed, by }
+    else {
+      // A clock set going counts time from this moment, not from the last time it was looked at.
+      if (req.kind === 'resume') this.clockAt = this.now()
+      this.clock = { running: req.kind === 'resume', speed: this.clock.speed, by }
+    }
+    this.pushClock()
+    this.flush()
+  }
+
+  /** Called by the screen when its tab is hidden or shown. A hidden host's timers slow down, so its friends are told. */
+  setHidden(hidden: boolean) {
+    if (this.hidden === hidden) return
+    this.hidden = hidden
+    this.lastPing = -Infinity
+    if (this.liveRoom && this.lobby && !this.closed) this.tick()
+  }
+
+  /** How far through the current day the shared clock is, from 0 to just under 1. Screens draw armies from this. */
+  dayFraction(): number {
+    if (this.isHost) return Math.min(0.999, this.acc / LIVE.msPerDay)
+    if (!this.clock.running || this.syncing) return this.frozen
+    return Math.min(0.999, ((this.now() - this.dayAt) * this.clock.speed) / LIVE.msPerDay)
+  }
+
+  /** The clock's speed and whether it runs, as the screens show it. */
+  get running() {
+    return this.clock.running
+  }
+
+  // -- the host's clock --
+
+  /** Host: every tick turns the time that has passed into days. A tick that comes late (a hidden tab) turns all the time it missed into days, a few at a time. */
+  private liveTick(t: number) {
+    if (!this.game || this.lobby?.phase !== 'playing') return
+    if (!this.isHost) return this.guestTick(t)
+    const dt = Math.max(0, t - this.clockAt)
+    this.clockAt = t
+    if (this.selfQueue.length) {
+      const due = this.selfQueue.filter((q) => q.due <= t)
+      this.selfQueue = this.selfQueue.filter((q) => q.due > t)
+      for (const q of due) this.hostCommand(this.clientId, q.cid, q.order)
+    }
+    if (this.votes.size && [...this.votes.values()].every((v) => t - v.at > VOTE_MS)) {
+      this.votes.clear()
+      this.pushClock()
+      this.flush()
+    }
+    this.syncAi()
+    const game = this.game!
+    if (game.outcome !== 'playing') {
+      if (this.clock.running) this.setClock({ running: false, why: 'over' })
+      return
+    }
+    if (!this.clock.running) return this.emitLive()
+    if (dt > ASLEEP_MS) {
+      this.setClock({ running: false, why: 'asleep', by: 'the host' })
+      return
+    }
+    this.acc = Math.min(this.acc + dt * this.clock.speed, LIVE.msPerDay * MAX_BACKLOG_DAYS)
+    let n = 0
+    while (this.acc >= LIVE.msPerDay && n < MAX_DAYS_PER_TICK) {
+      this.acc -= LIVE.msPerDay
+      n++
+    }
+    if (n) this.hostDays(n)
+    this.emitLive()
+  }
+
+  /** Host: plays `n` days, and tells everyone. */
+  private hostDays(n: number) {
+    let stepped = 0
+    let monthEnded = false
+    for (let i = 0; i < n; i++) {
+      const prev = this.game
+      if (!prev || prev.outcome !== 'playing') break
+      const step = stepRoomDay(prev, this.map)
+      this.game = step.state
+      stepped++
+      monthEnded ||= step.monthEnded
+      this.events.onDay?.(this.viewOf(prev), { ...step, state: this.viewOf(step.state) })
+    }
+    if (!stepped || !this.game) return
+    this.push({ k: 'day', n: stepped })
+    const at = clockOf(this.game)
+    if (monthEnded || at - this.checkedAt >= CHECK_EVERY_DAYS) {
+      this.checkedAt = at
+      this.push({ k: 'fp', at, fp: liveFingerprint(this.game) })
+    }
+    this.flush()
+    if (this.game.outcome !== 'playing') this.setClock({ running: false, why: 'over' })
+  }
+
+  /** Host: the nations whose players are away are played by the AI from the next month's turn. */
+  private syncAi() {
+    const game = this.game
+    const lobby = this.lobby
+    if (!this.isHost || !game || !lobby || !this.liveRoom || lobby.phase !== 'playing') return
+    const ids = lobby.players
+      .filter((p): p is typeof p & { nationId: NationId } => !!p.nationId && game.humans.includes(p.nationId) && !game.eliminated.includes(p.nationId) && !this.connected(p.clientId))
+      .map((p) => p.nationId)
+      .sort()
+    if (ids.join(',') === (game.liveAi ?? []).join(',')) return
+    this.game = { ...game, liveAi: ids }
+    this.push({ k: 'ai', ids })
+    this.flush()
+  }
+
+  // -- the guest's side --
+
+  private guestTick(t: number) {
+    if (this.syncing) this.catchUp()
+    else if (this.held.size && this.gapAt && t - this.gapAt > GAP_MS) this.desync()
+    for (const [cid, p] of this.pendingCmds) {
+      if (t - p.first > CMD_GIVE_UP_MS) {
+        this.pendingCmds.delete(cid)
+        this.events.onAck?.(cid, false, 'The host did not answer. Check the connection.', p.order)
+      } else if (t - p.at >= CMD_RESEND_MS) {
+        p.at = t
+        this.send({ t: 'cmd', from: this.clientId, cid, order: p.order })
+      }
+    }
+    this.emitLive()
+  }
+
+  private handleStream(msg: Extract<NetMessage, { t: 'stream' }>) {
+    if (this.isHost || !this.lobby || !this.liveRoom || msg.from !== this.lobby.host || msg.term !== this.term) return
+    if (!this.syncing && this.lastSeq >= 0 && msg.seq <= this.lastSeq) return
+    this.held.set(msg.seq, msg)
+    // A game that has not arrived yet, or is being fetched again, only collects.
+    if (this.syncing || this.lastSeq < 0) {
+      if (this.held.size > 600) this.held.delete(Math.min(...this.held.keys()))
+      return
+    }
+    this.drain()
+  }
+
+  /** Applies the host's messages in order, as far as they are all here. A hole waits a moment for the missing one. */
+  private drain() {
+    while (!this.syncing && this.lastSeq >= 0) {
+      for (const k of this.held.keys()) if (k <= this.lastSeq) this.held.delete(k)
+      const next = this.held.get(this.lastSeq + 1)
+      if (!next) break
+      this.held.delete(next.seq)
+      this.lastSeq = next.seq
+      this.dayAt = this.now()
+      for (const item of next.items) {
+        this.applyItem(item)
+        if (this.syncing) return
+      }
+    }
+    this.gapAt = this.held.size ? this.gapAt || this.now() : 0
+  }
+
+  private applyItem(item: StreamItem) {
+    const game = this.game
+    if (!game) return
+    switch (item.k) {
+      case 'day':
+        for (let i = 0; i < item.n; i++) {
+          const prev = this.game
+          if (!prev || prev.outcome !== 'playing') break
+          const step = stepRoomDay(prev, this.map)
+          this.game = step.state
+          this.events.onDay?.(this.viewOf(prev), { ...step, state: this.viewOf(step.state) })
+        }
+        return
+      case 'cmd': {
+        const r = applyCommand(game, this.map, item.order)
+        // The host took an order this screen cannot: the two games have already parted.
+        if (r.error) return this.desync()
+        this.game = r.state
+        this.remember(item.by, item.cid, { ok: true })
+        this.events.onOrder?.({ by: item.by, nation: item.order.nationId, order: item.order, own: item.by === this.clientId, state: this.viewOf(r.state), queued: !!r.queued })
+        return
+      }
+      case 'clock':
+        if (this.clock.running && !item.clock.running) this.frozen = this.dayFraction()
+        this.clock = { running: item.clock.running, speed: item.clock.speed, by: item.clock.by, ...(item.clock.why ? { why: item.clock.why } : {}), vote: item.clock.vote ?? null }
+        this.dayAt = this.now()
+        this.events.onClock?.(this.clock)
+        this.emitLive(true)
+        return
+      case 'ai':
+        this.game = { ...game, liveAi: item.ids }
+        return
+      case 'fp':
+        if (clockOf(game) === item.at && liveFingerprint(game) !== item.fp) this.desync()
+    }
+  }
+
+  // -- how the line is doing --
+
+  /** What the screen shows about the connection to the shared game. */
+  liveStatus(): LiveStatus {
+    const t = this.now()
+    const seen = this.lobby ? this.seen.get(this.lobby.host) : undefined
+    let worst: number | null = null
+    if (this.isHost) for (const [id, r] of this.rtts) if (this.connected(id)) worst = Math.max(worst ?? 0, r)
+    return {
+      hostHidden: !this.isHost && this.hostHidden,
+      hostAway: !this.isHost && seen !== undefined && t - seen > 6000,
+      rttMs: this.isHost ? worst : this.rtt === null ? null : Math.round(this.rtt),
+      inSync: this.isHost || (!this.syncing && this.lastSeq >= 0),
+      resyncs: this.resyncs,
+      pending: this.pendingCmds.size,
+    }
+  }
+
+  private emitLive(force = false) {
+    if (!this.events.onLive) return
+    const s = this.liveStatus()
+    const key = `${s.hostHidden}|${s.hostAway}|${s.rttMs === null ? '' : Math.round(s.rttMs / 20)}|${s.inSync}|${s.resyncs}|${s.pending}`
+    if (key === this.liveKey && !force) return
+    this.liveKey = key
+    this.events.onLive(s)
   }
 
   // ---- messages ----
@@ -429,6 +949,11 @@ export class OnlineSession {
     switch (msg.t) {
       case 'ping':
         this.names.set(msg.from, msg.name)
+        if (msg.from === this.lobby?.host) this.hostHidden = !!msg.hidden
+        if (this.isHost && msg.ts !== undefined) {
+          this.send({ t: 'pong', from: this.clientId, to: msg.from, ts: msg.ts })
+          if (msg.rtt !== undefined) this.rtts.set(msg.from, msg.rtt)
+        }
         return this.checkRival(msg.host, msg.term)
       case 'hello':
         return this.handleHello(msg.from, msg.name)
@@ -473,6 +998,20 @@ export class OnlineSession {
       case 'take-seat':
         if (this.isHost) this.handleTakeSeat(msg.from, msg.name, msg.nationId)
         return
+      case 'stream':
+        return this.handleStream(msg)
+      case 'cmd':
+        if (this.isHost) this.hostCommand(msg.from, msg.cid, msg.order)
+        return
+      case 'ack':
+        if (msg.to === this.clientId) this.handleAck(msg.cid, msg.ok, msg.reason)
+        return
+      case 'clock-req':
+        if (this.isHost) this.handleClockRequest(msg.from, msg.req)
+        return
+      case 'pong':
+        if (msg.to === this.clientId) this.rtt = this.rtt === null ? this.now() - msg.ts : this.rtt * 0.7 + (this.now() - msg.ts) * 0.3
+        return
     }
   }
 
@@ -496,6 +1035,7 @@ export class OnlineSession {
     if (wasPlaying && next.phase === 'lobby') {
       this.game = null
       this.plans.clear()
+      this.resetLive()
       this.events.onRematch?.()
     }
     this.events.onLobby?.(next)
@@ -508,7 +1048,11 @@ export class OnlineSession {
     if (this.isHost) {
       this.plans.clear()
       this.deadlineAt = null
+      this.outbox = []
+      this.selfQueue = []
     }
+    // The new host's game is the one to follow: nothing of the old host's stream counts any more.
+    if (this.liveRoom && this.lobby?.phase === 'playing') this.startSync()
     this.requestState()
   }
 
@@ -555,6 +1099,7 @@ export class OnlineSession {
     this.broadcastLobby()
     // Someone coming back to a running game gets the game, and where the month stands.
     if (lobby.phase === 'playing') {
+      this.syncAi()
       void this.broadcastState(from)
       this.emitReady()
     }
@@ -589,6 +1134,7 @@ export class OnlineSession {
     seat.name = name
     this.seen.set(from, this.now())
     this.broadcastLobby()
+    this.syncAi()
     void this.broadcastState(from)
     this.emitReady()
   }
@@ -618,8 +1164,10 @@ export class OnlineSession {
     this.pieces.set(msg.id, entry)
     if (entry.parts.filter(Boolean).length < msg.parts) return
     this.pieces.delete(msg.id)
+    const live = msg.liveSeq !== undefined
     // A newer copy has arrived while this one was assembling.
-    if (this.game && msg.turn < this.game.turn) return
+    if (!live && this.game && msg.turn < this.game.turn) return
+    if (live && !this.syncing && this.lastSeq >= 0 && msg.liveSeq! <= this.lastSeq) return
     let state: GameState
     try {
       state = await decodeState(entry.parts)
@@ -628,6 +1176,21 @@ export class OnlineSession {
       return
     }
     const prev = this.game
+    if (live) {
+      // The game took a while to unpack: a newer one may have been adopted meanwhile.
+      if (!this.syncing && this.lastSeq >= 0 && msg.liveSeq! <= this.lastSeq) return
+      this.game = state
+      this.lastSeq = msg.liveSeq!
+      this.syncing = false
+      this.gapAt = 0
+      this.dayAt = this.now()
+      if (msg.clock) this.clock = msg.clock
+      this.drain()
+      this.events.onStart?.(this.viewOf(this.game!))
+      this.events.onClock?.(this.clock)
+      this.emitLive(true)
+      return
+    }
     this.game = state
     this.remainingMs = msg.remainingMs
     if (prev && prev.turn < state.turn) {
@@ -649,9 +1212,10 @@ export class OnlineSession {
     this.events.onLobby?.(this.lobby)
     this.events.onHost?.(this.isHost)
     this.events.onResubmit?.()
+    for (const p of this.pendingCmds.values()) p.at = -Infinity
   }
 
-  /** Called every half second: heartbeats, the month timer, and taking over when the host disappears. */
+  /** Called every 200 ms: heartbeats, the month timer, and taking over when the host disappears. */
   tick() {
     if (this.closed) return
     const t = this.now()
@@ -659,7 +1223,7 @@ export class OnlineSession {
     this.lastTick = t
     if (t - this.lastPing >= PING_MS) {
       this.lastPing = t
-      this.send({ t: 'ping', from: this.clientId, name: this.name, host: this.lobby?.host ?? null, term: this.term })
+      this.send({ t: 'ping', from: this.clientId, name: this.name, host: this.lobby?.host ?? null, term: this.term, ...(this.liveRoom ? { ts: t, ...(this.rtt !== null ? { rtt: Math.round(this.rtt) } : {}), hidden: this.hidden } : {}) })
     }
     const here = [...this.seen.keys()].filter((id) => this.connected(id)).sort()
     const key = here.join(',')
@@ -671,7 +1235,10 @@ export class OnlineSession {
     if (!this.lobby) return
     // A room that is playing and no game here yet. The host sends it right after the lobby, so by the next tick it is overdue: ask.
     if (this.lobby.phase === 'playing' && !this.game && !this.isHost) this.catchUp()
-    if (this.isHost) {
+    if (this.liveRoom) {
+      this.liveTick(t)
+      if (this.isHost) return
+    } else if (this.isHost) {
       if (this.game?.outcome === 'playing' && this.deadlineAt !== null && t >= this.deadlineAt) void this.resolve()
       else this.checkResolve()
       return
@@ -717,6 +1284,17 @@ export class OnlineSession {
     this.events.onHost?.(true)
     this.events.onResubmit?.()
     this.emitReady()
+    // A live game goes on from this screen's copy, at the speed it was running. Everyone is sent that copy, so all screens agree on where it stands.
+    if (this.liveRoom && this.game) {
+      this.hostSeq = 0
+      this.outbox = []
+      this.held.clear()
+      this.syncing = false
+      this.clockAt = this.now()
+      this.acc = 0
+        this.syncAi()
+      void this.broadcastState()
+    }
   }
 
   /** Asks the host for the current game, for a screen that has just opened. */
