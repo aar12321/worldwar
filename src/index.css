@@ -1140,6 +1140,38 @@ body:has(.drawer) .armies-dock {
   }
 }
 
+/* Forces on station: a small badge in the nation's color, with an icon and the divisions. A guess is faded and dashed. */
+.station-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 4px;
+  border-radius: 999px;
+  background: var(--badge, #555);
+  color: #fff;
+  font-family: 'Inter Variable', Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  transform: translate(-50%, -50%);
+  cursor: default;
+  pointer-events: auto;
+}
+.station-badge[style*='--edge'] {
+  border-color: var(--edge);
+  border-width: 2px;
+}
+.station-badge[data-mine='1'] {
+  border-color: #fff;
+}
+.station-badge[data-guess='1'] {
+  opacity: 0.75;
+  border-style: dashed;
+}
+
 /*
  * Fingers are bigger than pointers: on a touch screen every button, tab and icon is at least 44 px each way (the usual minimum),
  * and the small text links in the HUD get an invisible pad so they are easy to hit without moving anything.
@@ -1186,4 +1218,68 @@ select option:checked {
 }
 select option:disabled {
   color: #8e8e93;
+}
+
+/* Scenario picker: one column on a phone, two on a desktop. The open card shows its whole briefing and spans the row. */
+.scenario-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+@media (min-width: 760px) {
+  .scenario-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .scenario-card-on {
+    grid-column: 1 / -1;
+  }
+}
+.scenario-card {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.scenario-card-on {
+  border-color: #0a84ff;
+  background: rgba(10, 132, 255, 0.14);
+}
+.scenario-card-head {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.scenario-card-head:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.scenario-card-body {
+  display: grid;
+  gap: 10px;
+  padding: 2px 14px 14px;
+}
+
+.scenario-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.scenario-facts .label {
+  display: block;
+  margin-bottom: 1px;
+}
+@media (max-width: 420px) {
+  .scenario-facts {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .scenario-facts > :first-child {
+    grid-column: 1 / -1;
+  }
 }

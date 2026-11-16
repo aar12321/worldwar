@@ -13,6 +13,7 @@ import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
 import { newStocks } from '../engine/stocks'
+import { applyScenario } from '../engine/scenarios'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
 import type { Difficulty, GameSettings, GovernmentType, SectorId, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
 
@@ -42,6 +43,8 @@ export interface NewGameOptions {
   difficulty?: Difficulty
   /** A game people play together online: decisions come to each player separately and never stop the month. Always on with two or more humans. */
   online?: boolean
+  /** A scenario from `data/scenarios.ts`. Left out (or 'standard'), the world is exactly the Standard game. */
+  scenario?: string
   /** 'live': time flows and armies march. Turns, the default, is the game as it has always played. */
   mode?: 'turns' | 'live'
 }
@@ -243,6 +246,8 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     state.launches = []
     state.flights = []
   }
+  // A scenario changes the finished world (wars, treaties, treasuries, troubles). Standard applies nothing.
+  if (opts.scenario) applyScenario(state, map, opts.scenario)
 
   return state
 }

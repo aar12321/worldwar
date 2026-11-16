@@ -190,6 +190,36 @@ describe('playing a month together', () => {
     expect(seats[2].readyList[seats[2].readyList.length - 1]).toEqual([])
   })
 
+  it('several people in one faction: the host resolves founding, joining, pooling and a vote, and every screen agrees', async () => {
+    const { seats } = await started(3)
+    // The host's copy is the one that counts: give the founder the influence a war costs.
+    seats[0].s.game!.nations.r0.resources.pp = 500
+    const play = async (orders: Order[][]) => {
+      const turn = seats[0].s.game!.turn
+      seats.forEach((x, i) => x.s.submitOrders(turn, orders[i] ?? [], true))
+      await settle(250)
+      expect(seats[0].s.game!.turn).toBe(turn + 1)
+    }
+    const f = () => seats[0].s.game!.factions?.[0]
+    await play([[{ type: 'factionFound', nationId: 'r0', name: 'Line Pact' }], [], []])
+    expect(f()?.members).toEqual(['r0'])
+    // A person can be invited by name and answers with their own order; an order that names someone else's nation is ignored.
+    await play([[{ type: 'factionInvite', nationId: 'r0', target: 'r1' }, { type: 'factionInvite', nationId: 'r0', target: 'r2' }], [], [{ type: 'factionJoin', nationId: 'r1', factionId: f()!.id }]])
+    await play([[], [{ type: 'factionJoin', nationId: 'r1', factionId: f()!.id }], [{ type: 'factionJoin', nationId: 'r2', factionId: f()!.id }]])
+    expect(f()?.members.sort()).toEqual(['r0', 'r1', 'r2'])
+    await play([[{ type: 'factionContribute', nationId: 'r0', gift: { stock: { money: 20 }, units: { infantry: 1 } } }], [{ type: 'factionContribute', nationId: 'r1', gift: { stock: { money: 15 } } }], []])
+    // 35 went in; the pool paid a month's upkeep for the one soldier.
+    expect(f()!.pool.stock.money).toBeGreaterThan(30)
+    expect(f()!.pool.stock.money).toBeLessThan(35)
+    await play([[{ type: 'factionPropose', nationId: 'r0', proposal: { kind: 'war', target: 'r3' } }], [], []])
+    const id = f()!.proposals[0]?.id
+    expect(id).toBeTruthy()
+    await play([[], [{ type: 'factionVote', nationId: 'r1', proposalId: id, vote: 'yes' }], [{ type: 'factionVote', nationId: 'r2', proposalId: id, vote: 'no' }]])
+    expect(f()!.proposals).toHaveLength(0)
+    expect(f()!.wars.length).toBe(1)
+    for (const x of seats) expect(fingerprint(x.s.game!)).toBe(fingerprint(seats[0].s.game!))
+  })
+
   it('ignores orders for someone else, and orders from an old month', async () => {
     const { seats } = await started(2)
     const before = seats[0].s.game!

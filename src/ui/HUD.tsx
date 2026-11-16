@@ -9,7 +9,9 @@ import { tierSpec } from '../data/empire'
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
-import { IncomingChip, IncomingMissilesChip, LiveControls, LiveDate, MonthBar } from './LiveControls'
+import { SearchIcon } from './navIcons'
+import { IncomingChip, IncomingMissilesChip, LiveControls, LiveDate, MonthBar, NukeChip } from './LiveControls'
+import { SpaceChip } from './SpaceChip'
 import { EventChip } from './EventModal'
 import { OnlinePeople, OnlineStatus } from './Online'
 import { isLive } from '../engine/calendar'
@@ -139,6 +141,7 @@ export function HUD() {
   const online = useGame((s) => (s.online?.status === 'playing' ? s.online : null))
   const setPanel = useGame((s) => s.setPanel)
   const setHelp = useGame((s) => s.setHelp)
+  const setPalette = useGame((s) => s.setPalette)
   const panel = useGame((s) => s.panel)
   const top = useAdvice(1)[0]
   const wrap = useRef<HTMLDivElement>(null)
@@ -148,7 +151,8 @@ export function HUD() {
     const el = wrap.current
     if (!el) return
     const root = document.documentElement
-    const set = () => root.style.setProperty('--hud-h', `${Math.ceil(el.getBoundingClientRect().height)}px`)
+    // The bar is scaled with the rest of the interface; the desks below it are scaled too, so they measure in unscaled units.
+    const set = () => root.style.setProperty('--hud-h', `${Math.ceil(el.getBoundingClientRect().height / (parseFloat(root.style.getPropertyValue('--ui-scale')) || 1))}px`)
     set()
     if (typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(set)
@@ -175,7 +179,7 @@ export function HUD() {
   const civic = econ.buildings.civic
 
   return (
-    <div ref={wrap} className="absolute top-0 inset-x-0 z-30 p-3 pointer-events-none">
+    <div ref={wrap} className="hud-wrap absolute top-0 inset-x-0 z-30 p-3 pointer-events-none">
       <div className="hud-row">
         <div className="glass rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-3 min-w-56">
           <div className="w-1.5 self-stretch rounded-full" style={{ background: player.color }} />
@@ -183,10 +187,13 @@ export function HUD() {
             <div className="flex items-center justify-between gap-2">
               <div className="text-[15px] font-semibold tracking-tight truncate">{player.name}</div>
               <div className="flex items-center gap-0.5 -mr-1.5">
+                <button className="hud-icon" aria-label="Search everything (Ctrl+K)" title="Jump to anything (Ctrl+K or /)" onClick={() => setPalette(true)}>
+                  <SearchIcon />
+                </button>
                 <button className="hud-icon" aria-label="News (N)" title="News (N)" aria-pressed={panel === 'log'} onClick={() => setPanel('log')}>
                   <NewsIcon />
                 </button>
-                <button className="hud-icon" aria-label="How the game works (?)" title="How the game works (?)" onClick={() => setHelp(true)}>
+                <button className="hud-icon" aria-label="How the game works (?)" title="How the game works and every key (?)" onClick={() => { useGame.getState().setHelpTab('guide'); setHelp(true) }}>
                   <HelpIcon />
                 </button>
                 <button className="hud-icon" aria-label="Settings" title="Settings" aria-pressed={panel === 'settings'} onClick={() => setPanel('settings')}>
@@ -214,7 +221,7 @@ export function HUD() {
               </div>
             )}
             </div>
-            <div className="mt-1.5 space-y-1">
+            <div className="hud-sub mt-1.5 space-y-1">
               <div className="flex items-center justify-between gap-3 text-[12px] text-white/70 tabular-nums">
                 <span>
                   <button className="touch-pad underline-offset-2 hover:underline text-white/85" onClick={() => setPanel('empire')} title={`You are a ${tierSpec(player.tier).name}. Open the Empire desk to see what it opens up.`}>
@@ -310,7 +317,9 @@ export function HUD() {
       </div>
       <div className="pill-stack">
         {online && <EventChip />}
+        {live && <NukeChip />}
         {live && <IncomingChip />}
+        <SpaceChip />
         {live && <IncomingMissilesChip />}
         {top && top.urgency === 'now' && panel === 'none' && !(live && top.id.startsWith('incoming-')) && (
           <button className="advice-pill pointer-events-auto" onClick={() => setPanel('briefing')} title="Open the Briefing (B)">

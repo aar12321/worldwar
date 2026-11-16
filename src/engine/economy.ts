@@ -3,6 +3,7 @@ import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, DIPLOMACY, UNIT_SPECS } from '../data/unitTypes'
 import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { EMPIRE, WAR } from '../data/war'
+import { falloutFactor } from '../data/nuclear'
 import { NO_EFFECTS, type PolicyEffects } from '../data/government'
 import { TRAITS, traitOf } from '../data/traits'
 import { agencyUpkeep } from './agencies'
@@ -25,12 +26,15 @@ import { COVERAGE, EPIDEMIC, IMMIGRATION, PEOPLE } from '../data/people'
 import { ACADEMY, ARMS_EXPORTS, ENTERPRISE, GENERAL_TRAITS } from '../data/projects'
 import { bankCredit, inflationStability, interestOf, policyRate, realIncomeFactor, runBank, seigniorage } from './bank'
 import { accordTrade } from './council'
+import { lineBonus } from './deployment'
 import { adminReport, combineTraits, occupationFloor, settleSpeed, type AdminReport } from './empire'
 import { activeProjects, armsExportIncome, enterpriseIncome, industryCapMult, powerMult, programEffects, projectBill, projectPower, projectSpeed, runArmsExports, runProjects, scaleBonus, scaleFactor, worksEffects } from './industry'
 import { activeLocal, localBill, localEffects, runLocalProjects } from './works'
 import { societyBill, societyEffects, runSociety, softCap, type SocietySource } from './society'
 import { coverageMult, coverageOf, demandOf, peopleStability, populationGrowth, runPeople, spendingBill, type Demand, type PeopleBasis } from './people'
 import { commanderTrait } from './generals'
+import { spaceEffects } from './spaceEffects'
+import { runSpace, spaceEngineerDemand } from './space'
 
 export const ECON = {
   /** Tax per worker. Raised from 12 when spending became real money, so a nation's first month nets what it always did. */
@@ -79,11 +83,11 @@ export function lineMax(s: GameState, map: WorldMap, regionId: string): number {
   const r = s.regions[regionId]
   const owner = s.nations[r.owner]
   const capital = owner?.capital === regionId ? WAR.lineCapital : owner?.regionalCapitals?.includes(regionId) ? EMPIRE_RULES.regionalCapitalLine : 0
-  return (TRAITS[traitOf(regionId, map.regions[regionId])].line ?? 0) + cityEffects(r).line + localEffects(r, map.regions[regionId]).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
+  return (TRAITS[traitOf(regionId, map.regions[regionId])].line ?? 0) + cityEffects(r).line + localEffects(r, map.regions[regionId]).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital + lineBonus(s, map, regionId)
 }
 
-/** Share of a country's output that counts, rising as conquered land is integrated. The occupation policy sets the floor. */
-export const integrationFactor = (r: RegionState, floor: number = WAR.integrationFloor) => floor + (1 - floor) * Math.min(1, Math.max(0, r.integration))
+/** Share of a country's output that counts, rising as conquered land is integrated (and, after a nuclear strike, as the ruins heal). The occupation policy sets the floor. */
+export const integrationFactor = (r: RegionState, floor: number = WAR.integrationFloor) => (floor + (1 - floor) * Math.min(1, Math.max(0, r.integration))) * falloutFactor(r.fallout)
 
 export interface WarBill {
   enemy: NationId
@@ -183,6 +187,8 @@ export interface EconomyReport {
   /** What spending on the people and public works costs this month. */
   spending: ReturnType<typeof spendingBill>
   projects: { building: number; upkeep: number }
+  /** The space program: its bill this month, and what its mines earn. */
+  space: { bill: ReturnType<typeof spaceEffects>['bill']; income: number }
   /** Money this month's work on aircraft developments costs. */
   aircraftBill: number
   enterpriseIncome: number
@@ -282,6 +288,12 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
   // Companies the nation controls and has put to work.
   const firms = companyEffects(s, nationId)
   for (const k of Object.keys(NO_EFFECTS) as (keyof PolicyEffects)[]) if (k !== 'research') pol[k] += firms[k]
+  // The space program: satellites, discoveries and prestige at home, and what its outposts and mines bring in.
+  const space = spaceEffects(n)
+  for (const k of Object.keys(space.policy) as (keyof PolicyEffects)[]) pol[k] += space.policy[k] ?? 0
+  oilProduction += space.oil
+  steelProduction += space.steel
+  localPower += space.power
 
   // The people: who is needed, who there is, and how well the work is staffed.
   const basis: PeopleBasis = {
@@ -295,6 +307,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     systemLevels: Object.values(n.systems ?? {}).reduce((a, b) => a + (b ?? 0), 0),
     // A project in a country is smaller than a national one, so it draws half as hard on the engineers.
     activeProjects: activeProjects(n).length + 0.5 * activeLocal(s, nationId).length,
+    extraEngineers: spaceEngineerDemand(n, workforce),
   }
   const demand = demandOf(n, basis)
   const coverage = coverageOf(n, demand)
@@ -342,7 +355,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
   // Bonds carry the rate they were sold at. A state with debt but no bond list (an old test or tool) pays the going rate.
   const interest = n.bonds?.length ? interestOf(n) : n.debt * credit.rate
   const policyMoney = pol.money * gross
-  const land = { capital: cityMoney, food: cityFood, pp: buildings.civic * 0.6 + owned.length * EMPIRE.influencePerRegion, tp: buildings.civic * 0.3 + cityResearch }
+  const land = { capital: cityMoney, food: cityFood, pp: buildings.civic * 0.6 + owned.length * EMPIRE.influencePerRegion, tp: buildings.civic * 0.3 + cityResearch + space.research }
   const arms = armsExportIncome(s, n, gross)
   const seign = seigniorage(s, n, gross, s.worldGross ?? 0)
 
@@ -449,6 +462,8 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'Housing', amount: -spending.housing, kind: 'cost' },
     { label: 'Programs for the people', amount: -societyCost.total, kind: 'cost' },
     { label: 'National projects', amount: -(projects.building + projects.upkeep), kind: 'cost' },
+    { label: 'Space program', amount: -space.bill.total, kind: 'cost' },
+    { label: 'Space mining', amount: space.money, kind: 'income' },
     { label: 'Aircraft development', amount: -aircraft, kind: 'cost' },
     { label: 'Governors', amount: -governors, kind: 'cost' },
     { label: 'Settlers', amount: -settle, kind: 'cost' },
@@ -512,6 +527,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     admin,
     spending,
     projects,
+    space: { bill: space.bill, income: space.money },
     aircraftBill: aircraft,
     enterpriseIncome: enterprise,
     armsExports: arms,
@@ -624,6 +640,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   if (n.bank) runBank(s, n, e.gross, e.credit.score, e.credit.room, e.credit.rate, e.credit.locked)
   if (n.projects) r.capital += runProjects(s, n, e.coverage.engineers)
   r.capital += runLocalProjects(s, n, projectSpeed(n, e.coverage.engineers))
+  if (n.space) r.capital += runSpace(s, map, n, e.researchStaff)
   if (n.aircraft) r.capital += runAircraft(s, n, projectSpeed(n, e.coverage.engineers))
   runArmsExports(s, n)
   return e

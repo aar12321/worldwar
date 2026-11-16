@@ -21,7 +21,7 @@ export function Bar({ value, color = '#0a84ff', label }: { value: number; color?
   const v = Math.max(0, Math.min(1, value))
   return (
     <div className="h-2 rounded-full bg-white/12 overflow-hidden" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v * 100)}>
-      <div className="h-full rounded-full" style={{ width: `${Math.max(2, v * 100)}%`, background: color }} />
+      <div className="h-full rounded-full transition-[width] duration-300 ease-out" style={{ width: `${Math.max(2, v * 100)}%`, background: color }} />
     </div>
   )
 }

@@ -362,11 +362,21 @@ describe('rivals answer, but not without end', () => {
     s.nations.r1.resources.capital = 3000
     ok(s, fire('cruise', 6))
     expect(s.nations.r1.struckBy?.r0).toBe(s.turn)
-    const orders = generateAllBotOrders(s, map)
-    const answers = orders.filter((o): o is Extract<Order, { type: 'strike' }> => o.type === 'strike' && o.nationId === 'r1' && o.weapon === 'missile')
-    expect(answers).toHaveLength(1)
-    expect(s.regions[answers[0].target].owner).toBe('r0')
-    expect(answers[0].count).toBeLessThanOrEqual(6)
+    // Which of a bot's actions comes up in a month is a seeded draw, so look across a few months: it answers in some, never twice in one.
+    let answered = 0
+    for (let turn = s.turn; turn < s.turn + 8; turn++) {
+      const c = structuredClone(s)
+      c.turn = turn
+      c.nations.r1.struckBy = { r0: turn }
+      const answers = generateAllBotOrders(c, map).filter((o): o is Extract<Order, { type: 'strike' }> => o.type === 'strike' && o.nationId === 'r1' && o.weapon === 'missile')
+      expect(answers.length).toBeLessThanOrEqual(1)
+      for (const a of answers) {
+        expect(c.regions[a.target].owner).toBe('r0')
+        expect(a.count).toBeLessThanOrEqual(6)
+      }
+      answered += answers.length
+    }
+    expect(answered).toBeGreaterThan(0)
   })
 
   it('two Hard rivals trading missiles can fire only what they have and build: a year of war stays bounded', () => {

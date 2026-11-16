@@ -215,7 +215,7 @@ export const MARKET: Record<TradeResource, MarketSpec> = {
   goods: { name: 'Goods', short: 'Goods', base: 1.1, reference: 20 },
 }
 
-export const TRADE_LIMITS = { maxMonths: 12, maxAmount: 500 }
+export const TRADE_LIMITS = { maxMonths: 12, maxAmount: 500, /** Live contracts: months before the first delivery, and the most money a nation can post as collateral. */ maxStart: 6, maxCollateral: 500 }
 
 export const DRAFT_LIMITS = { min: 0.02, max: 0.2, maxWithConscription: 0.35 }
 export const TAX_LIMITS = { min: 0.05, max: 0.6 }

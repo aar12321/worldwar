@@ -19,8 +19,11 @@ import { nextWeaponLevel } from './arms'
 import { companyEffects, tradeValue, validateDirective, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
+import { FACTION_ORDERS, factionOrderCost, factionProblem, isFactionOrder, sameFaction } from './factions'
+import { spaceCost, spaceProblem } from './space'
 import { pauseAircraftDevProblem, startAircraftDevCost, startAircraftDevProblem } from './aircraft'
 import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
+import { buildWarheadCost, buildWarheadProblem, nukeProblem } from './nuclear'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
@@ -33,12 +36,15 @@ import type { GameState, Nation, Order, Programs, SpendingKey, UnitType, WorldMa
 import { canAttackRegion, commitShare, reachProblem } from './warfare'
 import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
+import { STATION } from '../data/deployment'
+import { freeUnits, validateDeployment } from './deployment'
+import { validateSetBorder } from './borders'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike', 'eventChoice'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike', 'nuke', 'eventChoice', ...FACTION_ORDERS])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
-const LIVE_NOW = new Set<Order['type']>(['strike', 'respond', 'propose'])
+const LIVE_NOW = new Set<Order['type']>(['strike', 'nuke', 'respond', 'propose'])
 
 /**
  * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, an answer to an offer
@@ -176,6 +182,17 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'fundSystem':
       c.capital = fundSystemCost(s, o)
       break
+    case 'space': {
+      const k = s.nations[o.nationId] ? spaceCost(s, s.nations[o.nationId], o.action) : c
+      c.capital = k.capital
+      c.tp = k.tp
+      c.pp = k.pp
+      c.steel = k.steel
+      break
+    }
+    case 'setBorder':
+      c.pp = o.closed ? STATION.closeCost : 0
+      break
     case 'fundMissiles': {
       const k = fundMissilesCost(s.nations[o.nationId])
       c.capital = k.capital
@@ -186,6 +203,13 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       const k = buildMissilesCost(o)
       c.capital = k.capital
       c.steel = k.steel
+      break
+    }
+    case 'buildWarhead': {
+      const k = buildWarheadCost()
+      c.capital = k.capital
+      c.steel = k.steel
+      c.tp = k.tp
       break
     }
     case 'startAircraftDev':
@@ -220,6 +244,15 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'suppressRebels':
       c.pp = COSTS.suppressRebels
       break
+    case 'factionFound':
+    case 'factionContribute':
+    case 'factionPropose': {
+      const k = factionOrderCost(s, o)
+      c.capital = k.capital
+      c.pp = k.pp
+      c.steel = k.steel
+      break
+    }
     default:
       break
   }
@@ -301,6 +334,7 @@ function validateOrderChecked(s: GameState, map: WorldMap, o: Order, pending: Or
 
 function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
+  if (isFactionOrder(o)) return factionProblem(s, map, o, pending)
   switch (o.type) {
     case 'eventChoice': {
       const ev = s.pendingEvents?.[o.nationId]
@@ -494,7 +528,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
       const live = isLive(s)
       if (n.military.lastAttackTurn === (live ? clockMonth(s) : s.turn) && n.military.attacksThisTurn >= maxAttacks(s, o.nationId)) return live ? `You have already sent ${maxAttacks(s, o.nationId)} armies this month` : `Your military has already attacked ${maxAttacks(s, o.nationId)} times this turn`
-      if (totalUnits(n.military.units) < 0.1) return live ? 'No troops at home to send' : 'You have no military to attack with'
+      if (totalUnits(freeUnits(s, o.nationId)) < 0.1) return n.military.deployment && totalUnits(n.military.units) >= 0.1 ? 'Your whole force is on station. Free some in Deployment to send it.' : live ? 'No troops at home to send' : 'You have no military to attack with'
       if (o.share !== undefined && (!Number.isFinite(o.share) || o.share < 0.05 || o.share > 1)) return 'Send between 5% and 100% of your military'
       if (commitShare(n, o.commit ?? 'main', o.share) < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
       if (!canAttackRegion(s, map, o.nationId, o.target).ok) return reachProblem(s, map, o.nationId, o.target)
@@ -539,6 +573,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (t.overlord === o.nationId) return 'They are your puppet. Set them free first.'
       if (isAllied(s, o.nationId, o.target)) return 'You are allied'
       if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
+      if (sameFaction(s, o.nationId, o.target)) return 'You are in the same faction. Leave it first.'
       const pendingWars = pending.filter((p) => p.type === 'declareWar').length
       if (enemiesOf(s, o.nationId).length + pendingWars >= maxWars(s, o.nationId)) return `You are already fighting ${maxWars(s, o.nationId)} wars. End one first.`
       if (enemiesOf(s, o.target).length >= maxWars(s, o.target)) return `${t.name} is already fighting ${maxWars(s, o.target)} wars`
@@ -581,6 +616,16 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return validateFundSystem(s, o, pending)
     case 'strike':
       return validateStrike(s, map, o, pending)
+    case 'buildWarhead':
+      return buildWarheadProblem(s, o, pending)
+    case 'nuke':
+      return nukeProblem(s, map, o, pending)
+    case 'space':
+      return spaceProblem(s, n, o.action, nationWorkforce(s, map, o.nationId), pending.filter((p): p is Extract<Order, { type: 'space' }> => p.type === 'space' && p.nationId === o.nationId).map((p) => p.action))
+    case 'setDeployment':
+      return validateDeployment(s, map, o, pending)
+    case 'setBorder':
+      return validateSetBorder(s, map, o)
     case 'fundMissiles':
       return fundMissilesProblem(n)
     case 'buildMissiles':

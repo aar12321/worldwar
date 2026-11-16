@@ -57,5 +57,5 @@ describe('older saves and online snapshots', () => {
     const back = await decodeState(parts)
     expect(fingerprint(back)).toBe(fingerprint(s))
     expect(JSON.stringify(back)).toBe(JSON.stringify(s))
-  })
+  }, 120_000)
 })

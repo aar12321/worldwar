@@ -26,6 +26,17 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * one ceiling on care with the programs: a Hard bot that builds a centre feels a slightly smaller stability bonus. Checked before pinning: with that one
  * line put back the previous hash (83c1bd342788b) returned, so the audit's other changes (rushes scaled by the engineers, cruise missiles needing a few
  * to stop factories, the missile stores' ceiling, lines never healed by a strike, nonsense orders refused) move no bot game here.
+ * Pinned again when Medium and Hard rivals learned to found and join factions, pay into them and vote (the bots' faction play uses its own random stream). Checked before pinning: with the faction play switched off, the previous hashes matched exactly (1d71ef7fbf0dc5 for the Normal world, and the Hard world's earlier pin after the aircraft and missile changes), so nothing else moved; a game that never founds a faction carries no `factions` field.
+ * Pinned once more (Hard-bot world only) when rivals began running space programs: once they know Fifth-Generation Fighters, a Hard bot hires its first engineers, and that moves the state. Checked before pinning: with that one AI call (manageSpace) turned off, the previous hash matched again, so the space rules themselves change nothing for a nation that has no agency; the Normal-bot world and the small war did not move. Final pin of the Hard-bot world is the combination of factions, space and nuclear rivals (merged together; an accidental double-run of strikes in the order phases was removed first, and the small-war pin held).
+ * Pinned again for Active Military (forces on station, borders): every bot now posts patrols and garrisons in its first month (a deliberate
+ * change of what bots decide), keeps a smaller reserve to attack with, and its garrisons turn provocations back. Checked before pinning:
+ * with the bots' posture orders taken out, the Normal-bot world hashes to its old pin exactly, once the memory of border incidents (the
+ * new `borders` field) is dropped (see deployment.test.ts), and so did the Hard-bot world and the small war (which uses the same bots) against their pins from just before this change.
+ * So nothing else moved: the new rules change nothing for a nation that has never posted forces.
+ * Final pins (Normal and Hard worlds) are the combination of factions, space, nuclear rivals and active military merged together; the small-war pin held through every merge, which shows the combined rules add nothing for a nation that uses none of them.
+ * Re-pinned (all three) when the AI got its strategic layer (src/ai/strategy.ts: postures, attacks and war targets chosen from the War Room's own
+ * forecast, peace timing, missile kinds by target) and stale AI wars began to fizzle after a year: bots decide differently on purpose.
+ * Checked before pinning: docs/STRATEGY.md has the measured effect (attacks at poor odds from 44% to under 1%, wars shorter, no stalled fronts).
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -87,18 +98,18 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('1d71ef7fbf0dc5')
+    expect(hash(JSON.stringify(s))).toBe('f204c70c0058a')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('15a2cfcb321f9c')
+    expect(hash(JSON.stringify(s))).toBe('df245a2f24bc9')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('eb831d80c4765')
+    expect(hash(JSON.stringify(state))).toBe('1bb3d6aea64728')
     expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
   })
 

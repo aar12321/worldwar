@@ -1,7 +1,12 @@
+import { BODIES, MISSIONS } from '../data/space'
 import { SOCIAL, SOCIAL_RULES } from '../data/society'
 import { describeOrder } from '../engine/resolveTurn'
 import { orderCost } from '../engine/orders'
 import type { GameState, Order, WorldMap } from '../engine/types'
+import { NUCLEAR } from '../data/nuclear'
+import { isLive } from '../engine/calendar'
+import { leadingFactions, nukeAir, nukeThrough } from '../engine/nuclear'
+import { formatDivisions, regionsOf, totalUnits } from '../engine/helpers'
 
 export interface PendingConfirm {
   title: string
@@ -9,6 +14,12 @@ export interface PendingConfirm {
   label: string
   /** A destructive choice is shown in red. */
   danger?: boolean
+  /** Consequences, one line each, shown as a list under the text. */
+  points?: string[]
+  /** A red banner above the text, for the gravest choices. */
+  warning?: string
+  /** A sentence the player must tick before the button works. */
+  require?: string
   run: () => void
 }
 
@@ -29,6 +40,25 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
       return asks(`Break the pact with ${name(o.target)}?`, 'They will remember it, and so will every other nation.', 'Break it', true)
     case 'leaveAlliance':
       return asks(`Leave the alliance with ${name(o.target)}?`, 'They will think less of you and may not come to your aid again.', 'Leave', true)
+    case 'nuke': {
+      const r = game.regions[o.target]
+      const victim = game.nations[r?.owner]
+      if (!r || !victim) return null
+      const place = map.regions[o.target]?.name ?? o.target
+      const stops = Math.round((1 - nukeThrough(victim.systems?.shield ?? 0, nukeAir(game, o.nationId, victim.id))) * 100)
+      const factions = leadingFactions(game, o.nationId, game.settings.difficulty === 'easy' ? NUCLEAR.factionsEasy : NUCLEAR.factions, victim.id).map((m) => (m.length > 1 ? `${name(m[0])} bloc (${m.length} nations)` : name(m[0])))
+      const army = formatDivisions(totalUnits(victim.military.units))
+      const points = [
+        `${place} is destroyed: every building, factory and fortress there falls to almost nothing, and about two thirds of its ${r.population.toFixed(1)} million people die. Its output stays crippled for years and rebels rise in the ruins.`,
+        `${victim.name}'s army (${army} divisions) is all but wiped out${victim.capital === o.target || regionsOf(game, victim.id).length <= NUCLEAR.smallNation ? '' : ' in part: the rest of its force stands elsewhere'}. Its Defense Line there breaks, so the country can be taken, and ${victim.name} can fall.`,
+        stops > 0 ? `${victim.name}'s Interceptor Shield stops about ${stops}% of it.` : `${victim.name} has no Interceptor Shield to stop it.`,
+        `Your reputation for aggression rises by ${NUCLEAR.infamy}. Every nation holds you in deep and lasting contempt, and cuts off trade with you for ${NUCLEAR.sanctionsMonths} months.`,
+        factions.length ? `The world's strongest powers declare war on you at once: ${factions.join(' and ')}.` : 'The world\'s strongest powers declare war on you.',
+        'World tension spikes. This cannot be undone.',
+        isLive(game) ? `The warhead flies for ${NUCLEAR.flightDays} days before it lands, and ${victim.name} will see it coming. A war that ends first calls it off.` : 'It lands when the month ends.',
+      ]
+      return { title: `Launch a nuclear missile at ${place}?`, text: `A warhead of yours will strike ${victim.name}. Read what follows before you decide.`, label: 'Launch the missile', danger: true, points, warning: 'This starts a world war and cannot be undone.', require: 'I understand that the whole world will turn on me, and I want to fire.' }
+    }
     case 'strike':
       return o.weapon === 'orbital' ? asks('Fire the orbital weapon?', `${describeOrder(game, map, o)}. It can be used once a year.`, 'Fire', true) : null
     case 'setStateOwned':
@@ -43,6 +73,20 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
       const before = game.nations[o.nationId]?.social?.[o.policy]?.level ?? 0
       if (o.level >= before) return null
       return asks(`${before - o.level > 1 ? 'Cut' : 'Reduce'} ${SOCIAL[o.policy].name.toLowerCase()}?`, `People will lose it: stability falls by ${(before - o.level) * SOCIAL_RULES.cutStability} at once, and the benefit fades over a few months. Raising it again costs influence again.`, 'Cut it', true)
+    }
+    case 'factionLeave':
+      return asks('Leave the faction?', 'You take back what is left of your claim, less the exit fee (or nothing, if the charter forfeits). Soldiers stay in the pool while the faction is at war, and the members will think less of you.', 'Leave', true)
+    case 'factionPropose':
+      return o.proposal.kind === 'war' ? asks(`Put war on ${name(o.proposal.target)} to the vote?`, 'If the members pass it, every member that can joins the war, and the pooled army attacks. The influence is spent whether or not it passes.', 'Put it to the vote') : null
+    case 'space': {
+      const a = o.action
+      if (a.kind === 'claim') return asks(`Claim ${BODIES[a.body].name}?`, 'Only you may build there from now on, and rivals will not forget it.', 'Claim it')
+      if (a.kind === 'launch') {
+        const spec = MISSIONS[a.mission]
+        const risk = spec.crew > 0 ? ` ${spec.crew} astronauts will fly it, and a failure can kill them.` : ' A failure loses the payload and the rocket.'
+        if (a.mode === 'outsource' || spec.crew > 0 || spec.payload >= 300) return asks(`${a.mode === 'house' ? 'Fly' : 'Hire a company for'} the ${spec.name.toLowerCase()}?`, `It takes months and cannot be called back.${risk}`, a.mode === 'house' ? 'Fly it' : 'Hire them', spec.crew > 0)
+      }
+      return null
     }
     case 'repealLaw':
       return null

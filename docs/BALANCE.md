@@ -309,3 +309,33 @@ cores. Program and project returns are `twinSeries` of a world with and without 
 * **Superpower and Hegemon.** Nobody gets there in 120 bot months; a human does. Re-run `optimizerOrders` with 30 and 59 extra countries and
   compare the bill with section 5.
 * **Golden hashes.** `turnGolden.test.ts` pins whole bot games; each feature that changes bot behaviour must re-pin it with the reason.
+
+## 11. After the merge of aircraft, factions, nukes, space and deployments
+
+60-month all-bot worlds, seed 11, events off, after merging everything (no invariant violation in any):
+
+| difficulty | nations alive | biggest nation | in the red | median treasury, months of gross (all / nations that stayed one quiet country) |
+| --- | --- | --- | --- | --- |
+| Easy | 130 | 6.3% | 0 | 3.4 / 3.7 |
+| Medium | 112 | 4.0% | 1 | 2.2 / 3.2 |
+| Hard | 97 | 6.3% | 0 | 2.0 / 2.7 |
+
+Hard bots at 60 months: 12 of 96 nations started aircraft developments (21 nodes finished, 37 starts), a combined bill of 16 a month against a world gross of 7,686 (0.2%): no overspend.
+Faction, space and deployment orders are in use by Medium and Hard bots (faction contributions 280 to 320 orders, space 28 to 43) without any treasury or stability blow-up.
+
+**Aircraft against missiles** (share of a salvo that gets through; defender with three fighters at home):
+
+| defence | cruise | tactical | hypersonic | ballistic |
+| --- | --- | --- | --- | --- |
+| none | 1.00 | 1.00 | 1.00 | 1.00 |
+| hunters (radar + hunters, 220 money, 30 research) | 0.57 | 0.67 | 0.83 | 0.92 |
+| full interceptor net (630 money, 82 research) | 0.25 | 0.42 | 0.71 | 0.85 |
+| level 3 shield + full net | 0.06 | 0.21 | 0.35 | 0.51 |
+| the same, against stealth + electronic war + blackout | 0.37 | 0.54 | 0.61 | 0.70 |
+
+Hunters make cruise missiles nearly useless against a fully equipped defender (their role is cheap harassment) but never ballistic ones (51% still lands), and an attacker with the whole stealth branch gets 70% of ballistic missiles through the best defence: neither side is unstoppable. The whole 16-node tree costs 3,520 money and 430 research, a few years of a Nation's income and months of a Superpower's.
+
+Left as designed: a nuclear strike makes the leading factions declare war within *their own* war limits and never checks the striker's: that is the consequence of a nuke, not an exploit. The quiet-nations treasury growth reported for Easy/Medium did not reproduce at 60 months (3 to 4 months of income above).
+
+Test changes: the order-wiring test knows faction orders live in `factions.ts`; the AI retaliation test looks across eight months (which agenda action a bot takes in a month is a seeded draw).
+Full-suite failures seen under heavy machine load were all timeouts, never assertions; the new test files set a longer test timeout.

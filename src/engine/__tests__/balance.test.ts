@@ -18,6 +18,8 @@ import ordersSource from '../orders.ts?raw'
 import storeSource from '../../store.ts?raw'
 import turnSource from '../resolveTurn.ts?raw'
 import typesSource from '../types.ts?raw'
+import factionSource from '../factions.ts?raw'
+import { FACTION_ORDERS } from '../factions'
 
 // Some of these play whole months on the real map; a busy machine needs more than the default five seconds.
 vi.setConfig({ testTimeout: 120_000 })
@@ -237,6 +239,12 @@ describe('every order is wired in every place', () => {
   it('each one is described, checked, run in a phase, and executed', () => {
     for (const t of types) {
       expect(describe_.includes(`case '${t}'`), `describeOrder ${t}`).toBe(true)
+      // Faction orders have their own rules and executor (factions.ts); the rest are checked and run here.
+      if (FACTION_ORDERS.has(t as Order['type'])) {
+        expect(factionSource.includes(`case '${t}'`), `factions.ts ${t}`).toBe(true)
+        expect(rules.includes('isFactionOrder'), 'checkRules sends faction orders on').toBe(true)
+        continue
+      }
       expect(rules.includes(`case '${t}'`), `checkRules ${t}`).toBe(true)
       if (special.has(t)) continue
       expect(phases.includes(`'${t}'`), `PHASES ${t}`).toBe(true)

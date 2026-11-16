@@ -5,6 +5,8 @@ import { conquestGoal, controlled, countriesTaken, economicGoal, economicShare, 
 import { useGame } from '../store'
 import { useAdvice, usePlayerView } from './hooks'
 import { PanelShell } from './panel'
+import { ownsGoal } from '../engine/scenarios'
+import { ScenarioBriefing } from './ScenarioBriefing'
 
 const URGENCY: Record<Advice['urgency'], { label: string; color: string }> = {
   now: { label: 'Needs you now', color: '#ff453a' },
@@ -71,6 +73,8 @@ export function Briefing() {
 
   return (
     <PanelShell title="Briefing" kicker={`${player.name} · what needs you this month`} panel="briefing">
+      <ScenarioBriefing game={game} playerId={player.id} />
+      {!ownsGoal(game) && (
       <section className="inset-card p-4 space-y-3">
         <div className="text-[16px] font-semibold tracking-tight">How you win</div>
         {game.settings.goal === 'classic' ? (
@@ -89,6 +93,7 @@ export function Briefing() {
           </>
         )}
       </section>
+      )}
 
       {showGuide && left.length > 0 && (
         <section className="space-y-2.5">

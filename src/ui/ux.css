@@ -1,0 +1,1107 @@
+/*
+ * Look, feel and navigation: the rail and phone bar, jump window, sheets, tabs, settings rows, shared widgets,
+ * focus rings, motion, density, high contrast, color-blind colors and text size. Imported after index.css (see App.tsx),
+ * so where a rule here and one there say the same thing, this one wins.
+ */
+
+:root {
+  --focus: #6cb6ff;
+  --good: #6eeb8a;
+  --bad: #ff8a84;
+  --warn: #ffd60a;
+  --ui-scale: 1;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Focus: every control shows where the keyboard is, in the same strong ring.                                          */
+/* ---------------------------------------------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+.segmented > button:focus-visible,
+.nav-btn:focus-visible,
+.palette-row:focus-visible,
+.sheet-desk-main:focus-visible {
+  outline-offset: -2px;
+}
+.field:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.drawer:focus,
+.drawer:focus-visible {
+  outline: none;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Text size. Everything in the game's own panels scales together; the globe stays as it is.                           */
+/* ---------------------------------------------------------------------------------------------------------------- */
+.nav-dock,
+.drawer,
+.country-card,
+.modal,
+.toast-region,
+.orders-tray,
+.map-modes,
+.armies-dock,
+.pill-stack,
+.palette,
+.sheet,
+.online-pop,
+.hud-wrap {
+  zoom: var(--ui-scale);
+}
+/* Heights measured in the page's own units shrink back, so a scaled desk still fits the window. */
+.modal {
+  max-height: min(calc(88dvh / var(--ui-scale)), 820px);
+}
+.palette-list {
+  max-height: calc(52dvh / var(--ui-scale));
+}
+.sheet {
+  max-height: calc(84dvh / var(--ui-scale));
+}
+@media (max-width: 900px) {
+  .drawer,
+  .drawer-wide,
+  .country-card {
+    max-height: calc((100dvh - 150px) / var(--ui-scale) - var(--hud-h));
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* The rail on a computer, the bar on a phone.                                                                         */
+/* ---------------------------------------------------------------------------------------------------------------- */
+.nav-dock {
+  bottom: 16px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  z-index: 30;
+}
+.rail {
+  pointer-events: auto;
+  max-height: 100%;
+  overflow: hidden;
+  border-radius: 22px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-self: flex-start;
+  width: 100%;
+}
+.rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail-foot {
+  flex: none;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+.rail-group + .rail-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+.rail-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-3);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.rail-head.static {
+  cursor: default;
+}
+button.rail-head:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+.nav-btn {
+  position: relative;
+  width: 100%;
+  min-height: 56px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: rgba(245, 245, 247, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.nav-btn.on,
+.nav-btn[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.nav-btn:active {
+  transform: scale(0.97);
+}
+.nav-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-badge {
+  position: absolute;
+  top: 3px;
+  right: 8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ff453a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.pin-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.pin-chip:hover,
+.pin-chip[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.pin-chip-icon {
+  color: var(--warn);
+  flex: none;
+  display: inline-flex;
+}
+.pin-chip.sheet {
+  width: auto;
+  min-height: 44px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .nav-dock {
+    flex-direction: row;
+    top: auto;
+    bottom: 8px;
+  }
+  .rail {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 0;
+    padding: 4px;
+    border-radius: 18px;
+    align-self: stretch;
+  }
+  .nav-btn {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 52px;
+    min-height: 48px;
+    padding: 0 2px;
+    border-radius: 14px;
+  }
+  .nav-label {
+    font-size: 12px;
+    letter-spacing: -0.02em;
+  }
+  .nav-badge {
+    right: 4px;
+  }
+}
+
+/* The sheet that holds every desk on a phone. */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet {
+  width: min(560px, 100%);
+  max-height: 84dvh;
+  border-radius: 24px 24px 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sheet-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sheet-desk {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px;
+}
+.sheet-desk-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  position: relative;
+}
+.sheet-desk-main:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.sheet-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px 6px 6px;
+}
+.sheet-tab {
+  min-height: 44px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Desk headers, tabs, breadcrumbs.                                                                                    */
+/* ---------------------------------------------------------------------------------------------------------------- */
+.drawer {
+  animation: none;
+}
+.drawer-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 3;
+}
+.drawer-grip::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: 3px;
+  height: 36px;
+  margin-top: -18px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.28);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.drawer:hover .drawer-grip::after,
+.drawer-grip:focus-visible::after {
+  opacity: 1;
+}
+.drawer-grip:hover::after {
+  background: var(--focus);
+}
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+@media (min-width: 901px) {
+  .drawer[data-sized] {
+    width: min(var(--drawer-w), calc(100vw - 148px));
+    right: auto;
+  }
+}
+@media (max-width: 900px) {
+  .drawer-grip {
+    display: none;
+  }
+  /* On a phone the header gives the height to the content: one line for the kicker, smaller title. */
+  .drawer-head {
+    padding: 8px 12px 8px;
+    gap: 8px;
+  }
+  .drawer-head h2 {
+    font-size: 19px;
+    line-height: 1.2;
+  }
+  .drawer-head p {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .drawer-head .crumb-back {
+    margin: 0 0 2px -4px;
+  }
+  [data-panel-body] {
+    padding: 12px;
+  }
+}
+.crumb-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  margin: -2px 0 4px -4px;
+  padding: 2px 8px 2px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.crumb-back:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.icon-close {
+  flex: none;
+  aspect-ratio: 1;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pin-btn.on {
+  color: var(--warn);
+  background: rgba(255, 214, 10, 0.18);
+}
+.segmented > button[aria-selected='true'] {
+  background: rgba(99, 99, 102, 0.92);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+.segmented > button {
+  min-height: 34px;
+  font-size: 13px;
+}
+.segmented > button:hover:not([aria-selected='true']):not([aria-pressed='true']) {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+.tab-badge {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+.seg-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 26px;
+  border: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+}
+.seg-edge-left {
+  left: 0;
+  background: linear-gradient(to right, var(--surface) 55%, transparent);
+  border-radius: 10px 0 0 10px;
+}
+.seg-edge-right {
+  right: 0;
+  background: linear-gradient(to left, var(--surface) 55%, transparent);
+  border-radius: 0 10px 10px 0;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* The jump window.                                                                                                    */
+/* ---------------------------------------------------------------------------------------------------------------- */
+.palette-backdrop {
+  align-items: flex-start;
+  padding-top: 9vh;
+}
+.palette {
+  width: min(620px, 94vw);
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.palette-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.palette-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  color: #fff;
+  border: 0;
+  outline: none;
+  font-size: 17px;
+  padding: 12px 12px;
+}
+.palette-input::placeholder {
+  color: var(--text-3);
+}
+.palette-input:focus-visible {
+  outline: none;
+}
+.palette-chips {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.palette-chips > button {
+  flex: none;
+}
+.palette-list {
+  max-height: 52dvh;
+  overflow-y: auto;
+  padding: 4px 8px 8px;
+}
+.palette-group {
+  padding: 8px 8px 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.palette-row.on {
+  background: rgba(10, 132, 255, 0.28);
+}
+.palette-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--text-3);
+}
+.kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-bottom-width: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  white-space: nowrap;
+}
+/* With a desk open on a phone, the top bar keeps the name, the date and the numbers, and gives the rest of the height to the desk. */
+@media (max-width: 900px) {
+  body:has(.drawer) .hud-sub {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  .palette-backdrop {
+    padding-top: 4vh;
+  }
+  .palette-input {
+    font-size: 16px;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Settings rows, switches, the keys list.                                                                             */
+/* ---------------------------------------------------------------------------------------------------------------- */
+.setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 10px;
+  border-radius: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.setting-row.inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.setting-row.inline .setting-control {
+  flex: none;
+}
+.setting-row.flash {
+  animation: row-flash 1.4s ease-out;
+}
+@keyframes row-flash {
+  0% {
+    background: rgba(10, 132, 255, 0.4);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 3px 12px 3px 3px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(120, 120, 128, 0.36);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.switch-knob {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.16s var(--ease-out);
+}
+.switch.on {
+  background: #0a84ff;
+  flex-direction: row-reverse;
+  padding: 3px 3px 3px 12px;
+}
+.switch:not(.on) .switch-knob {
+  background: #d1d1d6;
+}
+.switch-text {
+  min-width: 24px;
+}
+.keys-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.keys-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 150px) 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Shared widgets: empty state, skeleton, stepper, cost and effect, ticker, info dot.                                  */
+/* ---------------------------------------------------------------------------------------------------------------- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 16px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+}
+.empty-state.compact {
+  padding: 18px 12px;
+}
+.empty-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+}
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.07) 25%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.07) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.stepper-btn {
+  min-width: 40px;
+  min-height: 40px;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0;
+  touch-action: manipulation;
+}
+.stepper-input {
+  width: 92px;
+  min-height: 40px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 6px 8px;
+}
+.cost-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.info-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  font-style: italic;
+  color: var(--text-2);
+}
+.tick-good {
+  animation: tick-good 0.9s ease-out;
+}
+.tick-bad {
+  animation: tick-bad 0.9s ease-out;
+}
+@keyframes tick-good {
+  0% {
+    color: var(--good);
+  }
+}
+@keyframes tick-bad {
+  0% {
+    color: var(--bad);
+  }
+}
+.toast {
+  position: relative;
+}
+.toast-mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+}
+.toast-action {
+  color: #8ec5ff;
+  min-height: 32px;
+}
+.tray-chip {
+  min-height: 30px;
+  border: 0;
+  cursor: pointer;
+}
+
+/* Reports fade in one card after another. */
+.report-grid .inset-card {
+  animation: card-in 0.22s var(--ease-out) both;
+}
+.report-grid .inset-card:nth-child(2) {
+  animation-delay: 30ms;
+}
+.report-grid .inset-card:nth-child(3) {
+  animation-delay: 60ms;
+}
+.report-grid .inset-card:nth-child(4) {
+  animation-delay: 90ms;
+}
+.report-grid .inset-card:nth-child(5) {
+  animation-delay: 120ms;
+}
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.modal {
+  animation: modal-in 0.18s var(--ease-out) both;
+}
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+.palette {
+  animation: modal-in 0.14s var(--ease-out) both;
+}
+.pulse-cta {
+  animation-duration: 2.2s;
+}
+.hud-next .btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+/* Bars grow with a transform, which costs nothing on a long page. */
+.bar-fill {
+  transform-origin: left center;
+  transition: transform 0.4s var(--ease-out);
+}
+.list-fade-in > * {
+  animation: card-in 0.16s var(--ease-out) both;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Small screens and touch: every control at least 44 px, no text under 12 px.                                         */
+/* ---------------------------------------------------------------------------------------------------------------- */
+@media (pointer: coarse), (max-width: 900px) {
+  .btn,
+  .segmented > button,
+  .crumb-back,
+  .switch,
+  .stepper-btn,
+  .stepper-input,
+  .tray-chip,
+  .toast-action,
+  select.field,
+  input.field,
+  .pin-chip,
+  button.rail-head {
+    min-height: 44px;
+  }
+  .stepper-btn {
+    min-width: 44px;
+  }
+  .crumb-back {
+    padding: 4px 12px 4px 8px;
+  }
+  .hud-icon,
+  .icon-close {
+    width: 44px;
+    height: 44px;
+  }
+  .info-dot {
+    width: 20px;
+    height: 20px;
+  }
+  summary,
+  [role='radio'] {
+    min-height: 44px;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 22px;
+    height: 22px;
+  }
+  label:has(> input[type='checkbox']),
+  label:has(> input[type='radio']) {
+    min-height: 44px;
+    align-items: center;
+  }
+  input[type='range'] {
+    min-height: 44px;
+  }
+  .hud-resources .label,
+  .label {
+    font-size: 12px;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Density.                                                                                                            */
+/* ---------------------------------------------------------------------------------------------------------------- */
+[data-density='compact'] [data-panel-body] {
+  padding: 12px;
+}
+[data-density='compact'] .inset-card {
+  padding: 10px !important;
+}
+[data-density='compact'] .btn {
+  padding: 5px 10px;
+}
+[data-density='compact'] .segmented > button {
+  padding: 4px 8px;
+}
+[data-density='compact'] .space-y-5 > :not(:last-child),
+[data-density='compact'] .space-y-4 > :not(:last-child) {
+  margin-block-end: 10px !important;
+}
+[data-density='compact'] .space-y-3 > :not(:last-child),
+[data-density='compact'] .space-y-2\.5 > :not(:last-child) {
+  margin-block-end: 6px !important;
+}
+[data-density='compact'] .econ-grid {
+  gap: 8px;
+}
+[data-density='compact'] .setting-row {
+  padding: 8px 8px;
+}
+@media (pointer: coarse), (max-width: 900px) {
+  [data-density='compact'] .btn,
+  [data-density='compact'] .segmented > button {
+    min-height: 44px;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* High contrast: brighter text, solid panels, strong outlines.                                                        */
+/* ---------------------------------------------------------------------------------------------------------------- */
+[data-contrast='high'] {
+  --surface: #000;
+  --surface-2: #0b0b0d;
+  --line: rgba(255, 255, 255, 0.7);
+  --text-2: #fff;
+  --text-3: rgba(255, 255, 255, 0.94);
+}
+[data-contrast='high'] [class*='text-white/'] {
+  color: #fff !important;
+}
+[data-contrast='high'] .label,
+[data-contrast='high'] .rail-head,
+[data-contrast='high'] .palette-group {
+  color: #fff;
+}
+[data-contrast='high'] .surface {
+  border-color: #fff;
+}
+[data-contrast='high'] .btn,
+[data-contrast='high'] .field,
+[data-contrast='high'] .inset-card,
+[data-contrast='high'] .chip,
+[data-contrast='high'] .pin-chip,
+[data-contrast='high'] .tray-chip,
+[data-contrast='high'] .segmented {
+  outline: 1px solid rgba(255, 255, 255, 0.75);
+  outline-offset: -1px;
+}
+[data-contrast='high'] .btn:disabled {
+  color: rgba(255, 255, 255, 0.85);
+  outline-style: dashed;
+}
+[data-contrast='high'] .inset-card {
+  background: rgba(255, 255, 255, 0.1);
+}
+[data-contrast='high'] .btn-primary {
+  background: #0066cc;
+}
+[data-contrast='high'] .segmented > button[aria-selected='true'],
+[data-contrast='high'] .segmented > button[aria-pressed='true'],
+[data-contrast='high'] .nav-btn.on {
+  background: #fff;
+  color: #000;
+}
+[data-contrast='high'] .switch:not(.on) {
+  background: #3a3a3c;
+  outline: 1px solid #fff;
+}
+[data-contrast='high'] .palette-row.on {
+  background: #fff;
+  color: #000;
+}
+[data-contrast='high'] .palette-row.on * {
+  color: #000 !important;
+}
+[data-contrast='high'] .modal-backdrop {
+  background: rgba(0, 0, 0, 0.88);
+}
+[data-contrast='high'] .glass {
+  background: #000;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Color-blind safe colors: blue and orange where the game uses green and red.                                         */
+/* The same pair is used for status text, fills, outlines and dots. Meaning is also written out in words and signs.    */
+/* ---------------------------------------------------------------------------------------------------------------- */
+[data-palette='colorblind'] {
+  --good: #56b4e9;
+  --bad: #ff9a52;
+  --warn: #f0e442;
+}
+[data-palette='colorblind'] [class*='text-[#6eeb8a]'],
+[data-palette='colorblind'] [class*='text-[#30d158]'],
+[data-palette='colorblind'] .chip-green {
+  color: #56b4e9 !important;
+}
+[data-palette='colorblind'] [class*='text-[#ff8a84]'],
+[data-palette='colorblind'] [class*='text-[#ff6961]'],
+[data-palette='colorblind'] [class*='text-[#ff453a]'],
+[data-palette='colorblind'] .chip-red {
+  color: #ff9a52 !important;
+}
+[data-palette='colorblind'] [class*='bg-[#30d158]'],
+[data-palette='colorblind'] [class*='bg-[#6eeb8a]'],
+[data-palette='colorblind'] [style*='background: rgb(48, 209, 88)'],
+[data-palette='colorblind'] [style*='background-color: rgb(48, 209, 88)'] {
+  background-color: #56b4e9 !important;
+}
+[data-palette='colorblind'] [class*='bg-[#30d158]/'],
+[data-palette='colorblind'] .chip-green {
+  background-color: rgba(86, 180, 233, 0.2) !important;
+}
+[data-palette='colorblind'] [class*='bg-[#ff453a]'],
+[data-palette='colorblind'] [style*='background: rgb(255, 69, 58)'],
+[data-palette='colorblind'] [style*='background-color: rgb(255, 69, 58)'] {
+  background-color: #ff9a52 !important;
+}
+[data-palette='colorblind'] [class*='bg-[#ff453a]/'],
+[data-palette='colorblind'] .chip-red {
+  background-color: rgba(255, 154, 82, 0.2) !important;
+}
+[data-palette='colorblind'] [class*='border-[#30d158]'],
+[data-palette='colorblind'] [class*='ring-[#30d158]'] {
+  border-color: #56b4e9 !important;
+  --tw-ring-color: #56b4e9 !important;
+}
+[data-palette='colorblind'] [class*='border-[#ff453a]'] {
+  border-color: #ff9a52 !important;
+}
+[data-palette='colorblind'] .btn-red {
+  color: #ffb27a;
+  background: rgba(255, 154, 82, 0.2);
+}
+[data-palette='colorblind'] .nav-badge {
+  background: #d55e00;
+}
+[data-palette='colorblind'] .live-alert {
+  border-color: rgba(255, 154, 82, 0.8);
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Reduced motion: nothing slides, fades or counts. Content still appears; it just does not travel.                    */
+/* ---------------------------------------------------------------------------------------------------------------- */
+[data-motion='reduced'] *,
+[data-motion='reduced'] *::before,
+[data-motion='reduced'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}
+[data-motion='reduced'] .skeleton {
+  animation: none !important;
+}
+
+/* Rail labels and badges stay at 12 px whatever the older rules say. */
+.nav-btn > .nav-label,
+.nav-btn > .nav-badge {
+  font-size: 12px !important;
+  letter-spacing: -0.01em;
+}
+@media (pointer: coarse), (max-width: 900px) {
+  /* Touch scrolls the tab bar by swiping; the little arrows are for mice. */
+  .seg-edge {
+    display: none;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    flex: none;
+    min-width: 22px;
+  }
+}
