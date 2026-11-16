@@ -225,7 +225,8 @@ describe('every order is wired in every place', () => {
   const union = typesSource.slice(typesSource.indexOf('export type Order ='), typesSource.indexOf('\n\n', typesSource.indexOf('export type Order =')))
   const types = [...union.matchAll(/\{ type: '(\w+)'/g)].map((m) => m[1])
   /** Attacks have their own loop, and a recall is a live-clock order. */
-  const special = new Set(['attack', 'recall'])
+  /** A command to a territory runs in the phase of the order it carries (see `commanded`). */
+  const special = new Set(['attack', 'recall', 'commandTerritory'])
   const between = (src: string, from: string, to?: string) => src.slice(src.indexOf(from), to ? src.indexOf(to, src.indexOf(from)) : undefined)
   const phases = between(turnSource, 'const PHASES', 'export function resolveTurn')
   const describe_ = between(turnSource, 'export function describeOrder', 'function safeDescribe')

@@ -546,6 +546,8 @@ export function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'leaveAlliance' || order.type === 'breakPact') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
   if (order.type === 'governPuppet') return typeof order.target === 'string' && !!order.patch && typeof order.patch === 'object' && !Array.isArray(order.patch)
+  if (order.type === 'releaseTerritory' || order.type === 'annexTerritory') return typeof order.target === 'string'
+  if (order.type === 'forceTrade') return typeof order.territory === 'string' && typeof order.partner === 'string' && !!order.terms && typeof order.terms === 'object'
   if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital') && (order.count === undefined || Number.isInteger(order.count)) && (order.aim === undefined || order.aim === 'country' || order.aim === 'site')
   if (order.type === 'raid') return typeof order.target === 'string' && (order.aim === undefined || order.aim === 'country' || order.aim === 'site') && (order.share === undefined || Number.isFinite(order.share))
   if (order.type === 'nuke') return typeof order.target === 'string'
