@@ -21,7 +21,7 @@ export interface ShortcutRow {
 }
 
 /** A context for listing keys when there is no game yet (the tests, the help sheet before a game starts). */
-export const NO_CTX: RegCtx = { game: null, live: false, tier: 1, offers: 0, urgent: 0, factionDue: 0, wars: 0, armies: 0 }
+export const NO_CTX: RegCtx = { game: null, live: false, tier: 1, offers: 0, urgent: 0, factionDue: 0, wars: 0, armies: 0, puppets: 0 }
 
 const show = (k: string) => (k.length === 1 ? k.toUpperCase() : k)
 
