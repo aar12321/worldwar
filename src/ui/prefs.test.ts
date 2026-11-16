@@ -54,6 +54,19 @@ describe('settings migration', () => {
   })
 })
 
+describe('loading an old settings blob', () => {
+  const old = JSON.parse('{"reducedMotion":true,"fxSpeed":2,"battleScenes":"mine","seenHelp":true,"monthlyReport":false,"showGuide":true,"pauseOnBattles":false,"liveReport":"note","liveSpeed":1}')
+
+  it('keeps the old reduce motion choice and gives every new preference its default', () => {
+    expect(migrateSettingsUi(old)).toEqual({ ...defaultPrefs(), motion: 'reduce' })
+  })
+
+  it('round-trips through JSON once migrated', () => {
+    const ui = migrateSettingsUi(old)
+    expect(migrateSettingsUi({ ui: JSON.parse(JSON.stringify(ui)) })).toEqual(ui)
+  })
+})
+
 describe('recents and pins', () => {
   it('puts the newest recent first, once', () => {
     expect(pushRecent(['a', 'b', 'c'], 'c')).toEqual(['c', 'a', 'b'])

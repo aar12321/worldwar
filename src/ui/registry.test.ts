@@ -85,6 +85,17 @@ describe('keys', () => {
     expect(targetForKey('w', turns)).toEqual({ desk: 'military', tab: 'wars' })
   })
 
+  it('does not open a desk or tab that is hidden in this kind of game', () => {
+    const hidden: DeskDef[] = [
+      { id: 'a', label: 'A', icon: 'x', key: 'g', group: 'world', order: 1, visible: (c) => c.live },
+      { id: 'b', label: 'B', icon: 'x', key: 'h', group: 'world', order: 2, tabs: [{ id: 't', label: 'T', key: 'j', visible: (c) => c.live }] },
+    ]
+    expect(targetForKey('g', turns, hidden)).toBeNull()
+    expect(targetForKey('g', live, hidden)).toEqual({ desk: 'a' })
+    expect(targetForKey('j', turns, hidden)).toBeNull()
+    expect(targetForKey('j', live, hidden)).toEqual({ desk: 'b', tab: 't' })
+  })
+
   it('ignores keys nothing uses', () => {
     for (const k of ['x', 'q', '9', '', 'Enter']) expect(targetForKey(k, turns)).toBeNull()
   })
@@ -139,6 +150,7 @@ describe('adding a desk or a tab in one place', () => {
   it('does not let a second registration replace the first, and spots a clash of keys', () => {
     const reg = buildRegistry(DESKS, [{ desks: [{ ...faction, id: 'economy', label: 'Fake' }, { ...faction, id: 'other', key: 'e' }] }])
     expect(reg.find((d) => d.id === 'economy')!.label).toBe('Economy')
+    expect(reg.filter((d) => d.id === 'economy')).toHaveLength(1)
     expect(duplicateKeys(reg)).toEqual(['e'])
   })
 

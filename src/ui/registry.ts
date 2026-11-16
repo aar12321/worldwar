@@ -236,11 +236,11 @@ export interface KeyTarget {
 }
 
 /** The desk or tab a single key opens, or null. Desk keys and their aliases first, then tab keys. */
-export function targetForKey(key: string, ctx: RegCtx): KeyTarget | null {
+export function targetForKey(key: string, ctx: RegCtx, desks: readonly DeskDef[] = allDesks()): KeyTarget | null {
   const k = key.toLowerCase()
   if (!k) return null
-  for (const d of allDesks()) if (isVisible(d, ctx) && (d.key === k || d.aliases?.includes(k))) return { desk: d.id }
-  for (const d of allDesks()) for (const t of d.tabs ?? []) if (t.key === k && isVisible(d, ctx) && isVisible(t, ctx)) return { desk: d.id, tab: t.id }
+  for (const d of desks) if (isVisible(d, ctx) && (d.key === k || d.aliases?.includes(k))) return { desk: d.id }
+  for (const d of desks) for (const t of d.tabs ?? []) if (t.key === k && isVisible(d, ctx) && isVisible(t, ctx)) return { desk: d.id, tab: t.id }
   return null
 }
 
