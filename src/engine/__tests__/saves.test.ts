@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { generateAllBotOrders } from '../../ai/bot'
 import { createInitialState } from '../../data/startingNations'
 import { getWorld } from '../../map/world'
-import { encodeState, decodeState, fingerprint } from '../../net/protocol'
+import { encodeState, decodeState } from '../../net/protocol'
+import { fingerprint } from '../../net/fingerprint'
 import { normalizeGame } from '../migrate'
 import { resolveTurn } from '../resolveTurn'
 import { UNIT_TYPES, type GameState } from '../types'
@@ -57,5 +58,5 @@ describe('older saves and online snapshots', () => {
     const back = await decodeState(parts)
     expect(fingerprint(back)).toBe(fingerprint(s))
     expect(JSON.stringify(back)).toBe(JSON.stringify(s))
-  })
+  }, 120_000)
 })

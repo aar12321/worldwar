@@ -1,13 +1,15 @@
 import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { DIFFICULTY } from '../data/difficulty'
+import { scenarioOf, STANDARD_SCENARIO, type ScenarioDef } from '../data/scenarios'
 import { TERRAIN } from '../data/terrain'
 import type { Difficulty } from '../engine/types'
 import { getWorld } from '../map/world'
 import { peekSave, useGame } from '../store'
 import { globeBridge } from './globeBridge'
-import { nationScore, nationTier, rankNations } from './nationList'
+import { difficultyHint, difficultyReason, nationScore, nationTier, rankNations, suggestedDifficulty } from './nationList'
 import { OnlineEntry } from './Online'
+import { ScenarioPicker } from './ScenarioPicker'
 
 export function Setup() {
   const { map } = getWorld()
@@ -19,6 +21,10 @@ export function Setup() {
   const [query, setQuery] = useState('')
   const [difficulty, setDifficulty] = useState<Difficulty>('normal')
   const [mode, setMode] = useState<'turns' | 'live'>('turns')
+  const [scenario, setScenario] = useState<string>(STANDARD_SCENARIO)
+  const [scenarioOpen, setScenarioOpen] = useState(false)
+  const scenarioDef = scenarioOf(scenario) ?? scenarioOf(STANDARD_SCENARIO)!
+  const standard = scenarioDef.id === STANDARD_SCENARIO
   const saved = useMemo(() => (hasSave ? peekSave() : null), [hasSave])
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6))
 
@@ -36,6 +42,17 @@ export function Setup() {
     if (region) globeBridge.api?.pointOfView({ lat: region.lat, lng: region.lng, altitude: 1.8 }, 700)
   }, [selected, map])
   const tier = nationTier
+  const pickTier = pick ? nationTier(nationScore(pick)) : null
+  const suggested = pickTier ? suggestedDifficulty(pickTier) : null
+  const chooseScenario = (def: ScenarioDef, playAs: boolean) => {
+    setScenario(def.id)
+    setScenarioOpen(false)
+    // A scenario suggests its nation and rivals; picking it never overrides a nation already chosen unless asked to.
+    if (def.id !== STANDARD_SCENARIO && (playAs || !selected)) {
+      selectRegion(def.recommended.nation)
+      setDifficulty(def.recommended.difficulty)
+    }
+  }
 
   return (
     <>
@@ -47,15 +64,15 @@ export function Setup() {
       </motion.div>
 
       <motion.div initial={{ x: -24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.05, ease: [0.22, 1, 0.36, 1] }} className="setup-list glass pointer-events-auto absolute left-6 top-36 bottom-6 w-[380px] rounded-[22px] flex flex-col overflow-hidden">
-        <div className="p-5 border-b border-white/10">
-          <div className="text-[17px] font-semibold tracking-tight">Choose a nation</div>
+        <div className="setup-head p-5 border-b border-white/10">
+          <div className="setup-head-title text-[17px] font-semibold tracking-tight">Choose a nation</div>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search, or click the globe"
             className="field mt-3 w-full px-3 py-2 text-[14px]"
           />
-          <div className="mt-2.5 flex flex-wrap gap-1" role="radiogroup" aria-label="How strong a start">
+          <div className="setup-chips mt-2.5 flex flex-wrap gap-1" role="radiogroup" aria-label="How strong a start">
             {(['all', 'Powerhouse', 'Strong start', 'Modest start', 'Small start'] as const).map((k) => (
               <button key={k} role="radio" aria-checked={size === k} className={`btn px-2 py-1 text-[12px] ${size === k ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setSize(k)}>
                 {k === 'all' ? 'All' : k.replace(' start', '')}
@@ -80,7 +97,8 @@ export function Setup() {
         </div>
       </motion.div>
 
-      <motion.div initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="setup-card glass pointer-events-auto absolute right-6 bottom-6 w-[400px] rounded-[22px] p-5 space-y-4">
+      <motion.div initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: 0.32, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} className="setup-card glass pointer-events-auto absolute right-6 bottom-6 w-[400px] rounded-[22px] flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto scroll-thin p-5 space-y-4">
         {pick ? (
           <div>
             <div className="label">{tier(nationScore(pick))}</div>
@@ -107,8 +125,27 @@ export function Setup() {
           <p className="text-white/55 text-[14px]">Pick a nation from the list, or click any country on the globe.</p>
         )}
         <div>
+          <div className="label mb-1.5">Scenario</div>
+          <button
+            className="w-full text-left rounded-xl p-2.5 border border-white/10 bg-white/8 hover:bg-white/12"
+            onClick={() => setScenarioOpen(true)}
+            aria-haspopup="dialog"
+            data-testid="scenario-button"
+          >
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-[14px] font-semibold">{scenarioDef.title}</span>
+              <span className="text-[12px] text-[#64a8ff] shrink-0">{standard ? 'Choose' : 'Change'}</span>
+            </span>
+            <span className="block text-[12px] text-white/75 leading-snug">{scenarioDef.tagline}</span>
+          </button>
+        </div>
+        <div>
           <div className="label mb-1.5">How you win</div>
-          <p className="text-[13px] text-white/75 leading-snug">Hold the whole world: every country yours, or a puppet of yours. It takes a long time. Wars need a reason, so you work through spies, allies and the news.</p>
+          <p className="text-[13px] text-white/75 leading-snug">
+            {standard
+              ? 'Hold the whole world: every country yours, or a puppet of yours. It takes a long time. Wars need a reason, so you work through spies, allies and the news.'
+              : `${scenarioDef.goalText} Wars still need a reason.`}
+          </p>
         </div>
         <div>
           <div className="label mb-2">How time passes</div>
@@ -134,7 +171,7 @@ export function Setup() {
         </div>
         <div>
           <div className="label mb-2">Rivals</div>
-          <div className="grid gap-1.5" role="radiogroup" aria-label="Rival skill">
+          <div className="grid gap-1.5" role="radiogroup" aria-label="Rival skill" aria-describedby={suggested ? 'difficulty-hint' : undefined}>
             {(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => (
               <button
                 key={d}
@@ -143,11 +180,19 @@ export function Setup() {
                 onClick={() => setDifficulty(d)}
                 className={`rounded-xl p-2.5 text-left border ${difficulty === d ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/8 hover:bg-white/12'}`}
               >
-                <div className="text-[14px] font-semibold">{DIFFICULTY[d].name}</div>
+                <div className="text-[14px] font-semibold">
+                  {DIFFICULTY[d].name}
+                  {suggested === d && <span className="chip chip-blue ml-2 !py-0 text-[11px]">Suggested</span>}
+                </div>
                 <div className="text-[12px] text-white/75 leading-snug">{DIFFICULTY[d].description}</div>
               </button>
             ))}
           </div>
+          {pickTier && suggested && (
+            <p id="difficulty-hint" className="mt-1.5 text-[12px] text-white/75 leading-snug" title={difficultyReason(pickTier)}>
+              {difficultyHint(pickTier, DIFFICULTY[suggested].name)}
+            </p>
+          )}
         </div>
         <details className="text-[13px] text-white/55">
           <summary className="cursor-pointer">Advanced</summary>
@@ -159,6 +204,8 @@ export function Setup() {
             </button>
           </div>
         </details>
+        </div>
+        <div className="setup-foot border-t border-white/10 p-4 space-y-2.5">
         <div className="flex gap-2">
           {hasSave && (
             <button className="btn flex-1 py-3" onClick={loadGame}>
@@ -168,7 +215,7 @@ export function Setup() {
           <button className="btn btn-primary flex-[2] py-3 text-[15px]" disabled={!pick} onClick={() => {
               if (!pick) return
               if (hasSave && !window.confirm(`Starting a new game replaces your saved game${saved ? ` (${saved.nation}, ${saved.date})` : ''}. Start anyway?`)) return
-              newGame({ playerRegionId: pick.id, seed, difficulty, mode })
+              newGame({ playerRegionId: pick.id, seed, difficulty, mode, ...(standard ? {} : { scenario }) })
               // The first game opens on how it works. Closing the window remembers that it was seen.
               if (!useGame.getState().settings.seenHelp) useGame.getState().setHelp(true)
             }}
@@ -179,10 +226,12 @@ export function Setup() {
         <button className="btn w-full py-2.5 text-[14px]" onClick={() => setOnlineOpen(true)}>
           Play with friends online
         </button>
-        <p className="text-[13px] text-white/65">{mode === 'live' ? 'Every other nation is a rival, acting as the days pass. Live games are for one player; playing with friends online uses turns.' : 'Every other nation is a rival. They act when you press Next turn. Playing with friends? Everyone presses Ready instead.'}</p>
+        <p className="text-[12px] text-white/65 leading-snug">{mode === 'live' ? 'Every other nation is a rival, acting as the days pass. Live games are for one player; playing with friends online uses turns.' : 'Every other nation is a rival. They act when you press Next turn. Playing with friends? Everyone presses Ready instead.'}</p>
+        </div>
       </motion.div>
     </div>
       {onlineOpen && <OnlineEntry onClose={() => setOnlineOpen(false)} />}
+      {scenarioOpen && <ScenarioPicker current={scenario} nation={selected} onPick={chooseScenario} onClose={() => setScenarioOpen(false)} />}
     </>
   )
 }

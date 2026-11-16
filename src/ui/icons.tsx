@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { UnitType } from '../engine/types'
 
-function Frame({ size = 20, children, title }: { size?: number; children: ReactNode; title?: string }) {
+export function Frame({ size = 20, children, title }: { size?: number; children: ReactNode; title?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" role={title ? 'img' : undefined} aria-label={title} aria-hidden={title ? undefined : true}>
       {children}
@@ -129,6 +129,15 @@ export function DiplomacyIcon() {
       <path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
       <path d="M2.5 19c.6-3 2.7-4.5 5.5-4.5s4.9 1.5 5.5 4.5" />
       <path d="M13.5 15.2c.8-.5 1.6-.7 2.5-.7 2.8 0 4.9 1.5 5.5 4.5" />
+    </Frame>
+  )
+}
+
+export function FactionIcon() {
+  return (
+    <Frame>
+      <path d="M12 3.5l7 3v5.2c0 4.2-2.8 7.4-7 8.8-4.2-1.4-7-4.6-7-8.8V6.5z" />
+      <path d="M9 12.2l2.2 2.2L15.2 10" />
     </Frame>
   )
 }

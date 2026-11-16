@@ -5,7 +5,8 @@ import { newStocks } from './stocks'
 import { EVENT_BY_ID } from '../data/events'
 import { startingCities } from './cities'
 import { lineMax } from './economy'
-import { UNIT_TYPES } from './types'
+import { cleanMark } from './monthMark'
+import { POOL_RESOURCES, UNIT_TYPES } from './types'
 import { EVENT_GAP_TURNS, FIRST_EVENT_TURN } from './events'
 import type { GameState, WorldMap } from './types'
 
@@ -57,6 +58,7 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   game.worldGross ??= 0
   game.investments ??= []
   game.settings.goal ??= 'classic'
+  cleanFactions(game)
   game.reasons ??= {}
   game.infamy ??= {}
   game.cases ??= []
@@ -91,10 +93,50 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   }
   if (game.pendingEvent && !EVENT_BY_ID[game.pendingEvent.eventId]) game.pendingEvent = null
   if (game.settings.mode === 'live') cleanLive(game, map)
+  else {
+    delete game.monthStart
+    // A turn game has no warheads in the air: one that was saved with some (from a live game) is left without.
+    delete game.nukes
+  }
+  // Coalition plans: kept only if whole. Games without any carry no such field.
+  if (game.coalitions !== undefined) game.coalitions = (Array.isArray(game.coalitions) ? game.coalitions : []).filter((p) => !!p && !!game.nations[p.target]?.alive && Array.isArray(p.members) && Array.isArray(p.focus) && Number.isFinite(p.strikeTurn) && Number.isFinite(p.strikeDay))
+  if (game.shock !== undefined && !Number.isFinite(game.shock)) delete game.shock
   // Statecraft: spending levels from the old budget, bonds from old debt, people, the bank, tiers.
   for (const r of Object.values(game.regions)) r.buildings.hospital ??= 0
   ensureStatecraft(game, map)
   return game
+}
+
+/** Factions in a save: a damaged one is dropped, and a good one is cleared of members and nations that no longer exist. Games with none are left alone. */
+function cleanFactions(game: GameState) {
+  if (game.factions === undefined) return
+  const finite = (x: unknown) => typeof x === 'number' && Number.isFinite(x)
+  const list = (Array.isArray(game.factions) ? game.factions : []).filter((f) => !!f && typeof f.id === 'string' && Array.isArray(f.members) && !!f.pool?.stock && !!f.pool.units && !!f.ledger && !!f.charter)
+  for (const f of list) {
+    f.members = f.members.filter((m) => !!game.nations[m])
+    for (const r of POOL_RESOURCES) {
+      f.pool.stock[r] = finite(f.pool.stock[r]) ? Math.max(0, f.pool.stock[r]) : 0
+      for (const m of f.members) {
+        f.ledger[m] ??= { stock: { money: 0, oil: 0, steel: 0, goods: 0, food: 0 }, units: { ...f.pool.units }, last: 0, joined: 0 }
+        f.ledger[m].stock[r] = finite(f.ledger[m].stock[r]) ? Math.max(0, f.ledger[m].stock[r]) : 0
+      }
+    }
+    for (const k of UNIT_TYPES) {
+      f.pool.units[k] = finite(f.pool.units[k]) ? Math.max(0, f.pool.units[k]) : 0
+      for (const m of f.members) {
+        f.ledger[m].units ??= { ...f.pool.units }
+        f.ledger[m].units[k] = finite(f.ledger[m].units[k]) ? Math.max(0, f.ledger[m].units[k]) : 0
+      }
+    }
+    for (const m of Object.keys(f.ledger)) if (!f.members.includes(m)) delete f.ledger[m]
+    f.proposals = (Array.isArray(f.proposals) ? f.proposals : []).filter((p) => !!p && f.members.includes(p.by) && !!p.votes)
+    f.contracts = (Array.isArray(f.contracts) ? f.contracts : []).filter((c) => !!c && f.members.includes(c.member))
+    f.invites = Array.isArray(f.invites) ? f.invites : []
+    f.wars = (Array.isArray(f.wars) ? f.wars : []).filter((w) => !!w && !!game.nations[w.target] && f.members.includes(w.lead))
+    f.history = Array.isArray(f.history) ? f.history.slice(-40) : []
+  }
+  game.factions = list.filter((f) => f.members.length > 0)
+  if (game.factions.length === 0) delete game.factions
 }
 
 /** A live save: keeps the day in range and drops anything that no longer points at a real nation, country or number. Turn saves are left alone. */
@@ -128,9 +170,18 @@ function cleanLive(game: GameState, map: WorldMap) {
     a.commit = ['probe', 'main', 'allin'].includes(a.commit) ? a.commit : 'main'
     a.stance = ['assault', 'blitz', 'siege'].includes(a.stance) ? a.stance : 'assault'
     a.bySea = !!a.bySea
+    if (a.chosen !== true) delete a.chosen
+  }
+  // The month's starting point for the report. A damaged one, or one from another month, is dropped, and the screen starts the month from where the game stands.
+  if (game.monthStart !== undefined) {
+    const mark = cleanMark(game.monthStart, game.turn)
+    if (mark) game.monthStart = mark
+    else delete game.monthStart
   }
   if (game.pendingDay !== undefined && (!finite(game.pendingDay) || !game.pendingEvent)) delete game.pendingDay
   const armyIds = new Set(game.armies.map((a) => a.id))
   game.launches = (Array.isArray(game.launches) ? game.launches : []).filter((l) => !!l && finite(l.at) && !!l.order && !!game.nations[l.order.nationId]?.alive && !!game.regions[l.order.target] && !armyIds.has(l.id))
+  // Warheads in the air: kept only if whole. A game that never had one carries no such field.
+  if (game.nukes !== undefined) game.nukes = (Array.isArray(game.nukes) ? game.nukes : []).filter((f) => !!f && finite(f.lands) && !!game.nations[f.nationId]?.alive && !!map.regions[f.target])
   game.flights = (Array.isArray(game.flights) ? game.flights : []).filter((f) => !!f && finite(f.lands) && finite(f.count) && !!game.nations[f.nationId]?.alive && !!map.regions[f.target])
 }

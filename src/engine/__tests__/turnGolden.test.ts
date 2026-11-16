@@ -11,6 +11,32 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * Pins exactly how turn-based months resolve, so a change that was not meant to alter the rules (a refactor, a cache) shows up here.
  * First pinned before the live mode was added. Re-pinned after the review's rule fixes (combat, coups, money, diplomacy, markets),
  * which change results on purpose. If a rule is changed on purpose, play the scenarios again and pin the new values.
+ * Re-pinned when nations got more project slots (two, not one, at the start): the bots build more at once. Checked before pinning:
+ * with the old slot counts put back, the old hashes matched, so everything else added then (project levels, projects in a country,
+ * social programs, campaigns) changes nothing for a nation that does not use it.
+ * The Hard-bot world was pinned again when Hard bots learned to use social programs, campaigns, the new projects and projects in
+ * their countries: a deliberate change of what they decide. The Normal-bot world did not move. Pinned again when missiles became a program with several kinds, and struck rivals began to answer.
+ * The small-war scenario was pinned again when an attack stopped carrying a share of the missile stock by itself (the bug: mass-produced missiles all flew with the first attack). Its first attack now fires none of the 14 missiles, so 11 are left after the 3-missile strike instead of about 2. Checked: the strike's effect is identical (the target's line is 5.55 either way) and the second attack's line differs only by the changed random draws. The two bot-world pins did not move: no bot in them carried missiles into an attack.
+ * The Hard-bot world was pinned once more when Hard bots at war began developing their aircraft (radar, ground crews, coatings: ten starts in
+ * the thirty months, by India, Japan, Nigeria, Russia, the USA). Checked before pinning: with that one AI call turned off the old hash matched
+ * again, so the aircraft rules themselves (stat bonuses, hunters, reach, the monthly bill and research paid at the start) change nothing for a
+ * nation that has not started a development; the Normal-bot world and the small war did not move.
+ * Pinned once more after the missile program began to pay its research (it was checked but never charged), which changes what Hard bots at war can afford.
+ * Pinned again by the balance audit (docs/BALANCE.md) when the stability from projects in your countries (cultural centres) began to share the
+ * one ceiling on care with the programs: a Hard bot that builds a centre feels a slightly smaller stability bonus. Checked before pinning: with that one
+ * line put back the previous hash (83c1bd342788b) returned, so the audit's other changes (rushes scaled by the engineers, cruise missiles needing a few
+ * to stop factories, the missile stores' ceiling, lines never healed by a strike, nonsense orders refused) move no bot game here.
+ * Pinned again when Medium and Hard rivals learned to found and join factions, pay into them and vote (the bots' faction play uses its own random stream). Checked before pinning: with the faction play switched off, the previous hashes matched exactly (1d71ef7fbf0dc5 for the Normal world, and the Hard world's earlier pin after the aircraft and missile changes), so nothing else moved; a game that never founds a faction carries no `factions` field.
+ * Pinned once more (Hard-bot world only) when rivals began running space programs: once they know Fifth-Generation Fighters, a Hard bot hires its first engineers, and that moves the state. Checked before pinning: with that one AI call (manageSpace) turned off, the previous hash matched again, so the space rules themselves change nothing for a nation that has no agency; the Normal-bot world and the small war did not move. Final pin of the Hard-bot world is the combination of factions, space and nuclear rivals (merged together; an accidental double-run of strikes in the order phases was removed first, and the small-war pin held).
+ * Pinned again for Active Military (forces on station, borders): every bot now posts patrols and garrisons in its first month (a deliberate
+ * change of what bots decide), keeps a smaller reserve to attack with, and its garrisons turn provocations back. Checked before pinning:
+ * with the bots' posture orders taken out, the Normal-bot world hashes to its old pin exactly, once the memory of border incidents (the
+ * new `borders` field) is dropped (see deployment.test.ts), and so did the Hard-bot world and the small war (which uses the same bots) against their pins from just before this change.
+ * So nothing else moved: the new rules change nothing for a nation that has never posted forces.
+ * Final pins (Normal and Hard worlds) are the combination of factions, space, nuclear rivals and active military merged together; the small-war pin held through every merge, which shows the combined rules add nothing for a nation that uses none of them.
+ * Re-pinned (all three) when the AI got its strategic layer (src/ai/strategy.ts: postures, attacks and war targets chosen from the War Room's own
+ * forecast, peace timing, missile kinds by target) and stale AI wars began to fizzle after a year: bots decide differently on purpose.
+ * Checked before pinning: docs/STRATEGY.md has the measured effect (attacks at poor odds from 44% to under 1%, wars shorter, no stalled fronts).
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -72,19 +98,21 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('18f74dd48298d5')
+    expect(hash(JSON.stringify(s))).toBe('f204c70c0058a')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('1cac8201a01d77')
+    // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
+    // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
+    expect(hash(JSON.stringify(s))).toBe('9630530323146')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('3c4c8c04b6064')
-    expect(hash(JSON.stringify(log))).toBe('1fcd1f01fd1956')
+    expect(hash(JSON.stringify(state))).toBe('1bb3d6aea64728')
+    expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
   })
 
   it('a turn game carries none of the live fields', () => {

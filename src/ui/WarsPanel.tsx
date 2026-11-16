@@ -1,3 +1,4 @@
+import { Term } from './widgets'
 import { useMemo, useState } from 'react'
 import { computeEconomy } from '../engine/economy'
 import { enemiesOf, maxWars, pairKey } from '../engine/helpers'
@@ -26,7 +27,7 @@ export function WarsTab() {
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <p className="text-[14px] text-white/70">Each war costs money every month and tires your people. Win battles to push a country's Defense Line to zero and it is yours.</p>
+      <p className="text-[14px] text-white/70">Each war costs money every month and tires your people. Win battles to push a country's <Term word="Defense Line">Defense Line</Term> to zero and it is yours.</p>
       <div className="inset-card p-3.5 grid grid-cols-3 gap-2 text-center">
         <div>
           <div className="label">War bills</div>

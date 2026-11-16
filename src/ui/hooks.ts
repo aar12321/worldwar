@@ -19,7 +19,7 @@ export interface PlayerView {
 }
 
 /** What a live game changes on a quiet day. Nothing else is touched, so nothing that reads the rest needs to redo its work. */
-const CLOCK_KEYS = new Set(['day', 'armies', 'launches', 'flights', 'battles'])
+const CLOCK_KEYS = new Set(['day', 'armies', 'launches', 'flights', 'battles', 'monthStart'])
 let slowGame: GameState | null = null
 
 /**
@@ -119,3 +119,15 @@ export const fmt = (v: number, digits = 0) =>
   Math.abs(v) >= 10000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(digits)
 
 export const signed = (v: number, digits = 1) => `${v >= 0 ? '+' : ''}${fmt(v, digits)}`
+
+/**
+ * The name of the person playing a nation, when it is another human's (online). Null for AI nations and for your own.
+ * Offers to that nation wait in their inbox until they read it, so they are not answered the moment the month ends.
+ */
+export function useHumanName(nationId: string | null): string | null {
+  return useGame((s) => {
+    const g = s.game
+    if (!g || !nationId || nationId === g.playerId || !g.nations[nationId]?.isPlayer) return null
+    return s.online?.lobby?.players.find((p) => p.nationId === nationId)?.name ?? 'another player'
+  })
+}

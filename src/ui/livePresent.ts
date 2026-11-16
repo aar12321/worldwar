@@ -1,11 +1,14 @@
 import { UNIT_SPECS } from '../data/unitTypes'
 import { absDate } from '../engine/calendar'
 import { lineMax } from '../engine/economy'
+import { guessDivisions, hasIntel, showDivisions } from '../engine/intel'
+import { totalUnits } from '../engine/helpers'
 import type { LiveEvent, LiveStep } from '../engine/live'
 import type { Army, BattleReport, GameState, NationId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { battleLine, scenesFor } from './battleText'
 import { useFx } from './globeBridge'
+import { MISSILE_SWATCH, landedEffect, missileName } from './missileText'
 
 type Tone = 'info' | 'error' | 'success'
 
@@ -110,11 +113,54 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
       case 'missile': {
         const target = e.flight.target
         const impact = map.regions[target]
+        const kind = e.flight.kind ?? 'hypersonic'
+        // "4 cruise missiles" / "1 hypersonic missile": the kind and the number, so a retaliation is plain to read.
+        const salvo = `${e.flight.count} ${missileName(kind, e.flight.count)}`
         if (e.landed && impact) {
-          useFx.getState().addRing({ lat: impact.lat, lng: impact.lng, color: '#ff9f0a', maxRadius: 2.6 }, 1600)
-          if (e.flight.nationId === player) say('success', `Your missiles hit ${place(target)}.`)
-          else if (game.regions[target]?.owner === player) say('error', `Missiles from ${nation(e.flight.nationId)} hit ${place(target)}.`)
-        } else if (e.flight.nationId === player) say('error', `Your missiles were wasted: ${e.why === 'taken' ? `${place(target)} was already yours when they landed` : e.why === 'changed' ? `${place(target)} changed hands before they landed` : 'the war ended before they landed'}.`)
+          useFx.getState().addRing({ lat: impact.lat, lng: impact.lng, color: MISSILE_SWATCH[kind], maxRadius: kind === 'ballistic' ? 3.6 : 2.6 }, 1600)
+          if (e.flight.nationId === player) say('success', `Your ${salvo} hit ${place(target)}: ${landedEffect(kind)}.`)
+          else if (game.regions[target]?.owner === player) say('error', `${nation(e.flight.nationId)} struck ${place(target)} with ${salvo}: ${landedEffect(kind)}. Answer from the War Room.`)
+        } else if (e.flight.nationId === player) say('error', `Your ${salvo} were wasted: ${e.why === 'taken' ? `${place(target)} was already yours when they landed` : e.why === 'changed' ? `${place(target)} changed hands before they landed` : 'the war ended before they landed'}.`)
+        break
+      }
+      case 'nukeLaunched': {
+        if (e.flight.nationId === player) break
+        if (e.flight.foe === player) say('error', `ALERT: ${nation(e.flight.nationId)} has launched a nuclear missile at ${place(e.flight.target)}. It lands ${absDate(e.flight.lands)}. Offer peace now: a war that ends first calls it off.`)
+        else say('info', `${nation(e.flight.nationId)} has launched a nuclear missile at ${place(e.flight.target)}.`)
+        break
+      }
+      case 'nuke': {
+        const target = e.flight.target
+        const impact = map.regions[target]
+        const victim = e.flight.foe
+        if (e.landed && impact) {
+          // The whole world sees it: rings that reach across the globe and a long shake.
+          const fx = useFx.getState()
+          for (let i = 0; i < 3; i++) fx.addRing({ lat: impact.lat, lng: impact.lng, color: i === 1 ? '#ffffff' : '#ff2d95', maxRadius: 8 + i * 3 }, 2600 + i * 500)
+          if (!settings.reducedMotion) fx.shake(1.5)
+          if (e.flight.nationId === player) say('error', `Your missile destroyed ${place(target)}. The world's strongest powers are at war with you.`)
+          else if (victim === player) say('error', `NUCLEAR STRIKE: ${nation(e.flight.nationId)} destroyed ${place(target)}.`)
+          else say('error', `${nation(e.flight.nationId)} used a nuclear weapon on ${place(target)}. The world is in shock.`)
+        } else if (e.flight.nationId === player) say('info', `Your nuclear missile did not land: ${e.why === 'taken' ? `${place(target)} was already yours` : e.why === 'changed' ? `${place(target)} changed hands` : 'the war ended first'}.`)
+        else if (victim === player) say('success', `The nuclear missile aimed at ${place(target)} was called off: ${e.why === 'peace' ? 'the war ended' : 'the target changed'}.`)
+        break
+      }
+      case 'contact': {
+        // Early warning: the patrols of a nation that watches its waters sight a landing force the day it sets out.
+        if (e.watcher !== player) break
+        const exact = hasIntel(game, player, e.army.nationId)
+        const size = totalUnits(e.army.units)
+        const seen = showDivisions(exact ? size : guessDivisions(game, player, e.army.nationId, 'contact', size), exact)
+        const impact = map.regions[e.army.target]
+        if (impact) useFx.getState().addRing({ lat: impact.lat, lng: impact.lng, color: '#64d2ff', maxRadius: 3.4 }, 2200)
+        say('error', `Your patrols sighted ${nation(e.army.nationId)}'s landing force (${seen} divisions) heading for ${place(e.army.target)}. It arrives ${absDate(e.army.end)}. Your patrols should sink about ${Math.round(e.expected * 100)}% of it.`)
+        break
+      }
+      case 'intercept': {
+        const impact = map.regions[e.place]
+        if (impact) useFx.getState().addRing({ lat: impact.lat, lng: impact.lng, color: '#64d2ff', maxRadius: 3 }, 1800)
+        if (e.by === player) say('success', `Your patrols intercepted ${nation(e.against)}'s landing on ${place(e.place)} and sank ${e.sunk.toFixed(1)} divisions of it.`)
+        else if (e.against === player) say('error', `${nation(e.by)}'s patrols intercepted your landing on ${place(e.place)}: ${e.sunk.toFixed(1)} divisions were lost at sea.`)
         break
       }
       case 'trained': {

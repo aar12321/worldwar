@@ -1,5 +1,8 @@
 import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
+import type { AircraftNodeId } from '../data/aircraft'
 import type { SystemId } from '../data/systems'
+import type { ScenarioGoal } from '../data/scenarios'
+import type { SpaceAction, SpaceState, SpaceWorld } from '../data/space'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
@@ -37,10 +40,40 @@ export type SchoolFocus = 'balanced' | 'trades' | 'engineering' | 'medicine' | '
 export type ImmigrationPolicy = 'closed' | 'normal' | 'selective' | 'open'
 export type OccupationPolicy = 'standard' | 'autonomy' | 'assimilate' | 'settle'
 export type ArmsExports = 'off' | 'friends' | 'anyone'
-export type ProjectId = 'rail' | 'grid' | 'ports' | 'sciencePark' | 'medCentre' | 'digitalGov' | 'spaceComplex'
+export type ProjectId =
+  | 'rail' | 'grid' | 'ports' | 'sciencePark' | 'medCentre' | 'digitalGov' | 'spaceComplex'
+  | 'waterNetwork' | 'stadium' | 'broadband' | 'grainReserve' | 'openUniversity' | 'expo' | 'aiLab' | 'fusion' | 'plannedCity' | 'marsMission'
+/** A project built in one country of an empire, not by the nation as a whole. */
+export type LocalProjectId = 'industrialPark' | 'techHub' | 'irrigation' | 'dam' | 'resort' | 'culturalCentre' | 'fortress' | 'sez' | 'mine'
 export type ResearchTrack = 'productivity' | 'medicine' | 'weapons'
+/** The standing programs a government runs for its people (see `data/society.ts`). */
+export type SocialId =
+  | 'clinics' | 'cleanWater' | 'mentalHealth' | 'elderCare'
+  | 'schoolMeals' | 'scholarships' | 'apprenticeships' | 'libraries'
+  | 'minimumWage' | 'jobsGuarantee' | 'smallLoans' | 'workerRights'
+  | 'childBenefit' | 'parentalLeave' | 'foodAid' | 'transit'
+  | 'policing' | 'courts' | 'integration' | 'festivals' | 'broadcasting' | 'surveillance'
+/** The kinds of missile. Hypersonic ones are the military's `missile` stock; the rest are the nation's `arsenal`. */
+export type MissileType = 'cruise' | 'tactical' | 'hypersonic' | 'ballistic'
+export type CampaignId = 'celebration' | 'vaccination' | 'literacy' | 'jobFair' | 'unityTour' | 'foodBank' | 'babyBonus'
 /** 1 Nation, 2 Regional power, 3 Great power, 4 Superpower, 5 Hegemon. */
 export type Tier = 1 | 2 | 3 | 4 | 5
+
+/** What a puppet pays its master: a share of its income, of its oil or steel, or of its soldiers. */
+export type TributeForm = 'money' | 'oil' | 'steel' | 'levy'
+
+/** What a master may change about a puppet in one order (once a month). Every part is optional; at least one must change something. */
+export interface PuppetPatch {
+  taxRate?: number
+  draftRate?: number
+  /** Enact (`on`) or repeal one law. */
+  law?: { id: LawId; on: boolean }
+  /** New levels for some of the puppet's spending lines. */
+  spending?: Partial<Spending>
+  tribute?: { form: TributeForm; share: number }
+  /** Money sent to the puppet as aid; it buys loyalty. */
+  aid?: number
+}
 
 /** Real money a nation spends on its people each month. Schools, health and public works go 0 to 4 (2 is standard); welfare goes 0 to 2. */
 export interface Spending {
@@ -112,11 +145,38 @@ export interface Bond {
   war?: boolean
 }
 
-export interface ProjectState {
-  /** Months of work done. */
+/** One social program: the level chosen, how far its effect has phased in toward it, and the month it was last changed. */
+export interface SocialState {
+  level: number
+  strength: number
+  changed: number
+}
+
+/** A campaign: months of effect left, and months until it can be run again. */
+export interface CampaignState {
+  left: number
+  cooldown: number
+}
+
+/** One aircraft development: months of work done, whether it is finished, and whether the work is on hold (which frees its slot). */
+export interface AircraftState {
   progress: number
   done: boolean
   paused?: boolean
+}
+
+export interface ProjectState {
+  /** Months of work done on the level being built. */
+  progress: number
+  /** True once the level being built is finished. While an upgrade is under way it is false, and the earlier levels keep working. */
+  done: boolean
+  paused?: boolean
+  /** Levels finished, once there is more than one or an upgrade has begun. Missing means 1 when `done`, 0 otherwise. */
+  level?: number
+  /** The month a rush last bought time on this project: one rush a month. */
+  rushed?: number
+  /** Projects in a country: the nation that began it, so a half-built project is not inherited by a conqueror. */
+  by?: NationId
 }
 
 /** What everyone can see about the world economy, worked out once a month. */
@@ -207,6 +267,8 @@ export interface RegionState {
   owner: NationId
   population: number
   buildings: Buildings
+  /** Projects built in this country (industrial parks, dams, resorts...). They stay with the land if it is conquered. */
+  works?: Partial<Record<LocalProjectId, ProjectState>>
   /** Turns of remaining sabotage (factories produce nothing). */
   sabotaged: number
   /** Strength of a rebel insurgency (in infantry divisions). */
@@ -217,6 +279,8 @@ export interface RegionState {
   integration: number
   /** Last turn an enemy attacked this country. It heals only in quiet months. */
   attackedTurn: number
+  /** Months of devastation still to run after a nuclear strike: its output stays crippled and heals as they pass. Absent when there is none. */
+  fallout?: number
   cities: City[]
 }
 
@@ -242,6 +306,38 @@ export interface Military {
   attacksThisTurn: number
   /** Share of the military committed this turn (0 to 1). Those units defend at half strength until the turn ends. */
   exposed: number
+  /** Where the forces stand guard: patrols, the submarine screen, border garrisons. Absent until the nation sets a posture. */
+  deployment?: Deployment
+}
+
+/**
+ * A standing posture: shares of each arm on station (see `engine/deployment.ts`). What is not on station is the reserve, the only
+ * part that can be sent to attack. Everything on station still costs upkeep and oil, and still defends, best at its own post.
+ */
+export interface Deployment {
+  /** Share of the warships on coastal patrol, 0 to 1. */
+  coastal: number
+  /** Share of the warships in the submarine screen. `coastal` and `subs` add up to at most 1. */
+  subs: number
+  /** Share of the fighters and drones flying air patrols. */
+  air: number
+  /** Share of the ground forces (infantry, tanks, artillery, robots) on the border with each neighboring nation. All the shares add up to at most 1. */
+  border: Record<NationId, number>
+  /** The month the posture last changed. It can change once a month. */
+  changed: number
+  /** How many of the nation's countries lie along each border it garrisons, as of the last month's upkeep. Spares the map a search every time. */
+  fronts?: Record<NationId, number>
+}
+
+/** What a pair of neighbors remember about their border: incidents, and who has closed it. Absent until something happens. */
+export interface BorderRecord {
+  /** Heat from border incidents as it stood in month `at`. It fades every month. */
+  heat?: number
+  at?: number
+  /** Border incidents so far. */
+  incidents?: number
+  /** Nations that have closed this border. */
+  closedBy?: NationId[]
 }
 
 export interface Resources {
@@ -292,6 +388,17 @@ export interface Nation {
   secureUntil: number
   /** The turn it became a puppet, so a master can only annex one that has settled. */
   overlordSince?: number
+  /**
+   * Puppets only: how loyal the puppet is to its master, 0 to 100 (see `engine/puppets.ts`). Absent on a puppet made before loyalty
+   * existed, which keeps the old flat rules until its master first rules it, and on every nation that is not a puppet.
+   */
+  loyalty?: number
+  /** Puppets only: the form and share of the tribute the master takes. Absent means the old 12% of income in money. */
+  tribute?: { form: TributeForm; share: number }
+  /** Puppets only: the month the master last changed the puppet's rules (once a month). */
+  ruledAt?: number
+  /** Puppets only: the month the puppet last called on the world for help against its master. */
+  calledOut?: number
   /** Turn of the last corruption sweep. Stolen money takes time to build up again. */
   lastSweep?: number
   /** Size of each private business sector. */
@@ -309,6 +416,26 @@ export interface Nation {
   stateOwned: SectorId[]
   seizedUntil: number
   projects: Partial<Record<ProjectId, ProjectState>>
+  /** The space agency: talent, rockets, flights, labs, outposts. Absent until the first space order, so a nation that never uses it is unchanged. */
+  space?: SpaceState
+  /** Cruise, tactical and ballistic missiles in store (hypersonic ones are `military.units.missile`). */
+  arsenal?: Partial<Record<MissileType, number>>
+  /** The missile program's level, 0 to 3. */
+  missileProgram?: number
+  /** Missiles built so far in the month `turn`, against the program's capacity. */
+  missileBuilt?: { turn: number; count: number }
+  /** The last month each nation struck this one with missiles, so it can answer. */
+  struckBy?: Record<NationId, number>
+  /** The kind of missile each of them last struck this nation with, so it can answer in kind. */
+  struckWith?: Record<NationId, MissileType>
+  /** The nuclear program of a Superpower: warheads in store and under construction. Absent until the first one is ordered. */
+  nuclear?: NuclearState
+  /** Aircraft developments begun or finished (see `data/aircraft.ts`). Absent until the first one is started, so a nation that never uses them is unchanged. */
+  aircraft?: Partial<Record<AircraftNodeId, AircraftState>>
+  /** Social programs in force. Absent until the first one is set, so a nation that never uses them is unchanged. */
+  social?: Partial<Record<SocialId, SocialState>>
+  /** Campaigns running or cooling down. Absent until the first one is run. */
+  campaigns?: Partial<Record<CampaignId, CampaignState>>
   /** Military academy level, 0 to 3. */
   academy: number
   /** Levels bought in each future research program. */
@@ -367,6 +494,12 @@ export interface TradeTerms {
   receive: ResourceBundle
   /** 0 for a one-off exchange, otherwise the amounts change hands every month for this many months. */
   months: number
+  /** A live contract: months to wait before the first delivery. */
+  start?: number
+  /** A live contract: money the proposer posts. It comes back when the contract is fulfilled and goes to the other side if the proposer breaks it. */
+  collateral?: number
+  /** A live contract: the other nation joins every war the proposer fights, for as long as it runs. */
+  joinWars?: boolean
 }
 
 export type ProposalDraft =
@@ -413,6 +546,19 @@ export interface Deal {
   receive: ResourceBundle
   /** Last turn on which the deal pays out. */
   until: number
+  /** Present on a live contract (a trade with a start, collateral or a duty to join wars). Absent on every other deal. */
+  contract?: ContractInfo
+}
+
+/** What makes a deal a live contract: when it starts, the collateral held for it, and the duty to join wars. */
+export interface ContractInfo {
+  /** First turn it pays out. */
+  start: number
+  /** Collateral the poster put up, held until the contract ends. */
+  held: number
+  poster: NationId
+  /** The nation that must join every war of the other side while it runs. */
+  joins?: NationId
 }
 
 export interface OpinionModifier {
@@ -485,8 +631,11 @@ export type Order =
   | { type: 'printMoney'; nationId: NationId; share: number }
   | { type: 'wealthFund'; nationId: NationId; amount: number }
   | { type: 'setStateOwned'; nationId: NationId; sector: SectorId; mode: 'buy' | 'seize' | 'sell' }
-  | { type: 'startProject'; nationId: NationId; project: ProjectId }
-  | { type: 'pauseProject'; nationId: NationId; project: ProjectId; paused: boolean }
+  /** Starts a project, or the next level of a built one. A project of a country (`LocalProjectId`) says which with `regionId`. */
+  | { type: 'startProject'; nationId: NationId; project: ProjectId | LocalProjectId; regionId?: RegionId }
+  | { type: 'pauseProject'; nationId: NationId; project: ProjectId | LocalProjectId; paused: boolean; regionId?: RegionId }
+  /** Pays extra to finish the level under way sooner. Once a month for each project. */
+  | { type: 'rushProject'; nationId: NationId; project: ProjectId | LocalProjectId; regionId?: RegionId }
   | { type: 'moveCapital'; nationId: NationId; regionId: RegionId }
   | { type: 'setRegionalCapital'; nationId: NationId; regionId: RegionId; on: boolean }
   | { type: 'fundAcademy'; nationId: NationId }
@@ -512,11 +661,13 @@ export type Order =
   | { type: 'marketBuy'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'marketSell'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'setAutoBuy'; nationId: NationId; resources: TradeResource[] }
-  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many missiles to fire in this battle. Left out, a share of them fire with the force sent. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number }
+  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many hypersonic missiles to fire in this battle. Left out, none: an attack never carries missiles it was not told to. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number; /** The coalition strike this attack belongs to: in a live game every attack of one strike leaves on the same day. */ joint?: string }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'buildCase'; nationId: NationId; target: NationId }
   | { type: 'annexPuppet'; nationId: NationId; target: NationId }
+  /** A master rules its puppet: tax, draft, a law, spending, the form of the tribute, aid. Once a month for each puppet, at the month's end. */
+  | { type: 'governPuppet'; nationId: NationId; target: NationId; patch: PuppetPatch }
   | { type: 'crisisAction'; nationId: NationId; crisisId: string; action: 'aid' | 'mediate' | 'support' }
   | { type: 'propose'; nationId: NationId; target: NationId; proposal: ProposalDraft }
   | { type: 'respond'; nationId: NationId; proposalId: string; accept: boolean }
@@ -527,15 +678,47 @@ export type Order =
   | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
   | { type: 'fundSystem'; nationId: NationId; system: SystemId; levels?: number }
-  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital'; /** Missiles to fire in a hypersonic strike. */ count?: number }
+  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital'; /** Missiles to fire in the salvo. */ count?: number; /** Which kind. Hypersonic if left out. */ kind?: MissileType }
+  /** Raises the missile program one level. */
+  | { type: 'fundMissiles'; nationId: NationId }
+  /** Builds missiles of a kind from the program: money and steel (and oil) each. */
+  | { type: 'buildMissiles'; nationId: NationId; kind: Exclude<MissileType, 'hypersonic'>; count: number }
+  /** Starts building one nuclear warhead (a Superpower with the missile technology). */
+  | { type: 'buildWarhead'; nationId: NationId }
+  /** Fires a nuclear warhead at a country of a nation you are at war with. */
+  | { type: 'nuke'; nationId: NationId; target: RegionId }
+  /** Anything the space program does: hire, develop and build rockets, launch missions, run the labs, claim and build on other worlds. Applies at once. */
+  | { type: 'space'; nationId: NationId; action: SpaceAction }
+  /** Starts an aircraft development (research is paid now, money month by month). */
+  | { type: 'startAircraftDev'; nationId: NationId; node: AircraftNodeId }
+  /** Puts a development on hold, which frees its slot and its monthly bill, or takes it up again. */
+  | { type: 'pauseAircraftDev'; nationId: NationId; node: AircraftNodeId; paused: boolean }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId; /** How many levels to buy at once. One if left out. */ levels?: number }
   | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
+  /** Posts forces on station. The shares replace the nation's whole posture; what is left over is the reserve. */
+  | { type: 'setDeployment'; nationId: NationId; coastal: number; subs: number; air: number; border: Record<NationId, number> }
+  /** Closes or reopens the border with a neighboring nation. */
+  | { type: 'setBorder'; nationId: NationId; neighbor: NationId; closed: boolean }
   | { type: 'buyShares'; nationId: NationId; company: string; shares: number }
   | { type: 'sellShares'; nationId: NationId; company: string; shares: number }
   | { type: 'setDirective'; nationId: NationId; company: string; directive: Directive }
   | { type: 'enactLaw'; nationId: NationId; law: LawId }
   | { type: 'repealLaw'; nationId: NationId; law: LawId }
+  /** Sets a social program to Off (0), Pilot, National or Universal (3). */
+  | { type: 'setSocial'; nationId: NationId; policy: SocialId; level: number }
+  | { type: 'campaign'; nationId: NationId; campaign: CampaignId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
+  /** Factions: found one, join one you were invited to, invite a nation, leave, pay into the common pool, take your share out, put a country to a war vote, vote. */
+  | { type: 'factionFound'; nationId: NationId; name: string; charter?: Partial<FactionCharter> }
+  | { type: 'factionJoin'; nationId: NationId; factionId: string }
+  | { type: 'factionInvite'; nationId: NationId; target: NationId }
+  | { type: 'factionLeave'; nationId: NationId }
+  | { type: 'factionContribute'; nationId: NationId; gift: FactionGift }
+  | { type: 'factionWithdraw'; nationId: NationId; gift: FactionGift }
+  | { type: 'factionPropose'; nationId: NationId; proposal: FactionProposalDraft }
+  | { type: 'factionVote'; nationId: NationId; proposalId: string; vote: 'yes' | 'no' }
+  /** Online: this player's answer to the decision waiting for them (`GameState.pendingEvents`). */
+  | { type: 'eventChoice'; nationId: NationId; index: number }
   /** Live mode: calls an army that is still on its way out back home. */
   | { type: 'recall'; nationId: NationId; armyId: string }
 
@@ -558,6 +741,17 @@ export interface BattleRound {
   defenderLosses: UnitCounts
 }
 
+/** A landing met by the defender's patrols: who sank how many divisions of it before it came ashore. */
+export interface Interception {
+  by: NationId
+  /** Divisions of the landing force sunk or shot down. */
+  sunk: number
+  /** Share of the force that was lost. */
+  share: number
+  /** How the crossing went: the route. */
+  via: Via
+}
+
 export interface BattleReport {
   id: string
   turn: number
@@ -576,6 +770,12 @@ export interface BattleReport {
   lineMax?: number
   /** Live mode: the army that fought it. */
   armyId?: string
+  /** The player chose how much of the military to send, instead of a preset. */
+  chosen?: boolean
+  /** The defender's patrols met the landing at sea and sank part of it. */
+  intercept?: Interception
+  /** A surprise attack on a border nobody was guarding: how much stronger it made the attacker. */
+  surprise?: number
   /** Set by the screen on a battle watched again from the list, so the globe does not treat it as news. */
   replay?: boolean
 }
@@ -663,6 +863,8 @@ export interface GameState {
   turn: number
   seed: number
   settings: GameSettings
+  /** The scenario this game started from, with its goal. Absent in a Standard game, so a Standard save is exactly what it always was. */
+  scenario?: { id: string; start: number; goal: ScenarioGoal }
   /** The nation of the player at this screen. In online games each screen sets its own. */
   playerId: NationId
   /** Every nation a person plays. One in a single-player game, two to four online. */
@@ -713,6 +915,10 @@ export interface GameState {
   /** Diplomatic outcomes from the most recent turn. */
   dispatches: Dispatch[]
   pendingEvent: PendingEvent | null
+  /** True in a game people play together online. Everyone gets their own decisions, and none of them stops the month. */
+  multiplayer?: boolean
+  /** Multiplayer: the decision waiting for each human. An answer is an `eventChoice` order; an unanswered one takes the first option. */
+  pendingEvents?: Record<NationId, PendingEvent>
   /** Turn when the next surprise decision may appear. New games wait until turn 8 (FIRST_EVENT_TURN). */
   nextEventTurn: number
   battles: BattleReport[]
@@ -728,6 +934,12 @@ export interface GameState {
   history?: HistoryPoint[]
   /** How much buying (positive) or selling (negative) has pushed each world price lately. It fades every month. */
   marketPressure?: Partial<Record<TradeResource, number>>
+  /** Factions: member countries pooling money, materials and soldiers to vote on wars together. Absent until one is founded. */
+  factions?: Faction[]
+  /** Who holds each world beyond Earth, and how many flights the world has flown. Absent until someone starts a space program. */
+  space?: SpaceWorld
+  /** What neighbors remember about their borders, by sorted "a|b" key: incidents and closures. Absent until something happens. */
+  borders?: Record<string, BorderRecord>
   /** Live mode only: the day of the month, from 0. `turn` is still the month. */
   day?: number
   /** Live mode only: armies marching, fighting or coming home. */
@@ -736,8 +948,42 @@ export interface GameState {
   launches?: PlannedLaunch[]
   /** Live mode only: hypersonic salvos in the air. */
   flights?: MissileFlight[]
+  /** Live mode only: nuclear warheads in the air. They fly for days, and the target's owner can see them coming. */
+  nukes?: NukeFlight[]
+  /** World tension added by a nuclear strike. It fades every month and is added to the world's tension. */
+  shock?: number
+  /** The turn of the last nuclear strike anywhere in the world, so rivals keep quiet for a while after one. */
+  nukeLast?: number
+  /** Rivals drawing together against a leading nation, and the strikes they have agreed on. Absent until one forms. */
+  coalitions?: CoalitionPlan[]
+  /** The turn each leading nation was last the object of a coalition's plan, so plans do not follow one another at once. */
+  coalitionLast?: Record<NationId, number>
   /** Live mode only: the absolute day whose business waits until the player answers a decision that came with the new month. */
   pendingDay?: number
+  /** Live mode only: how the player's nation stood when the month began, and its battles since. It travels with the game, so a month's report is right across a save and a load. The screen keeps it; the clock does not touch it. */
+  monthStart?: MonthMark
+}
+
+/** The numbers the monthly report compares: how the player's nation stood at one moment. */
+export interface MonthStats {
+  money: number
+  food: number
+  influence: number
+  research: number
+  oil: number
+  steel: number
+  goods: number
+  soldiers: number
+  divisions: number
+  stability: number
+}
+
+/** A month's starting point for the report: the numbers as the month began, and one line for each of the player's battles since. */
+export interface MonthMark {
+  /** The month it began. */
+  turn: number
+  stats: MonthStats
+  battles: { text: string; good: boolean }[]
 }
 
 /** How an army gets to its target. Over water or air it fights with the amphibious penalty. */
@@ -759,6 +1005,8 @@ export interface Army {
   stance: Stance
   /** Share of the military it was when it left, for the battle report. */
   share: number
+  /** The player chose the share, instead of a preset. The battle report names it a chosen force, not a preset. */
+  chosen?: boolean
   via: Via
   /** Fixed at launch: crossing water or air fights with the amphibious penalty. */
   bySea: boolean
@@ -799,9 +1047,165 @@ export interface MissileFlight {
   from: RegionId
   target: RegionId
   count: number
+  /** Which kind. Hypersonic if left out. */
+  kind?: MissileType
   launched: number
   /** Absolute day it lands. */
   lands: number
   /** Who held the target when it was fired. */
   foe?: NationId
+}
+
+// ---- Factions: countries that pool money, materials and soldiers and vote on war together ----
+
+/** What the common pool holds besides soldiers. */
+export type PoolResource = 'money' | 'oil' | 'steel' | 'goods' | 'food'
+export const POOL_RESOURCES: PoolResource[] = ['money', 'oil', 'steel', 'goods', 'food']
+export type PoolStock = Record<PoolResource, number>
+
+/** How a faction's own rules work: who counts how much in a vote, who gets conquered land, and what leaving costs. */
+export interface FactionCharter {
+  /** `majority`: each member has one vote. `weighted`: votes follow each member's ownership share. */
+  vote: 'majority' | 'weighted'
+  /** `share`: conquered countries are split by ownership share. `proposer`: they go to whoever proposed the war. */
+  spoils: 'share' | 'proposer'
+  /** `refund`: a leaver takes back what is left of what they put in, less a fee. `forfeit`: they leave everything behind. */
+  exit: 'refund' | 'forfeit'
+}
+
+/** A gift to the pool, or a withdrawal from it: money and materials, and soldiers by type. */
+export interface FactionGift {
+  stock?: Partial<PoolStock>
+  units?: Partial<UnitCounts>
+}
+
+/** What one member has put into the pool and not taken out. Ownership shares come from this. */
+export interface FactionLedger {
+  stock: PoolStock
+  units: UnitCounts
+  /** The month of the last contribution: it stays locked for a while after. */
+  last: number
+  joined: number
+}
+
+/** A standing deal between the pool and a member: the member supplies the pool each month, and may be paid from it. */
+export interface FactionContractTerms {
+  /** The member who supplies. */
+  member: NationId
+  /** What the member sends the pool each month. Supplies with nothing paid back count as contributions to its ledger. */
+  supply: Partial<PoolStock>
+  /** What the pool pays the member each month. */
+  pay: Partial<PoolStock>
+  /** Months from approval before the first delivery. */
+  start: number
+  months: number
+  /** Money the member puts up as a guarantee. */
+  collateral: number
+}
+
+export type FactionProposalDraft = { kind: 'war'; target: NationId } | { kind: 'contract'; terms: FactionContractTerms }
+
+export interface FactionProposal {
+  id: string
+  kind: 'war' | 'contract'
+  by: NationId
+  created: number
+  /** The last month in which it can still be voted on. */
+  expires: number
+  target?: NationId
+  terms?: FactionContractTerms
+  votes: Record<NationId, 'yes' | 'no'>
+  /** Weighted charters only: each member's weight on the day it was put forward, so money paid in afterwards cannot buy this vote. */
+  weights?: Record<NationId, number>
+}
+
+export interface FactionContract extends FactionContractTerms {
+  id: string
+  /** First and last month it delivers. */
+  from: number
+  until: number
+  /** The member's collateral, held by the pool. */
+  held: number
+}
+
+/** A war the faction fights together: the pooled army attacks the target every month. */
+export interface FactionWar {
+  id: string
+  target: NationId
+  /** The member whose training, weapons and technology the pooled army fights with. */
+  lead: NationId
+  proposer: NationId
+  since: number
+  /** Countries each member has been given from this war, so the split follows the shares. */
+  given: Record<NationId, number>
+  captured: RegionId[]
+}
+
+export interface FactionInvite {
+  nation: NationId
+  by: NationId
+  expires: number
+}
+
+export interface Faction {
+  id: string
+  name: string
+  founder: NationId
+  founded: number
+  charter: FactionCharter
+  members: NationId[]
+  pool: { stock: PoolStock; units: UnitCounts }
+  ledger: Record<NationId, FactionLedger>
+  proposals: FactionProposal[]
+  contracts: FactionContract[]
+  invites: FactionInvite[]
+  wars: FactionWar[]
+  /** The pooled army could not be fed or fuelled last month, so it fights at reduced strength. */
+  short?: { oil?: boolean; food?: boolean }
+  /** What happened lately: votes, wars, contracts, members. */
+  history: { turn: number; text: string }[]
+}
+
+/** A nuclear program: warheads built, and the turns the ones under construction are done. */
+export interface NuclearState {
+  warheads: number
+  building: number[]
+  /** The turn of its last launch, for the wait between two. */
+  last?: number
+  /** Warheads fired in all. */
+  fired?: number
+}
+
+/** Live mode: a nuclear warhead on its way. */
+export interface NukeFlight {
+  id: string
+  nationId: NationId
+  from: RegionId
+  target: RegionId
+  launched: number
+  /** Absolute day it lands. */
+  lands: number
+  /** Who held the target when it was fired. */
+  foe?: NationId
+}
+
+/**
+ * Rivals who have agreed to strike a leading nation together: who they are, where they will hit, and when. Hard rivals make these
+ * plans, and the leader sees them coming in the World reaction panel.
+ */
+export interface CoalitionPlan {
+  id: string
+  /** The leading nation they gather against. */
+  target: NationId
+  members: NationId[]
+  /** The target's weakest countries a member can reach, first choice first. Every member attacks the first one it can reach. */
+  focus: RegionId[]
+  /** The turn the plan was made, the month the strike falls, and (live games) the day of that month. */
+  formed: number
+  strikeTurn: number
+  strikeDay: number
+  /** Set once the month of the strike has come and gone. */
+  done?: boolean
+  /** The threat score that brought them together. */
+  threat: number
 }

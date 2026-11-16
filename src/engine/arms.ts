@@ -4,6 +4,7 @@ import type { GameState, Nation, NationId, UnitType } from './types'
 import { ACADEMY, GENERAL_TRAITS } from '../data/projects'
 import { commanderTrait } from './generals'
 import { programEffects } from './industry'
+import { aircraftEffects, aircraftUnitBonus } from './aircraft'
 
 /** Technology modifiers plus the permanent weapon levels. A weapon level helps attack and defense alike. */
 export function combatMods(n: Nation): AggregatedModifiers {
@@ -15,6 +16,15 @@ export function combatMods(n: Nation): AggregatedModifiers {
     const bonus = (n.military?.weapons?.[k] ?? 0) * WEAPONS.bonusPerLevel + program
     mods.unitAttack[k] += bonus
     mods.unitDefense[k] += bonus + (trait === 'stalwart' ? GENERAL_TRAITS.stalwart.defense : 0)
+  }
+  // Aircraft developments add to fighters, bombers and drones the same way a technology does. A nation with none adds nothing.
+  const air = aircraftEffects(n)
+  if (air) {
+    for (const k of ['fighter', 'air', 'drone'] as const) {
+      const b = aircraftUnitBonus(air, k)
+      mods.unitAttack[k] += b.attack
+      mods.unitDefense[k] += b.defense
+    }
   }
   if (trait === 'air_marshal') {
     mods.unitAttack.air += GENERAL_TRAITS.air_marshal.air

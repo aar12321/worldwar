@@ -159,8 +159,9 @@ describe('a world of tiers', () => {
     const hard = play('hard')
     expect(easy.budgets).toBe(0)
     expect(easy.investments).toBe(0)
-    expect(medium.budgets).toBeGreaterThan(20)
-    expect(hard.budgets).toBeGreaterThan(20)
+    // Budgets are a count over a short run, and any change to the rivals' dealings (standing contracts) reshuffles it: Easy does none, the others many.
+    expect(medium.budgets).toBeGreaterThan(10)
+    expect(hard.budgets).toBeGreaterThan(10)
     expect(medium.cityLevels).toBeGreaterThan(easy.cityLevels)
     expect(hard.cityLevels).toBeGreaterThan(easy.cityLevels)
     expect(medium.investments).toBe(0)

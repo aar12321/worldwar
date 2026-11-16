@@ -1,10 +1,13 @@
+import { MISSILES } from '../data/missiles'
+import { airReach } from './aircraft'
+import { launchSite, strikeKind } from './missiles'
 import { LIVE } from '../data/live'
 import { GENERAL_TRAITS } from '../data/projects'
 import { commanderTrait } from './generals'
 import { REACH } from '../data/war'
-import { FRONTIER } from '../data/systems'
 import { atWar, clamp, distanceKm, emptyUnits, newId, totalUnits } from './helpers'
 import { fireMissiles } from './systems'
+import { freeUnits } from './deployment'
 import { canAttackRegion, commitShare } from './warfare'
 import type { Army, ArmyOutcome, AttackOrder, GameState, GeoPoint, MissileFlight, NationId, Order, RegionId, UnitCounts, UnitType, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -68,7 +71,7 @@ export function launchPoint(s: GameState, map: WorldMap, nationId: NationId, tar
     for (const r of Object.values(s.regions)) {
       if (r.owner !== nationId || !map.regions[r.id]) continue
       const km = distanceKm(map.regions[r.id], t)
-      if (via === 'fleet' ? r.buildings.port > 0 && km <= REACH.seaKm : r.buildings.factory > 0 && km <= REACH.airKm) candidates.push(r.id)
+      if (via === 'fleet' ? r.buildings.port > 0 && km <= REACH.seaKm : r.buildings.factory > 0 && km <= airReach(s.nations[nationId])) candidates.push(r.id)
     }
   }
   let best: RegionId | null = null
@@ -122,17 +125,17 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
   // A live army is away for days or weeks, so even an all-in attack leaves a guard at home.
   const share = Math.min(commitShare(n, commit, o.share), 1 - LIVE.homeGuard)
   const units = emptyUnits()
+  // Only the reserve marches: forces on station keep their posts.
+  const free = freeUnits(s, o.nationId)
   for (const k of UNIT_TYPES) {
-    const take = n.military.units[k] * share
+    const take = free[k] * share
     units[k] = take
     n.military.units[k] -= take
   }
-  // The player may choose exactly how many missiles go along. Otherwise they go in the same share as everything else.
-  if (o.missiles !== undefined) {
-    n.military.units.missile += units.missile
-    units.missile = Math.min(Math.max(0, Math.floor(o.missiles)), Math.floor(n.military.units.missile + 1e-9))
-    n.military.units.missile -= units.missile
-  }
+  // Only the missiles the order names go along, none if it names none: a share of the stock never leaves by itself.
+  n.military.units.missile += units.missile
+  units.missile = Math.min(Math.max(0, Math.floor(o.missiles ?? 0)), Math.floor(n.military.units.missile + 1e-9))
+  n.military.units.missile -= units.missile
   const m = n.military
   m.attacksThisTurn = m.lastAttackTurn === s.turn ? m.attacksThisTurn + 1 : 1
   m.lastAttackTurn = s.turn
@@ -144,6 +147,7 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
     commit,
     stance,
     share,
+    ...(o.share !== undefined ? { chosen: true } : {}),
     via: trip.via,
     bySea: trip.bySea,
     home: trip.from,
@@ -263,22 +267,13 @@ export function recallProblem(s: GameState, nationId: NationId, armyId: string):
   return null
 }
 
-/** Fires a salvo of hypersonic missiles. They leave now and land a day later. Mutates `s`. */
+/** Fires a salvo of missiles. They leave now and land after the days their kind takes to fly. Mutates `s`. */
 export function launchStrike(s: GameState, map: WorldMap, o: Strike, today: number): MissileFlight | null {
+  const kind = strikeKind(o)
+  const from = launchSite(s, map, o.nationId, o.target, kind)
   const fired = fireMissiles(s, o)
   if (fired < 1) return null
-  const t = map.regions[o.target]
-  let from: RegionId | null = null
-  let bestKm = Infinity
-  for (const r of Object.values(s.regions).sort((x, y) => (x.id < y.id ? -1 : 1))) {
-    if (r.owner !== o.nationId || r.buildings.factory <= 0 || !map.regions[r.id]) continue
-    const km = distanceKm(map.regions[r.id], t)
-    if (km <= FRONTIER.strikeKm && km < bestKm) {
-      from = r.id
-      bestKm = km
-    }
-  }
-  const flight: MissileFlight = { id: newId(s, 'f'), nationId: o.nationId, from: from ?? o.target, target: o.target, count: fired, launched: today, lands: today + LIVE.missileDays, foe: s.regions[o.target]?.owner }
+  const flight: MissileFlight = { id: newId(s, 'f'), nationId: o.nationId, from: from ?? o.target, target: o.target, count: fired, ...(kind !== 'hypersonic' ? { kind } : {}), launched: today, lands: today + MISSILES[kind].days, foe: s.regions[o.target]?.owner }
   ;(s.flights ??= []).push(flight)
   return flight
 }

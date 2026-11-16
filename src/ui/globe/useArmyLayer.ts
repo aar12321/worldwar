@@ -5,10 +5,12 @@ import { LIVE } from '../../data/live'
 import { armyAt, greatCircle, planTrip } from '../../engine/armies'
 import { clockOf } from '../../engine/calendar'
 import { atWar, formatDivisions, totalUnits } from '../../engine/helpers'
-import type { Army, MissileFlight } from '../../engine/types'
+import { NUCLEAR } from '../../data/nuclear'
+import type { Army, MissileFlight, MissileType, NukeFlight } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
 import { armyStatus } from '../armyText'
+import { MISSILE_ARC, flightDays } from '../missileText'
 import { liveClock } from '../liveClock'
 import { badge, glyphOf, type Glyph, type Variant } from './badges'
 
@@ -28,7 +30,7 @@ export interface ArmyDatum {
   size: number
 }
 
-interface PathDatum {
+export interface PathDatum {
   id: string
   points: [number, number, number][]
   color: string
@@ -36,6 +38,8 @@ interface PathDatum {
   gap: number
   animate: number
   key: string
+  /** Line width. Routes use the default; border lines set their own. */
+  stroke?: number
 }
 
 interface ArcDatum {
@@ -44,6 +48,12 @@ interface ArcDatum {
   startLng: number
   endLat: number
   endLng: number
+  /** What it is, so the arc is drawn in its kind's colors. */
+  kind: MissileType
+  /** Days in the air: a ballistic missile crawls across the globe, a hypersonic one is gone in a day. */
+  days: number
+  /** A nuclear warhead: a thicker, higher arc in its own colors. */
+  nuke?: boolean
 }
 
 export interface ThreatRing {
@@ -65,10 +75,15 @@ const pathDashGap = (d: object) => (d as PathDatum).gap
 const pathDashAnimateTime = (d: object) => (d as PathDatum).animate
 /** How high above the countries badges and routes ride, clear of the raised countries you can attack or have selected. */
 const ARMY_ALT = 0.05
-const pathStroke = () => 3.2
-const arcColor = () => ['rgba(255,214,10,0.95)', 'rgba(255,69,58,0.95)']
+const pathStroke = (d: object) => (d as PathDatum).stroke ?? 3.2
+const arcColor = (d: object) => ((d as ArcDatum).nuke ? ['rgba(255,255,255,1)', 'rgba(255,45,149,1)'] : MISSILE_ARC[(d as ArcDatum).kind])
+/** Ballistic missiles are drawn heavier than cruise missiles, and a warhead heaviest of all. */
+const arcStroke = (d: object) => ((d as ArcDatum).nuke ? 1.5 : (d as ArcDatum).kind === 'ballistic' ? 0.8 : (d as ArcDatum).kind === 'cruise' ? 0.35 : 0.5)
+const arcAltitude = (d: object) => ((d as ArcDatum).nuke ? 0.55 : null)
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
+
+const isMissile = (f: MissileFlight | NukeFlight): f is MissileFlight => 'count' in f
 
 /** What the layer remembers between renders, so unchanged armies keep the same objects and the globe does not rebuild them. */
 class LayerCache {
@@ -152,10 +167,10 @@ class LayerCache {
   }
 
   /** Missiles in the air, one arc each. */
-  syncArcs(flights: MissileFlight[] | undefined): ArcDatum[] {
+  syncArcs(flights: MissileFlight[] | undefined, nukes?: NukeFlight[]): ArcDatum[] {
     const next = new Map<string, ArcDatum>()
     let changed = false
-    for (const f of flights ?? []) {
+    for (const f of [...(flights ?? []), ...(nukes ?? [])]) {
       const from = map.regions[f.from]
       const to = map.regions[f.target]
       if (!from || !to) continue
@@ -165,7 +180,7 @@ class LayerCache {
         continue
       }
       changed = true
-      next.set(f.id, { id: f.id, startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng })
+      next.set(f.id, { id: f.id, startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, ...(isMissile(f) ? { kind: f.kind ?? 'hypersonic', days: flightDays(f) } : { kind: 'ballistic' as MissileType, days: NUCLEAR.flightDays, nuke: true }) })
     }
     if (next.size !== this.arcs.size) changed = true
     this.arcs = next
@@ -195,6 +210,7 @@ function legPoints(a: Pick<Army, 'from' | 'to' | 'via'>): [number, number, numbe
 export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, reduced: boolean) {
   const armies = useGame((s) => s.game?.armies)
   const flights = useGame((s) => s.game?.flights)
+  const nukes = useGame((s) => s.game?.nukes)
   const playerId = useGame((s) => s.game?.playerId)
   const selected = useGame((s) => s.selectedArmy)
   const mapMode = useGame((s) => s.mapMode)
@@ -292,7 +308,7 @@ export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, armies])
   const pathsData = useMemo(() => (preview ? [...routes, preview] : routes), [routes, preview])
-  const arcsData = useMemo(() => cache.syncArcs(flights), [cache, flights])
+  const arcsData = useMemo(() => cache.syncArcs(flights, nukes), [cache, flights, nukes])
 
   // A warning ring over each of your countries an enemy army is marching on.
   const threatKey = useMemo(() => {
@@ -310,7 +326,8 @@ export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, 
     [threatKey],
   )
 
-  const flightMs = LIVE.msPerDay / speed
+  // Each arc's light crosses it once in the time its missile spends in the air, at the speed the clock runs.
+  const arcAnimateTime = useCallback((d: object) => (reduced ? 0 : (d as ArcDatum).days * (LIVE.msPerDay / speed)), [reduced, speed])
   return {
     threatRings,
     props: {
@@ -332,11 +349,13 @@ export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, 
       pathTransitionDuration: 0,
       arcsData,
       arcColor,
-      arcStroke: 0.5,
+      arcStroke,
+      arcAltitude,
       arcAltitudeAutoScale: 0.4,
-      arcDashLength: 0.35,
-      arcDashGap: 1.6,
-      arcDashAnimateTime: reduced ? 0 : flightMs,
+      // One bright stretch a quarter of the arc long, always on the arc and crossing it once in the flight's days.
+      arcDashLength: 0.25,
+      arcDashGap: 0.75,
+      arcDashAnimateTime: arcAnimateTime,
     },
   }
 }

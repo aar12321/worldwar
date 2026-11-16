@@ -26,6 +26,14 @@ export interface Lobby {
   settings: RoomSettings
   players: LobbyPlayer[]
   phase: 'lobby' | 'playing'
+  /** Which era of hosting this is. Every takeover raises it, so a host that was left behind can tell it has been replaced. */
+  term: number
+}
+
+/** A seat a newcomer to a running game may take: a player who is away, or whom the host let go. */
+export interface OpenSeat {
+  nationId: NationId
+  name: string
 }
 
 export const MAX_PLAYERS = 4
@@ -42,15 +50,21 @@ export type NetMessage =
   | { t: 'hello'; from: ClientId; name: string }
   | { t: 'lobby'; from: ClientId; lobby: Lobby }
   | { t: 'pick'; from: ClientId; nationId: NationId | null }
-  | { t: 'settings'; from: ClientId; settings: RoomSettings }
   | { t: 'leave'; from: ClientId }
   | { t: 'orders'; from: ClientId; turn: number; orders: Order[]; ready: boolean }
   | { t: 'ready'; from: ClientId; turn: number; ready: NationId[]; remainingMs: number | null }
-  | { t: 'state'; from: ClientId; id: string; part: number; parts: number; data: string; turn: number; remainingMs: number | null }
+  /** A game, in pieces. `to` says who asked for it; everyone else skips it. */
+  | { t: 'state'; from: ClientId; id: string; part: number; parts: number; data: string; turn: number; remainingMs: number | null; hostTerm: number; to?: ClientId }
   | { t: 'need-state'; from: ClientId }
   | { t: 'chat'; from: ClientId; name: string; text: string; at: number }
-  | { t: 'ping'; from: ClientId; name: string }
-  | { t: 'claim-host'; from: ClientId }
+  /** Each heartbeat also says who this screen thinks the host is, so two hosts find each other. */
+  | { t: 'ping'; from: ClientId; name: string; host: ClientId | null; term: number }
+  | { t: 'claim-host'; from: ClientId; term: number }
+  /** The host sends a player away. */
+  | { t: 'kick'; from: ClientId; target: ClientId }
+  /** The host answers a newcomer to a running game with the seats that are free. */
+  | { t: 'seats'; from: ClientId; to: ClientId; seats: OpenSeat[] }
+  | { t: 'take-seat'; from: ClientId; nationId: NationId; name: string }
 
 /** Room codes avoid letters that look alike, so they can be read out loud. */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -96,12 +110,4 @@ export async function encodeState(state: GameState): Promise<string[]> {
 export async function decodeState(parts: string[]): Promise<GameState> {
   const bytes = await pipe(fromB64(parts.join('')), new DecompressionStream('gzip'))
   return JSON.parse(new TextDecoder().decode(bytes)) as GameState
-}
-
-/** A short fingerprint of a game, to see at a glance whether two screens agree. */
-export function fingerprint(state: GameState): string {
-  let h = 2166136261
-  const text = `${state.turn}|${state.seed}|${state.log.length}|${state.nextId}|${Object.values(state.nations).map((n) => `${n.id}${n.alive ? 1 : 0}${Math.round(n.resources.capital)}`).join(',')}`
-  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619)
-  return (h >>> 0).toString(36)
 }

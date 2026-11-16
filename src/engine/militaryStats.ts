@@ -1,6 +1,8 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingRank } from '../data/unitTypes'
+import { aircraftSources } from './aircraft'
 import { combatMods } from './arms'
+import { freeUnits, postedUnits } from './deployment'
 import { COMBAT, hasCombinedArms } from './combat'
 import { forceUnits, nationModifiers, totalUnits } from './helpers'
 import { trainingSlots } from './training'
@@ -9,7 +11,7 @@ import { UNIT_TYPES } from './types'
 
 /** One thing that changes a unit's stats, so the player can see where a number comes from. */
 export interface BonusSource {
-  kind: 'tech' | 'weapons' | 'drill'
+  kind: 'tech' | 'weapons' | 'drill' | 'aircraft'
   label: string
   attack: number
   defense: number
@@ -46,6 +48,9 @@ export interface MilitarySheet {
   combinedArmsBonus: number
   trainingSlots: number
   trainingUsed: number
+  /** Divisions on station (patrols, screens, garrisons) and divisions in the reserve, free to attack. */
+  onStation: number
+  reserve: number
 }
 
 /**
@@ -73,6 +78,7 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
       const d = mod?.unitDefense?.[unit] ?? 0
       if (a || d) sources.push({ kind: 'tech', label: TECH_BY_ID[id].name, attack: a, defense: d })
     }
+    for (const a of aircraftSources(n, unit)) sources.push({ kind: 'aircraft', label: `Development: ${a.label}`, attack: a.attack, defense: a.defense })
     if (weaponLevel > 0) sources.push({ kind: 'weapons', label: `Weapons level ${weaponLevel}`, attack: weaponLevel * WEAPONS.bonusPerLevel, defense: weaponLevel * WEAPONS.bonusPerLevel })
     if (drillRank > 0) sources.push({ kind: 'drill', label: `${trainingRank(drillRank)} drill`, attack: drillBonus, defense: drillBonus })
     return {
@@ -103,6 +109,8 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
     combinedArmsBonus: COMBAT.combinedArmsBonus + base.combinedArms,
     trainingSlots: trainingSlots(s, nationId),
     trainingUsed: (s.trainingQueue ?? []).filter((j) => j.nationId === nationId).length,
+    onStation: totalUnits(postedUnits(s, nationId)),
+    reserve: totalUnits(freeUnits(s, nationId)),
   }
 }
 
@@ -117,4 +125,14 @@ export function homePower(s: GameState, nationId: NationId): number {
   if (!s.nations[nationId]) return 0
   if (!s.armies?.some((a) => a.nationId === nationId)) return militaryPower(s, nationId)
   return militarySheet({ ...s, armies: [] }, nationId).totalPower
+}
+
+/** Strength of the reserve: what a nation can send to attack. The same as `militaryPower` for a nation with nothing on station. */
+export function freePower(s: GameState, nationId: NationId): number {
+  const n = s.nations[nationId]
+  if (!n) return 0
+  if (!n.military.deployment) return militaryPower(s, nationId)
+  const sheet = militarySheet(s, nationId)
+  const free = freeUnits(s, nationId)
+  return sheet.units.reduce((sum, l) => sum + (l.count > 0 ? l.power * Math.min(1, free[l.unit] / l.count) : 0), 0)
 }

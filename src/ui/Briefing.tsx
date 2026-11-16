@@ -1,9 +1,12 @@
 import { isLive } from '../engine/calendar'
 import { OBJECTIVES, type Advice } from '../engine/advisor'
-import { controlled } from '../engine/victory'
+import { getWorld } from '../map/world'
+import { conquestGoal, controlled, countriesTaken, economicGoal, economicShare, goalSentence, populationShare } from '../engine/victory'
 import { useGame } from '../store'
 import { useAdvice, usePlayerView } from './hooks'
 import { PanelShell } from './panel'
+import { ownsGoal } from '../engine/scenarios'
+import { ScenarioBriefing } from './ScenarioBriefing'
 
 const URGENCY: Record<Advice['urgency'], { label: string; color: string }> = {
   now: { label: 'Needs you now', color: '#ff453a' },
@@ -70,11 +73,27 @@ export function Briefing() {
 
   return (
     <PanelShell title="Briefing" kicker={`${player.name} · what needs you this month`} panel="briefing">
+      <ScenarioBriefing game={game} playerId={player.id} />
+      {!ownsGoal(game) && (
       <section className="inset-card p-4 space-y-3">
         <div className="text-[16px] font-semibold tracking-tight">How you win</div>
-        <Progress label="Hold the whole world" value={held} goal={lands} text={`${held} of ${lands} countries`} />
-        <p className="text-[13px] text-white/70">Every country must be yours or a puppet of yours{puppets > 0 ? ` (${puppets} puppet${puppets === 1 ? '' : 's'} so far)` : ''}. It takes a long time: work through allies, spies and patience. You lose if {player.name} is wiped out.</p>
+        {game.settings.goal === 'classic' ? (
+          <>
+            <Progress label="Countries taken" value={countriesTaken(game, player.id)} goal={conquestGoal(game.settings.victoryShare)} text={`${countriesTaken(game, player.id)} of ${conquestGoal(game.settings.victoryShare)}`} />
+            <Progress label="World's people held" value={populationShare(game, player.id)} goal={game.settings.victoryShare} text={`${Math.round(populationShare(game, player.id) * 100)}% of ${Math.round(game.settings.victoryShare * 100)}%`} />
+            <Progress label="World's output" value={economicShare(game, getWorld().map, player.id)} goal={economicGoal(game.settings.victoryShare)} text={`${Math.round(economicShare(game, getWorld().map, player.id) * 100)}% of ${Math.round(economicGoal(game.settings.victoryShare) * 100)}%`} />
+            <p className="text-[13px] text-white/70">
+              {game.humans.length > 1 || game.multiplayer ? 'The first player' : 'You'} to {goalSentence(game)} wins. Any one of the three is enough. You lose if {player.name} is wiped out.
+            </p>
+          </>
+        ) : (
+          <>
+            <Progress label="Hold the whole world" value={held} goal={lands} text={`${held} of ${lands} countries`} />
+            <p className="text-[13px] text-white/70">Every country must be yours or a puppet of yours{puppets > 0 ? ` (${puppets} puppet${puppets === 1 ? '' : 's'} so far)` : ''}. It takes a long time: work through allies, spies and patience. You lose if {player.name} is wiped out.</p>
+          </>
+        )}
       </section>
+      )}
 
       {showGuide && left.length > 0 && (
         <section className="space-y-2.5">
