@@ -35,7 +35,7 @@ describe('an attack that names its units', () => {
 
   it('cannot send units that stand on station', () => {
     const s = war()
-    s.nations.r0.military.deployment = { coastal: 0, subs: 0, air: 1, border: {} }
+    s.nations.r0.military.deployment = { coastal: 0, subs: 0, air: 1, border: {}, changed: 0 }
     // All the fighters and strike aircraft are on air patrol.
     expect(attackPool(s, 'r0').fighter).toBe(0)
     expect(validateOrder(s, map, send({ fighter: 1 }))).toMatch(/no fighters free/)

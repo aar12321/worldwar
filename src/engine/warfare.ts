@@ -205,7 +205,7 @@ export function transferRegion(s: GameState, map: WorldMap, regionId: RegionId, 
 }
 
 /** A Blitz under a commander who knows the trade pushes further. */
-function blitzSpec(n: Nation | undefined, stance: Stance) {
+export function blitzSpec(n: Nation | undefined, stance: Stance) {
   const spec = STANCES[stance]
   return stance === 'blitz' && commanderTrait(n) === 'blitz' ? { ...spec, advance: spec.advance * (1 + GENERAL_TRAITS.blitz.blitz) } : spec
 }
@@ -312,7 +312,7 @@ export function gunBonus(units: UnitCounts, stance: Stance): number {
   return 1 + share * (stance === 'siege' ? WAR.artillerySiege : WAR.artilleryAssault)
 }
 
-interface Setup {
+export interface Setup {
   attacker: Combatant
   defender: Combatant
   garrison: UnitCounts
@@ -341,7 +341,7 @@ function scaled(units: UnitCounts, weights: Record<string, number>): UnitCounts 
  * The share of hypersonic batteries' damage that gets past the defender's shield and, with developments, its hunter fighters
  * (those standing in this fight). Exactly the shield's own number when neither side has any developments.
  */
-function batteryThrough(attacker: Combatant, defender: Combatant, shield: number): number {
+export function batteryThrough(attacker: Combatant, defender: Combatant, shield: number): number {
   const base = interceptFactor(shield)
   if (!attacker.air && !defender.air) return base
   return pastDefenses(base, attacker.air, defender.air, defender.units.fighter, AIRCRAFT_RULES.huntVs.hypersonic)
