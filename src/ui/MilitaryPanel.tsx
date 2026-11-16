@@ -16,6 +16,7 @@ import { isLive } from '../engine/calendar'
 import { ACADEMY, GENERAL_TRAITS } from '../data/projects'
 import { tierOf } from '../engine/empire'
 import { academyCost } from '../engine/industry'
+import { DeploymentTab } from './DeploymentTab'
 import { SystemsTab } from './SystemsTab'
 import { WarsTab } from './WarsPanel'
 
@@ -149,7 +150,7 @@ function Forces() {
     <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
         <Total label="Strength" value={sheet.totalPower.toFixed(0)} />
-        <Total label="Divisions" value={formatDivisions(sheet.totalUnits)} sub={sheet.inField > 0.05 ? `${formatDivisions(sheet.totalUnits - sheet.inField)} at home · ${formatDivisions(sheet.inField)} in the field` : undefined} />
+        <Total label="Divisions" value={formatDivisions(sheet.totalUnits)} sub={[sheet.inField > 0.05 ? `${formatDivisions(sheet.totalUnits - sheet.inField)} at home · ${formatDivisions(sheet.inField)} in the field` : '', player.military.deployment ? `${formatDivisions(sheet.onStation)} on station · ${formatDivisions(sheet.reserve)} reserve` : ''].filter(Boolean).join(' · ') || undefined} />
         <Total label="Upkeep a month" value={`-${fmt(sheet.upkeep, 1)}`} />
         <Total label="Food a month" value={`-${fmt(sheet.foodUse, 1)}`} />
       </div>
@@ -229,6 +230,7 @@ function Forces() {
 
 const MILITARY_TABS = [
   ['forces', 'Forces'],
+  ['deploy', 'Deployment'],
   ['wars', 'Wars'],
 ] as const
 
@@ -246,9 +248,9 @@ export function MilitaryPanel() {
       kicker={`One force for the whole nation · ${wars} of ${maxWars(game, player.id)} wars`}
       panel="military"
       wide
-      tabs={<Tabs value={tab} onChange={setTab} options={isLive(game) ? ([MILITARY_TABS[0], ['armies', (game.armies?.filter((a) => a.nationId === player.id).length ?? 0) > 0 ? `Armies (${game.armies?.filter((a) => a.nationId === player.id).length})` : 'Armies'], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const) : ([MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const)} />}
+      tabs={<Tabs value={tab} onChange={setTab} options={isLive(game) ? ([MILITARY_TABS[0], MILITARY_TABS[1], ['armies', (game.armies?.filter((a) => a.nationId === player.id).length ?? 0) > 0 ? `Armies (${game.armies?.filter((a) => a.nationId === player.id).length})` : 'Armies'], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const) : ([MILITARY_TABS[0], MILITARY_TABS[1], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const)} />}
     >
-      {tab === 'forces' ? <Forces /> : tab === 'wars' ? <WarsTab /> : tab === 'systems' ? <SystemsTab /> : tab === 'armies' && isLive(game) ? <ArmiesTab /> : <AgenciesTab />}
+      {tab === 'forces' ? <Forces /> : tab === 'deploy' ? <DeploymentTab /> : tab === 'wars' ? <WarsTab /> : tab === 'systems' ? <SystemsTab /> : tab === 'armies' && isLive(game) ? <ArmiesTab /> : <AgenciesTab />}
     </PanelShell>
   )
 }

@@ -11,6 +11,8 @@ import { SYSTEM_SPECS } from '../data/systems'
 import { fundSystem, runStrike, runSystems } from './systems'
 import { MISSILES } from '../data/missiles'
 import { applyBuildMissiles, applyFundMissiles } from './missiles'
+import { applyDeployment, runDeployment } from './deployment'
+import { applySetBorder } from './borders'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -171,6 +173,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     }
     case 'strike':
       return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Fire ${o.count ?? 1} ${MISSILES[o.kind ?? 'hypersonic'].name.toLowerCase()}${(o.count ?? 1) === 1 ? '' : 's'} at ${region(o.target)}`
+    case 'setDeployment':
+      return 'Post forces on station'
+    case 'setBorder':
+      return `${o.closed ? 'Close' : 'Reopen'} the border with ${nation(o.neighbor)}`
     case 'fundMissiles':
       return 'Raise the missile program'
     case 'buildMissiles':
@@ -217,7 +223,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 const PHASES: Order['type'][][] = [
   ['eventChoice'],
   ['respond'],
-  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital'],
+  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose', 'resolution'],
   ['cancelTrain'],
@@ -325,6 +331,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   applyDeals(s)
   runPolitics(s, map, rng)
   runEpidemics(s, map, nationNeighborMap(s, map), doctors)
+  runDeployment(s, map)
   runJustification(s, map, rng)
   runCrises(s, map, rng)
   runStocks(s, map, rng)
@@ -629,6 +636,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'fundSystem':
       fundSystem(s, o.nationId, o.system, o.levels ?? 1)
+      break
+    case 'setDeployment':
+      applyDeployment(s, map, o)
+      break
+    case 'setBorder':
+      applySetBorder(s, o)
       break
     case 'fundMissiles':
       applyFundMissiles(s, n)

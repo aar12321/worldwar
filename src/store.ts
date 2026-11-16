@@ -37,9 +37,9 @@ export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'dip
 export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
 export type { PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
-export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
+export type MilitaryTab = 'forces' | 'deploy' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
-export type MapMode = 'political' | 'relations' | 'fronts'
+export type MapMode = 'political' | 'relations' | 'fronts' | 'borders'
 
 export interface PolicyPatch {
   taxRate?: number
@@ -606,6 +606,13 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
     .sort((a, b) => Number(b.defender.nationId === player && b.attacker.nationId !== 'rebels') - Number(a.defender.nationId === player && a.attacker.nationId !== 'rebels'))
   const fx = scenesFor(settings.battleScenes, player, mine)
   for (const b of mine) if (b.captured) flashCapture(b.regionId, b.defender.nationId === player, next.nations[player]?.color ?? '#fff')
+  // A landing met by patrols at sea is news whether the report is on or off.
+  for (const b of mine) {
+    if (!b.intercept) continue
+    const place = getWorld().map.regions[b.regionId]?.name ?? b.regionId
+    if (b.defender.nationId === player) toast(`Your patrols intercepted a landing on ${place} and sank ${b.intercept.sunk.toFixed(1)} divisions of it.`, 'success', 6000)
+    else toast(`Patrols met your landing on ${place}: ${b.intercept.sunk.toFixed(1)} divisions were lost at sea.`, 'error', 6000)
+  }
   // With the report off, the turn's big moments still get a line.
   if (!settings.monthlyReport) {
     const mineNews = next.dispatches.filter((d) => d.to === player || d.from === player)
@@ -1156,6 +1163,7 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ warRoom: null })
     const queue = settings.battleScenes === 'off' ? [] : [result.battle]
     if (result.battle.captured) flashCapture(target, false, next.nations[game.playerId].color)
+    if (result.battle.intercept) get().toast(`Their patrols met your landing at sea and sank ${result.battle.intercept.sunk.toFixed(1)} divisions of it.`, 'error', 5000)
     set({ game: next, fxQueue: [...get().fxQueue, ...queue], fxTotal: get().fxQueue.length + queue.length })
     if (!queue.length) {
       const name = map.regions[target].name

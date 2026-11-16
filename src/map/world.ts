@@ -1,6 +1,6 @@
 import { geoArea, geoCentroid, geoDistance } from 'd3-geo'
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson'
-import { feature, neighbors } from 'topojson-client'
+import { feature, mesh, neighbors } from 'topojson-client'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import worldTopology from 'world-atlas/countries-110m.json'
 import { COUNTRY_STATS, EXCLUDED_COUNTRIES, STRATEGIC_SEA_LANES } from '../data/countries'
@@ -125,4 +125,42 @@ let cached: BuiltWorld | null = null
 export function getWorld(): BuiltWorld {
   if (!cached) cached = buildWorld()
   return cached
+}
+
+/** A stretch of shared border between two countries, as points of [longitude, latitude]. */
+export interface BorderLine {
+  a: RegionId
+  b: RegionId
+  points: [number, number][]
+}
+
+let cachedLines: BorderLine[] | null = null
+
+/**
+ * The land borders between countries as lines on the globe: one entry for each stretch two countries share. Worked out from the same
+ * map data the countries come from, once, the first time a screen asks (the Borders map).
+ */
+export function borderLines(): BorderLine[] {
+  if (cachedLines) return cachedLines
+  const topology = worldTopology as unknown as Topology<{ countries: GeometryCollection<{ name: string }> }>
+  const geoms = topology.objects.countries.geometries
+  const adjacency = neighbors(geoms as never)
+  const ids = geoms.map((g) => slugify((g.properties as { name: string }).name))
+  const kept = new Set(Object.keys(getWorld().map.regions))
+  const out: BorderLine[] = []
+  adjacency.forEach((list, i) => {
+    for (const j of list) {
+      if (j <= i || !kept.has(ids[i]) || !kept.has(ids[j])) continue
+      const line = mesh(topology, topology.objects.countries, (x, y) => (x === geoms[i] && y === geoms[j]) || (x === geoms[j] && y === geoms[i]))
+      for (const piece of line.coordinates) if (piece.length >= 2) out.push({ a: ids[i], b: ids[j], points: piece as [number, number][] })
+    }
+  })
+  cachedLines = out
+  return out
+}
+
+/** The pairs of countries joined by one of the strategic sea lanes: the narrow seas and ocean crossings the map treats as chokepoints. */
+export function chokepoints(): [RegionId, RegionId][] {
+  const regions = getWorld().map.regions
+  return STRATEGIC_SEA_LANES.map(([a, b]) => [slugify(a), slugify(b)] as [RegionId, RegionId]).filter(([a, b]) => regions[a] && regions[b])
 }

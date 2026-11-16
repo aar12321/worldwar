@@ -4,6 +4,7 @@ import { COMMITS, STANCES, type Commit, type Stance } from '../data/war'
 import { planTrip, tripSchedule } from '../engine/armies'
 import { absDate, clockOf, isLive } from '../engine/calendar'
 import { computeEconomy } from '../engine/economy'
+import { freeUnits } from '../engine/deployment'
 import { formatDivisions, maxAttacks, totalUnits } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
 import { forecastAttack } from '../engine/warfare'
@@ -107,7 +108,10 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const hasStrikeWeapons = player.military.units.missile >= 1 || (player.systems?.orbital ?? 0) > 0
   const bill = computeEconomy(game, map, player.id).warBills.find((b) => b.enemy === owner.id)?.amount ?? 0
   const nominal = customShare ?? COMMITS[commit].share
-  const sent = totalUnits(player.military.units) * (f?.share ?? nominal)
+  // Only the reserve can be sent: forces on station keep their posts.
+  const reserve = freeUnits(game, player.id)
+  const onStation = !!player.military.deployment
+  const sent = totalUnits(reserve) * (f?.share ?? nominal)
   const away = Math.min(1, player.military.exposed + (f?.share ?? nominal))
   const lineNow = f?.lineBefore ?? region.line
   const lineMaxNow = f?.lineMax ?? lineNow
@@ -115,7 +119,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const trip = live ? planTrip(game, map, player.id, target) : null
   const when = trip ? tripSchedule(trip, today) : null
   const share = f?.share ?? nominal
-  const sentAway = totalUnits(player.military.units) * share
+  const sentAway = totalUnits(reserve) * share
   const stayHome = totalUnits(player.military.units) - sentAway
   const sentThisMonth = player.military.lastAttackTurn === game.turn ? player.military.attacksThisTurn : 0
   const route = trip ? (trip.via === 'land' ? 'by land' : trip.via === 'lane' ? 'across the sea' : trip.via === 'fleet' ? 'by sea' : 'by air') : ''
@@ -171,6 +175,11 @@ function WarRoomDialog({ target }: { target: RegionId }) {
 
         <section className="space-y-2">
           <h3 className="text-[15px] font-semibold">How much to send</h3>
+          {onStation && (
+            <p className="text-[12px] text-white/70">
+              Shares are of your reserve, {formatDivisions(totalUnits(reserve))} divisions. {formatDivisions(totalUnits(player.military.units) - totalUnits(reserve))} stay on station: patrols, screens and garrisons cannot attack.
+            </p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Force size">
             {COMMIT_KEYS.map((c) => {
               const share = Math.min(COMMITS[c].share, 1 - player.military.exposed)
@@ -189,12 +198,12 @@ function WarRoomDialog({ target }: { target: RegionId }) {
                     {COMMITS[c].name}
                     {bestCommit === c && <span className="ml-1.5 rounded-full bg-[#30d158]/25 px-1.5 py-0.5 text-[10px] font-semibold text-[#6eeb8a]">AI recommends</span>}
                   </div>
-                  <div className="text-[12px] text-white/75 tabular-nums">{formatDivisions(totalUnits(player.military.units) * share)} divisions</div>
+                  <div className="text-[12px] text-white/75 tabular-nums">{formatDivisions(totalUnits(reserve) * share)} divisions</div>
                   <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[12px] text-white/80 tabular-nums">
-                    {UNIT_TYPES.filter((u) => player.military.units[u] * share >= 0.05).map((u) => (
+                    {UNIT_TYPES.filter((u) => reserve[u] * share >= 0.05).map((u) => (
                       <span key={u} className="inline-flex items-center gap-1">
                         <UnitIcon unit={u} size={13} />
-                        {formatDivisions(player.military.units[u] * share)}
+                        {formatDivisions(reserve[u] * share)}
                       </span>
                     ))}
                   </div>
@@ -208,8 +217,8 @@ function WarRoomDialog({ target }: { target: RegionId }) {
               className={`rounded-xl p-2.5 text-left border ${custom !== null ? 'border-[#0a84ff] bg-[#0a84ff]/20' : 'border-white/10 bg-white/6 hover:bg-white/10'}`}
             >
               <div className="text-[14px] font-semibold">Choose</div>
-              <div className="text-[12px] text-white/75 tabular-nums">{custom !== null ? `${formatDivisions(totalUnits(player.military.units) * Math.min(custom / 100, 1 - player.military.exposed))} divisions` : 'Any amount'}</div>
-              <div className="mt-1 text-[12px] text-white/80">{custom !== null ? `${custom}% of your military` : 'Pick a share yourself'}</div>
+              <div className="text-[12px] text-white/75 tabular-nums">{custom !== null ? `${formatDivisions(totalUnits(reserve) * Math.min(custom / 100, 1 - player.military.exposed))} divisions` : 'Any amount'}</div>
+              <div className="mt-1 text-[12px] text-white/80">{custom !== null ? `${custom}% of your ${onStation ? 'reserve' : 'military'}` : 'Pick a share yourself'}</div>
             </button>
           </div>
           {custom !== null && (

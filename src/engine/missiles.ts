@@ -1,6 +1,7 @@
 import { addOpinion } from '../ai/opinion'
 import { MISSILES, MISSILE_PROGRAM, PROGRAM_MISSILES } from '../data/missiles'
 import { interceptFactor } from './combat'
+import { airPatrolStop } from './deployment'
 import { addInfamy, addLog, atWar, clamp, distanceKm } from './helpers'
 import type { GameState, MissileType, Nation, NationId, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -76,7 +77,9 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   const region = s.regions[target]
   const victim = s.nations[region.owner]
   const place = map.regions[target].name
-  const through = getsThrough(victim.systems?.shield ?? 0, kind)
+  // The victim's air patrols shoot some of a salvo down before the shield does its work.
+  const patrol = airPatrolStop(s, victim.id, kind)
+  const through = getsThrough(victim.systems?.shield ?? 0, kind) * (1 - patrol)
   const stopped = Math.round((1 - through) * 100)
   const parts: string[] = []
   if (spec.line > 0) {
@@ -114,7 +117,7 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   if (spec.opinion) addOpinion(s, region.owner, nationId, 'Bombarded us with ballistic missiles', spec.opinion, 0.3)
   // The struck nation remembers, and a nation that can answer will.
   ;(victim.struckBy ??= {})[nationId] = s.turn
-  addLog(s, 'battle', `${fired} ${spec.name.toLowerCase()}${fired === 1 ? '' : 's'} from ${n.name} hit ${place}${stopped > 0 ? ` (the shield stopped ${stopped}%)` : ''}: ${parts.join(', ') || 'little damage'}.`, [nationId, region.owner])
+  addLog(s, 'battle', `${fired} ${spec.name.toLowerCase()}${fired === 1 ? '' : 's'} from ${n.name} hit ${place}${stopped > 0 ? ` (${patrol > 0.005 ? 'the shield and the air patrols' : 'the shield'} stopped ${stopped}%)` : ''}: ${parts.join(', ') || 'little damage'}.`, [nationId, region.owner])
 }
 
 // ---- The missile program ----

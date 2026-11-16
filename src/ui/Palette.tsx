@@ -26,6 +26,7 @@ const ECONOMY: [EconomyTab, string][] = [
 ]
 const MILITARY: [MilitaryTab, string][] = [
   ['forces', 'Forces and academy'],
+  ['deploy', 'Deployment: patrols, screens, border garrisons'],
   ['wars', 'Wars'],
   ['agencies', 'Agencies'],
   ['systems', 'Frontier systems'],

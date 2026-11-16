@@ -15,10 +15,11 @@ import { cityEffects, razeCities } from './cities'
 import { lineMax, regionWorkforce } from './economy'
 import { interceptFactor, resolveBattle, type Combatant } from './combat'
 import { createRng } from './rng'
+import { defenseWeights, freeUnits, interception, surpriseBonus } from './deployment'
 import { recordBattle } from './warscore'
 import { addInfamy, addLog, atWar, distanceKm, emptyUnits, forceUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
 import type { Rng } from './rng'
-import type { Army, BattleReport, GameState, Military, Nation, NationId, RegionId, UnitCounts, Via, WorldMap } from './types'
+import type { Army, BattleReport, GameState, Interception, Military, Nation, NationId, RegionId, UnitCounts, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
 export { distanceKm }
@@ -45,7 +46,8 @@ export function canAttackRegion(s: GameState, map: WorldMap, nationId: NationId,
   }
   const n = s.nations[nationId]
   if (!n) return { ok: false, bySea: false }
-  const u = n.military.units
+  // Ships and planes on station cannot carry an army: only the reserve can.
+  const u = freeUnits(s, nationId)
   // Ships and planes carry the army: a token squadron cannot lift a whole military across the ocean.
   const lift = carryNeeded(u)
   const fleet = t.coastal && u.naval >= Math.max(REACH.navalUnits, lift)
@@ -71,13 +73,16 @@ export function carryNeeded(u: UnitCounts): number {
 /** Why a nation cannot reach a country, in words a player can act on. */
 export function reachProblem(s: GameState, map: WorldMap, nationId: NationId, target: RegionId): string {
   const t = map.regions[target]
-  const u = s.nations[nationId]?.military.units
+  const u = s.nations[nationId] ? freeUnits(s, nationId) : undefined
   const hasPort = Object.values(s.regions).some((r) => r.owner === nationId && r.buildings.port > 0)
   const lift = u ? carryNeeded(u) : 0
   const navy = u && u.naval >= Math.max(REACH.navalUnits, lift)
   const air = u && u.fighter + u.air >= Math.max(REACH.airUnits, lift)
   const ships = Math.ceil(Math.max(REACH.navalUnits, lift))
-  const sea = !t?.coastal ? 'ships cannot reach an inland country' : hasPort ? (navy ? '' : `train warships to sail from your port (${ships} needed to carry your military)`) : navy ? 'build a port for your warships' : 'build a port and train warships'
+  // Warships on patrol or in the screen cannot carry an army: say so, rather than telling the player to train more.
+  const all = s.nations[nationId] ? forceUnits(s, nationId).naval : 0
+  const stationed = !navy && all >= Math.max(REACH.navalUnits, lift) && !!s.nations[nationId]?.military.deployment
+  const sea = !t?.coastal ? 'ships cannot reach an inland country' : hasPort ? (navy ? '' : stationed ? 'your warships are on patrol: free some in Military, Deployment, to sail' : `train warships to sail from your port (${ships} needed to carry your military)`) : navy ? 'build a port for your warships' : 'build a port and train warships'
   const sky = air ? 'it is beyond your air range, and you need a factory close enough to use as an airbase' : `or train fighters or strike aircraft (${Math.ceil(Math.max(REACH.airUnits, lift))} needed) and keep a factory as an airbase`
   return `Out of reach: it is not on your border. To reach it, ${[sea, sky].filter(Boolean).join('; ')}.`
 }
@@ -304,6 +309,19 @@ interface Setup {
   bySea: boolean
   /** Share of the defender's military standing in this fight. */
   defendShare: number
+  via?: Via
+  /** Units of the landing force lost to the defender's patrols before it came ashore. */
+  sunk: UnitCounts | null
+  intercept?: Interception
+  /** A first strike on a border nobody guarded: how much stronger it made the attacker. */
+  surprise: number
+}
+
+/** Units multiplied by a weight for each kind. */
+function scaled(units: UnitCounts, weights: Record<string, number>): UnitCounts {
+  const out = emptyUnits()
+  for (const k of UNIT_TYPES) out[k] = units[k] * weights[k]
+  return out
 }
 
 /** Builds both sides of an attack, or null if it is not allowed. Shared by the real fight and the forecast. */
@@ -316,9 +334,11 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const defenderId = targetRegion.owner
   const defenderNation = s.nations[defenderId]
   if (defenderId === nationId || !defenderNation?.alive || !atWar(s, nationId, defenderId)) return null
-  const reach = army ? { ok: true, bySea: army.bySea } : canAttackRegion(s, map, nationId, target)
+  const reach: Reach = army ? { ok: true, bySea: army.bySea, via: army.via } : canAttackRegion(s, map, nationId, target)
   const share = army ? army.share : commitShare(attackerNation, commit, custom)
-  if (army ? totalUnits(army.units) < 0.05 : !reach.ok || share < 0.05 || totalUnits(attackerNation.military.units) < 0.1) return null
+  // Only the reserve can attack: what stands on station stays at its post.
+  const free = army ? null : freeUnits(s, nationId)
+  if (army ? totalUnits(army.units) < 0.05 : !reach.ok || share < 0.05 || totalUnits(free!) < 0.1) return null
 
   const spec = blitzSpec(attackerNation, stance)
   const attNotes: string[] = []
@@ -330,7 +350,32 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
     attNotes.push(`amphibious assault (-${Math.round(40 * (1 - reduction))}%)`)
   }
   // An army fights with the units it carries, every missile included. Otherwise a share of the whole military goes.
-  const attacker = army ? makeCombatant(attackerNation, { ...attackerNation.military, units: army.units }, null, attNotes, attPenalty, 1) : makeCombatant(attackerNation, attackerNation.military, null, attNotes, attPenalty, share)
+  // A garrison that is not on its guard loses the border to a surprise attack in the first months of a war.
+  let surprise = 0
+  if (reach.via === 'land') {
+    surprise = surpriseBonus(s, map, defenderId, nationId)
+    if (surprise > 0.005) {
+      attPenalty *= 1 + surprise
+      attNotes.push(`surprise on an unguarded border (+${Math.round(surprise * 100)}%)`)
+    }
+  }
+  const attacker = army ? makeCombatant(attackerNation, { ...attackerNation.military, units: army.units }, null, attNotes, attPenalty, 1) : makeCombatant(attackerNation, free === attackerNation.military.units ? attackerNation.military : { ...attackerNation.military, units: free! }, null, attNotes, attPenalty, share)
+  // The defender's patrols meet a landing from the sea or the air and sink part of it before it comes ashore.
+  let sunk: UnitCounts | null = null
+  let intercept: Interception | undefined
+  if (reach.bySea && reach.via) {
+    const icpt = interception(s, defenderId, reach.via, attacker.units)
+    if (icpt.share > 0) {
+      sunk = emptyUnits()
+      for (const k of UNIT_TYPES) {
+        if (k === 'missile') continue
+        sunk[k] = attacker.units[k] * icpt.share
+        attacker.units[k] -= sunk[k]
+      }
+      intercept = { by: defenderId, sunk: totalUnits(sunk), share: icpt.share, via: reach.via }
+      attNotes.push(`patrols sank ${Math.round(icpt.share * 100)}% of the landing force`)
+    }
+  }
   // The player chooses how many missiles to fire. Left out, a share of them fire with the force sent.
   if (!army && missiles !== undefined) attacker.units.missile = Math.min(Math.max(0, Math.floor(missiles)), Math.floor(attackerNation.military.units.missile + 1e-9))
   attacker.boost = spec.boost
@@ -338,8 +383,12 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const garrison = emptyUnits()
   garrison.infantry = garrisonStrength(s, map, target)
   const defNotes: string[] = []
-  const defender = makeCombatant(defenderNation, defenderNation.military, garrison, defNotes, 1, defendingShare(s, defenderNation, target, defNotes))
-  return { attacker, defender, garrison, share, bySea: reach.bySea, defendShare: defendingShare(s, defenderNation, target, []) }
+  // What stands on station fights where it stands: a garrison best on its own border, patrols against a landing.
+  const weights = defenseWeights(s, defenderId, nationId, reach.bySea)
+  const defending = weights ? { ...defenderNation.military, units: scaled(defenderNation.military.units, weights) } : defenderNation.military
+  if (weights && UNIT_TYPES.some((k) => Math.abs(weights[k] - 1) > 0.02 && defenderNation.military.units[k] >= 0.05)) defNotes.push('forces on station: strongest at their own post')
+  const defender = makeCombatant(defenderNation, defending, garrison, defNotes, 1, defendingShare(s, defenderNation, target, defNotes))
+  return { attacker, defender, garrison, share, bySea: reach.bySea, defendShare: defendingShare(s, defenderNation, target, []), via: reach.via, sunk, intercept, surprise }
 }
 
 export interface AttackForecast {
@@ -430,6 +479,8 @@ export function resolveAttack(
 
   const outcome = resolveBattle({ attacker, defender, terrain: mr.terrain, coastal: mr.coastal }, rng)
   const mine = army ? army.units : attackerNation.military.units
+  // Whatever the patrols sank on the way in is gone before the fight.
+  if (setup.sunk) for (const k of UNIT_TYPES) mine[k] = Math.max(0, mine[k] - setup.sunk[k])
   applyLosses(mine, emptyUnits(), outcome.attackerLosses)
   // Only the part of the defender's military that stood here (the rest held other fronts) and the garrison share the losses.
   const standing = emptyUnits()
@@ -496,6 +547,8 @@ export function resolveAttack(
     lineMax: max,
     ...(army ? { armyId: army.id } : {}),
     ...(chosen ? { chosen } : {}),
+    ...(setup.intercept ? { intercept: setup.intercept } : {}),
+    ...(setup.surprise > 0.005 ? { surprise: setup.surprise } : {}),
   }
   s.battles.push(report)
   if (outcome.winner === 'attacker') reach(attackerNation, 'win')
@@ -508,6 +561,12 @@ export function resolveAttack(
   }
   const verb = captured ? 'captured' : outcome.winner === 'attacker' ? 'pushed back the defense of' : 'was repulsed attacking'
   addLog(s, 'battle', `${attackerNation.name} ${verb} ${mr.name} (held by ${defenderNation.name}).`, [nationId, defenderId])
+  if (setup.intercept) {
+    const by = defenderNation.name
+    report.modifiers.push(`${by}'s patrols met the landing at sea and sank ${setup.intercept.sunk.toFixed(1)} divisions of it`)
+    addLog(s, 'war', `${by}'s patrols intercepted ${attackerNation.name}'s landing on ${mr.name} and sank ${setup.intercept.sunk.toFixed(1)} divisions of it.`, [nationId, defenderId])
+  }
+  if (setup.surprise > 0.005) addLog(s, 'war', `${attackerNation.name} struck ${mr.name} across a border ${defenderNation.name} was not guarding.`, [nationId, defenderId])
   if (firedMissiles >= 0.5) report.modifiers.push(`Fired ${Math.round(firedMissiles)} hypersonic missile${Math.round(firedMissiles) === 1 ? '' : 's'} (used up)`)
   if (missileHits > 0) report.modifiers.push(`Hypersonic batteries cut the Defense Line by ${missileHits.toFixed(1)}`)
   if (savedA + savedD > 0) report.modifiers.push(`Nano-medicine saved ${(savedA + savedD).toFixed(1)} divisions`)

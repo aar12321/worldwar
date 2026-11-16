@@ -28,7 +28,7 @@ export interface ArmyDatum {
   size: number
 }
 
-interface PathDatum {
+export interface PathDatum {
   id: string
   points: [number, number, number][]
   color: string
@@ -36,6 +36,8 @@ interface PathDatum {
   gap: number
   animate: number
   key: string
+  /** Line width. Routes use the default; border lines set their own. */
+  stroke?: number
 }
 
 interface ArcDatum {
@@ -65,7 +67,7 @@ const pathDashGap = (d: object) => (d as PathDatum).gap
 const pathDashAnimateTime = (d: object) => (d as PathDatum).animate
 /** How high above the countries badges and routes ride, clear of the raised countries you can attack or have selected. */
 const ARMY_ALT = 0.05
-const pathStroke = () => 3.2
+const pathStroke = (d: object) => (d as PathDatum).stroke ?? 3.2
 const arcColor = () => ['rgba(255,214,10,0.95)', 'rgba(255,69,58,0.95)']
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)

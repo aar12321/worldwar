@@ -13,7 +13,8 @@ import { nextWeaponLevel } from '../engine/arms'
 import { recentlyProposed } from '../engine/diplomacy'
 import { computeEconomy, lineMax, type EconomyReport } from '../engine/economy'
 import { atWar, canUseUnit, clamp, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex, totalUnits } from '../engine/helpers'
-import { homePower, militaryPower } from '../engine/militaryStats'
+import { freePower, homePower, militaryPower } from '../engine/militaryStats'
+import { deploymentOrder } from './deployment'
 import { validateOrder } from '../engine/orders'
 import { clockMonth } from '../engine/calendar'
 import { createRng, type Rng } from '../engine/rng'
@@ -237,6 +238,11 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   }
 
   if (!n.military.commanderId && n.generals.length > 0) tryAdd({ type: 'assignGeneral', nationId, generalId: n.generals[0].id })
+
+  // Active military: every rival keeps forces on station, more of them and better placed the higher the difficulty. Easy rivals only
+  // post a token garrison and patrol; they also leave the posture alone once set.
+  const posture = deploymentOrder(s, map, nationId, diff.skill as 0 | 1 | 2)
+  if (posture) tryAdd(posture)
 
   const reserve = 15
   let budget = Math.max(0, n.resources.capital - reserve)
@@ -620,7 +626,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
     const target = options[0]
     if (target && rng.chance(target.started ? 0.85 : BOT.attackChance * diff.aggression)) {
       // Send the smallest force that clears the bar, and keep some home when a strong neighbor is also at war with us.
-      const needed = (target.def * attackRatio) / Math.max(0.1, myPower)
+      // Only the reserve attacks, so it is the reserve's strength that must clear the bar.
+      const needed = (target.def * attackRatio) / Math.max(0.1, freePower(s, nationId))
       const threatened = enemies.some((e) => e !== s.regions[target.id].owner && (ctx.power.get(e) ?? 0) > myPower * 0.6)
       const commit = needed <= COMMITS.probe.share ? 'probe' : needed <= COMMITS.main.share ? 'main' : !threatened || needed > 1 ? 'allin' : 'main'
       if (needed <= 1) {

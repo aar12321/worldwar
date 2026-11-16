@@ -120,3 +120,9 @@ export const NEON = {
 export const RELATION_COLORS = { yours: '#0a84ff', ally: '#30d158', pact: '#64d2ff', war: '#ff453a', other: '#5b6270' }
 /** Fronts mode: a full Defense Line is the strong color, a broken one fades toward the pale color. */
 export const FRONT_COLORS = { yours: '#0a84ff', enemy: '#ff453a', weak: '#f1e3c8', other: '#3d434e' }
+
+/** Borders mode: the land itself is kept quiet so the lines on it read. */
+export const BORDER_COLORS = { yours: '#1c4a86', neighbor: '#3b4354', other: '#2b303a' }
+
+/** The color of a border's tension: calm green, through amber, to red. */
+export const tensionColor = (t: number) => (t >= 60 ? '#ff453a' : t >= 35 ? '#ffb340' : '#30d158')

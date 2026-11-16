@@ -6,6 +6,7 @@ import { commanderTrait } from './generals'
 import { REACH } from '../data/war'
 import { atWar, clamp, distanceKm, emptyUnits, newId, totalUnits } from './helpers'
 import { fireMissiles } from './systems'
+import { freeUnits } from './deployment'
 import { canAttackRegion, commitShare } from './warfare'
 import type { Army, ArmyOutcome, AttackOrder, GameState, GeoPoint, MissileFlight, NationId, Order, RegionId, UnitCounts, UnitType, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -123,8 +124,10 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
   // A live army is away for days or weeks, so even an all-in attack leaves a guard at home.
   const share = Math.min(commitShare(n, commit, o.share), 1 - LIVE.homeGuard)
   const units = emptyUnits()
+  // Only the reserve marches: forces on station keep their posts.
+  const free = freeUnits(s, o.nationId)
   for (const k of UNIT_TYPES) {
-    const take = n.military.units[k] * share
+    const take = free[k] * share
     units[k] = take
     n.military.units[k] -= take
   }

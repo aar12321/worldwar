@@ -16,6 +16,11 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * social programs, campaigns) changes nothing for a nation that does not use it.
  * The Hard-bot world was pinned again when Hard bots learned to use social programs, campaigns, the new projects and projects in
  * their countries: a deliberate change of what they decide. The Normal-bot world did not move. Pinned again when missiles became a program with several kinds, and struck rivals began to answer.
+ * Pinned again for Active Military (forces on station, borders): every bot now posts patrols and garrisons in its first month (a deliberate
+ * change of what bots decide), keeps a smaller reserve to attack with, and its garrisons turn provocations back. Checked before pinning:
+ * with the bots' posture orders taken out, the Normal-bot world hashes to its old pin exactly, once the memory of border incidents (the
+ * new `borders` field) is dropped (see deployment.test.ts), and the small war, which uses the same bots, matched its old pin the same way.
+ * So nothing else moved: the new rules change nothing for a nation that has never posted forces.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -77,18 +82,18 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('1d71ef7fbf0dc5')
+    expect(hash(JSON.stringify(s))).toBe('1da6174a424318')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('23d77e0bf045b')
+    expect(hash(JSON.stringify(s))).toBe('3f02e58ed6156')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('8fc104d2481e1')
+    expect(hash(JSON.stringify(state))).toBe('e3917e1d83cbf')
     expect(hash(JSON.stringify(log))).toBe('1fcd1f01fd1956')
   })
 

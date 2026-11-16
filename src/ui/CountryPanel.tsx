@@ -1,4 +1,9 @@
 import { opinionLabel, opinionOf } from '../ai/opinion'
+import { BORDER_LABEL, STATION } from '../data/deployment'
+import { bordersOf } from '../engine/borders'
+import { lineBonus } from '../engine/deployment'
+import { deploymentView, showDivisions } from '../engine/intel'
+import { tensionColor } from './colors'
 import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, COSTS } from '../data/unitTypes'
@@ -14,6 +19,7 @@ import { garrisonStrength } from '../engine/warfare'
 import { netWarScore } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
+import type { GameState, RegionId, WorldMap } from '../engine/types'
 import { useHumanName, usePlayerView } from './hooks'
 import { UnitIcon } from './icons'
 import { MilitaryCompare } from './MilitaryCompare'
@@ -121,6 +127,7 @@ export function CountryPanel() {
           <LineBar now={line} max={max} />
           {mine && <p className="text-[13px] text-white/70">An enemy must wear this down to zero to take the country. Barracks make it longer.</p>}
         </div>
+        <BorderCard game={game} map={map} selected={selected} mine={mine} />
         {region.rebels > 0 && <p className="text-[14px] text-[#ff8a84]">Rebels are fighting here ({region.rebels.toFixed(1)} divisions).</p>}
 
         {mine ? (
@@ -220,6 +227,47 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="inset-card py-2.5 px-1">
       <div className="label">{label}</div>
       <div className="text-[16px] font-semibold tabular-nums">{value}</div>
+    </div>
+  )
+}
+
+/** The border between the country you clicked and yours: its state, its tension and why, and who guards it. */
+function BorderCard({ game, map, selected, mine }: { game: GameState; map: WorldMap; selected: RegionId; mine: boolean }) {
+  const openMilitary = useGame((s) => s.openMilitary)
+  const player = game.playerId
+  if (mine) {
+    const bonus = lineBonus(game, map, selected)
+    return bonus > 0.05 ? <p className="text-[13px] text-[#6cb4ff]">Border garrisons add {bonus.toFixed(1)} to this country's Defense Line.</p> : null
+  }
+  const owner = game.regions[selected].owner
+  const b = bordersOf(game, map, player).find((x) => x.other === owner)
+  if (!b) return null
+  const view = deploymentView(game, player, owner)
+  const theirs = b.land ? (view.exact ? b.theirDivisions : (view.border[player] ?? 0)) : 0
+  return (
+    <div className="space-y-1.5" aria-label="Border">
+      <div className="flex items-baseline justify-between text-[14px]">
+        <span className="font-semibold">
+          {b.land ? 'Border' : 'Sea border'} with {owner === player ? 'you' : game.nations[owner].name}
+          <span className={`chip ml-2 ${b.state === 'disputed' ? 'chip-red' : b.state === 'open' ? 'chip-green' : b.state === 'fortified' ? 'chip-blue' : ''}`}>{BORDER_LABEL[b.state]}</span>
+        </span>
+        <span className="tabular-nums text-white/80">Tension {b.tension}</span>
+      </div>
+      <div className="h-2 rounded-full bg-white/10 overflow-hidden" role="img" aria-label={`Border tension ${b.tension} of 100`}>
+        <div className="h-full" style={{ width: `${b.tension}%`, background: tensionColor(b.tension) }} />
+      </div>
+      <p className="text-[12px] text-white/65">{b.parts.map((p) => `${p.label} ${p.value > 0 ? '+' : ''}${p.value}`).join(' · ')}</p>
+      {b.land ? (
+        <p className="text-[13px] text-white/75">
+          You guard it with {b.mineDivisions.toFixed(1)} divisions ({Math.round(b.mineCover * 100)}% of a full guard of about {(STATION.fullPerRegion * b.fronts).toFixed(1)}).{' '}
+          {theirs > 0 ? `They keep ${showDivisions(theirs, view.exact)} facing you${view.exact ? '' : ' (a guess)'}.` : view.exact ? (view.posted ? 'They have nobody posted facing you: a weak spot.' : 'They have set no posture.') : 'What they keep here is not known: gather intelligence.'}
+        </p>
+      ) : (
+        <p className="text-[13px] text-white/75">Across the sea. Warships on patrol and the submarine screen guard it.</p>
+      )}
+      <button className="btn btn-quiet px-3 py-1 text-[13px]" onClick={() => openMilitary('deploy')}>
+        Deployment
+      </button>
     </div>
   )
 }

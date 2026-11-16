@@ -32,6 +32,9 @@ import type { GameState, Nation, Order, Programs, SpendingKey, UnitType, WorldMa
 import { canAttackRegion, commitShare, reachProblem } from './warfare'
 import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
+import { STATION } from '../data/deployment'
+import { freeUnits, validateDeployment } from './deployment'
+import { validateSetBorder } from './borders'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
 export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike', 'eventChoice'])
@@ -174,6 +177,9 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     case 'fundSystem':
       c.capital = fundSystemCost(s, o)
+      break
+    case 'setBorder':
+      c.pp = o.closed ? STATION.closeCost : 0
       break
     case 'fundMissiles': {
       const k = fundMissilesCost(s.nations[o.nationId])
@@ -475,7 +481,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (!atWar(s, o.nationId, target.owner) && !pendingWar) return `Not at war with ${s.nations[target.owner].name}`
       const live = isLive(s)
       if (n.military.lastAttackTurn === (live ? clockMonth(s) : s.turn) && n.military.attacksThisTurn >= maxAttacks(s, o.nationId)) return live ? `You have already sent ${maxAttacks(s, o.nationId)} armies this month` : `Your military has already attacked ${maxAttacks(s, o.nationId)} times this turn`
-      if (totalUnits(n.military.units) < 0.1) return live ? 'No troops at home to send' : 'You have no military to attack with'
+      if (totalUnits(freeUnits(s, o.nationId)) < 0.1) return n.military.deployment && totalUnits(n.military.units) >= 0.1 ? 'Your whole force is on station. Free some in Deployment to send it.' : live ? 'No troops at home to send' : 'You have no military to attack with'
       if (o.share !== undefined && (!Number.isFinite(o.share) || o.share < 0.05 || o.share > 1)) return 'Send between 5% and 100% of your military'
       if (commitShare(n, o.commit ?? 'main', o.share) < 0.05) return 'Your military is spent this turn. It can fight again next turn.'
       if (!canAttackRegion(s, map, o.nationId, o.target).ok) return reachProblem(s, map, o.nationId, o.target)
@@ -562,6 +568,10 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return validateFundSystem(s, o, pending)
     case 'strike':
       return validateStrike(s, map, o, pending)
+    case 'setDeployment':
+      return validateDeployment(s, map, o, pending)
+    case 'setBorder':
+      return validateSetBorder(s, map, o)
     case 'fundMissiles':
       return fundMissilesProblem(n)
     case 'buildMissiles':
