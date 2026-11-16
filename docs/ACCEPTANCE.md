@@ -55,7 +55,14 @@ All listed features were reachable and worked end to end except where the table 
 | Hypersonic | War Room, Train under Forces | Reachable | Shown with stock 0 and a link | none |
 | Aircraft development | Forces, Develop; Ctrl+K "Aircraft development" | Yes: 16 developments, "Start development" with cost and needs | Yes | none |
 | Palette entry for missiles | Ctrl+K "Missile program and stockpile" | **Fixed:** it opened Forces; the program lives in Systems | Yes | now opens Systems |
-| Shields, countermeasures, retaliation, live flight | Rules and live flight text in War Room and nuclear card | Verified for the nuclear flight; the missile agent is changing missile play, so not re-judged | n/a | left to that work |
+| Shields, countermeasures, retaliation, live flight | Rules and live flight text in War Room and nuclear card | Verified for the nuclear flight; re-checked after the merge: tab and War Room rows open; deeper play left to the missile work | n/a | left to that work |
+
+## D2. Missile War (after merging main at 8647cbd)
+
+| Feature | How reached | Works? | On screen? | Issue / fix |
+| --- | --- | --- | --- | --- |
+| Missile War tab | Military, Missile War; Ctrl+K "Military > Missile War" | Yes on desktop and phone: opens, no error screen, no sideways scroll | Tension ladder (Calm to Nuclear brink), next steps, Defences with radar, interceptor rounds, batteries, mobile launchers and their costs | none |
+| War Room missile rows | War Room, Missiles | With no stock it says so and offers "Open the program" (desktop and phone) | Yes | the aim toggle, raids and scramble need missiles in stock and a live war; not exercised in the browser |
 
 ## E. Space program
 
