@@ -243,7 +243,9 @@ export function GameOver() {
       : `${winnerName ? `${winnerName} (${p.name})` : p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${when}.`
     : game.humans.length > 1 || online
       ? `Every player's nation has fallen, as of ${when}.`
-      : `${p.name} fell ${isLive(game) ? 'on' : 'in'} ${when}. The nation is gone, so the game is lost.`
+      : p.alive && game.scenario
+        ? `Time ran out, as of ${when}: you did not manage to ${goalSentence(game)} in time.`
+        : `${p.name} fell ${isLive(game) ? 'on' : 'in'} ${when}. The nation is gone, so the game is lost.`
   const standings = players
     .map((x) => {
       const n = game.nations[x.nationId as string]
@@ -253,7 +255,7 @@ export function GameOver() {
     .sort((a, b) => Number(b.won) - Number(a.won) || Number(a.out) - Number(b.out) || b.countries - a.countries)
   return (
     <Modal
-      title={youWon ? 'You won' : win ? `${winnerName ?? champion.name} won` : game.humans.length > 1 || online ? 'Every nation has fallen' : 'Your nation has fallen'}
+      title={youWon ? 'You won' : win ? `${winnerName ?? champion.name} won` : game.humans.length > 1 || online ? 'Every nation has fallen' : p.alive && game.scenario ? 'Out of time' : 'Your nation has fallen'}
       kicker={youWon ? 'Victory' : win ? 'Game over' : 'Defeat'}
       tone={youWon ? '#30d158' : '#ff453a'}
       footer={

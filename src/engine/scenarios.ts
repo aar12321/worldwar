@@ -302,6 +302,12 @@ function each(s: GameState, who: Who | undefined, roles: Roles, f: (n: GameState
 /** The scenario this game runs, if it runs one. */
 export const scenarioInPlay = (s: GameState): ScenarioDef | null => (s.scenario ? scenarioOf(s.scenario.id) : null)
 
+/** True when the scenario's goal is its own (survive, grow, out-earn), so the Briefing shows its bars in place of the usual goal card. */
+export function ownsGoal(s: GameState): boolean {
+  const k = s.scenario?.goal.kind
+  return k === 'survive' || k === 'tier' || k === 'economy'
+}
+
 /** Months since the scenario began (0 in the first month). */
 export const scenarioMonths = (s: GameState): number => (s.scenario ? Math.max(0, s.turn - s.scenario.start) : 0)
 

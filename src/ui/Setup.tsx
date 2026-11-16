@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { DIFFICULTY } from '../data/difficulty'
+import { scenarioOf, STANDARD_SCENARIO, type ScenarioDef } from '../data/scenarios'
 import { TERRAIN } from '../data/terrain'
 import type { Difficulty } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -8,6 +9,7 @@ import { peekSave, useGame } from '../store'
 import { globeBridge } from './globeBridge'
 import { difficultyHint, difficultyReason, nationScore, nationTier, rankNations, suggestedDifficulty } from './nationList'
 import { OnlineEntry } from './Online'
+import { ScenarioPicker } from './ScenarioPicker'
 
 export function Setup() {
   const { map } = getWorld()
@@ -19,6 +21,10 @@ export function Setup() {
   const [query, setQuery] = useState('')
   const [difficulty, setDifficulty] = useState<Difficulty>('normal')
   const [mode, setMode] = useState<'turns' | 'live'>('turns')
+  const [scenario, setScenario] = useState<string>(STANDARD_SCENARIO)
+  const [scenarioOpen, setScenarioOpen] = useState(false)
+  const scenarioDef = scenarioOf(scenario) ?? scenarioOf(STANDARD_SCENARIO)!
+  const standard = scenarioDef.id === STANDARD_SCENARIO
   const saved = useMemo(() => (hasSave ? peekSave() : null), [hasSave])
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6))
 
@@ -38,6 +44,15 @@ export function Setup() {
   const tier = nationTier
   const pickTier = pick ? nationTier(nationScore(pick)) : null
   const suggested = pickTier ? suggestedDifficulty(pickTier) : null
+  const chooseScenario = (def: ScenarioDef, playAs: boolean) => {
+    setScenario(def.id)
+    setScenarioOpen(false)
+    // A scenario suggests its nation and rivals; picking it never overrides a nation already chosen unless asked to.
+    if (def.id !== STANDARD_SCENARIO && (playAs || !selected)) {
+      selectRegion(def.recommended.nation)
+      setDifficulty(def.recommended.difficulty)
+    }
+  }
 
   return (
     <>
@@ -110,8 +125,27 @@ export function Setup() {
           <p className="text-white/55 text-[14px]">Pick a nation from the list, or click any country on the globe.</p>
         )}
         <div>
+          <div className="label mb-1.5">Scenario</div>
+          <button
+            className="w-full text-left rounded-xl p-2.5 border border-white/10 bg-white/8 hover:bg-white/12"
+            onClick={() => setScenarioOpen(true)}
+            aria-haspopup="dialog"
+            data-testid="scenario-button"
+          >
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-[14px] font-semibold">{scenarioDef.title}</span>
+              <span className="text-[12px] text-[#64a8ff] shrink-0">{standard ? 'Choose' : 'Change'}</span>
+            </span>
+            <span className="block text-[12px] text-white/75 leading-snug">{scenarioDef.tagline}</span>
+          </button>
+        </div>
+        <div>
           <div className="label mb-1.5">How you win</div>
-          <p className="text-[13px] text-white/75 leading-snug">Hold the whole world: every country yours, or a puppet of yours. It takes a long time. Wars need a reason, so you work through spies, allies and the news.</p>
+          <p className="text-[13px] text-white/75 leading-snug">
+            {standard
+              ? 'Hold the whole world: every country yours, or a puppet of yours. It takes a long time. Wars need a reason, so you work through spies, allies and the news.'
+              : `${scenarioDef.goalText} Wars still need a reason.`}
+          </p>
         </div>
         <div>
           <div className="label mb-2">How time passes</div>
@@ -181,7 +215,7 @@ export function Setup() {
           <button className="btn btn-primary flex-[2] py-3 text-[15px]" disabled={!pick} onClick={() => {
               if (!pick) return
               if (hasSave && !window.confirm(`Starting a new game replaces your saved game${saved ? ` (${saved.nation}, ${saved.date})` : ''}. Start anyway?`)) return
-              newGame({ playerRegionId: pick.id, seed, difficulty, mode })
+              newGame({ playerRegionId: pick.id, seed, difficulty, mode, ...(standard ? {} : { scenario }) })
               // The first game opens on how it works. Closing the window remembers that it was seen.
               if (!useGame.getState().settings.seenHelp) useGame.getState().setHelp(true)
             }}
@@ -197,6 +231,7 @@ export function Setup() {
       </motion.div>
     </div>
       {onlineOpen && <OnlineEntry onClose={() => setOnlineOpen(false)} />}
+      {scenarioOpen && <ScenarioPicker current={scenario} nation={selected} onPick={chooseScenario} onClose={() => setScenarioOpen(false)} />}
     </>
   )
 }

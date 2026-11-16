@@ -366,7 +366,7 @@ export const TIER_NAMES: Record<number, string> = { 2: 'a Regional power', 3: 'a
 export function scenarioGoalSentence(g: ScenarioGoal): string | null {
   switch (g.kind) {
     case 'survive':
-      return `still stand, with your capital in your hands, ${g.months} months after the start`
+      return `survive ${g.months} months with your capital in your hands`
     case 'tier':
       return `grow to ${TIER_NAMES[g.tier]} (${tierSpec(g.tier).countries} countries)${g.deadline ? ` within ${g.deadline} months` : ''}`
     case 'economy':

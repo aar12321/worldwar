@@ -1182,3 +1182,43 @@ select option:checked {
 select option:disabled {
   color: #8e8e93;
 }
+
+/* Scenario picker: one column on a phone, two on a desktop. The open card shows its whole briefing and spans the row. */
+.scenario-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+@media (min-width: 760px) {
+  .scenario-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .scenario-card-on {
+    grid-column: 1 / -1;
+  }
+}
+.scenario-card {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.scenario-card-on {
+  border-color: #0a84ff;
+  background: rgba(10, 132, 255, 0.14);
+}
+.scenario-card-head {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.scenario-card-head:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.scenario-card-body {
+  display: grid;
+  gap: 10px;
+  padding: 2px 14px 14px;
+}
