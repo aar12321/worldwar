@@ -5,23 +5,15 @@ import { capitalDistance, capitalsOf, empireCount, tierOf } from '../engine/empi
 import { computeEconomy } from '../engine/economy'
 import type { OccupationPolicy, ResolutionKind } from '../engine/types'
 import { getWorld } from '../map/world'
-import { useGame, type EmpireTab } from '../store'
+import { useGame } from '../store'
 import { usePlayerView } from './hooks'
 import { Bar, LevelPicker, Pending, StatTile, Tiles } from './kit'
 import { pct } from './format'
 import { Card, Line } from './economy/parts'
-import { OrderButton, PanelShell, Tabs } from './panel'
+import { DeskTabs, OrderButton, PanelShell, TabHost } from './panel'
 import { useState } from 'react'
 import { Spark } from './Charts'
 import { WorldReaction } from './WorldReaction'
-
-const TABS = [
-  ['overview', 'Overview'],
-  ['provinces', 'Provinces'],
-  ['world', 'World'],
-  ['reaction', 'World reaction'],
-  ['stats', 'Statistics'],
-] as const satisfies readonly (readonly [EmpireTab, string])[]
 
 /** What a tier opens, one line each, for the table. */
 function unlocks(t: ReturnType<typeof tierSpec>): [string, string][] {
@@ -47,26 +39,12 @@ function unlocks(t: ReturnType<typeof tierSpec>): [string, string][] {
 
 export function EmpireDesk() {
   const view = usePlayerView()
-  const tab = useGame((s) => s.empireTab)
-  const setTab = useGame((s) => s.setEmpireTab)
   if (!view) return null
   const { game, player } = view
   const spec = tierOf(player)
   return (
-    <PanelShell title="Empire" kicker={`${spec.name} · ${empireCount(game, player.id)} ${empireCount(game, player.id) === 1 ? 'country' : 'countries'}`} panel="empire" wide tabs={<Tabs value={tab} onChange={setTab} options={TABS} />}>
-      <div>
-        {tab === 'overview' && <Overview />}
-        {tab === 'provinces' && <Provinces />}
-        {tab === 'world' && <World />}
-        {tab === 'reaction' && (
-          <section className="econ-grid">
-            <div className="span-all">
-              <WorldReaction />
-            </div>
-          </section>
-        )}
-        {tab === 'stats' && <Statistics />}
-      </div>
+    <PanelShell title="Empire" kicker={`${spec.name} · ${empireCount(game, player.id)} ${empireCount(game, player.id) === 1 ? 'country' : 'countries'}`} panel="empire" wide tabs={<DeskTabs desk="empire" />}>
+      <TabHost desk="empire" />
     </PanelShell>
   )
 }
@@ -186,11 +164,11 @@ function Provinces() {
         {far.length > 0 && (spec.regionalCapitals > 0 || spec.moveCapital) && (
           <div className="rounded-xl bg-white/5 divide-y divide-white/8">
             {far.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-[13px]">
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-[13px]">
                 <span className="min-w-0 truncate">
                   {map.regions[r.id].name} <span className="text-white/55">· {Math.round(capitalDistance(game, map, player, r.id, caps))} km from a capital</span>
                 </span>
-                <span className="flex gap-1.5 shrink-0">
+                <span className="flex flex-wrap gap-1.5">
                   {spec.regionalCapitals > 0 && <OrderButton order={{ type: 'setRegionalCapital', nationId: player.id, regionId: r.id, on: true }} label="Regional" cost={`${EMPIRE_RULES.regionalCapitalInfluence} infl.`} />}
                   {spec.moveCapital && <OrderButton order={{ type: 'moveCapital', nationId: player.id, regionId: r.id }} label="Capital" cost={`${EMPIRE_RULES.capitalMoveInfluence} infl.`} effect={wait > 0 ? `In ${wait} months` : `Stability -${EMPIRE_RULES.capitalMoveStability}`} />}
                 </span>
@@ -296,6 +274,20 @@ function World() {
         </div>
       </Card>
       {game.accord && game.accord.until >= game.turn && <p className="text-[13px] text-[#6eeb8a]">A trade accord is in force until {game.accord.until - game.turn} months from now.</p>}
+    </section>
+  )
+}
+
+/** The tabs, named for the registry (src/ui/registry.ts). */
+export { Overview as EmpireOverview, Provinces as EmpireProvinces, World as EmpireWorld, Statistics as EmpireStatistics }
+
+/** The World reaction tab, named for the registry. */
+export function EmpireReaction() {
+  return (
+    <section className="econ-grid">
+      <div className="span-all">
+        <WorldReaction />
+      </div>
     </section>
   )
 }

@@ -13,6 +13,7 @@ import { useGame } from '../../store'
 import { signed, usePlayerView } from '../hooks'
 import { LevelPicker, StatTile } from '../kit'
 import { Tabs } from '../panel'
+import { DataList } from '../DataList'
 import { Card } from './parts'
 import { ProjectCard } from './projects/ProjectCard'
 
@@ -135,7 +136,6 @@ function Countries() {
   const stored = useGame((s) => s.economyRegion)
   const { game, player } = view
   const { map } = getWorld()
-  const [query, setQuery] = useState('')
   const owned = useMemo(
     () =>
       Object.values(game.regions)
@@ -144,7 +144,6 @@ function Countries() {
     [game.regions, player.id],
   )
   const regionId: RegionId = stored && game.regions[stored]?.owner === player.id ? stored : player.capital
-  const shown = owned.filter((r) => map.regions[r.id].name.toLowerCase().includes(query.trim().toLowerCase()))
   const under = activeLocal(game, player.id)
   const select = (id: RegionId) => openEconomy('projects', id)
   const countOf = (id: RegionId) => Object.values(game.regions[id].works ?? {}).filter((p) => p?.done).length
@@ -153,20 +152,28 @@ function Countries() {
   return (
     <>
       <Card title="Your countries" hint="Each can have its own projects: an industrial park, a dam, a resort. Pick one, then build.">
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={owned.length > 6 ? 'Search your countries' : 'Filter'} aria-label="Search your countries" className="field w-full px-3 py-2 text-[14px]" />
-        <ul className="max-h-[260px] overflow-y-auto scroll-thin space-y-1 pr-1" aria-label="Your countries">
-          {shown.map((r) => (
-            <li key={r.id}>
-              <button className={`w-full text-left rounded-lg px-2.5 py-2 flex items-center justify-between gap-2 text-[14px] ${r.id === regionId ? 'bg-[#0a84ff]/25' : 'hover:bg-white/6'}`} aria-pressed={r.id === regionId} onClick={() => select(r.id)}>
-                <span className="font-semibold truncate">{map.regions[r.id].name}</span>
-                <span className="text-[12px] text-white/65 whitespace-nowrap">
-                  {countOf(r.id)} built{buildingIn(r.id) > 0 ? ` · ${buildingIn(r.id)} building` : ''}
-                </span>
-              </button>
-            </li>
-          ))}
-          {shown.length === 0 && <li className="text-[13px] text-white/60 px-2.5 py-2">No country by that name.</li>}
-        </ul>
+        <DataList
+          rows={owned}
+          rowKey={(r) => r.id}
+          searchText={(r) => map.regions[r.id].name}
+          searchLabel="Search your countries"
+          label="Your countries"
+          noun={['country', 'countries']}
+          sorts={[
+            { id: 'size', label: 'Biggest first', value: (r) => r.population, dir: 'desc' },
+            { id: 'name', label: 'A to Z', value: (r) => map.regions[r.id].name, dir: 'asc' },
+            { id: 'built', label: 'Most built first', value: (r) => countOf(r.id), dir: 'desc' },
+          ]}
+          pageSize={25}
+          renderRow={(r) => (
+            <button className={`w-full text-left rounded-lg px-2.5 py-2 flex items-center justify-between gap-2 text-[14px] ${r.id === regionId ? 'bg-[#0a84ff]/25' : 'hover:bg-white/6'}`} data-row-primary aria-pressed={r.id === regionId} onClick={() => select(r.id)}>
+              <span className="font-semibold truncate">{map.regions[r.id].name}</span>
+              <span className="text-[12px] text-white/65 whitespace-nowrap">
+                {countOf(r.id)} built{buildingIn(r.id) > 0 ? ` · ${buildingIn(r.id)} building` : ''}
+              </span>
+            </button>
+          )}
+        />
       </Card>
 
       {under.length > 0 && (

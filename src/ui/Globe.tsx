@@ -14,7 +14,7 @@ import { useGame } from '../store'
 import { useSlowGame } from './hooks'
 import { paintSignature } from './globe/paint'
 import { useArmyLayer } from './globe/useArmyLayer'
-import { BORDER_COLORS, FRONT_COLORS, NEON, RELATION_COLORS, mix, tint, wash, withAlpha } from './colors'
+import { BORDER_COLORS, NEON, frontColors, mix, relationColors, tint, wash, withAlpha } from './colors'
 import { borderPaths, stationBadges, tensionBadges, type StationBadge } from './globe/borderLayer'
 import { neighborsOf } from '../engine/borders'
 import { globeBridge, useFx, type BattleOverlay } from './globeBridge'
@@ -55,7 +55,9 @@ function regionColor(game: GameState | null, id: RegionId): string {
 }
 
 /** What a country's color means in a map mode other than Political. */
-function modeColor(game: GameState, mode: 'relations' | 'fronts' | 'borders', id: RegionId, neighbors?: Set<string>): string {
+function modeColor(game: GameState, mode: 'relations' | 'fronts' | 'borders', id: RegionId, neighbors?: Set<string>, palette: 'standard' | 'colorblind' = 'standard'): string {
+  const RELATION_COLORS = relationColors(palette)
+  const FRONT_COLORS = frontColors(palette)
   const r = game.regions[id]
   const me = game.playerId
   const mine = r.owner === me
@@ -265,7 +267,8 @@ export function WorldGlobe() {
     return targetsRef.current.set
   }, [game])
   // What the colors depend on. The accessors below read the game from a ref and change only when this does.
-  const paintKey = useMemo(() => paintSignature(game, mapMode), [game, mapMode])
+  const palette = useGame((s) => s.settings.ui.palette)
+  const paintKey = useMemo(() => `${paintSignature(game, mapMode)}|${palette}`, [game, mapMode, palette])
 
   // The nations that touch the player's, for the Borders map's quiet colors.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -277,7 +280,7 @@ export function WorldGlobe() {
       const game = gameRef.current
       const hidden = hiddenCaptures.get(id)
       if (game && mapMode !== 'political') {
-        const base = modeColor(game, mapMode, id, neighborSet)
+        const base = modeColor(game, mapMode, id, neighborSet, palette)
         return id === selectedRegion ? tint(base, 0.14) : id === hover ? tint(base, 0.08) : base
       }
       const base = hidden ? wash(hidden, map.regions[id].terrain) : regionColor(game, id)
@@ -287,7 +290,7 @@ export function WorldGlobe() {
       return base
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [paintKey, hiddenCaptures, targets, selectedRegion, hover, mapMode, neighborSet],
+    [paintKey, hiddenCaptures, targets, selectedRegion, hover, mapMode, neighborSet, palette],
   )
   const polygonSideColor = useCallback((f: object) => tint(polygonColor(f), -0.2), [polygonColor])
   const polygonAltitude = useCallback(
