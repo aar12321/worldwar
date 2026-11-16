@@ -3,8 +3,6 @@ import type { Difficulty } from '../engine/types'
 export interface DifficultySpec {
   name: string
   description: string
-  /** Bots attack a region only when their power exceeds its defense by this factor. */
-  attackRatio: number
   /** Bots declare war only when they out-muscle the target by this factor. */
   warDeclarePowerRatio: number
   /** No bot declares war on the player before this turn. */
@@ -35,7 +33,6 @@ export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
   easy: {
     name: 'Easy',
     description: 'Cautious rivals who play the basics, wait a long time before attacking you, and never band together against you.',
-    attackRatio: 1.6,
     warDeclarePowerRatio: 2,
     playerGracePeriod: 30,
     maxWarsOnPlayer: 1,
@@ -51,7 +48,6 @@ export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
   normal: {
     name: 'Medium',
     description: 'Rivals run their countries well: cities, budgets, laws and business. They form alliances and gang up on a runaway leader.',
-    attackRatio: 1.3,
     warDeclarePowerRatio: 1.5,
     playerGracePeriod: 20,
     maxWarsOnPlayer: 2,
@@ -67,7 +63,6 @@ export const DIFFICULTY: Record<Difficulty, DifficultySpec> = {
   hard: {
     name: 'Hard',
     description: 'Ruthless rivals with a richer economy. They borrow, invest, sanction, counter your army and fight side by side with allies.',
-    attackRatio: 1.15,
     warDeclarePowerRatio: 1.3,
     playerGracePeriod: 10,
     maxWarsOnPlayer: 99,

@@ -128,7 +128,7 @@ export function borderCover(s: GameState, map: WorldMap, defender: NationId, att
   if (g <= 0 && !closedBy(s, defender, attacker)) return 0
   const front = frontsOf(s, map, defender, attacker)
   if (!front) return 0
-  const checkpoints = g > 0 && closedBy(s, defender, attacker) ? 0.25 : 0
+  const checkpoints = g > 0 && closedBy(s, defender, attacker) ? BORDER.closedCover : 0
   return clamp(g / (STATION.fullPerRegion * front) + checkpoints, 0, 1)
 }
 

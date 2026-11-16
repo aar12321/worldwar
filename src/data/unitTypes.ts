@@ -110,7 +110,6 @@ export const DIPLOMACY = {
 }
 
 export const COSTS = {
-  declareWar: 25,
   declareWarWithCasusBelli: 10,
   leaveAlliance: 10,
   breakPact: 25,

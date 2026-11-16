@@ -9,8 +9,6 @@ export const EMPIRE = {
   /** One more war allowed for every this many countries you control, up to the cap. */
   warsPerRegions: 12,
   maxWarsCap: 8,
-  /** Unsettled countries you can hold before stability suffers, plus one for every this many you control. */
-  settleRegions: 4,
   /** A defeated nation whose capital has fallen gives up entirely when its army is under this many divisions. */
   surrenderUnits: 3,
   /** Or when its army is under this share of a player conqueror's. */
@@ -109,9 +107,6 @@ export const WAR = {
   /** Months for conquered land to be fully yours. */
   integrationTurns: 6,
   integrationFloor: 0.4,
-  /** Conquered countries beyond this many each cost stability. */
-  overextendFree: 2,
-  overextendPenalty: 3,
   /** A military attacked on several fronts in a month stands with 1/sqrt(fronts) of itself in each fight, but never less than this. */
   minFrontShare: 0.45,
   /** A breakaway nation keeps only the technologies up to this research cost from its old ruler. */

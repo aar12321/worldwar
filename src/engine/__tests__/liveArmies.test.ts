@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MISSILES } from '../../data/missiles'
 import { LIVE } from '../../data/live'
 import { WAR } from '../../data/war'
 import { armyAt, greatCircle, planTrip, travelDays, tripSchedule } from '../armies'
@@ -389,7 +390,7 @@ describe('hypersonic missiles in a live game', () => {
     expect(applyOrderNow(s, map, salvo(3)).error).toBeNull()
     expect(s.nations.r0.military.units.missile).toBe(3)
     expect(s.flights).toHaveLength(1)
-    expect(s.flights![0].lands).toBe(clockOf(s) + LIVE.missileDays)
+    expect(s.flights![0].lands).toBe(clockOf(s) + MISSILES.hypersonic.days)
     expect(s.regions.r1.line).toBe(6.4)
     const { s: after, events } = run(s, 1)
     expect(after.flights).toHaveLength(0)

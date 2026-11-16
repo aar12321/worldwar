@@ -50,6 +50,4 @@ export const COALITION = {
   driveChance: 0.55,
   /** Extra alliances a Hard rival may keep while a leader is at or above this pressure. */
   extraAlliance: 0.5,
-  /** Months a rival is rested after taking part in a strike before it will plan another. */
-  memberRest: 6,
 }

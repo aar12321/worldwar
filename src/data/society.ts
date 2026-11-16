@@ -71,8 +71,6 @@ export const SOCIAL_RULES = {
   cutStability: 2,
   /** The most stability all programs and projects can add together: 18 at the very most, approached but never reached. */
   stabilityCap: 18,
-  /** A policy can be changed once a month. */
-  perMonth: 1,
 }
 
 /** Strength 0 to 3 (it moves between levels) as a multiple of one unit of effect. */

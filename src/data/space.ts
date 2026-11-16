@@ -336,8 +336,6 @@ export const OUTPOST = {
   /** Money and months to raise an outpost to level 2 and 3, before the body's distance. */
   cost: [0, 0, 260, 480],
   months: [0, 0, 14, 20],
-  /** Upkeep a month for each level, before distance. */
-  upkeep: 1.6,
   /** Stability a colony gives at home, and what it adds to growth. */
   colonyStability: 1.5,
   /** Space experience needed to raise it to level 2 and 3. */
