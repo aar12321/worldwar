@@ -44,7 +44,7 @@ describe('scenarios', () => {
     // Choosing a scenario in the options is the same as applying it to the finished world.
     const viaOptions = createInitialState(map, { playerRegionId: 'poland', seed: 5, difficulty: 'normal', scenario: 'two-fronts' })
     expect(JSON.stringify(viaOptions)).toBe(JSON.stringify(make('two-fronts', 'poland')))
-  }, 60_000)
+  })
 
   it('names every country and role it uses: for the recommended nation no op is skipped', { timeout: 120_000 }, () => {
     for (const d of SCENARIOS) {
@@ -55,7 +55,7 @@ describe('scenarios', () => {
     }
   })
 
-  it('applies deterministically', { timeout: 60_000 }, () => {
+  it('applies deterministically', () => {
     for (const d of SCENARIOS) {
       const a = make(d.id, d.recommended.nation, 9, 'normal')
       const b = make(d.id, d.recommended.nation, 9, 'normal')
@@ -130,7 +130,7 @@ describe('scenarios', () => {
     expect(atWar(keg, 'azerbaijan', 'armenia')).toBe(true)
   })
 
-  it('wars it starts count as justified: no lasting infamy is left on the aggressor', { timeout: 60_000 }, () => {
+  it('wars it starts count as justified: no lasting infamy is left on the aggressor', () => {
     const s = make('strait-under-fire', 'oman')
     expect(s.infamy.iran ?? 0).toBe(0)
   })

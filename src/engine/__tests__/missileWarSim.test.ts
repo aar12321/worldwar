@@ -56,7 +56,16 @@ function worldWar(s: GameState) {
   }
 }
 
+/** Runs are deterministic in their arguments and their tallies are only read, so a run asked for twice (the stressed Normal world is the yardstick for both Hard ones) is played once. */
+const played = new Map<string, Tally>()
 function play(seed: number, difficulty: Difficulty, player: string, months: number, stress = false): Tally {
+  const key = JSON.stringify([seed, difficulty, player, months, stress])
+  let t = played.get(key)
+  if (!t) played.set(key, (t = playOnce(seed, difficulty, player, months, stress)))
+  return t
+}
+
+function playOnce(seed: number, difficulty: Difficulty, player: string, months: number, stress: boolean): Tally {
   const { map } = getWorld()
   let s: GameState = createInitialState(map, { playerRegionId: player, seed, difficulty, goal: 'classic', victoryShare: 2 })
   if (stress) worldWar(s)

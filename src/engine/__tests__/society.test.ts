@@ -345,7 +345,7 @@ describe('what a program costs and does', () => {
     expect(plain.boilOver).toBeGreaterThan(8)
     expect(kept.unsettled).toBeLessThan(plain.unsettled * 0.6)
     expect(kept.boilOver).toBeLessThan(plain.boilOver * 0.6)
-  }, 60_000)
+  })
 
   it('a trade-off is a real one: minimum wage and surveillance and workers rights cost something', () => {
     const s = base()
