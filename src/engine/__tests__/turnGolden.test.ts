@@ -106,7 +106,9 @@ describe('turn mode resolves exactly as pinned', () => {
     expect(battles).toBeGreaterThan(0)
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
-    expect(hash(JSON.stringify(s))).toBe('9630530323146')
+    // Re-pinned for the audit: a share's dividend is capped at the cheapest bond rate (src/engine/bank.ts dividendRate), so bots that hold shares earn less.
+    // With that cap switched off, '9630530323146' returns, so nothing else moved.
+    expect(hash(JSON.stringify(s))).toBe('14199992a274a')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
