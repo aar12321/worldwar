@@ -1,22 +1,20 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ComponentType, type LazyExoticComponent, type ReactNode } from 'react'
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { validateOrder } from '../engine/orders'
 import type { Order } from '../engine/types'
 import { getWorld } from '../map/world'
-import { useGame, type GameStore, type Panel } from '../store'
+import { useGame, type Panel } from '../store'
+import { tabBodies, useDeskTab } from './deskTab'
 import { goBack, useNav } from './navState'
 import { BackIcon, ChevronIcon, PinIcon } from './navIcons'
 import { clampWidth, togglePinned } from './prefs'
-import { crumbs, currentTab, findDesk, findTab, pinId, visibleTabs, type TabMemory } from './registry'
+import { crumbs, findDesk, pinId, visibleTabs } from './registry'
 import { useRegCtx } from './regCtx'
-import { EmptyState, Skeleton, runWithUndo } from './widgets'
+import { EmptyState, Skeleton } from './widgets'
+import { runWithUndo } from './undo'
 import { usePlayerView } from './hooks'
 import { speak } from './plain'
 import { confirmFor } from './confirmRules'
-
-/** The tab of a desk, wherever the store keeps it. */
-const tabMemory = (s: GameStore): TabMemory => ({ economyTab: s.economyTab, militaryTab: s.militaryTab, empireTab: s.empireTab, deskTabs: s.deskTabs })
-export const useDeskTab = (desk: string): string | undefined => useGame((s) => currentTab(tabMemory(s), desk))
 
 /** Lets a desk's drawer be dragged wider or narrower; the width is remembered per desk. */
 function useDrawerWidth(panel: string) {
@@ -228,19 +226,6 @@ export function DeskTabs({ desk }: { desk: string }) {
   return <Tabs value={value} onChange={(t) => setTab(desk, t)} options={tabs.map((t) => [t.id, t.label] as const)} badges={badges} label={`${findDesk(desk)?.label ?? 'Desk'} tabs`} />
 }
 
-const tabBodies = new Map<string, LazyExoticComponent<ComponentType>>()
-/** The lazy component of a registered tab. One per tab, so React keeps it between renders. */
-export function tabBody(desk: string, tab: string): LazyExoticComponent<ComponentType> | null {
-  const key = `${desk}:${tab}`
-  const hit = tabBodies.get(key)
-  if (hit) return hit
-  const load = findTab(desk, tab)?.load
-  if (!load) return null
-  const made = lazy(load)
-  tabBodies.set(key, made)
-  return made
-}
-
 /** Starts loading the other tabs of a desk when the browser is idle, so switching tabs never waits. */
 function usePreloadTabs(desk: string) {
   useEffect(() => {
@@ -263,7 +248,7 @@ export function TabHost({ desk }: { desk: string }) {
   const current = useDeskTab(desk)
   const tabs = visibleTabs(desk, ctx)
   const tab = tabs.some((t) => t.id === current) ? (current as string) : tabs[0]?.id
-  const Body = tab ? tabBody(desk, tab) : null
+  const Body = tab ? tabBodies[`${desk}:${tab}`] : undefined
   const ref = useRef<HTMLDivElement>(null)
   usePreloadTabs(desk)
   useEffect(() => {

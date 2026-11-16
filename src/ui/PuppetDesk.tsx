@@ -160,7 +160,10 @@ function Controls({ puppet, pending }: { puppet: Nation; pending: boolean }) {
   const any = Object.keys(patch).length > 0
   const order: Govern = { type: 'governPuppet', nationId: player.id, target: puppet.id, patch }
   const why = any ? governProblem(game, order, orders.filter((o) => !(o.type === 'governPuppet' && o.target === puppet.id))) : null
-  const pv = useMemo(() => (any ? previewGovern(game, map, player.id, puppet.id, patch) : null), [game, map, player.id, puppet.id, any, JSON.stringify(patch)]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The patch is rebuilt every render; keying the preview on its text keeps it from being recomputed until something actually changes.
+  const patchKey = JSON.stringify(patch)
+  const stablePatch = useMemo(() => JSON.parse(patchKey) as PuppetPatch, [patchKey])
+  const pv = useMemo(() => (any ? previewGovern(game, map, player.id, puppet.id, stablePatch) : null), [game, map, player.id, puppet.id, any, stablePatch])
   const base = useMemo(() => {
     const p = pressureOf(game, map, puppet)
     return { parts: p.parts, total: p.total, settles: equilibrium(p.total) }
@@ -305,9 +308,3 @@ function Garrison({ puppet }: { puppet: Nation }) {
     </Card>
   )
 }
-
-/** Exported for the tests and the Diplomacy card: the one-line state of a puppet. */
-export function puppetSummary(n: Nation): string {
-  return n.loyalty === undefined ? 'flat tribute' : `${loyaltyWord(n.loyalty)} (${Math.round(n.loyalty)})`
-}
-
