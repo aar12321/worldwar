@@ -10,7 +10,7 @@ import { normalizeGame } from './engine/migrate'
 import { markMonth, statsOf } from './engine/monthMark'
 import { markSettled } from './engine/economy'
 import { MONTH_END_ORDERS, isMonthEndOrder, undoable, validateOrder } from './engine/orders'
-import { absDate, dayDate, isLive } from './engine/calendar'
+import { absDate, clockOf, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
 import { applyOrderNow, describeOrder, resolveTurn } from './engine/resolveTurn'
@@ -771,7 +771,11 @@ function liveDay(prev: GameState, step: LiveStep) {
     if (failed.length) st.toast(failed.length === 1 ? failed[0].text : `${failed.length} orders failed at the month's end. See the report.`, 'error', 7000)
     patch.orders = waitingOf(game)
     persistLive()
-  } else game.monthStart = presented.mine.length ? { ...month, battles: [...month.battles, ...presented.mine.map(lineOf)] } : month
+  } else {
+    game.monthStart = presented.mine.length ? { ...month, battles: [...month.battles, ...presented.mine.map(lineOf)] } : month
+    // Every ten days as well, so a tab closed without warning loses little.
+    if (clockOf(game) % 10 === 0) persistLive()
+  }
   patch.game = game
   useGame.setState(patch)
 }
@@ -809,7 +813,7 @@ function liveClockChanged(clock: ClockView) {
   if (!clock.running) persistLive()
 }
 
-/** A live game is saved from the shared game, as a turn game is. A day is too often: the start of a month, a pause and a hidden tab are the moments. */
+/** A live game is saved from the shared game, as a turn game is. A day is too often: every ten days, the start of a month, a pause and a hidden tab are the moments. */
 function persistLive() {
   const lobby = session?.lobby
   const game = session?.game
