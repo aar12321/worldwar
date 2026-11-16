@@ -59,6 +59,22 @@ export type CampaignId = 'celebration' | 'vaccination' | 'literacy' | 'jobFair' 
 /** 1 Nation, 2 Regional power, 3 Great power, 4 Superpower, 5 Hegemon. */
 export type Tier = 1 | 2 | 3 | 4 | 5
 
+/** What a puppet pays its master: a share of its income, of its oil or steel, or of its soldiers. */
+export type TributeForm = 'money' | 'oil' | 'steel' | 'levy'
+
+/** What a master may change about a puppet in one order (once a month). Every part is optional; at least one must change something. */
+export interface PuppetPatch {
+  taxRate?: number
+  draftRate?: number
+  /** Enact (`on`) or repeal one law. */
+  law?: { id: LawId; on: boolean }
+  /** New levels for some of the puppet's spending lines. */
+  spending?: Partial<Spending>
+  tribute?: { form: TributeForm; share: number }
+  /** Money sent to the puppet as aid; it buys loyalty. */
+  aid?: number
+}
+
 /** Real money a nation spends on its people each month. Schools, health and public works go 0 to 4 (2 is standard); welfare goes 0 to 2. */
 export interface Spending {
   schools: number
@@ -372,6 +388,17 @@ export interface Nation {
   secureUntil: number
   /** The turn it became a puppet, so a master can only annex one that has settled. */
   overlordSince?: number
+  /**
+   * Puppets only: how loyal the puppet is to its master, 0 to 100 (see `engine/puppets.ts`). Absent on a puppet made before loyalty
+   * existed, which keeps the old flat rules until its master first rules it, and on every nation that is not a puppet.
+   */
+  loyalty?: number
+  /** Puppets only: the form and share of the tribute the master takes. Absent means the old 12% of income in money. */
+  tribute?: { form: TributeForm; share: number }
+  /** Puppets only: the month the master last changed the puppet's rules (once a month). */
+  ruledAt?: number
+  /** Puppets only: the month the puppet last called on the world for help against its master. */
+  calledOut?: number
   /** Turn of the last corruption sweep. Stolen money takes time to build up again. */
   lastSweep?: number
   /** Size of each private business sector. */
@@ -639,6 +666,8 @@ export type Order =
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'buildCase'; nationId: NationId; target: NationId }
   | { type: 'annexPuppet'; nationId: NationId; target: NationId }
+  /** A master rules its puppet: tax, draft, a law, spending, the form of the tribute, aid. Once a month for each puppet, at the month's end. */
+  | { type: 'governPuppet'; nationId: NationId; target: NationId; patch: PuppetPatch }
   | { type: 'crisisAction'; nationId: NationId; crisisId: string; action: 'aid' | 'mediate' | 'support' }
   | { type: 'propose'; nationId: NationId; target: NationId; proposal: ProposalDraft }
   | { type: 'respond'; nationId: NationId; proposalId: string; accept: boolean }

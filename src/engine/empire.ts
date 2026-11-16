@@ -4,16 +4,17 @@ import { LAW_SPECS } from '../data/unitTypes'
 import { addLog, distanceKm } from './helpers'
 import { projectPower, scaleBonus } from './industry'
 import { societyEffects } from './society'
+import { countWeight } from './puppets'
 import type { GameState, LawId, Nation, NationId, RegionId, Tier, WorldMap } from './types'
 
 export { CITY_CREDIT_CAP }
 
-/** Countries that count toward a nation's tier: those it holds, and half of each puppet's. */
+/** Countries that count toward a nation's tier: those it holds, and half of each puppet's (more when the puppet is loyal, less when restive). */
 export function empireCount(s: GameState, id: NationId, held?: Map<NationId, number>): number {
   const counts = held ?? countRegions(s)
   let puppets = 0
-  for (const n of Object.values(s.nations)) if (n.alive && n.overlord === id) puppets += counts.get(n.id) ?? 0
-  return (counts.get(id) ?? 0) + Math.floor(puppets / 2)
+  for (const n of Object.values(s.nations)) if (n.alive && n.overlord === id) puppets += (counts.get(n.id) ?? 0) * countWeight(n)
+  return (counts.get(id) ?? 0) + Math.floor(puppets)
 }
 
 export function countRegions(s: GameState): Map<NationId, number> {

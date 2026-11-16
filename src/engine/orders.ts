@@ -39,9 +39,10 @@ import { recallProblem } from './armies'
 import { STATION } from '../data/deployment'
 import { freeUnits, validateDeployment } from './deployment'
 import { validateSetBorder } from './borders'
+import { annexFactor, governCost, governProblem, lockedByMaster } from './puppets'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike', 'nuke', 'eventChoice', ...FACTION_ORDERS])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'operation', 'domestic', 'strike', 'nuke', 'eventChoice', ...FACTION_ORDERS])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
 const LIVE_NOW = new Set<Order['type']>(['strike', 'nuke', 'respond', 'propose'])
@@ -55,9 +56,11 @@ export function isMonthEndOrder(s: Pick<GameState, 'settings'>, type: Order['typ
   return MONTH_END_ORDERS.has(type)
 }
 
-/** Influence to annex a puppet: more for a bigger one. */
+/** Influence to annex a puppet: more for a bigger one, half for a devoted one and half as much again for a restive one. */
 export function annexCost(s: GameState, target: string): number {
-  return EMPIRE.annexCost * Math.max(1, Object.values(s.regions).filter((r) => r.owner === target).length)
+  const base = EMPIRE.annexCost * Math.max(1, Object.values(s.regions).filter((r) => r.owner === target).length)
+  const f = annexFactor(s.nations[target])
+  return f === 1 ? base : Math.max(1, Math.round(base * f))
 }
 
 /** Influence a war on `target` costs `nationId` right now: little with a reason, a great deal without one. */
@@ -164,6 +167,12 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'annexPuppet':
       c.pp = annexCost(s, o.target)
       break
+    case 'governPuppet': {
+      const k = governCost(s, o)
+      c.capital = k.capital
+      c.pp = k.pp
+      break
+    }
     case 'crisisAction': {
       const k = crisisCost(o.action)
       c.capital = k.capital
@@ -343,6 +352,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return null
     }
     case 'setPolicy': {
+      if (lockedByMaster(s, n) && (Math.abs(o.taxRate - n.taxRate) > 1e-9 || Math.abs(o.draftRate - n.draftRate) > 1e-9 || (o.spending && Object.entries(o.spending).some(([k, v]) => v !== n.spending[k as SpendingKey]))))
+        return `${s.nations[n.overlord ?? '']?.name ?? 'Your overlord'} sets your taxes, draft and spending`
       const maxDraft = n.laws.includes('conscription_act') ? DRAFT_LIMITS.maxWithConscription : DRAFT_LIMITS.max
       if (!Number.isFinite(o.taxRate) || !Number.isFinite(o.draftRate)) return 'Tax and draft rates must be numbers'
       if (o.taxRate < TAX_LIMITS.min || o.taxRate > TAX_LIMITS.max) return 'Tax rate out of range'
@@ -542,6 +553,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'assignGeneral':
       if (o.generalId && !n.generals.some((g) => g.id === o.generalId)) return 'Unknown commander'
       return null
+    case 'governPuppet':
+      return governProblem(s, o, pending)
     case 'annexPuppet': {
       const t = s.nations[o.target]
       if (!t?.alive || t.overlord !== o.nationId) return 'They are not your puppet'
@@ -646,6 +659,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'fundAgency':
       return validateFund(s, o, pending)
     case 'enactLaw':
+      if (lockedByMaster(s, n)) return `${s.nations[n.overlord ?? '']?.name ?? 'Your overlord'} decides your laws`
       if (pending.some((p) => p.type === 'enactLaw')) return 'One new law a month'
       return lawProblem(n, o.law)
     case 'setSocial':
@@ -656,6 +670,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (pending.some((p) => p.type === 'campaign' && p.campaign === o.campaign)) return 'Already running'
       return campaignProblem(n, o.campaign)
     case 'repealLaw':
+      if (lockedByMaster(s, n)) return `${s.nations[n.overlord ?? '']?.name ?? 'Your overlord'} decides your laws`
       return n.laws.includes(o.law) ? null : 'Not enacted'
     case 'suppressRebels': {
       const r = s.regions[o.regionId]

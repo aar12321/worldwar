@@ -514,6 +514,7 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance' || order.type === 'breakPact') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
+  if (order.type === 'governPuppet') return typeof order.target === 'string' && !!order.patch && typeof order.patch === 'object' && !Array.isArray(order.patch)
   if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital') && (order.count === undefined || Number.isInteger(order.count))
   if (order.type === 'nuke') return typeof order.target === 'string'
   if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)
@@ -1080,6 +1081,8 @@ export const useGame = create<GameStore>((set, get) => ({
     if (order.type === 'respond') rest = orders.filter((o) => !(o.type === 'respond' && o.proposalId === order.proposalId))
     // A player can change their mind about a decision until the month ends.
     else if (order.type === 'eventChoice') rest = orders.filter((o) => o.type !== 'eventChoice')
+    // The rules of a puppet can be changed until the month ends: the last order for it counts.
+    else if (order.type === 'governPuppet') rest = orders.filter((o) => !(o.type === 'governPuppet' && o.target === order.target))
     // A vote can be changed until the month ends: the last one counts.
     else if (order.type === 'factionVote') rest = orders.filter((o) => !(o.type === 'factionVote' && o.proposalId === order.proposalId))
     const err = validateOrder(game, map, order, rest)
