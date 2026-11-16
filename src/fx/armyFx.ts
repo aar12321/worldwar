@@ -178,7 +178,7 @@ export class ArmyLayer {
       a.marching = moving
       this.drawn.add(s.id)
       drawnCount++
-      const sq = Math.max(7, Math.min(20, v.pxPerUnit * 2.1))
+      const sq = Math.max(10, Math.min(30, v.pxPerUnit * 3.1))
       const alpha = s.returning ? 0.72 : 1
       const ang = Math.atan2(a.hy, a.hx)
       const bob = moving ? now / 170 + a.seed * 20 : 0
@@ -213,7 +213,8 @@ export class ArmyLayer {
         sy += Math.cos(now / 61 + i * 1.7) * 0.9
       }
       // A disc in the nation's colour under the squad, so every force reads whose it is.
-      p.glow(sx, sy, sq * 1.15, 0.55 * alpha, s.color, false)
+      p.glow(sx, sy, sq * 1.45, 0.7 * alpha, '#0a0c12', false)
+      p.glow(sx, sy, sq * 1.05, 0.8 * alpha, s.color, false)
       if (q.kind === 'infantry' || q.kind === 'drone') {
         const f = a.marching ? Math.floor(now / 125 + i * 3) : 0
         p.sprite('army.march', f, sx, sy, sq * 1.05, ang + Math.PI / 2, alpha, null, false)
@@ -269,6 +270,7 @@ export class ArmyLayer {
       const sy = y - uy * lag + ay * across - ax * sway * 0.3
       // Wake: foam trailing behind, longer when moving.
       if (a.marching) p.strip('trail.wake', sx - ux * sz * 0.4, sy - uy * sz * 0.4, sx - ux * sz * 1.9, sy - uy * sz * 1.9, sz * 0.5, 0.6 * alpha * load, now / 500, '#ffffff', true)
+      p.glow(sx, sy, sz * 1.3, 0.45 * alpha, '#0a0c12', false)
       p.sprite(i === 0 && ships > 1 ? 'sil.destroyer' : 'sil.patrolBoat', 0, sx, sy, sz, ang + Math.PI / 2, alpha * (0.55 + 0.45 * load) * (1 - 0.55 * land), s.color, false)
     }
     if (prog < 0.1 && !e.reduced) {
@@ -312,7 +314,7 @@ export class ArmyLayer {
       const sx = x - ux * rank * sz * 0.7 + ax * side * rank * sz * 0.65
       const sy = y - uy * rank * sz * 0.7 + ay * side * rank * sz * 0.65
       if (!e.reduced) p.strip('trail.contrail', sx - ux * sz * 0.5, sy - uy * sz * 0.5, sx - ux * sz * 3.2, sy - uy * sz * 3.2, sz * 0.28, 0.5 * alpha, now / 900, '#ffffff', true)
-      p.sprite('ui.ring.halo', 0, sx, sy, sz * 1.15, 0, 0.25 * alpha, s.color, true)
+      p.glow(sx, sy, sz * 1.5, 0.55 * alpha, '#0a0c12', false)
       p.sprite(bombers ? 'sil.bomber' : 'sil.fighter', 0, sx, sy, sz, ang + Math.PI / 2, alpha, s.color, false)
     }
     this.drawIcons(p, a, x, y - sq * 0.8, sq, alpha)

@@ -144,6 +144,12 @@ export class FxEngine {
   colorblind = false
   /** Set when anything changes that a still frame must show, so an idle engine redraws once. */
   dirty = true
+  /** Wakes the loop when something changed while it was idle. */
+  wake: (() => void) | null = null
+  touch() {
+    this.dirty = true
+    this.wake?.()
+  }
   private seedState = 0x9e3779b9
   private screenAlpha = 0
   private screenCol = '#ffffff'
@@ -190,7 +196,7 @@ export class FxEngine {
       this.release(v)
       this.stats.evicted++
     }
-    this.dirty = true
+    this.touch()
   }
 
   /** True when the layer will draw anything at all. */
@@ -261,7 +267,7 @@ export class FxEngine {
     f.seed = init.seed ?? this.rand()
     f.acc = 0
     this.live.push(f)
-    this.dirty = true
+    this.touch()
     return f
   }
 
@@ -281,7 +287,7 @@ export class FxEngine {
   clearEffects() {
     for (const f of [...this.live]) this.release(f)
     this.particles.clear()
-    this.dirty = true
+    this.touch()
   }
 
   // ---- state driven flights ----------------------------------------------------------------------------------
@@ -318,7 +324,7 @@ export class FxEngine {
     this.ordered.length = 0
     for (const rt of this.flights.values()) this.ordered.push(rt)
     this.ordered.sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0) || b.style.prio - a.style.prio || (a.id < b.id ? -1 : 1))
-    this.dirty = true
+    this.touch()
   }
 
   /** Set by the sequence module: what happens when a new flight is seen. */
@@ -326,7 +332,7 @@ export class FxEngine {
 
   setDecals(list: readonly DecalSpec[]) {
     this.decals = list.slice(0, this.caps.decals)
-    this.dirty = true
+    this.touch()
   }
 
   // ---- particles ---------------------------------------------------------------------------------------------
@@ -425,7 +431,7 @@ export class FxEngine {
         if (this.onShake && f.c > 0 && !this.reduced) this.onShake(f.c)
         if (this.lod !== 'far' && !this.reduced) {
           const big = f.b > 9
-          this.smoke(f.lat, f.lng, big ? 6 : 3, f.b * 0.55, 2.8, '#6b6560', 1.4, 0.55)
+          this.smoke(f.lat, f.lng, big ? 5 : 3, f.b * 0.7, 3.2, '#a39a92', 2.2, 0.32)
           this.embers(f.lat, f.lng, big ? 12 : 6, 0.5, 5)
           this.debris(f.lat, f.lng, big ? 6 : 3, 0.55, 5)
         }
@@ -462,13 +468,13 @@ export class FxEngine {
       }
       case K.ASH: {
         f.acc += dt
-        if (f.acc > 110 && t < f.dur * 0.7) {
+        if (f.acc > 150 && t < f.dur * 0.6) {
           f.acc = 0
           const a = this.rand() * 6.283
           const r = this.rand() * f.b
           const dlat = (Math.sin(a) * r) / 111
           const dlng = (Math.cos(a) * r) / 111 / Math.max(0.2, Math.cos((f.lat * Math.PI) / 180))
-          this.smoke(f.lat + dlat, f.lng + dlng, 1, f.b * 2.4, 6, '#3a342f', 0.5, 0.42)
+          this.smoke(f.lat + dlat, f.lng + dlng, 1, 6 + this.rand() * 4, 7, '#5a524c', 0.45, 0.28)
           if (this.rand() < 0.5) this.embers(f.lat + dlat, f.lng + dlng, 1, 0.5, 1.5, 3)
         }
         break
@@ -748,7 +754,7 @@ export class FxEngine {
       case K.FLASH: {
         project(v, f.lat, f.lng, 0.01, pt)
         if (!pt.vis) return
-        const size = f.b * ppu
+        const size = f.b * ppu * 1.7
         const flashT = t / 1000
         // Hot flash, then a plume that stands up above the site while the smoke thickens.
         p.sprite('missile.launchFlash', Math.floor(flashT * 20), pt.x, pt.y, size * 1.6, 0, clamp01(1 - t / 320), null, true)
@@ -767,7 +773,7 @@ export class FxEngine {
         const sec = t / 1000
         const hold = sec > burstEnd ? clamp01(1 - (sec - burstEnd) / ((f.dur / 1000) - burstEnd)) : 1
         p.sprite('missile.interceptBurst', Math.floor(sec * 16), pt.x, pt.y, size * 1.7, 0, hold, null, true)
-        p.glow(pt.x, pt.y, size * 2.2, 0.6 * clamp01(1 - t / 300), COLORS[f.col] ?? '#64d2ff')
+        p.glow(pt.x, pt.y, size * 1.6, 0.35 * clamp01(1 - t / 260), COLORS[f.col] ?? '#64d2ff')
         const e = EASE.outCubic(u)
         p.sprite('ui.ring.thin', 0, pt.x, pt.y, size * (0.5 + 2.8 * e), 0, (1 - u) * 0.9, COLORS[f.col] ?? '#64d2ff', true)
         break

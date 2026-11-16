@@ -8,6 +8,7 @@ import type { MissileType, SalvoReport } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
 import { useFx } from '../globeBridge'
+import { useFxPrefs } from '../../fx/settings'
 import { DEFENSE_COLOR, FX_CAPS, LOOK, decalsFrom, lookColor, planFx, radarRing, type Decal, type Palette, type Pt } from '../missileFx'
 
 const { map } = getWorld()
@@ -167,6 +168,8 @@ export function useMissileFx(globe: MutableRefObject<GlobeMethods | undefined>, 
     const fresh: SalvoReport[] = salvos.filter((r) => !seenSalvos.current!.has(r.id))
     for (const r of fresh) seenSalvos.current.add(r.id)
     const fx = useFx.getState()
+    // The effects overlay plays the salvo itself; these rings are the look when it is off.
+    if (useFxPrefs.getState().quality !== 'off') return
     for (const r of fresh.slice(-6)) {
       const to = pointOf(r.region)
       if (!to) continue
@@ -190,7 +193,7 @@ export function useMissileFx(globe: MutableRefObject<GlobeMethods | undefined>, 
       if (!seenFlights.current.has(f.id)) {
         seenFlights.current.add(f.id)
         const from = pointOf(f.from)
-        if (from && useFx.getState().rings.length < FX_CAPS.ringsAlive) useFx.getState().addRing({ lat: from.lat, lng: from.lng, color: lookColor(f.kind ?? 'hypersonic', palette), maxRadius: reduced ? 1.2 : 2 }, reduced ? 900 : 1300)
+        if (from && useFxPrefs.getState().quality === 'off' && useFx.getState().rings.length < FX_CAPS.ringsAlive) useFx.getState().addRing({ lat: from.lat, lng: from.lng, color: lookColor(f.kind ?? 'hypersonic', palette), maxRadius: reduced ? 1.2 : 2 }, reduced ? 900 : 1300)
       }
       if (f.scrambled && !seenScramble.current.has(f.id)) {
         seenScramble.current.add(f.id)

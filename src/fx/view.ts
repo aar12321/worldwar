@@ -149,9 +149,9 @@ export class OrthoView implements View {
     this.ay = t[1]
     this.az = t[2]
     // Right = up x forward, up is the globe's y axis, orthogonalised.
-    let rx = this.ay * 0 - this.az * 1
-    let ry = this.az * 0 - this.ax * 0
-    let rz = this.ax * 1 - this.ay * 0
+    let rx = -this.az
+    let ry = 0
+    let rz = this.ax
     const rl = Math.hypot(rx, ry, rz) || 1
     rx /= rl
     ry /= rl

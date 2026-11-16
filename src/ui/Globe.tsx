@@ -21,6 +21,7 @@ import { neighborsOf } from '../engine/borders'
 import { globeBridge, useFx, type BattleOverlay } from './globeBridge'
 import { paintPresenceMarker, usePresenceLayer } from './globe/usePresence'
 import { usePresenceUi } from './globe/presenceUi'
+import { FxOverlay, useFxDrawing } from '../fx/FxOverlay'
 import type { PresenceMarker } from './globe/presenceLayer'
 
 const { map, features } = getWorld()
@@ -397,6 +398,10 @@ export function WorldGlobe() {
 
   const army = useArmyLayer(ref, reducedMotion)
   const missileFx = useMissileFx(ref, reducedMotion)
+  // The effects overlay draws flights and the marks of recent hits itself; the plain arcs and points step aside while it does.
+  const fxOn = useFxDrawing()
+  const fxProps = useMemo(() => (fxOn ? { ...missileFx.props, pointsData: [] as object[] } : missileFx.props), [fxOn, missileFx.props])
+  const armyProps = useMemo(() => (fxOn && !reducedMotion ? { ...army.props, arcsData: [] as object[] } : army.props), [fxOn, reducedMotion, army.props])
   // The Borders map draws every border in the colors of its tension, over the army routes.
   const borderLines = useMemo(() => {
     const g = gameRef.current
@@ -416,6 +421,7 @@ export function WorldGlobe() {
   const ringColor = useCallback((r: object) => (t: number) => withAlpha((r as { color: string }).color, Math.max(0, 1 - t)), [])
 
   return (
+    <>
     <Globe
       ref={ref}
       width={w}
@@ -449,9 +455,11 @@ export function WorldGlobe() {
       ringMaxRadius="maxRadius"
       ringPropagationSpeed={4}
       ringRepeatPeriod={ringPeriod}
-      {...army.props}
-      {...missileFx.props}
+      {...armyProps}
+      {...fxProps}
       pathsData={pathsData}
     />
+    <FxOverlay globe={ref} />
+    </>
   )
 }
