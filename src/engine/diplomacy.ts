@@ -1,7 +1,7 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
-import { EMPIRE, JUSTIFY } from '../data/war'
+import { EMPIRE, JUSTIFY, WAR } from '../data/war'
 import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, maxWars, newId, pairKey, puppetsOf } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
@@ -496,4 +496,22 @@ export function expireDiplomacy(s: GameState) {
   s.proposals = kept
   for (const [k, turn] of Object.entries(s.proposalMemory)) if (s.turn - turn > 24) delete s.proposalMemory[k]
   decayOpinions(s)
+  fizzleStaleWars(s)
+}
+
+/**
+ * A war between two AI nations in which neither side's countries have been attacked for a year is over in all but name: it holds
+ * a war slot, ties down allies and puts off every pact. It ends in the usual truce. A war a human is in is never ended for them.
+ */
+export function fizzleStaleWars(s: GameState) {
+  for (const key of [...s.wars]) {
+    const [a, b] = key.split('|')
+    if (s.humans.includes(a) || s.humans.includes(b)) continue
+    if (s.turn - (s.warStarted[key] ?? s.turn) < WAR.staleMonths) continue
+    let last = -Infinity
+    for (const r of Object.values(s.regions)) if (r.owner === a || r.owner === b) last = Math.max(last, r.attackedTurn)
+    if (s.turn - last < WAR.staleMonths) continue
+    makePeace(s, a, b)
+    addLog(s, 'diplomacy', `The war between ${name(s, a)} and ${name(s, b)} has fizzled out: nobody has fought for a year.`, [a, b])
+  }
 }

@@ -122,6 +122,8 @@ export const WAR = {
   weariness: 0.4,
   wearinessPerMonth: 0.03,
   wearinessPerMonthCap: 1.2,
+  /** A war between two AI nations in which no blow has been struck for this many months fizzles out into a truce. */
+  staleMonths: 12,
 }
 
 /** How far an army can be carried without a border or a short sea lane. */
