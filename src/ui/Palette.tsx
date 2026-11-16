@@ -93,6 +93,8 @@ export function buildPaletteItems(): PaletteItem[] {
     out.push({ id: 'act:pin', label: pinned ? 'Unpin this desk from the rail' : 'Pin this desk to the rail', group: 'Actions', keywords: 'favorite favourite star', run: () => st.updatePrefs({ pinned: togglePinned(st.settings.ui.pinned, id) }) })
     out.push({ id: 'act:close', label: 'Close the open desk', keys: ['Esc'], group: 'Actions', run: () => st.setPanel(st.panel) })
   }
+  out.push({ id: 'act:aircraft', label: 'Aircraft development', hint: 'Design and develop new aircraft (Military, Forces)', keywords: 'fighters bombers jets planes develop research', group: 'Actions', run: () => { st.openTab('military', 'forces'); st.setAircraftOpen(true) } })
+  out.push({ id: 'act:missiles', label: 'Missile program and stockpile', hint: 'Missile kinds, the program and strikes (Military, Forces)', keywords: 'rockets hypersonic strike warheads', group: 'Actions', run: () => st.openTab('military', 'forces') })
   out.push({ id: 'act:help', label: 'How the game works', keys: ['?'], group: 'Actions', run: () => st.setHelp(true) })
   out.push({ id: 'act:keys', label: 'Keyboard shortcuts', hint: 'Every key the game answers', keywords: 'keys hotkeys cheat sheet', group: 'Actions', keys: ['?'], run: () => { st.setHelpTab('keys'); st.setHelp(true) } })
   out.push({ id: 'act:capital', label: 'Go to your capital', group: 'Actions', run: goTo(game.nations[game.playerId].capital) })

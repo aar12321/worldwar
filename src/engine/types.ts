@@ -1,4 +1,5 @@
 import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
+import type { AircraftNodeId } from '../data/aircraft'
 import type { SystemId } from '../data/systems'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
@@ -50,6 +51,8 @@ export type SocialId =
   | 'minimumWage' | 'jobsGuarantee' | 'smallLoans' | 'workerRights'
   | 'childBenefit' | 'parentalLeave' | 'foodAid' | 'transit'
   | 'policing' | 'courts' | 'integration' | 'festivals' | 'broadcasting' | 'surveillance'
+/** The kinds of missile. Hypersonic ones are the military's `missile` stock; the rest are the nation's `arsenal`. */
+export type MissileType = 'cruise' | 'tactical' | 'hypersonic' | 'ballistic'
 export type CampaignId = 'celebration' | 'vaccination' | 'literacy' | 'jobFair' | 'unityTour' | 'foodBank' | 'babyBonus'
 /** 1 Nation, 2 Regional power, 3 Great power, 4 Superpower, 5 Hegemon. */
 export type Tier = 1 | 2 | 3 | 4 | 5
@@ -135,6 +138,13 @@ export interface SocialState {
 export interface CampaignState {
   left: number
   cooldown: number
+}
+
+/** One aircraft development: months of work done, whether it is finished, and whether the work is on hold (which frees its slot). */
+export interface AircraftState {
+  progress: number
+  done: boolean
+  paused?: boolean
 }
 
 export interface ProjectState {
@@ -343,6 +353,16 @@ export interface Nation {
   stateOwned: SectorId[]
   seizedUntil: number
   projects: Partial<Record<ProjectId, ProjectState>>
+  /** Cruise, tactical and ballistic missiles in store (hypersonic ones are `military.units.missile`). */
+  arsenal?: Partial<Record<MissileType, number>>
+  /** The missile program's level, 0 to 3. */
+  missileProgram?: number
+  /** Missiles built so far in the month `turn`, against the program's capacity. */
+  missileBuilt?: { turn: number; count: number }
+  /** The last month each nation struck this one with missiles, so it can answer. */
+  struckBy?: Record<NationId, number>
+  /** Aircraft developments begun or finished (see `data/aircraft.ts`). Absent until the first one is started, so a nation that never uses them is unchanged. */
+  aircraft?: Partial<Record<AircraftNodeId, AircraftState>>
   /** Social programs in force. Absent until the first one is set, so a nation that never uses them is unchanged. */
   social?: Partial<Record<SocialId, SocialState>>
   /** Campaigns running or cooling down. Absent until the first one is run. */
@@ -553,7 +573,7 @@ export type Order =
   | { type: 'marketBuy'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'marketSell'; nationId: NationId; resource: TradeResource; amount: number }
   | { type: 'setAutoBuy'; nationId: NationId; resources: TradeResource[] }
-  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many missiles to fire in this battle. Left out, a share of them fire with the force sent. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number }
+  | { type: 'attack'; nationId: NationId; target: RegionId; commit?: Commit; stance?: Stance; /** How many hypersonic missiles to fire in this battle. Left out, none: an attack never carries missiles it was not told to. */ missiles?: number; /** A share of the military to send (0.05 to 1), in place of the Probe, Main force and All in presets. */ share?: number }
   | { type: 'assignGeneral'; nationId: NationId; generalId: string | null }
   | { type: 'declareWar'; nationId: NationId; target: NationId }
   | { type: 'buildCase'; nationId: NationId; target: NationId }
@@ -568,7 +588,15 @@ export type Order =
   | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
   | { type: 'fundSystem'; nationId: NationId; system: SystemId; levels?: number }
-  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital'; /** Missiles to fire in a hypersonic strike. */ count?: number }
+  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital'; /** Missiles to fire in the salvo. */ count?: number; /** Which kind. Hypersonic if left out. */ kind?: MissileType }
+  /** Raises the missile program one level. */
+  | { type: 'fundMissiles'; nationId: NationId }
+  /** Builds missiles of a kind from the program: money and steel (and oil) each. */
+  | { type: 'buildMissiles'; nationId: NationId; kind: Exclude<MissileType, 'hypersonic'>; count: number }
+  /** Starts an aircraft development (research is paid now, money month by month). */
+  | { type: 'startAircraftDev'; nationId: NationId; node: AircraftNodeId }
+  /** Puts a development on hold, which frees its slot and its monthly bill, or takes it up again. */
+  | { type: 'pauseAircraftDev'; nationId: NationId; node: AircraftNodeId; paused: boolean }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId; /** How many levels to buy at once. One if left out. */ levels?: number }
   | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
   | { type: 'buyShares'; nationId: NationId; company: string; shares: number }
@@ -877,6 +905,8 @@ export interface MissileFlight {
   from: RegionId
   target: RegionId
   count: number
+  /** Which kind. Hypersonic if left out. */
+  kind?: MissileType
   launched: number
   /** Absolute day it lands. */
   lands: number

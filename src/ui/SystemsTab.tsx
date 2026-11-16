@@ -4,6 +4,7 @@ import { hasTech } from '../engine/helpers'
 import { fundSystemCost, systemUpkeep } from '../engine/systems'
 import { fmt, usePlayerView } from './hooks'
 import { Pips } from './bits'
+import { MissileProgramCard } from './MissileProgram'
 import { OrderButton } from './panel'
 
 function SystemCard({ id }: { id: SystemId }) {
@@ -63,9 +64,10 @@ export function SystemsTab() {
   return (
     <div className="space-y-5">
       <p className="text-[14px] text-white/80">
-        Frontier technologies unlock systems you run for the whole nation. Each has three levels, costs upkeep, and has something that beats it, so no single program wins a war alone.
+        The missile program builds the missiles you fire from the War Room. Frontier technologies unlock systems you run for the whole nation. Each has three levels, costs upkeep, and has something that beats it, so no single program wins a war alone.
         {owned.length > 0 ? ` You run ${fmt(systemUpkeep(player), 1)} money a month of them.` : ' Research the Frontier branch to unlock them.'}
       </p>
+      <MissileProgramCard />
       <div className="grid gap-3 md:grid-cols-2">
         {SYSTEM_IDS.map((id) => (
           <SystemCard key={id} id={id} />

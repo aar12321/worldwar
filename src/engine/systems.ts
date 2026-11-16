@@ -1,11 +1,12 @@
 import { companyEffects } from './stocks'
+import { strikeHitsKind, strikeKind, takeMissiles, validateMissileStrike } from './missiles'
 import { FRONTIER, SYSTEM_IDS, SYSTEM_MAX, SYSTEM_SPECS, systemsCost, type SystemId } from '../data/systems'
 import { TECH_BY_ID } from '../data/techTree'
 import { addOpinion } from '../ai/opinion'
 import { interceptFactor } from './combat'
 import { projectPower, scaleBonus, scaleFactor } from './industry'
-import { addInfamy, addLog, atWar, distanceKm, hasTech } from './helpers'
-import type { GameState, NationId, Order, RegionId, WorldMap } from './types'
+import { addInfamy, addLog, atWar, hasTech } from './helpers'
+import type { GameState, MissileType, NationId, Order, RegionId, WorldMap } from './types'
 
 type Fund = Extract<Order, { type: 'fundSystem' }>
 type Strike = Extract<Order, { type: 'strike' }>
@@ -67,14 +68,7 @@ export function validateStrike(s: GameState, map: WorldMap, o: Strike, pending: 
     if (s.turn - n.lastOrbital < cooldown) return `The orbital weapon recharges in ${cooldown - (s.turn - n.lastOrbital)} months`
     return null
   }
-  if (n.military.units.missile < 1) return 'Needs hypersonic missiles'
-  const count = o.count ?? 1
-  if (!Number.isInteger(count) || count < 1) return 'Choose how many missiles to fire'
-  const left = missilesLeft(n.military.units.missile, pending, o.nationId)
-  if (left < count) return left <= 0 ? 'No missiles left this month' : `Only ${left} missile${left === 1 ? '' : 's'} left this month`
-  const near = Object.values(s.regions).some((own) => own.owner === o.nationId && own.buildings.factory > 0 && map.regions[own.id] && distanceKm(map.regions[own.id], t) <= FRONTIER.strikeKm)
-  if (!near) return `Out of range: batteries reach ${FRONTIER.strikeKm} km from a country with a factory`
-  return null
+  return validateMissileStrike(s, map, o, pending)
 }
 
 function highestBuilding(s: GameState, id: RegionId) {
@@ -97,24 +91,12 @@ export function missilesLeft(stock: number, pending: Order[], nationId: NationId
 
 /** Takes the missiles out of a nation's stock for a salvo, and returns how many were fired. Each one is used up, whatever it hits. */
 export function fireMissiles(s: GameState, o: Strike): number {
-  const n = s.nations[o.nationId]
-  const fired = Math.min(o.count ?? 1, Math.floor(n.military.units.missile + 1e-9))
-  if (fired < 1) return 0
-  n.military.units.missile -= fired
-  return fired
+  return takeMissiles(s.nations[o.nationId], strikeKind(o), o.count ?? 1)
 }
 
-/** What a salvo of `fired` missiles does when it lands on a country. */
-export function strikeHits(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, fired: number) {
-  const n = s.nations[nationId]
-  const region = s.regions[target]
-  const victim = s.nations[region.owner]
-  const place = map.regions[target].name
-  const stops = interceptFactor(victim.systems?.shield ?? 0)
-  const hit = Math.min(FRONTIER.strikeLineMax, fired * FRONTIER.strikeLine) * stops
-  region.line = Math.max(0.5, region.line - hit)
-  region.sabotaged = Math.max(region.sabotaged, FRONTIER.strikeFactoryTurns)
-  addLog(s, 'battle', `${fired} hypersonic missile${fired === 1 ? '' : 's'} from ${n.name} hit ${place}. The Defense Line fell by ${hit.toFixed(1)}${stops < 1 ? ` (the shield stopped ${Math.round((1 - stops) * 100)}%)` : ''} and the factories stopped.`, [nationId, region.owner])
+/** A hypersonic salvo landing (kept for callers that name no kind). */
+export function strikeHits(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, fired: number, kind: MissileType = 'hypersonic') {
+  strikeHitsKind(s, map, nationId, target, kind, fired)
 }
 
 export function runStrike(s: GameState, map: WorldMap, o: Strike) {
@@ -126,7 +108,7 @@ export function runStrike(s: GameState, map: WorldMap, o: Strike) {
   if (o.weapon === 'missile') {
     const fired = fireMissiles(s, o)
     if (fired < 1) return
-    strikeHits(s, map, o.nationId, o.target, fired)
+    strikeHitsKind(s, map, o.nationId, o.target, strikeKind(o), fired)
     return
   }
   const level = n.systems?.orbital ?? 1

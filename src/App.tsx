@@ -28,6 +28,7 @@ import { WarRoom } from './ui/WarRoom'
 
 // The globe (three.js, about 2 MB) and the big desks load in their own files, so the start screen appears at once.
 const WorldGlobe = lazy(() => import('./ui/Globe').then((m) => ({ default: m.WorldGlobe })))
+const AircraftDev = lazy(() => import('./ui/AircraftDev').then((m) => ({ default: m.AircraftDev })))
 
 function useShortcuts() {
   useEffect(() => {
@@ -57,8 +58,13 @@ function useShortcuts() {
       if (belongsToControl({ key: '', target })) return
       const st = useGame.getState()
       if (!st.game) return
+      // The aircraft screen closes on Escape even when a button inside it has just gone away and focus fell to the page.
+      if (e.key === 'Escape' && st.aircraftOpen) {
+        st.setAircraftOpen(false)
+        return
+      }
       // A dialog is open: it handles its own keys.
-      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom || st.confirm || st.paletteOpen) return
+      if (st.game.pendingEvent || st.game.outcome !== 'playing' || st.fxQueue.length > 0 || st.helpOpen || st.summary || st.warRoom || st.aircraftOpen || st.confirm || st.paletteOpen) return
       const mapMode = mapModeForKey(e.key)
       if (e.key === 'Escape') {
         if (st.panel !== 'none') st.setPanel(st.panel)
@@ -156,6 +162,7 @@ export default function App() {
   const online = useGame((s) => !!s.online)
   const panel = useGame((s) => s.panel)
   const live = useGame((s) => !!s.game && isLive(s.game) && !s.online)
+  const aircraftOpen = useGame((s) => s.aircraftOpen)
   useShortcuts()
   usePrefsEffects()
   useFlushOnExit()
@@ -186,6 +193,11 @@ export default function App() {
           {panel === 'none' && <ArmiesDock />}
           <OrdersTray />
           <WarRoom />
+          {aircraftOpen && (
+            <Suspense fallback={null}>
+              <AircraftDev />
+            </Suspense>
+          )}
           <BattleFX />
           <TurnSummary />
           <EventModal />

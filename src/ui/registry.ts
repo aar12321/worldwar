@@ -153,7 +153,7 @@ export const DESKS: DeskDef[] = [
     keywords: ['army', 'units', 'war', 'train', 'weapons'],
     badge: (c) => c.wars || null,
     tabs: [
-      { id: 'forces', label: 'Forces', hint: 'Forces and academy', keywords: ['infantry', 'tanks', 'train', 'weapons', 'drill', 'commander'], load: lazyOf(() => import('./MilitaryPanel'), 'MilitaryForces') },
+      { id: 'forces', label: 'Forces', hint: 'Forces and academy', keywords: ['infantry', 'tanks', 'train', 'weapons', 'drill', 'commander', 'aircraft', 'missiles', 'planes'], load: lazyOf(() => import('./MilitaryPanel'), 'MilitaryForces') },
       { id: 'armies', label: 'Armies', hint: 'Armies on the march (live games)', keywords: ['recall', 'march'], load: lazyOf(() => import('./ArmiesTab'), 'ArmiesTab'), visible: (c) => c.live, badge: (c) => c.armies || null },
       { id: 'wars', label: 'Wars', hint: 'Your wars, fronts and peace', key: 'w', keywords: ['peace', 'front', 'defense line', 'declare', 'attack'], load: lazyOf(() => import('./WarsPanel'), 'WarsTab'), badge: (c) => c.wars || null },
       { id: 'agencies', label: 'Agencies', hint: 'Intelligence and security services', keywords: ['spy', 'cia', 'fbi', 'sabotage', 'coup', 'rebels', 'intelligence'], load: lazyOf(() => import('./AgenciesTab'), 'AgenciesTab') },
