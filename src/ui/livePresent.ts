@@ -1,3 +1,4 @@
+import { useFxPrefs } from '../fx/settings'
 import { UNIT_SPECS } from '../data/unitTypes'
 import { absDate } from '../engine/calendar'
 import { lineMax } from '../engine/economy'
@@ -139,8 +140,8 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
         if (e.landed && impact) {
           // The whole world sees it: rings that reach across the globe and a long shake.
           const fx = useFx.getState()
-          for (let i = 0; i < 3; i++) fx.addRing({ lat: impact.lat, lng: impact.lng, color: i === 1 ? '#ffffff' : '#ff2d95', maxRadius: 8 + i * 3 }, 2600 + i * 500)
-          if (!settings.reducedMotion) fx.shake(1.5)
+          if (useFxPrefs.getState().quality === 'off') for (let i = 0; i < 3; i++) fx.addRing({ lat: impact.lat, lng: impact.lng, color: i === 1 ? '#ffffff' : '#ff2d95', maxRadius: 8 + i * 3 }, 2600 + i * 500)
+          if (!settings.reducedMotion && useFxPrefs.getState().quality === 'off') fx.shake(1.5)
           if (e.flight.nationId === player) say('error', `Your missile destroyed ${place(target)}. The world's strongest powers are at war with you.`)
           else if (victim === player) say('error', `NUCLEAR STRIKE: ${nation(e.flight.nationId)} destroyed ${place(target)}.`)
           else say('error', `${nation(e.flight.nationId)} used a nuclear weapon on ${place(target)}. The world is in shock.`)

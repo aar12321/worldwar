@@ -11,6 +11,8 @@ import { KeysSheet } from './Help'
 import { LevelPicker } from './kit'
 import { EmptyState } from './widgets'
 import { SCALES, SCALE_LABELS } from './prefs'
+import { FX_SETTINGS, FX_SETTING_LABELS } from '../fx/quality'
+import { useFxPrefs } from '../fx/settings'
 import { settingDef, type SettingsTab } from './settingsDefs'
 
 const KIND_COLOR: Record<LogKind, string> = {
@@ -124,6 +126,11 @@ export function SettingsPanel() {
   const ui = settings.ui
   const update = useGame((s) => s.updateSettings)
   const updatePrefs = useGame((s) => s.updatePrefs)
+  const fxQuality = useFxPrefs((s) => s.quality)
+  const autoTier = useFxPrefs((s) => s.autoTier)
+  const fxFollow = useFxPrefs((s) => s.follow)
+  const setFxQuality = useFxPrefs((s) => s.setQuality)
+  const setFxFollow = useFxPrefs((s) => s.setFollow)
   const resetPrefs = useGame((s) => s.resetPrefs)
   const askConfirm = useGame((s) => s.askConfirm)
   const quit = useGame((s) => s.quitToMenu)
@@ -164,6 +171,13 @@ export function SettingsPanel() {
           </SettingRow>
           <SettingRow id="motion">
             <LevelPicker label="Motion" levels={['Follow the system', 'Reduce', 'Full']} value={['system', 'reduce', 'full'].indexOf(ui.motion)} onChange={(i) => updatePrefs({ motion: (['system', 'reduce', 'full'] as const)[i] })} />
+          </SettingRow>
+          <SettingRow id="fxQuality">
+            <LevelPicker label="Effects quality" levels={FX_SETTINGS.map((q) => FX_SETTING_LABELS[q])} value={FX_SETTINGS.indexOf(fxQuality)} onChange={(i) => setFxQuality(FX_SETTINGS[i])} />
+            {fxQuality === 'auto' && <p className="text-[12px] text-white/60 mt-1">Right now: {FX_SETTING_LABELS[autoTier]}</p>}
+          </SettingRow>
+          <SettingRow id="fxFollow" inline>
+            <Switch label="Follow the action" checked={fxFollow} onChange={setFxFollow} />
           </SettingRow>
           <SettingRow id="widths" inline>
             <button className="btn" disabled={Object.keys(ui.panelWidths).length === 0} onClick={() => updatePrefs({ panelWidths: {} })}>

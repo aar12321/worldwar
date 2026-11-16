@@ -12,6 +12,8 @@ import { NEON } from './colors'
 import { globeBridge, useFx } from './globeBridge'
 import { UnitIcon } from './icons'
 import { Modal } from './Modal'
+import { BattleScene } from '../fx/BattleScene'
+import { Ticker } from '../fx/Ticker'
 import { LineBar } from './WarRoom'
 
 const INTRO_MS = 700
@@ -184,6 +186,7 @@ export function BattleFX() {
         </>
       }
     >
+      <BattleScene battle={battle} attColor={att.color} defColor={def.color} attName={att.name} defName={def.name} shown={shown} speed={settings.fxSpeed} reduced={reduced} />
       <div className="grid grid-cols-2 gap-6">
         {[
           { side: att, units: battle.attacker.units, lost: attLost, start: attStart, label: 'Attacker' },
@@ -197,7 +200,7 @@ export function BattleFX() {
             </div>
             <Bar left={col.start - col.lost} start={col.start} color={col.side.color} />
             <div className="text-[14px] tabular-nums text-white/80">
-              {formatDivisions(Math.max(0, col.start - col.lost))} of {formatDivisions(col.start)} divisions
+              <Ticker value={Math.max(0, col.start - col.lost)} format={formatDivisions} /> of {formatDivisions(col.start)} divisions
             </div>
             <div className="flex flex-wrap gap-1.5 text-[13px] text-white/75">
               {UNIT_TYPES.filter((k) => col.units[k] >= 0.05).map((k) => (

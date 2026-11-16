@@ -12,6 +12,7 @@ import { useGame } from '../../store'
 import { armyStatus } from '../armyText'
 import { MISSILE_ARC, flightDays } from '../missileText'
 import { liveClock } from '../liveClock'
+import { fxEngine } from '../../fx/runtime'
 import { badge, glyphOf, type Glyph, type Variant } from './badges'
 
 const { map } = getWorld()
@@ -233,6 +234,9 @@ export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, 
     // Badges keep the same size on screen at any zoom: they scale with how far the camera is from the ground, not from the centre.
     const w = Math.max(2, dist - 100) * (0.034 + 0.01 * d.size) * pulse
     sprite.scale.set(w, w, 1)
+    // A formation drawn by the effects overlay stands in for the badge, which stays only as the click target.
+    const base = d.army.phase === 'returning' ? 0.72 : 1
+    sprite.material.opacity = fxEngine.armies.drawn.has(d.id) ? 0.02 : base
   }, [globe, cache])
 
   // A stable function: the globe throws away every badge when this changes.

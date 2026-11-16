@@ -6,6 +6,8 @@ import { formatDivisions, totalUnits } from '../engine/helpers'
 import type { GameState, Nation, UnitCounts, UnitType } from '../engine/types'
 import { UnitIcon } from './icons'
 import { CostEffect, NumberStepper } from './widgets'
+import { FormationPreview } from '../fx/FormationPreview'
+import { useGame } from '../store'
 
 /** How many of a kind a stepper may reach: whole divisions, or tenths when less than one is free. */
 const whole = (pool: number) => (pool >= 1 ? Math.floor(pool + 1e-9) : Math.floor(pool * 10 + 1e-9) / 10)
@@ -49,6 +51,7 @@ export function DeployPanel({
   live: boolean
   shortcuts?: boolean
 }) {
+  const reducedMotion = useGame((s) => s.settings.reducedMotion)
   const force = player.military.units
   const owned = SENDABLE.filter((k) => force[k] >= 0.05)
   const sent = totalUnits(units)
@@ -82,6 +85,7 @@ export function DeployPanel({
           </button>
         ))}
       </div>
+      <FormationPreview units={units} color={player.color} reduced={reducedMotion} label="Force preview" />
       <div className="grid gap-2 sm:grid-cols-2">
         {owned.map((k) => {
           const spec = UNIT_SPECS[k]
