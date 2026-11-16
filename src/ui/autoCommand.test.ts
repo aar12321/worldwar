@@ -3,7 +3,7 @@ import { DEFAULT_AUTO } from '../engine/commander'
 import { setMilitary } from '../engine/__tests__/fixtures'
 import { applyOrderNow, describeOrder, resolveTurn } from '../engine/resolveTurn'
 import { getWorld } from '../map/world'
-import { sanitizeAuto, useGame } from '../store'
+import { keptOrder, sanitizeAuto, useGame } from '../store'
 
 const { map } = getWorld()
 
@@ -67,6 +67,14 @@ describe('auto-command in the store', () => {
     // The standing auto-command planned the new month straight away, if there is anything left to attack.
     expect(useGame.getState().autoCommand.on).toBe(true)
   }, 120_000)
+
+  it('its planned attacks survive a reload of the tray, and an ordinary attack does not', () => {
+    const planned = { type: 'attack' as const, nationId: 'germany', target: 'poland', units: { infantry: 4 }, auto: true }
+    expect(keptOrder(planned, 'germany')).toBe(true)
+    expect(keptOrder({ ...planned, auto: undefined }, 'germany')).toBe(false)
+    expect(keptOrder({ ...planned, units: undefined }, 'germany')).toBe(false)
+    expect(keptOrder(planned, 'france')).toBe(false)
+  })
 
   it('keeps its limits sane', () => {
     expect(sanitizeAuto({ maxAttacks: 99, reserve: 5, minWin: -1, objective: 'nonsense' as never })).toEqual({ on: false, objective: 'win', maxAttacks: 9, reserve: 0.9, minWin: 0.3 })

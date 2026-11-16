@@ -525,10 +525,13 @@ function loadOrders(playerId: string): Order[] {
   }
 }
 
-function keptOrder(item: unknown, playerId: string): item is Order {
+export function keptOrder(item: unknown, playerId: string): item is Order {
   if (!item || typeof item !== 'object') return false
   const order = item as Order
-  if (typeof order.type !== 'string' || order.nationId !== playerId || !MONTH_END_ORDERS.has(order.type)) return false
+  // An attack planned by auto-command waits in the tray for the month's end, so it is kept too: it survives a reload.
+  const planned = order.type === 'attack' && order.auto === true && !!order.units && typeof order.target === 'string'
+  if (typeof order.type !== 'string' || order.nationId !== playerId || !(MONTH_END_ORDERS.has(order.type) || planned)) return false
+  if (planned) return true
   if (order.type === 'setPolicy') return Number.isFinite(order.taxRate) && Number.isFinite(order.draftRate) && (order.corporateTax === undefined || Number.isFinite(order.corporateTax))
   if (order.type === 'setPrograms') return !!order.programs && typeof order.programs === 'object' && (order.rate === undefined || Number.isFinite(order.rate))
   if (order.type === 'moveCapital') return typeof order.regionId === 'string'
