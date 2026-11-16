@@ -90,6 +90,8 @@ export interface DeskDef {
   badge?: (ctx: RegCtx) => number | null
 }
 
+const incomingCount = (g: GameState): number => (g.flights ?? []).filter((f) => f.nationId !== g.playerId && g.regions[f.target]?.owner === g.playerId).length
+
 const lazyOf = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K): Loader => () => load().then((m) => ({ default: m[name] }))
 
 const economyTab = (id: string, label: string, hint: string, load: Loader, keywords: string[] = []): TabDef => ({ id, label, hint, keywords, load })
@@ -163,6 +165,7 @@ export const DESKS: DeskDef[] = [
       { id: 'deploy', label: 'Deployment', hint: 'Deployment: patrols, screens, border garrisons', keywords: ['station', 'garrison', 'border', 'patrol', 'reserve', 'navy', 'screen'], load: lazyOf(() => import('./DeploymentTab'), 'DeploymentTab') },
       { id: 'armies', label: 'Armies', hint: 'Armies on the march (live games)', keywords: ['recall', 'march'], load: lazyOf(() => import('./ArmiesTab'), 'ArmiesTab'), visible: (c) => c.live, badge: (c) => c.armies || null },
       { id: 'wars', label: 'Wars', hint: 'Your wars, fronts and peace', key: 'w', keywords: ['peace', 'front', 'defense line', 'declare', 'attack'], load: lazyOf(() => import('./WarsPanel'), 'WarsTab'), badge: (c) => c.wars || null },
+      { id: 'missiles', label: 'Missile War', hint: 'Missile war: radar, interceptors, counterforce, raids, doctrine, ceasefire', keywords: ['missile', 'radar', 'interceptor', 'salvo', 'decoy', 'counterforce', 'launch site', 'bomber', 'raid', 'scramble', 'doctrine', 'tension', 'ceasefire', 'silo'], load: lazyOf(() => import('./MissileWar'), 'MissileWarTab'), badge: (c) => (c.game ? incomingCount(c.game) || null : null) },
       { id: 'agencies', label: 'Agencies', hint: 'Intelligence and security services', keywords: ['spy', 'cia', 'fbi', 'sabotage', 'coup', 'rebels', 'intelligence'], load: lazyOf(() => import('./AgenciesTab'), 'AgenciesTab') },
       { id: 'systems', label: 'Systems', hint: 'Frontier systems: cyber, shield, AI, quantum, orbital', keywords: ['cyber', 'shield', 'interceptor', 'nano', 'orbital', 'quantum', 'missile defense'], load: lazyOf(() => import('./SystemsTab'), 'SystemsTab') },
     ],

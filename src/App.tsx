@@ -15,6 +15,7 @@ import { EventModal } from './ui/EventModal'
 import { useFx } from './ui/globeBridge'
 import { Help } from './ui/Help'
 import { HUD } from './ui/HUD'
+import { MissileAlert } from './ui/MissileAlert'
 import { useLiveClock } from './ui/liveClock'
 import { MapModes } from './ui/MapModes'
 import { Setup } from './ui/Setup'
@@ -184,6 +185,7 @@ export default function App() {
       {inGame && (
         <>
           <HUD />
+          <MissileAlert />
           <NavRail />
           {/* A desk covers these, so they are not rendered (and do not redo their work every live day) while one is open. */}
           {panel === 'none' && <MapModes />}

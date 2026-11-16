@@ -14,6 +14,7 @@ import { useGame } from '../store'
 import { useSlowGame } from './hooks'
 import { paintSignature } from './globe/paint'
 import { useArmyLayer } from './globe/useArmyLayer'
+import { useMissileFx } from './globe/useMissileFx'
 import { BORDER_COLORS, NEON, frontColors, mix, relationColors, tint, wash, withAlpha } from './colors'
 import { borderPaths, stationBadges, tensionBadges, type StationBadge } from './globe/borderLayer'
 import { neighborsOf } from '../engine/borders'
@@ -376,6 +377,7 @@ export function WorldGlobe() {
   }, [pins, stationMarkers, battles, pops])
 
   const army = useArmyLayer(ref, reducedMotion)
+  const missileFx = useMissileFx(ref, reducedMotion)
   // The Borders map draws every border in the colors of its tension, over the army routes.
   const borderLines = useMemo(() => {
     const g = gameRef.current
@@ -386,7 +388,7 @@ export function WorldGlobe() {
   // Your launch site pulses purple while a flight of yours is under way.
   const launchSite = game?.nations[game.playerId]?.space?.missions.length ? game.nations[game.playerId].capital : ''
   const spaceRings = useMemo(() => (launchSite && map.regions[launchSite] ? [{ lat: map.regions[launchSite].lat, lng: map.regions[launchSite].lng, color: '#bf5af2', maxRadius: 3.2, repeat: 2200 }] : []), [launchSite])
-  const allRings = useMemo(() => (army.threatRings.length || spaceRings.length ? [...rings, ...army.threatRings, ...spaceRings] : rings), [rings, army.threatRings, spaceRings])
+  const allRings = useMemo(() => (army.threatRings.length || spaceRings.length || missileFx.rings.length ? [...rings, ...army.threatRings, ...spaceRings, ...missileFx.rings] : rings), [rings, army.threatRings, spaceRings, missileFx.rings])
 
   const ringColor = useCallback((r: object) => (t: number) => withAlpha((r as { color: string }).color, Math.max(0, 1 - t)), [])
 
@@ -425,6 +427,7 @@ export function WorldGlobe() {
       ringPropagationSpeed={3}
       ringRepeatPeriod={ringPeriod}
       {...army.props}
+      {...missileFx.props}
       pathsData={pathsData}
     />
   )

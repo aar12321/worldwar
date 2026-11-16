@@ -1,4 +1,3 @@
-import { appendFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { generateAllBotOrders, generateBotOrders } from '../../ai/bot'
 import { createInitialState } from '../../data/startingNations'
@@ -92,7 +91,8 @@ describe('the AI in the missile war', () => {
   const runs: Record<string, Tally> = {}
   const show = (label: string, t: Tally) => {
     runs[label] = t
-    if (process.env.MWSIM_OUT) appendFileSync(process.env.MWSIM_OUT, `${label} ${JSON.stringify(t)}\n`)
+    // eslint-disable-next-line no-console
+    console.log(`MWSIM ${label} ${JSON.stringify(t)}`)
   }
 
   it('Easy rivals never use it', () => {
