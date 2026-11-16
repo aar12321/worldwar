@@ -767,7 +767,14 @@ export function runSpaceWorld(s: GameState) {
   const claims = s.space?.claims
   if (!claims) return
   for (const [body, c] of Object.entries(claims) as [BodyId, { owner: NationId; turn: number }][]) {
-    if (s.nations[c.owner]?.alive) continue
+    const owner = s.nations[c.owner]
+    if (owner?.alive) {
+      // A claim nobody settles lapses: squatting on a world blocks everyone else.
+      if (s.turn - c.turn <= SPACE.claimMonths || (owner.space?.bodies[body]?.outpost?.level ?? 0) >= 1) continue
+      delete claims[body]
+      addLog(s, 'news', `${owner.name}'s claim on ${BODIES[body].name} lapsed: nothing was built there in ${SPACE.claimMonths} months. Any nation that has landed may claim it.`, [c.owner])
+      continue
+    }
     delete claims[body]
     addLog(s, 'news', `${BODIES[body].name} is unclaimed again: ${s.nations[c.owner]?.name ?? 'its owner'} is gone.`, [c.owner])
   }

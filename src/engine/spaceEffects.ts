@@ -19,6 +19,8 @@ export function discoveryBonus(sp: SpaceState | undefined): Required<Omit<NodeEf
     if (!e) continue
     for (const k of Object.keys(out) as (keyof typeof out)[]) out[k] += e[k] ?? 0
   }
+  // Soft ceilings: the last discoveries still help, but they never stack without limit.
+  for (const [k, cap] of Object.entries(SPACE.discoveryCap)) if (k in out) out[k as keyof typeof out] = Math.min(out[k as keyof typeof out], cap)
   return out
 }
 

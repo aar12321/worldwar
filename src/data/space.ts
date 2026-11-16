@@ -160,6 +160,10 @@ export const SPACE = {
   launchCrewLoss: 0.5,
   /** Claiming a body costs influence. */
   claimCost: 30,
+  /** A claim with no outpost on it lapses after this many months, so a nation cannot sit on worlds it never settles. */
+  claimMonths: 60,
+  /** Discoveries stack, but not past these ceilings (a share each). */
+  discoveryCap: { mining: 0.5, output: 0.04 } as Record<string, number>,
   /** Months of lacking money before an outpost loses a level. */
   starveMonths: 4,
   /** The world's space industry: grows with time and every flight. It makes private companies better and cheaper. */
@@ -249,7 +253,7 @@ export const COMPANIES: Record<string, CompanySpec> = {
   helios: { name: 'Helios Deep Space', blurb: 'Specialists in the long road out: asteroids, Mars and beyond. Dear, and worth it.', home: 'india', price: 1.55, reliability: 0.83, baseClass: 4, maxClass: 5, step: 50, minIndustry: 45, deep: 0.05 },
 }
 /** A nation with a technology sector of this size has a private space firm of its own. */
-export const DOMESTIC = { id: 'domestic', sector: 1.2, price: 0.9, reliability: 0.78, baseClass: 2, maxClass: 4, step: 50, share: 0.25, abroadShare: 0.06 }
+export const DOMESTIC = { id: 'domestic', sector: 1.2, price: 0.9, reliability: 0.78, baseClass: 2, maxClass: 4, step: 50, share: 0.15, abroadShare: 0.06 }
 
 export interface MissionSpec {
   name: string
@@ -320,8 +324,8 @@ export interface BodySpec {
 export const BODIES: Record<BodyId, BodySpec> = {
   moon: { name: 'The Moon', blurb: 'Three days away. Poles with ice, a surface full of helium-3, and nobody to argue with.', distance: 1, richness: 0.9, mines: ['rareMetals', 'helium3', 'water'], research: 0.5 },
   asteroids: { name: 'Asteroids', blurb: 'Flying mountains of iron and platinum, months from home and with almost no gravity to climb out of.', distance: 1.5, richness: 1.4, mines: ['metals', 'rareMetals'], research: 0.4 },
-  mars: { name: 'Mars', blurb: 'Soil, ice, an old riverbed and a sky of dust. The only other world a settlement could grow on.', distance: 2, richness: 1, mines: ['metals', 'water', 'rareMetals'], research: 0.8 },
-  europa: { name: 'Europa', blurb: 'An ocean under the ice of a moon of Jupiter. The farthest place anyone will build.', distance: 3, richness: 1.2, mines: ['water', 'volatiles'], research: 1.2 },
+  mars: { name: 'Mars', blurb: 'Soil, ice, an old riverbed and a sky of dust. The only other world a settlement could grow on.', distance: 2, richness: 1.9, mines: ['metals', 'water', 'rareMetals'], research: 0.8 },
+  europa: { name: 'Europa', blurb: 'An ocean under the ice of a moon of Jupiter. The farthest place anyone will build.', distance: 3, richness: 2.1, mines: ['water', 'volatiles'], research: 1.2 },
 }
 export const BODY_IDS = Object.keys(BODIES) as BodyId[]
 
@@ -360,8 +364,8 @@ export interface MineSpec {
 
 export const MINES: Record<MineId, MineSpec> = {
   rareMetals: { name: 'Rare-metal mine', blurb: 'Platinum and rare earths, sold at home for hard money.', cost: 360, months: 24, exp: 160, money: 12 },
-  helium3: { name: 'Helium-3 mine', blurb: 'Fuel for fusion. Feeds the grid, and a national fusion plant multiplies it.', cost: 420, months: 26, exp: 200, he3: 1, money: 8 },
-  water: { name: 'Water-ice mine', blurb: 'Drinking water, air and rocket fuel. Cuts what the space program costs to keep, and makes some oil.', cost: 300, months: 20, exp: 120, water: 0.12, oil: 4.5 },
+  helium3: { name: 'Helium-3 mine', blurb: 'Fuel for fusion. Feeds the grid, and a national fusion plant multiplies it.', cost: 420, months: 26, exp: 200, he3: 1, money: 14 },
+  water: { name: 'Water-ice mine', blurb: 'Drinking water, air and rocket fuel. Cuts what the space program costs to keep, and makes some oil.', cost: 300, months: 20, exp: 120, water: 0.12, oil: 7 },
   metals: { name: 'Metal mine', blurb: 'Iron, nickel and cobalt in the quantities of a factory district. A substitute for steel.', cost: 340, months: 22, exp: 140, steel: 6.5 },
   volatiles: { name: 'Volatiles plant', blurb: 'Methane and ammonia from the ice. A substitute for oil.', cost: 380, months: 24, exp: 240, oil: 9, money: 3 },
 }
