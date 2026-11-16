@@ -79,7 +79,7 @@ export function FactionRow({ id }: { id: NationId }) {
   const relations = partnerRelations(game, me).get(id) ?? []
   const same = !!mine && mine.id === theirs?.id
   const link = (
-    <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openFaction(id)}>
+    <button className="btn btn-quiet px-3 py-1.5 text-[13px] text-[#64d2ff] underline" onClick={() => openFaction(id)}>
       Open Faction desk
     </button>
   )

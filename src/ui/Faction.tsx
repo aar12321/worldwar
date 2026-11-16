@@ -96,7 +96,7 @@ export function NationPicker({ items, value, onChange, placeholder = 'Search cou
       </div>
       {blocked && (
         <p className="text-[13px] text-[#ffb4ae]" role="status">
-          {blocked.name} cannot be chosen: {blocked.why}.
+          {blocked.why}.
         </p>
       )}
     </div>
