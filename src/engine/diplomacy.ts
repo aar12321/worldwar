@@ -1,8 +1,9 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, decayOpinions } from '../ai/opinion'
+import { LIBERATE_TEXT, PUPPET } from '../data/puppets'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
 import { EMPIRE, JUSTIFY, WAR } from '../data/war'
-import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, maxWars, newId, pairKey, puppetsOf } from './helpers'
+import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, justificationOf, maxWars, newId, pairKey, puppetsOf } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
 import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, WorldMap } from './types'
@@ -73,6 +74,14 @@ export function annexPuppet(s: GameState, map: WorldMap, master: NationId, puppe
   addInfamy(s, master, EMPIRE.annexInfamy)
 }
 
+/** A winner frees a puppet of the loser at the peace table: independent, no tribute, grateful, and at peace with its liberator. */
+function liberatePuppet(s: GameState, liberator: NationId, master: NationId, puppet: NationId) {
+  freePuppet(s, puppet)
+  addOpinion(s, puppet, liberator, LIBERATE_TEXT.opinion, PUPPET.liberate.opinion, 0.1)
+  addLog(s, 'diplomacy', LIBERATE_TEXT.log(name(s, liberator), name(s, puppet), name(s, master)), [liberator, puppet, master])
+  if (atWar(s, liberator, puppet)) makePeace(s, liberator, puppet)
+}
+
 /** A master lets its puppet go. */
 export function releasePuppet(s: GameState, master: NationId, puppet: NationId) {
   freePuppet(s, puppet)
@@ -87,6 +96,13 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
   if (!callAllies && (enemiesOf(s, a).length >= maxWars(s, a) || enemiesOf(s, b).length >= maxWars(s, b))) return
   // A war with a reason is a legitimate act. A war without one is aggression, and the world remembers it.
   const justified = !callAllies || hasCasusBelli(s, a, b)
+  // A war begun under "Free X from Y" is remembered: it gives the right to free X at the peace table.
+  if (s.liberationWars) delete s.liberationWars[`${a}>${b}`]
+  const cause = justificationOf(s, a, b)
+  if (cause) {
+    const freed = puppetsOf(s, b).filter((id) => cause.reason === LIBERATE_TEXT.cause(s.nations[id].name, s.nations[b].name))
+    if (freed.length) (s.liberationWars ??= {})[`${a}>${b}`] = freed
+  }
   s.wars.push(key)
   s.wars.sort()
   s.warStarted[key] = s.turn
@@ -167,6 +183,11 @@ export function generalPeaceTies(s: GameState, a: NationId, b: NationId): [Natio
 
 function makePeace(s: GameState, a: NationId, b: NationId) {
   const key = pairKey(a, b)
+  if (s.liberationWars) {
+    delete s.liberationWars[`${a}>${b}`]
+    delete s.liberationWars[`${b}>${a}`]
+    if (Object.keys(s.liberationWars).length === 0) delete s.liberationWars
+  }
   s.wars = s.wars.filter((k) => k !== key)
   delete s.warStarted[key]
   clearWarScore(s, a, b)
@@ -235,6 +256,7 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
       if (toTarget.length) parts.push(`${name(s, p.from)} cedes ${toTarget.join(', ')}`)
       if (p.terms.reparations > 0) parts.push(`${name(s, p.to)} pays ${p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
       if (p.terms.reparations < 0) parts.push(`${name(s, p.from)} pays ${-p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
+      if (p.terms.liberate !== undefined && s.nations[p.terms.liberate]) parts.unshift(LIBERATE_TEXT.describe(s.nations[p.terms.liberate].name, name(s, p.to)))
       if (p.terms.puppet) parts.unshift(`${name(s, p.to)} becomes a puppet of ${name(s, p.from)} and pays ${Math.round(DIPLOMACY.puppet.tribute * 100)}% of its income`)
       const base = parts.length ? parts.join('; ') : 'White peace: no territory or payments change hands'
       const ties = p.terms.general ? generalPeaceTies(s, p.from, p.to) : []
@@ -277,7 +299,9 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
     case 'peace': {
       // Read the other wars first: signing the main peace changes who counts as allied and at war.
       const ties = p.terms.general ? generalPeaceTies(s, p.from, p.to) : []
+      const liberated = p.terms.liberate
       makePeace(s, p.from, p.to)
+      if (liberated !== undefined) liberatePuppet(s, p.from, p.to, liberated)
       for (const [x, y] of ties) if (atWar(s, x, y)) makePeace(s, x, y)
       for (const id of p.terms.cede) {
         const owner = s.regions[id].owner

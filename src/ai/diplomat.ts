@@ -1,4 +1,5 @@
 import { COALITION } from '../data/coalition'
+import { LIBERATE_TEXT } from '../data/puppets'
 import { PERSONALITIES } from '../data/personalities'
 import { difficultyOf } from '../data/difficulty'
 import { alarmBetween, leadersOf, type ThreatReport } from '../engine/coalition'
@@ -83,6 +84,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       const others = p.terms.general ? generalPeaceTies(s, p.from, botId).length : 0
       const score = me.warWeariness * 1.1 + (ratio - 1) * 25 + net * 0.6 + concession - demand * 0.8 + op * 0.15 + bias - (fresh ? 12 : 0) - 8 - Math.min(10, others * 2.5) + noise
       if (p.terms.puppet && score <= 8) return verdict(false, 'we will never be your puppet')
+      if (p.terms.liberate !== undefined && score <= 8) return verdict(false, LIBERATE_TEXT.refusal)
       if (score > 0) {
         if (me.warWeariness > 25) return verdict(true, 'the war has bled us dry')
         if (ratio > 1.3 || net > 15) return verdict(true, 'we cannot win this war')

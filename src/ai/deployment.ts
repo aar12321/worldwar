@@ -1,7 +1,8 @@
+import { PUPPET } from '../data/puppets'
 import { AIR_UNITS, GROUND_UNITS, NAVAL_UNITS } from '../data/deployment'
 import { heatNow, landBorders } from '../engine/deployment'
 import { neighborsOf, recordOf } from '../engine/borders'
-import { atWar, clamp, forceUnits, hasCasusBelli, hasPact, isAllied, totalUnits } from '../engine/helpers'
+import { atWar, clamp, forceUnits, hasCasusBelli, hasPact, isAllied, puppetsOf, regionsOf, totalUnits } from '../engine/helpers'
 import type { GameState, NationId, Order, WorldMap } from '../engine/types'
 
 export type Posture = Pick<Extract<Order, { type: 'setDeployment' }>, 'coastal' | 'subs' | 'air' | 'border'>
@@ -11,6 +12,10 @@ const round05 = (v: number) => Math.round(v * 20) / 20
 
 /** Most of each arm a rival keeps on station, by skill (Easy, Medium, Hard). The rest stays free to attack with. */
 const CAP = { ground: [0.1, 0.2, 0.3], coastal: [0.25, 0.3, 0.3], subs: [0, 0.2, 0.4], air: [0.15, 0.25, 0.35] }
+
+/** The most ground forces a rival posts in its puppets in all, and the loyalty above which it does not bother (it keeps an existing garrison until the puppet is loyal, `PUPPET.high`, so the post does not flap). */
+export const PUPPET_GARRISON_CAP = 0.2
+export const PUPPET_GARRISON_BELOW = 60
 
 /** How much a neighbor worries a nation, from the war, the grievance, the incidents and the size of its army. A friend barely counts. */
 export function borderThreat(s: GameState, id: NationId, x: NationId): number {
@@ -50,6 +55,24 @@ export function plannedPosture(s: GameState, map: WorldMap, id: NationId, skill:
     }
   }
 
+  // A master that rules a shaky puppet beside it keeps a garrison there: it buys loyalty (see PUPPET.garrison) for troops that would otherwise
+  // sit in the reserve. Medium and Hard only, and only as much as the cover needs, out of at most PUPPET_GARRISON_CAP of the ground forces.
+  if (skill >= 1 && fronts.size) {
+    const ground = sum(force, GROUND_UNITS)
+    let room = PUPPET_GARRISON_CAP
+    for (const p of puppetsOf(s, id).sort()) {
+      const loyal = s.nations[p].loyalty
+      if (!fronts.has(p) || loyal === undefined || loyal >= (n.military.deployment?.border[p] ? PUPPET.high : PUPPET_GARRISON_BELOW) || ground < 4) continue
+      const need = (PUPPET.garrison.perCountry * regionsOf(s, p).length) / ground
+      const share = Math.min(room, Math.ceil(need * 20) / 20)
+      if (share < 0.05) continue
+      const total = Object.values(out.border).reduce((t, v) => t + v, 0) - (out.border[p] ?? 0) + share
+      if (total > 1) continue
+      out.border[p] = Math.max(out.border[p] ?? 0, share)
+      room -= share
+    }
+  }
+
   const coastal = Object.values(s.regions).some((r) => r.owner === id && map.regions[r.id]?.coastal)
   const navy = sum(force, NAVAL_UNITS)
   if (coastal && navy >= 0.5) {
@@ -77,7 +100,9 @@ export function deploymentOrder(s: GameState, map: WorldMap, id: NationId, skill
   const want = plannedPosture(s, map, id, skill)
   const d = n.military.deployment
   const have: Posture = d ? { coastal: d.coastal, subs: d.subs, air: d.air, border: d.border } : { coastal: 0, subs: 0, air: 0, border: {} }
-  if (d ? distance(want, have) < 0.1 : distance(want, have) <= 0) return null
+  // A change in a puppet's garrison is worth an order from half that much: it is what holds the puppet's loyalty.
+  const puppetShift = Object.keys({ ...want.border, ...have.border }).some((x) => s.nations[x]?.overlord === id && Math.abs((want.border[x] ?? 0) - (have.border[x] ?? 0)) >= 0.05)
+  if (d ? distance(want, have) < 0.1 && !puppetShift : distance(want, have) <= 0) return null
   return { type: 'setDeployment', nationId: id, ...want }
 }
 

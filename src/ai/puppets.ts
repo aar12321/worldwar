@@ -1,6 +1,7 @@
 import { PUPPET, TRIBUTE } from '../data/puppets'
-import { enemiesOf, puppetsOf } from '../engine/helpers'
-import { tributeOf } from '../engine/puppets'
+import { enemiesOf, puppetsOf, regionsOf } from '../engine/helpers'
+import { liberablePuppets, tributeOf } from '../engine/puppets'
+import { liberateValue, puppetValue, regionValue } from '../engine/warscore'
 import type { Rng } from '../engine/rng'
 import type { GameState, NationId, Order, PuppetPatch, TributeForm, WorldMap } from '../engine/types'
 
@@ -72,4 +73,40 @@ function neededForm(s: GameState, master: NationId, puppet: NationId): TributeFo
   if (m.resources.oil < 6 && (s.nations[puppet].resources.oil ?? 0) > 6) return 'oil'
   if (m.resources.steel < 6 && (s.nations[puppet].resources.steel ?? 0) > 6) return 'steel'
   return null
+}
+
+/**
+ * When a rival asks for a puppet at the peace table instead of land (see `peaceTerms`). Never Easy. Medium wants a decisive win
+ * (war score 35) and keeps one puppet; Hard settles for a clear win (25) and keeps up to three. Whoever it is, the loser must be a
+ * country that is worth ruling (its land is worth at least `minLand` in war score), neither side may be a puppet already, and a
+ * master never holds more puppets than 1 + half its own countries, so a small nation cannot snowball on tribute.
+ */
+export const PUPPET_AI = { minNet: [99, 35, 25], maxPuppets: [0, 1, 3], minLand: 30 }
+
+export function wantsPuppet(s: GameState, map: WorldMap, me: NationId, enemy: NationId, net: number, skill: 0 | 1 | 2): boolean {
+  if (skill === 0 || net < PUPPET_AI.minNet[skill]) return false
+  const m = s.nations[me]
+  const e = s.nations[enemy]
+  if (!m?.alive || !e?.alive || m.overlord || e.overlord || s.humans.includes(me)) return false
+  if (puppetsOf(s, me).length >= Math.min(PUPPET_AI.maxPuppets[skill], 1 + Math.floor(regionsOf(s, me).length / 2))) return false
+  let land = 0
+  for (const r of regionsOf(s, enemy)) land += regionValue(s, map, r)
+  if (land < PUPPET_AI.minLand) return false
+  return puppetValue(s, map, enemy) <= net * 0.85
+}
+
+/**
+ * The puppet of an enemy a Hard rival frees at the peace table, if it has cause (it went to war for it, or the puppet cries out) and
+ * the war score covers it, with the war score it has left. Freeing a puppet takes the master's tribute and soldiers away and wins a
+ * friend; the cheapest cause is taken first.
+ */
+export function liberationChoice(s: GameState, map: WorldMap, me: NationId, enemy: NationId, budget: number, skill: 0 | 1 | 2): { id: NationId; cost: number } | null {
+  if (skill < 2) return null
+  let best: { id: NationId; cost: number } | null = null
+  for (const id of liberablePuppets(s, me, enemy)) {
+    const cost = liberateValue(s, map, id)
+    if (cost > budget) continue
+    if (!best || cost < best.cost) best = { id, cost }
+  }
+  return best
 }

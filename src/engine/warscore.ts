@@ -1,7 +1,9 @@
+import { PUPPET } from '../data/puppets'
 import { DIPLOMACY } from '../data/unitTypes'
 import { EMPIRE } from '../data/war'
 import { regionWorkforce } from './economy'
 import { clamp, totalUnits } from './helpers'
+import { liberationProblem } from './puppets'
 import type { BattleReport, GameState, NationId, PeaceTerms, RegionId, WorldMap } from './types'
 
 export const WARSCORE = {
@@ -55,6 +57,11 @@ export function puppetValue(s: GameState, map: WorldMap, id: NationId): number {
   return Math.round(Math.min(EMPIRE.puppetCap, Math.max(DIPLOMACY.puppet.minValue, land * DIPLOMACY.puppet.valueShare)))
 }
 
+/** War score needed to free a puppet at the peace table: a share of what making it one would cost. */
+export function liberateValue(s: GameState, map: WorldMap, puppet: NationId): number {
+  return Math.round(puppetValue(s, map, puppet) * PUPPET.liberate.cost)
+}
+
 export function termsCost(s: GameState, map: WorldMap, terms: PeaceTerms, proposer: NationId, target: NationId) {
   let demand = 0
   let concession = 0
@@ -64,6 +71,7 @@ export function termsCost(s: GameState, map: WorldMap, terms: PeaceTerms, propos
     else if (owner === proposer) concession += regionValue(s, map, id)
   }
   if (terms.puppet) demand += puppetValue(s, map, target)
+  if (terms.liberate !== undefined && s.nations[terms.liberate]) demand += liberateValue(s, map, terms.liberate)
   if (terms.reparations > 0) demand += terms.reparations * 1.2
   else concession += -terms.reparations * 1.2
   return { demand: Math.round(demand), concession: Math.round(concession) }
@@ -73,6 +81,10 @@ export function validatePeaceTerms(s: GameState, map: WorldMap, terms: PeaceTerm
   if (terms.puppet) {
     if (s.nations[target].overlord) return `${s.nations[target].name} is already a puppet`
     if (s.nations[proposer].overlord) return 'A puppet cannot make puppets'
+  }
+  if (terms.liberate !== undefined) {
+    const why = liberationProblem(s, proposer, target, terms.liberate)
+    if (why) return why
   }
   const seen = new Set<RegionId>()
   for (const id of terms.cede) {

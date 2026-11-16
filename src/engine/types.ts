@@ -483,6 +483,8 @@ export interface PeaceTerms {
   puppet?: boolean
   /** A general peace: allies and puppets of each side who are fighting the other side stop too, with the same truce. */
   general?: boolean
+  /** Liberation: a puppet of the target (the loser) is set free, independent, with no tribute. The proposer needs a cause (see `liberationCause`). */
+  liberate?: NationId
   /** Capital per month for REPARATION_MONTHS. Positive: the target pays the proposer. Negative: the proposer pays. */
   reparations: number
 }
@@ -885,6 +887,8 @@ export interface GameState {
   casusBelli: Record<string, number>
   /** "holder|target" -> what the reason for war is, shown to the player. */
   reasons: Record<string, string>
+  /** Wars begun to free a puppet: "holder>master" -> the puppets the holder went to war for. Absent until one is. Cleared when the war ends. */
+  liberationWars?: Record<string, NationId[]>
   /** How much each nation is distrusted for starting wars, taking land and covert acts. It fades. */
   infamy: Record<NationId, number>
   /** Cases being built against a country. When one is ready it becomes a reason for war. */

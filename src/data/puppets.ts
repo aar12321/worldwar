@@ -82,7 +82,20 @@ export const PUPPET = {
   /** The master's influence for each kind of change. */
   cost: { tax: 3, draft: 3, lawOn: 6, lawOff: 3, spending: 2, tributeForm: 4, tributeShare: 3, aid: 0 },
   /** Calling the world to its help: a puppet this loyal or less asks, and nations that are neighbors of either side, or already at war with the master, may free it. */
-  liberate: { below: 20, reasonMonths: 12, again: 12, free: 0.2 },
+  liberate: { below: 20, reasonMonths: 12, again: 12, free: 0.2, cost: 0.5, opinion: 40 },
+}
+
+/** Words for the peace table's "set a puppet free" term, for the UI. `describe` names who is freed and from whom. */
+export const LIBERATE_TEXT = {
+  term: 'Set a puppet free',
+  short: 'Liberate',
+  hint: 'Free one of their puppets: it becomes independent, pays no tribute and thinks well of you. Needs a cause: you went to war to free it, or it cries out against its master.',
+  describe: (puppet: string, master: string) => `${master} sets its puppet ${puppet} free`,
+  cause: (puppet: string, master: string) => `Free ${puppet} from ${master}`,
+  none: 'They have no puppet you have cause to free',
+  refusal: 'we will not give up our puppet',
+  log: (liberator: string, puppet: string, master: string) => `${liberator} freed ${puppet} from ${master} at the peace table.`,
+  opinion: 'Freed us',
 }
 
 export interface TributeSpec {

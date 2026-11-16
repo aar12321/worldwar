@@ -26,10 +26,10 @@ import { MARKET_GOODS, marketPrices, stockOf, tradeRoom, type MarketPrices } fro
 import type { BuildingType, GameState, MissileType, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
 import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
 import { canAttackRegion } from '../engine/warfare'
-import { MAX_REPARATIONS, puppetValue, regionValue } from '../engine/warscore'
+import { MAX_REPARATIONS, regionValue } from '../engine/warscore'
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
 import { lockedByMaster } from '../engine/puppets'
-import { managePuppets } from './puppets'
+import { liberationChoice, managePuppets, wantsPuppet } from './puppets'
 import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
 import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
@@ -668,9 +668,12 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
 /** What a bot asks for at the peace table: land if it is winning, a white peace or payment if it is losing. */
 export function peaceTerms(s: GameState, map: WorldMap, me: NationId, enemy: NationId, net: number, desperate: boolean, skill = 0): PeaceTerms {
   // The strongest tier prefers a tributary to a ruin when it is winning big.
-  if (skill === 2 && net >= 40 && !s.nations[enemy].overlord && !s.nations[me].overlord && puppetValue(s, map, enemy) <= net * 0.85) return { cede: [], reparations: 0, puppet: true }
+  if (wantsPuppet(s, map, me, enemy, net, skill as 0 | 1 | 2)) return { cede: [], reparations: 0, puppet: true }
   if (net >= 12) {
     let budget = Math.floor(net * 0.85)
+    // A rival that has cause frees a puppet of its enemy first: the master loses its tribute and soldiers and the puppet becomes a friend.
+    const free = liberationChoice(s, map, me, enemy, budget, skill as 0 | 1 | 2)
+    if (free) budget -= free.cost
     const enemyNation = s.nations[enemy]
     const border = Object.values(s.regions)
       .filter((r) => r.owner === enemy && r.id !== enemyNation.capital && map.regions[r.id].neighbors.some((nb) => s.regions[nb]?.owner === me))
@@ -685,7 +688,7 @@ export function peaceTerms(s: GameState, map: WorldMap, me: NationId, enemy: Nat
       }
     }
     const reparations = Math.min(MAX_REPARATIONS, Math.floor(budget / 1.2 / 2))
-    return { cede, reparations: cede.length ? 0 : Math.max(0, reparations) }
+    return { cede, reparations: cede.length ? 0 : Math.max(0, reparations), ...(free ? { liberate: free.id } : {}) }
   }
   if (net <= -10 && desperate) return { cede: [], reparations: -clamp(Math.round(-net * 0.4), 3, 20) }
   return { cede: [], reparations: 0 }

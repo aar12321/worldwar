@@ -1,6 +1,6 @@
 import { addOpinion } from '../ai/opinion'
 import { DRAFT_LIMITS, LAW_SPECS, TAX_LIMITS } from '../data/unitTypes'
-import { DEFAULT_TRIBUTE, LEVY_POOL, PUPPET, PUPPET_LAW_IDS, PUPPET_SPENDING_KEYS, TRIBUTE, TRIBUTE_FORMS } from '../data/puppets'
+import { DEFAULT_TRIBUTE, LEVY_POOL, LIBERATE_TEXT, PUPPET, PUPPET_LAW_IDS, PUPPET_SPENDING_KEYS, TRIBUTE, TRIBUTE_FORMS } from '../data/puppets'
 import { SPENDING } from '../data/people'
 import { garrisonDivisions } from './deployment'
 import { computeEconomy, type EconomyReport } from './economy'
@@ -271,7 +271,7 @@ export function runPuppetMonth(s: GameState, map: WorldMap, puppet: Nation, mast
 function callForHelp(s: GameState, map: WorldMap, puppet: Nation, master: Nation, rng: Rng) {
   const L = PUPPET.liberate
   const first = (puppet.calledOut ?? -999) + L.again <= s.turn
-  const reason = `Free ${puppet.name} from ${master.name}`
+  const reason = LIBERATE_TEXT.cause(puppet.name, master.name)
   if (first) {
     puppet.calledOut = s.turn
     const near = new Set<NationId>()
@@ -344,6 +344,25 @@ export function bindPuppet(s: GameState, puppetId: NationId, masterId: NationId)
   delete p.ruledAt
   delete p.calledOut
 }
+
+/** The wars `holder` went into to free puppets of `master`, as the ids of the puppets. */
+export const liberationWarFor = (s: GameState, holder: NationId, master: NationId): NationId[] => s.liberationWars?.[`${holder}>${master}`] ?? []
+
+/** Why `holder` may not free `puppet` (a puppet of `master`, the nation it is at war with) at the peace table, or null. The cause: it went to war to free that puppet, or the puppet cries out (loyalty below `liberate.below`). */
+export function liberationProblem(s: GameState, holder: NationId, master: NationId, puppet: NationId): string | null {
+  const p = typeof puppet === 'string' ? s.nations[puppet] : undefined
+  if (!p?.alive || p.overlord !== master) return 'They are not a puppet of that nation'
+  if (!atWar(s, holder, master)) return 'You are not at war with its master'
+  if (s.nations[holder]?.overlord) return 'A puppet cannot free puppets'
+  if (puppet === holder) return 'You cannot free yourself this way'
+  const wentToWar = liberationWarFor(s, holder, master).includes(puppet)
+  const cries = p.loyalty !== undefined && p.loyalty < PUPPET.liberate.below
+  if (!wentToWar && !cries) return `You have no cause to free ${p.name}: you did not go to war for it and it does not cry out`
+  return null
+}
+
+/** The puppets of `master` that `holder` may free at the peace table now. */
+export const liberablePuppets = (s: GameState, holder: NationId, master: NationId): NationId[] => puppetsOf(s, master).filter((id) => liberationProblem(s, holder, master, id) === null).sort()
 
 /** Ends a puppet's subjection: the loyalty and everything the master set on it as tribute are cleared. */
 export function freePuppet(s: GameState, puppetId: NationId) {
