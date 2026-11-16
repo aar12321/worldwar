@@ -35,6 +35,6 @@ long('relationships in bot play (long)', () => {
       it(`${diff} seed ${seed} ${on ? 'with' : 'without'} the relationship rules`, () => {
         const r = relationsBotRun(diff, seed, months, on)
         const line = 'RELSIM ' + JSON.stringify(r)
-        console.log(line)
+        ;(globalThis as unknown as { process: { stderr: { write(s: string): void } } }).process.stderr.write(line + '\n')
       }, 3_600_000)
 })

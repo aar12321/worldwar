@@ -57,7 +57,18 @@ The Normal and Hard bot worlds moved (the small war did not): rivals now act in 
 
 ## Sims (Hard, 60 months, seeds 1 to 3, bots in every seat)
 
-See the table at the end of this file (filled in from `VITE_RELSIM=hard npx vitest run src/engine/__tests__/relationsSim.test.ts`).
+`VITE_RELSIM=hard VITE_RELSIM_SEEDS=1 npx vitest run src/engine/__tests__/relationsSim.test.ts -t long` (a seed at a time; each run prints a `RELSIM` line to stderr). With the rules on, then off:
+
+| Seed | Acts by rivals in 60 months | Requests made / answered | Alliances at end | Most allies one nation | Opinion pairs (mean, 5th, 95th, at +90 or more, at -90 or less) | Opinion of the player (mean, 5th, 95th) |
+|---|---|---|---|---|---|---|
+| 1 on | culture 68, visit 60, embassy 33, plan 2, venture 1 | 38 / 33 | 51 | 4 | -0.3, -15, 10, 2, 0 of 1130 | 0.1, -12, 10 |
+| 1 off | none | none | 42 | 3 | -1.1, -15, 6, 0, 2 of 1140 | 0.1, -8, 6 |
+| 2 on | culture 63, visit 43, embassy 30, plan 3, research 1, students 1 | 29 / 26 | 60 | 4 | -0.2, -11, 9, 1, 0 of 1190 | 0.5, -10, 10 |
+| 2 off | none | none | 49 | 4 | -0.5, -11, 6, 0, 0 of 1250 | 0.6, -6, 6 |
+| 3 on | culture 50, visit 38, embassy 28, plan 1 | 27 / 25 | 49 | 4 | -1.3, -17, 10, 4, 2 of 1000 | 1.2, -10, 10 |
+| 3 off | none | none | 57 | 4 | -1.2, -15, 6, 1, 3 of 1070 | 2.0, -8, 6 |
+
+Opinions stay in range and nobody is pinned at the ends (at most 4 of 1000 pairs at +90, about as many as without the layer). Alliances end 49 to 60 with the layer, against 42 to 57 without: no runaway, and no nation holds more than 4. The 5th to 95th spread widens a little (the 95th percentile of opinion is 9 to 10 instead of 6): friends are warmer, strangers are not colder.
 
 ## Not done / unverified
 
