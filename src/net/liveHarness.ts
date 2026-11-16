@@ -13,6 +13,7 @@ export interface LiveSeat {
   id: string
   s: OnlineSession
   days: number
+  battles: number
   orders: OrderEvent[]
   acks: { cid: number; ok: boolean; reason?: string }[]
   clocks: ClockView[]
@@ -39,7 +40,7 @@ export interface LiveRoom {
 }
 
 export function liveSeat(hub: MemoryHub, map: WorldMap, id: string, name: string, clock: { t: number }): LiveSeat {
-  const out: LiveSeat = { id, s: null as unknown as OnlineSession, days: 0, orders: [], acks: [], clocks: [], statuses: [], starts: [], requests: [], kicked: 0, rematches: 0 }
+  const out: LiveSeat = { id, s: null as unknown as OnlineSession, days: 0, battles: 0, orders: [], acks: [], clocks: [], statuses: [], starts: [], requests: [], kicked: 0, rematches: 0 }
   out.s = new OnlineSession({
     transport: hub.join(id),
     clientId: id,
@@ -48,7 +49,10 @@ export function liveSeat(hub: MemoryHub, map: WorldMap, id: string, name: string
     now: () => clock.t,
     autoTick: false,
     events: {
-      onDay: () => void out.days++,
+      onDay: (_prev, step) => {
+        out.days++
+        out.battles += step.events.filter((e) => e.kind === 'battle').length
+      },
       onOrder: (e) => out.orders.push(e),
       onAck: (cid, ok, reason) => out.acks.push({ cid, ok, reason }),
       onClock: (c) => out.clocks.push(c),
@@ -111,3 +115,8 @@ export const same = (room: LiveRoom, seats = room.seats) => new Set(seats.map((x
 
 /** An attack order from `from` on `target`, with the whole stance defaults. */
 export const attackOrder = (from: string, target: string): Order => ({ type: 'attack', nationId: from, target, commit: 'main', stance: 'assault' }) as Order
+
+/** Changes every screen's copy of the game in the same way, for tests that need a situation (money, a war) the game would take months to reach. */
+export function patchAll(room: LiveRoom, fn: (g: GameState) => void) {
+  for (const x of room.seats) if (x.s.game) fn(x.s.game)
+}
