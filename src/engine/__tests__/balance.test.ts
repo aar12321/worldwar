@@ -9,6 +9,7 @@ import { investedIn, projectSpeed } from '../industry'
 import { MONTH_END_ORDERS, validateOrder } from '../orders'
 import { resolveTurn } from '../resolveTurn'
 import type { GameState, Order, SocialId } from '../types'
+import { decodeState, encodeState, fingerprint } from '../../net/protocol'
 import { RUSH, rushGain } from '../works'
 import { optimizerOrders, runBotWorld } from './balance.sweep'
 import { checkInvariants, invariantProblems } from './invariants'
@@ -312,6 +313,65 @@ describe('a damaged or hostile plan cannot stop the month or poison a treasury',
       }
     }
     expect(bad).toBe(0)
+  })
+})
+
+describe('online play carries everything the statecraft systems add', () => {
+  it('a state full of programs, projects, works, campaigns and missiles squeezes into a few small pieces and comes back exactly', async () => {
+    const { map: world } = getWorld()
+    const s = createInitialState(world, { playerRegionId: 'france', seed: 1, goal: 'classic', victoryShare: 2 })
+    const ids = Object.keys(s.regions)
+    for (const id of ids.slice(0, 100)) {
+      s.regions[id].owner = 'france'
+      s.regions[id].works = Object.fromEntries(LOCAL_IDS.map((l) => [l, { progress: 99, done: true, level: 3, by: 'france', rushed: 5 }]))
+    }
+    const n = s.nations.france
+    for (const id of SOCIAL_IDS) (n.social ??= {})[id] = { level: 3, strength: 3, changed: 5 }
+    for (const id of CAMPAIGN_IDS) (n.campaigns ??= {})[id] = { left: 3, cooldown: 9 }
+    for (const id of PROJECT_IDS) n.projects[id] = { progress: 99, done: true, level: 3, rushed: 4 }
+    n.missileProgram = 3
+    n.missileBuilt = { turn: 1, count: 18 }
+    n.arsenal = { cruise: 100, tactical: 50, ballistic: 20 }
+    n.struckBy = Object.fromEntries(ids.slice(0, 30).map((i) => [i, 3]))
+    const parts = await encodeState(s)
+    expect(parts.every((p) => p.length <= 40_000)).toBe(true)
+    expect(parts.length).toBeLessThanOrEqual(4)
+    const back = await decodeState(parts)
+    expect(JSON.stringify(back)).toBe(JSON.stringify(s))
+    expect(fingerprint(back)).toBe(fingerprint(s))
+    expect(invariantProblems(back)).toEqual([])
+  })
+})
+
+describe('two people planning the same month', () => {
+  it('programs, projects, rushes and missiles resolve the same whichever plan the host reads first', () => {
+    const small = lineMap(8)
+    const base = startState(small)
+    base.humans = ['r0', 'r1']
+    for (const id of ['r0', 'r1']) {
+      Object.assign(base.nations[id].resources, { capital: 4000, pp: 300, tp: 200, steel: 200 })
+      base.nations[id].isPlayer = true
+    }
+    const plan = (id: string, region: string): Order[] => [
+      { type: 'setSocial', nationId: id, policy: 'courts', level: 1 },
+      { type: 'campaign', nationId: id, campaign: 'celebration' },
+      { type: 'startProject', nationId: id, project: 'rail' },
+      { type: 'startProject', nationId: id, project: 'irrigation', regionId: region },
+      { type: 'fundMissiles', nationId: id },
+      { type: 'buildMissiles', nationId: id, kind: 'cruise', count: 3 },
+    ]
+    const a = plan('r0', 'r0')
+    const b = plan('r1', 'r1')
+    const one = resolveTurn(base, small, [...a, ...b])
+    const two = resolveTurn(base, small, [...b, ...a])
+    // Each human's own orders took effect, and the order the plans were read in changes nothing but the order of the log.
+    for (const id of ['r0', 'r1']) {
+      expect(one.nations[id].missileProgram).toBe(1)
+      expect(one.nations[id].arsenal).toEqual({ cruise: 3 })
+      expect(one.nations[id].social?.courts?.level).toBe(1)
+    }
+    const norm = (s: GameState) => ({ ...JSON.parse(JSON.stringify(s)), log: [...s.log].map((e) => JSON.stringify(e)).sort() })
+    expect(norm(one)).toEqual(norm(two))
   })
 })
 
