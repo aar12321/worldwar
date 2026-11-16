@@ -178,6 +178,20 @@ describe('playing a month together', () => {
     expect(seats[0].s.game!.regions.r0.buildings.farm).toBeGreaterThan(seats[0].s.game!.regions.r2.buildings.farm - 100)
     const after = seats[1].states[seats[1].states.length - 1]
     expect(after.regions.r1.buildings.farm).toBeGreaterThanOrEqual(1)
+    // The new month starts with nobody ready on any screen, even if an old ready list arrives late.
+    for (const x of seats) expect(x.readyList[x.readyList.length - 1] ?? []).toEqual([])
+  })
+
+  it('a ready list from an earlier month, arriving late, does not light the dots again', async () => {
+    const { seats } = await started(2)
+    const turn = seats[0].s.game!.turn
+    seats[0].s.submitOrders(turn, [], true)
+    seats[1].s.submitOrders(turn, [], true)
+    await settle(200)
+    expect(seats[1].s.game!.turn).toBe(turn + 1)
+    const before = seats[1].readyList.length
+    ;(seats[1].s as unknown as { receive(m: unknown): Promise<void> }).receive({ t: 'ready', from: 'host', turn, ready: ['r0', 'r1'], remainingMs: null })
+    expect(seats[1].readyList.length).toBe(before)
   })
 
   it('shows everyone who is ready', async () => {

@@ -446,7 +446,8 @@ export class OnlineSession {
         if (!this.isHost) {
           // The host is on a later month than this screen: a state message was lost.
           if (this.game && msg.turn > this.game.turn) this.catchUp()
-          else this.events.onReady?.(msg.ready, msg.remainingMs)
+          // A ready list from an earlier month can arrive after the new month's state: it must not light the dots again.
+          else if (!this.game || msg.turn === this.game.turn) this.events.onReady?.(msg.ready, msg.remainingMs)
         }
         this.remainingMs = msg.remainingMs
         return
@@ -629,8 +630,11 @@ export class OnlineSession {
     const prev = this.game
     this.game = state
     this.remainingMs = msg.remainingMs
-    if (prev && prev.turn < state.turn) this.events.onState?.(this.viewOf(prev), this.viewOf(state))
-    else this.events.onStart?.(this.viewOf(state))
+    if (prev && prev.turn < state.turn) {
+      this.events.onState?.(this.viewOf(prev), this.viewOf(state))
+      // A new month starts with nobody ready. The host's own ready list for it may have come before this state and been set aside.
+      this.events.onReady?.([], msg.remainingMs)
+    } else this.events.onStart?.(this.viewOf(state))
   }
 
   private handleClaim(from: ClientId, term: number) {
