@@ -1,5 +1,8 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 
+/** Open dialogs, oldest first. Escape closes only the top one, wherever focus is. */
+const openModals: object[] = []
+
 const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
 
 /**
@@ -58,8 +61,21 @@ export function Modal({
       }
     }
     node.addEventListener('keydown', onKey)
+    // Focus can sit behind the dialog (a desk that opened after it took it), so Escape is also heard on the page.
+    const token = {}
+    openModals.push(token)
+    const onPageKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || openModals[openModals.length - 1] !== token || !closeRef.current) return
+      if (node.contains(e.target as Node)) return // the dialog's own handler has it
+      e.stopPropagation()
+      closeRef.current()
+    }
+    document.addEventListener('keydown', onPageKey, true)
     return () => {
       node.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onPageKey, true)
+      const at = openModals.indexOf(token)
+      if (at >= 0) openModals.splice(at, 1)
       previous?.focus?.()
     }
   }, [])
