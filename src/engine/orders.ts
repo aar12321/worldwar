@@ -270,8 +270,9 @@ export function programsProblem(s: GameState, n: Nation, p: Partial<Programs>, r
 export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Order[] = []): string | null {
   try {
     return validateOrderChecked(s, map, o, pending)
-  } catch {
-    return 'That order makes no sense'
+  } catch (e) {
+    // The reason is kept so a real bug in a rule is easy to find, not only a damaged plan.
+    return `That order makes no sense (${e instanceof Error ? e.message : 'unknown error'})`
   }
 }
 

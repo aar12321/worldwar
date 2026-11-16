@@ -289,8 +289,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
       if (s.humans?.includes(o.nationId)) {
         try {
           executeOrder(s, map, o, rng)
-        } catch {
-          addLog(s, 'info', `Order failed: ${safeDescribe(s, map, o)} (it makes no sense).`, [o.nationId])
+        } catch (e) {
+          addLog(s, 'info', `Order failed: ${safeDescribe(s, map, o)} (it makes no sense: ${e instanceof Error ? e.message : 'unknown error'}).`, [o.nationId])
         }
       } else executeOrder(s, map, o, rng)
     }

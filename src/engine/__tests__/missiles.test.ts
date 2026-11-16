@@ -3,6 +3,8 @@ import { generateAllBotOrders } from '../../ai/bot'
 import { MISSILES, MISSILE_PROGRAM, MISSILE_TYPES, PROGRAM_MISSILES } from '../../data/missiles'
 import { totalUnits } from '../helpers'
 import { arsenalSize, buildRoom, getsThrough, launchSite, missileStock, recentAttackers, storageCap, strikeHitsKind } from '../missiles'
+import { advanceDay, startLive } from '../live'
+import { clockOf } from '../calendar'
 import { orderCost, validateOrder } from '../orders'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, MissileType, Order } from '../types'
@@ -165,6 +167,33 @@ describe('firing missiles', () => {
     // Not at war any more, or long ago: nobody to answer.
     s.wars = []
     expect(recentAttackers(s, s.nations.r1)).toEqual([])
+  })
+})
+
+describe('in a live game', () => {
+  it('each kind flies for its own days, lands with its own effect, and a shot-down salvo changes nothing', () => {
+    const fly = (kind: MissileType, count: number) => {
+      let s = startLive(war())
+      s.nations.r0.arsenal = { cruise: 20, tactical: 20, ballistic: 20 }
+      s.nations.r0.military.units.missile = 20
+      ok(s, fire(kind, count))
+      expect(s.flights).toHaveLength(1)
+      expect(s.flights![0].lands).toBe(clockOf(s) + MISSILES[kind].days)
+      expect(s.flights![0].kind).toBe(kind === 'hypersonic' ? undefined : kind)
+      const line = s.regions.r1.line
+      const army = totalUnits(s.nations.r1.military.units)
+      const days = MISSILES[kind].days
+      for (let i = 0; i < days - 1; i++) s = advanceDay(s, map, { planner: () => [] }).state
+      expect(s.flights).toHaveLength(1)
+      expect(s.regions.r1.line).toBe(line)
+      s = advanceDay(s, map, { planner: () => [] }).state
+      expect(s.flights).toHaveLength(0)
+      return { line: line - s.regions.r1.line, army: army - totalUnits(s.nations.r1.military.units) }
+    }
+    expect(fly('cruise', 8).line).toBeCloseTo(2, 5)
+    expect(fly('tactical', 10).army).toBeGreaterThan(0)
+    expect(fly('hypersonic', 5).line).toBeCloseTo(3, 5)
+    expect(fly('ballistic', 6).line).toBeCloseTo(6, 5)
   })
 })
 
