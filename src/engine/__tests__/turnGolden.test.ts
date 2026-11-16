@@ -23,7 +23,7 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * nation that has not started a development; the Normal-bot world and the small war did not move.
  * Pinned once more after the missile program began to pay its research (it was checked but never charged), which changes what Hard bots at war can afford.
  * Pinned again when Medium and Hard rivals learned to found and join factions, pay into them and vote (the bots' faction play uses its own random stream). Checked before pinning: with the faction play switched off, the previous hashes matched exactly (1d71ef7fbf0dc5 for the Normal world, and the Hard world's earlier pin after the aircraft and missile changes), so nothing else moved; a game that never founds a faction carries no `factions` field.
- * Pinned once more (Hard-bot world only) when rivals began running space programs: once they know Fifth-Generation Fighters, a Hard bot hires its first engineers, and that moves the state. Checked before pinning: with that one AI call (manageSpace) turned off, the previous hash matched again, so the space rules themselves change nothing for a nation that has no agency; the Normal-bot world and the small war did not move.
+ * Pinned once more (Hard-bot world only) when rivals began running space programs: once they know Fifth-Generation Fighters, a Hard bot hires its first engineers, and that moves the state. Checked before pinning: with that one AI call (manageSpace) turned off, the previous hash matched again, so the space rules themselves change nothing for a nation that has no agency; the Normal-bot world and the small war did not move. Final pin of the Hard-bot world is the combination of factions, space and nuclear rivals (merged together; an accidental double-run of strikes in the order phases was removed first, and the small-war pin held).
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -91,7 +91,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('199b75ea8fdd24')
+    expect(hash(JSON.stringify(s))).toBe('7508c50bbe02c')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
