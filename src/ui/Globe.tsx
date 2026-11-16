@@ -15,7 +15,7 @@ import { useSlowGame } from './hooks'
 import { paintSignature } from './globe/paint'
 import { useArmyLayer } from './globe/useArmyLayer'
 import { BORDER_COLORS, FRONT_COLORS, NEON, RELATION_COLORS, mix, tint, wash, withAlpha } from './colors'
-import { borderPaths, stationBadges, type StationBadge } from './globe/borderLayer'
+import { borderPaths, stationBadges, tensionBadges, type StationBadge } from './globe/borderLayer'
 import { neighborsOf } from '../engine/borders'
 import { globeBridge, useFx, type BattleOverlay } from './globeBridge'
 
@@ -94,6 +94,10 @@ const GLYPHS: Record<StationBadge['glyph'], string> = {
   sub: '<ellipse cx="12" cy="14" rx="9" ry="4" /><path d="M9 10h5l1 4M12 10V6h3" />',
   air: '<path d="M12 3l2 7 8 4v2l-8-2-1 5 3 2v1l-4-1-4 1v-1l3-2-1-5-8 2v-2l8-4z" />',
   guard: '<path d="M12 3l8 3v6c0 4.5-3.4 7.8-8 9-4.6-1.2-8-4.5-8-9V6z" />',
+  open: '<circle cx="12" cy="12" r="7" fill="none" />',
+  fortified: '<path d="M12 3l8 3v6c0 4.5-3.4 7.8-8 9-4.6-1.2-8-4.5-8-9V6z" />',
+  closed: '<rect x="4" y="9" width="16" height="6" rx="1" />',
+  disputed: '<path d="M12 3l10 18H2z" /><path d="M12 10v5M12 18v.5" stroke="#14171c" />',
 }
 
 /** A small badge for forces on station: an icon and the divisions, in the nation's color. */
@@ -101,6 +105,7 @@ function paintStation(b: StationBadge): HTMLElement {
   const el = document.createElement('div')
   el.className = 'station-badge'
   el.style.setProperty('--badge', b.color)
+  if (b.edge) el.style.setProperty('--edge', b.edge)
   el.dataset.mine = b.mine ? '1' : '0'
   el.dataset.guess = b.guess ? '1' : '0'
   el.title = b.title
@@ -351,7 +356,7 @@ export function WorldGlobe() {
   const stationsRef = useRef<{ key: string; list: Marker[] }>({ key: '', list: [] })
   const stationMarkers = useMemo<Marker[]>(() => {
     if (!game) return []
-    const badges = stationBadges(game, map, game.playerId, mapMode === 'borders')
+    const badges = [...stationBadges(game, map, game.playerId, mapMode === 'borders'), ...(mapMode === 'borders' ? tensionBadges(game, map, game.playerId) : [])]
     const key = badges.map((b) => `${b.key}:${b.text}:${b.color}:${b.guess}`).join(';')
     if (key === stationsRef.current.key) return stationsRef.current.list
     stationsRef.current = { key, list: badges.map((b) => ({ key: `station:${b.key}`, lat: b.lat, lng: b.lng, title: b.title, yours: b.mine, station: b })) }

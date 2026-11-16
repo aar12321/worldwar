@@ -1160,6 +1160,10 @@ body:has(.drawer) .armies-dock {
   cursor: default;
   pointer-events: auto;
 }
+.station-badge[style*='--edge'] {
+  border-color: var(--edge);
+  border-width: 2px;
+}
 .station-badge[data-mine='1'] {
   border-color: #fff;
 }

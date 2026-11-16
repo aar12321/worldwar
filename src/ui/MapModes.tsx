@@ -55,6 +55,11 @@ export function MapModes() {
           ))}
         </ul>
       )}
+      {mode === 'borders' && (
+        <p className="px-1.5 pt-1.5 text-[12px] leading-snug text-white/70">
+          Each badge on a border gives its tension and its state: ring open, shield fortified, bar closed, triangle disputed. A thick line is well guarded, a dashed one is closed. Small badges are forces on station.
+        </p>
+      )}
     </div>
   )
 }

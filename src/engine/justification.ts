@@ -48,7 +48,7 @@ export function runJustification(s: GameState, map: WorldMap, rng: Rng) {
       if (hasCasusBelli(s, victim, culprit)) continue
       const land = sharesLandBorder(s, map, a, b)
       // Across the sea an intruder is only seen by a nation that watches its waters.
-      if (!land && s.nations[victim].military.deployment && !watchesWaters(s, victim)) continue
+
       // A garrison that fully guards its border turns a provocation back before it becomes an incident.
       const cover = land ? borderCover(s, map, victim, culprit) : 0
       if (cover > 0 && rng.chance(cover * STATION.provocationStop)) {

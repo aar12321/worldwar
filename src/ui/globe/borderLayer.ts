@@ -1,4 +1,4 @@
-import { borderState, borderTension, neighborsOf } from '../../engine/borders'
+import { bordersOf, borderState, borderTension, neighborsOf } from '../../engine/borders'
 import { borderCover, garrisonDivisions } from '../../engine/deployment'
 import { greatCircle } from '../../engine/armies'
 import { deploymentView, hasIntel, showDivisions } from '../../engine/intel'
@@ -9,7 +9,7 @@ import { tensionColor } from '../colors'
 import type { PathDatum } from './useArmyLayer'
 
 /** What a station badge shows. */
-export type StationGlyph = 'ship' | 'sub' | 'air' | 'guard'
+export type StationGlyph = 'ship' | 'sub' | 'air' | 'guard' | 'open' | 'fortified' | 'closed' | 'disputed'
 
 /** One force on station, drawn as a small badge on the globe. */
 export interface StationBadge {
@@ -23,6 +23,8 @@ export interface StationBadge {
   mine: boolean
   guess: boolean
   title: string
+  /** A tension badge: the outline carries the tension's color, and the icon the border's state, so the state never rests on color alone. */
+  edge?: string
 }
 
 /** Nations whose forces on station the player can see: their own, and those they have intelligence on that touch them or fight them. */
@@ -105,6 +107,37 @@ export function stationBadges(game: GameState, map: WorldMap, player: NationId, 
       const lng = mid[0] + (home.lng - mid[0]) * 0.12
       out.push({ key: `${v.id}:guard:${x}`, lat, lng, glyph: 'guard', text: showDivisions(facing, view.exact), color: n.color, mine, guess: !view.exact, title: `${name} garrison facing ${game.nations[x]?.name ?? x}: ${showDivisions(facing, view.exact)} divisions${view.exact ? '' : ' (a guess)'}` })
     }
+  }
+  return out
+}
+
+/**
+ * Badges for the Borders map: one for each border of the player's with a neighbor, saying the tension in a number and the state in an
+ * icon (an open ring, a shield, a bar, a warning), so the state does not rest on color alone. Land borders sit on the longest stretch of
+ * the border, sea borders at the middle of the first sea lane.
+ */
+export function tensionBadges(game: GameState, map: WorldMap, player: NationId): StationBadge[] {
+  const out: StationBadge[] = []
+  const spots = borderSpots(game)
+  for (const b of bordersOf(game, map, player)) {
+    let lat: number
+    let lng: number
+    if (b.land) {
+      const spot = spots.get(pairKey(player, b.other))
+      if (!spot) continue
+      const mid = spot.points[Math.floor(spot.points.length / 2)]
+      lat = mid[1]
+      lng = mid[0]
+    } else {
+      const from = Object.values(game.regions).find((r) => r.owner === player && map.regions[r.id].seaLanes.some((l) => game.regions[l]?.owner === b.other))
+      const to = from && map.regions[from.id].seaLanes.find((l) => game.regions[l]?.owner === b.other)
+      if (!from || !to) continue
+      const p = greatCircle({ lat: map.regions[from.id].lat, lng: map.regions[from.id].lng }, { lat: map.regions[to].lat, lng: map.regions[to].lng }, 0.5)
+      lat = p.lat
+      lng = p.lng
+    }
+    const name = game.nations[b.other]?.name ?? b.other
+    out.push({ key: `tension:${b.other}`, lat, lng, glyph: b.state, text: String(b.tension), color: '#14171c', edge: tensionColor(b.tension), mine: false, guess: false, title: `${b.land ? 'Border' : 'Sea border'} with ${name}: ${b.state}, tension ${b.tension} of 100` })
   }
   return out
 }
