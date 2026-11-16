@@ -7,7 +7,7 @@ import { COSTS, DIPLOMACY, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS
 import { blocOf, blocsOf } from '../engine/blocs'
 import { PACT_TURNS, describeProposal, generalPeaceTies, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
-import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, regionsOf, turnDate } from '../engine/helpers'
+import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, puppetsOf, regionsOf, turnDate } from '../engine/helpers'
 import { annexCost, warCost } from '../engine/orders'
 import { tierOf } from '../engine/empire'
 import { isLive } from '../engine/calendar'
@@ -18,7 +18,9 @@ import { bundleValue, describeBundle, marketPrices, stockOf } from '../engine/tr
 import type { Deal, Dispatch, GameState, NationId, Proposal, RegionId, ResourceBundle, SectorId, TradeResource } from '../engine/types'
 import { INVEST, SECTORS, SECTOR_IDS } from '../data/business'
 import { TRADE_RESOURCES } from '../engine/types'
-import { MAX_REPARATIONS, netWarScore, puppetValue, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
+import { LIBERATE_TEXT } from '../data/puppets'
+import { liberablePuppets } from '../engine/puppets'
+import { MAX_REPARATIONS, liberateValue, netWarScore, puppetValue, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { useHumanName, usePlayerView } from './hooks'
@@ -285,9 +287,12 @@ function PeaceComposer({ target }: { target: NationId }) {
   const [reparations, setReparations] = useState(0)
   const [puppet, setPuppet] = useState(false)
   const [general, setGeneral] = useState(false)
+  const [free, setFree] = useState<NationId | ''>('')
   const ties = generalPeaceTies(game, player.id, target)
+  const freeable = liberablePuppets(game, player.id, target)
+  const hasPuppets = puppetsOf(game, target).length > 0
   const live = cede.filter((id) => game.regions[id] && (game.regions[id].owner === target || game.regions[id].owner === player.id))
-  const terms = { cede: live, reparations, ...(puppet ? { puppet: true } : {}), ...(general && ties.length ? { general: true } : {}) }
+  const terms = { cede: live, reparations, ...(puppet ? { puppet: true } : {}), ...(free && freeable.includes(free) ? { liberate: free } : {}), ...(general && ties.length ? { general: true } : {}) }
   const net = netWarScore(game, player.id, target)
   const budget = Math.max(0, net)
   const { demand, concession } = termsCost(game, map, terms, player.id, target)
@@ -334,6 +339,22 @@ function PeaceComposer({ target }: { target: NationId }) {
           </span>
         </label>
       )}
+      {hasPuppets && (
+        <div className="text-[14px]" data-testid="liberate-term">
+          <label className="block">
+            {LIBERATE_TEXT.term}
+            <select className="field mt-1 block w-full px-3 py-2 text-[14px]" value={free && freeable.includes(free) ? free : ''} onChange={(e) => setFree(e.target.value as NationId | '')} disabled={freeable.length === 0}>
+              <option value="">{freeable.length === 0 ? LIBERATE_TEXT.none : 'Do not free a puppet'}</option>
+              {freeable.map((id) => (
+                <option key={id} value={id}>
+                  {LIBERATE_TEXT.short} {game.nations[id].name} ({liberateValue(game, map, id)} war score)
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="block text-[12px] text-white/65">{LIBERATE_TEXT.hint}</span>
+        </div>
+      )}
       {ties.length > 0 && (
         <label className="flex items-start gap-2 text-[14px]">
           <input type="checkbox" className="mt-1" checked={general} onChange={(e) => setGeneral(e.target.checked)} />
@@ -348,7 +369,7 @@ function PeaceComposer({ target }: { target: NationId }) {
       )}
       <OrderButton
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
-        label={live.length === 0 && reparations === 0 && !puppet && !terms.general ? 'Offer peace with no terms' : 'Send terms'}
+        label={live.length === 0 && reparations === 0 && !puppet && !terms.liberate && !terms.general ? 'Offer peace with no terms' : 'Send terms'}
         cost={`${PROPOSAL_COSTS.peace} influence`}
         effect={human ? `${human} sees it when the next month begins` : 'They answer when the month ends'}
         tone="btn-primary"

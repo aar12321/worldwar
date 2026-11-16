@@ -6,7 +6,7 @@ import { storedOpinion } from '../../ai/opinion'
 import { evaluateProposal } from '../../ai/diplomat'
 import { declareWar, describeProposal, propose, respond, validateProposal } from '../diplomacy'
 import { atWar, grantJustification } from '../helpers'
-import { liberationProblem, bindPuppet, extraction } from '../puppets'
+import { liberationProblem, liberablePuppets, bindPuppet, extraction } from '../puppets'
 import { createRng } from '../rng'
 import { resolveTurn } from '../resolveTurn'
 import type { GameState, PeaceTerms, Proposal } from '../types'
@@ -70,6 +70,17 @@ describe('liberate: a peace term that frees a puppet', () => {
     declareWar(s, map, 'r0', 'r1', createRng(1, 1))
     expect(s.liberationWars?.['r0>r1']).toBeUndefined()
     expect(liberationProblem(s, 'r0', 'r1', 'r2')).toMatch(/no cause/)
+  })
+
+  it('the peace table lists exactly the puppets it may free, and what each costs', () => {
+    // The Diplomacy screen builds its drop-down from these two calls.
+    const quiet = world(60)
+    expect(liberablePuppets(quiet, 'r0', 'r1')).toEqual([])
+    const crying = world(PUPPET.liberate.below - 1)
+    expect(liberablePuppets(crying, 'r0', 'r1')).toEqual(['r2'])
+    const t = terms({ liberate: liberablePuppets(crying, 'r0', 'r1')[0] })
+    expect(validatePeaceTerms(crying, map, t, 'r0', 'r1')).toBeNull()
+    expect(termsCost(crying, map, t, 'r0', 'r1').demand).toBe(liberateValue(crying, map, 'r2'))
   })
 
   it('refuses a nation that is not the master\'s puppet, a peace not at war, and a puppet asking', () => {
