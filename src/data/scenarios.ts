@@ -36,6 +36,8 @@ export type ScenarioOp =
   /** Every pair among the members signs a non-aggression pact for this many months. */
   | { op: 'pact'; members: Who; months: number }
   | { op: 'puppet'; master: NationRef; puppets: Who }
+  /** The nations listed become territories of the master (see `engine/territories.ts`), within the master's tier limit. */
+  | { op: 'territory'; master: NationRef; territories: Who }
   | { op: 'sanction'; from: Who; to: Who; months: number }
   | { op: 'guarantee'; from: NationRef; to: NationRef; months: number }
   /** `holder` resents `target`. With a `reason`, it also holds a reason for war for `months` months. */
