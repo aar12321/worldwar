@@ -79,21 +79,21 @@ sites (a doctrine's answer is under "auto"). Dead is millions of civilians kille
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Easy, organic (seed 3) | 60 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Normal, organic (seed 7) | 60 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| Hard, organic (seed 5) | 90 | 8 | 3 | 0 | 7 | 0 | 0 | 0 | 0 | 35 | 7.5 |
-| Hard, organic (seed 11) | 58 | 8 | 0 | 0 | 8 | 0 | 0 | 0 | 0 | 5 | 1.6 |
-| Hard, organic (seed 23) | 90 | 11 | 0 | 0 | 11 | 0 | 6 | 0 | 0 | 53 | 13.7 |
+| Hard, organic (seed 5) | 90 | 6 | 3 | 0 | 5 | 0 | 0 | 0 | 0 | 7 | 8.6 |
+| Hard, organic (seed 11) | 90 | 5 | 0 | 0 | 5 | 0 | 0 | 0 | 0 | 11 | 1.2 |
+| Hard, organic (seed 23) | 90 | 4 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 17 | 4.1 |
 | Easy, stressed world war (seed 3) | 36 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| Normal, stressed (seed 7) | 36 | 23 | 87 | 0 | 2 | 8 | 0 | 0 | 0 | 24 | 68.9 |
-| Hard, stressed (seed 5) | 36 | 32 | 21 | 2 | 28 | 1 | 0 | 0 | 1 | 30 | 17.4 |
-| Hard, stressed (seed 11) | 36 | 54 | 45 | 2 | 43 | 1 | 3 | 0 | 1 | 43 | 53.0 |
+| Normal, stressed (seed 7) | 36 | 30 | 119 | 0 | 1 | 7 | 3 | 0 | 0 | 29 | 108.1 |
+| Hard, stressed (seed 5) | 36 | 52 | 91 | 2 | 28 | 7 | 4 | 0 | 1 | 44 | 68.7 |
+| Hard, stressed (seed 11) | 36 | 49 | 51 | 3 | 38 | 2 | 0 | 0 | 0 | 36 | 23.9 |
 
 "Stressed" gives the eight most populous nations a level-3 missile program, 12 cruise, 12 tactical, 6 ballistic and 12 decoys each, 8 hypersonic, a level-2 shield and
-three bomber and fighter divisions, split into two camps at war. Reading it: **no run reached a nuclear launch** (the bomb keeps its own rules), the world's tension
-stays under 55 (the ladder's top rung opens at 80), false alarms are rare (two in 72 stressed months, none organically), Easy never touches the war, Normal
-defends and answers (and, with the older strike logic it keeps, fires the most missiles and kills the most people, 87 missiles and 69 million dead in the stressed
-world), Hard prefers counterforce and bomber raids at the launchers (a quarter of Normal's dead for the same war) and offers ceasefires as the tension climbs (3 in
-the seed-11 war, 6 in an organic run). In the organic worlds rivals rarely get to missiles at all: a month-by-month war is what turns the game on. A raid is by far
-the most common Hard action; the missile stores of organic rivals are small because they build them only once at war.
+three bomber and fighter divisions, split into two camps at war. Reading it: **no run reached a nuclear launch** (the bomb keeps its own rules), the world's tension stays under 45 (the top rung opens at 80), false alarms are rare
+(one in 72 stressed Hard months, none organically), Easy never touches the war, Normal defends, keeps a doctrine and, with the older strike logic it keeps, fires the most
+missiles and kills the most people (119 missiles, 108 million dead in the stressed world), and Hard fires fewer missiles and spends more on bomber raids and
+counterforce at the launchers (24 to 69 million dead for 51 to 91 missiles). Both offer ceasefires as the tension climbs (3 for Normal, 4 in the Hard seed-5 war). In the
+organic worlds rivals rarely get to the missile war at all: a rival has to be at war with a power in reach and have built missiles, so what the AI does there is mostly a few bomber raids.
+Tension in the stressed wars is held down by the fade and by ceasefires; a Hard AI never opens new salvos at the brink.
 
 ## Tests
 - `missileWar.test.ts` (53): damage per kind, caps, urban, stability and reputation, economy and war score, the combat matrix, interceptors (rounds, decoys,

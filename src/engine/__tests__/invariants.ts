@@ -68,11 +68,11 @@ export function invariantProblems(s: GameState): string[] {
       if (!p.done) check(p.progress <= levelMonths(pid, built + 1) + 1e-9 && built + 1 <= 3, `${id} project ${pid} progress ${p.progress} over ${levelMonths(pid, built + 1)} (level ${built + 1})`)
     }
 
-    // Missiles: stock never negative, the program 0-3, and a month's building within its capacity.
+    // Missiles: stock never negative, the program 0-3, and a month's building within its capacity (decoys take a third of a slot, so the count can be fractional).
     for (const [k, v] of Object.entries(n.arsenal ?? {})) check(real(v) && v >= -1e-9, `${id} arsenal ${k} ${v}`)
     const level = n.missileProgram ?? 0
     check(Number.isInteger(level) && level >= 0 && level <= MISSILE_PROGRAM.maxLevel, `${id} missile program ${level}`)
-    if (n.missileBuilt) check(Number.isInteger(n.missileBuilt.count) && n.missileBuilt.count >= 0 && n.missileBuilt.count <= MISSILE_PROGRAM.capacity[Math.max(0, Math.min(3, level))], `${id} built ${n.missileBuilt.count} in a month at program level ${level}`)
+    if (n.missileBuilt) check(real(n.missileBuilt.count) && n.missileBuilt.count >= 0 && n.missileBuilt.count <= MISSILE_PROGRAM.capacity[Math.max(0, Math.min(3, level))] + 1e-9, `${id} built ${n.missileBuilt.count} in a month at program level ${level}`)
   }
 
   for (const r of Object.values(s.regions)) {

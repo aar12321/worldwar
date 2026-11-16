@@ -15,12 +15,15 @@ import type { GameState, MissileType, NationId, Order, WorldMap } from '../engin
  * as the tension climbs. Everyone stops opening new salvos at the brink (the top rung): from there only doctrines answer.
  * Nuclear weapons keep their own rules (aiNuclearOrder): nothing here builds or fires a warhead.
  */
-export function missileWarOrders(s: GameState, map: WorldMap, id: NationId, skill: 0 | 1 | 2, rng: Rng): Order[] {
+export function missileWarOrders(s: GameState, map: WorldMap, id: NationId, skill: 0 | 1 | 2, rng: Rng, phase: 'strike' | 'prepare'): Order[] {
   if (!MW.enabled || skill < 1) return []
   const n = s.nations[id]
   const foes = enemiesOf(s, id).filter((e) => s.nations[e]?.alive)
   if (!foes.length) return []
+  // Two calls per decision: `strike` (ceasefire offers, counterforce, raids, recon) runs before the older answer-and-strike logic so a Hard rival goes for the
+  // launchers first; `prepare` (doctrine, radar, rounds, batteries, decoys) runs after it, so that logic keeps its turn.
   const out: Order[] = []
+  const prep: Order[] = []
   const money = n.resources.capital
   const tension = tensionOf(s)
   const rung = rungOf(tension)
@@ -39,22 +42,22 @@ export function missileWarOrders(s: GameState, map: WorldMap, id: NationId, skil
   const doctrine = doctrineOf(n)
   if (mine >= 3 || theirs >= 3) {
     const wanted = skill === 2 && radarLevel(n) >= 2 && rung < 3 && mine >= 4 ? 'warning' : 'retaliate'
-    if (doctrine !== wanted && !(doctrine === 'retaliate' && wanted === 'warning' && rng.chance(0.5))) out.push({ type: 'setDoctrine', nationId: id, doctrine: wanted })
+    if (doctrine !== wanted && !(doctrine === 'retaliate' && wanted === 'warning' && rng.chance(0.5))) prep.push({ type: 'setDoctrine', nationId: id, doctrine: wanted })
   }
-  if (doctrine === 'warning' && rung >= 3) out.push({ type: 'setDoctrine', nationId: id, doctrine: 'retaliate' })
+  if (doctrine === 'warning' && rung >= 3) prep.push({ type: 'setDoctrine', nationId: id, doctrine: 'retaliate' })
 
   // 3. Defence, once an enemy has missiles to fear.
   if (theirs >= 3) {
     const cap = skill === 2 ? 3 : 1
-    if (radarLevel(n) < cap && (n.missileWar?.radar ?? 0) < cap && money > defenseCost(s, { type: 'missileDefense', nationId: id, item: 'radar' }).capital + 200) out.push({ type: 'missileDefense', nationId: id, item: 'radar' })
+    if (radarLevel(n) < cap && (n.missileWar?.radar ?? 0) < cap && money > defenseCost(s, { type: 'missileDefense', nationId: id, item: 'radar' }).capital + 200) prep.push({ type: 'missileDefense', nationId: id, item: 'radar' })
     const room = interceptorCap(n) - interceptorsOf(n)
-    if (interceptorCap(n) > 0 && room >= 4 && money > room * MW.roundCost + 150) out.push({ type: 'missileDefense', nationId: id, item: 'interceptors', count: Math.min(room, MW.roundsMaxOrder) })
+    if (interceptorCap(n) > 0 && room >= 4 && money > room * MW.roundCost + 150) prep.push({ type: 'missileDefense', nationId: id, item: 'interceptors', count: Math.min(room, MW.roundsMaxOrder) })
     if (skill === 2 && home.length && money > MW.batteryMoney + 250) {
       // A battery where the people are.
       const place = home.find((r) => (n.missileWar?.batteries?.[r.id] ?? 0) < 1)
-      if (place) out.push({ type: 'missileDefense', nationId: id, item: 'battery', regionId: place.id })
+      if (place) prep.push({ type: 'missileDefense', nationId: id, item: 'battery', regionId: place.id })
     }
-    if (skill === 2 && mine >= 6 && mobileLevel(n) < 1 && money > MW.mobileMoney[0] + 300) out.push({ type: 'missileDefense', nationId: id, item: 'mobile' })
+    if (skill === 2 && mine >= 6 && mobileLevel(n) < 1 && money > MW.mobileMoney[0] + 300) prep.push({ type: 'missileDefense', nationId: id, item: 'mobile' })
   }
 
   // 4. Offence, never opening new salvos at the brink, and not at all without something to fire.
@@ -92,8 +95,8 @@ export function missileWarOrders(s: GameState, map: WorldMap, id: NationId, skil
     }
     // Building up, so there is something to fire: decoys for a Hard rival that faces a shield.
     if (skill === 2 && programLevel(n) >= 1 && buildRoom(n, s.turn) > 0 && money > 300 && foes.some((e) => interceptorCap(s.nations[e]) > 0) && stock('decoy') < 12) {
-      out.push({ type: 'buildMissiles', nationId: id, kind: 'decoy', count: Math.min(12, buildRoomFor(n, s.turn, 'decoy')) })
+      prep.push({ type: 'buildMissiles', nationId: id, kind: 'decoy', count: Math.min(12, buildRoomFor(n, s.turn, 'decoy')) })
     }
   }
-  return out
+  return phase === 'strike' ? out : prep
 }

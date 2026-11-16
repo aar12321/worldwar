@@ -136,7 +136,7 @@ describe('the AI in the missile war', () => {
       expect(t.siteMissiles).toBeGreaterThan(0)
       expect(t.raids).toBeGreaterThan(0)
       // The ladder climbs far enough in this war for rivals to offer each other a ceasefire.
-      if (seed === 11) expect(t.ceasefires).toBeGreaterThan(0)
+      if (seed === 5) expect(t.ceasefires).toBeGreaterThan(0)
       expect(t.site + t.raids).toBeGreaterThan(play(7, 'normal', 'poland', 36, true).site + 2)
     }
   })

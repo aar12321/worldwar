@@ -123,7 +123,7 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned for the missile war (docs/MISSILE_WAR_STATUS.md): Hard rivals now play it (doctrine, radar, interceptors, raids, counterforce) and every
     // strike writes salvo reports, a ledger and the world's tension. Checked: with the missile war switched off (withOldMissiles) the previous hash
     // '5e24dace6d64b' returns, in 'the missile war is the only thing that moved them' below.
-    expect(hash(JSON.stringify(s))).toBe('a84a20e43a2f0')
+    expect(hash(JSON.stringify(s))).toBe('2bbdc71bb6ad1')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
