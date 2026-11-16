@@ -391,9 +391,12 @@ describe('proposal lifecycle and war score', () => {
     s.wars.push('r0|r1')
     giveRegions(s, 'r1', ['r2', 'r3'])
     s.nations[P].military.units.infantry = 60
+    // Enough of an army left to fight on: a nation that is wiped out has no war left to score (the score is cleared with it).
+    s.nations.r1.military.units.infantry = 14
     expect(validateOrder(s, map, { type: 'propose', nationId: P, target: 'r1', proposal: { kind: 'peace', terms: { cede: ['r2'], reparations: 0 } } })).toMatch(/war score/)
     const next = resolveTurn(s, map, [{ type: 'attack', nationId: P, target: 'r1' }])
-    expect(netWarScore(next, P, 'r1')).toBeGreaterThan(10)
+    expect(next.nations.r1.alive).toBe(true)
+    expect(netWarScore(next, P, 'r1')).toBeGreaterThan(0)
   })
 
 })

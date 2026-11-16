@@ -20,7 +20,7 @@ import { interceptFactor, resolveBattle, type Combatant } from './combat'
 import { createRng } from './rng'
 import { defenseWeights, freeUnits, interception, surpriseBonus } from './deployment'
 import { cleanUnits, shareOf, SENDABLE } from './deploy'
-import { recordBattle } from './warscore'
+import { forgetWarScore, recordBattle } from './warscore'
 import { addInfamy, addLog, atWar, distanceKm, emptyUnits, forceUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
 import { clearPuppetFields } from './puppets'
 import type { Rng } from './rng'
@@ -134,7 +134,7 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
   s.wars = s.wars.filter((k) => !involves(k))
   s.alliances = s.alliances.filter((k) => !involves(k))
   for (const k of Object.keys(s.pacts)) if (involves(k)) delete s.pacts[k]
-  for (const k of Object.keys(s.warScore)) if (involves(k)) delete s.warScore[k]
+  forgetWarScore(s, id)
   for (const k of Object.keys(s.warStarted)) if (involves(k)) delete s.warStarted[k]
   s.proposals = s.proposals.filter((p) => p.from !== id && p.to !== id && !(p.kind === 'callToArms' && p.enemy === id))
   s.deals = s.deals.filter((d) => d.from !== id && d.to !== id)
@@ -595,7 +595,9 @@ export function resolveAttack(
   if (outcome.winner === 'attacker') reach(attackerNation, 'win')
   if (captured) reach(attackerNation, 'capture')
   if (captured) transferRegion(s, map, target, nationId)
-  recordBattle(s, report, captured && wasCapital)
+  // A faction's joint army fights under its lead: the members at war with the defender share the credit.
+  const partners = army?.faction ? (s.factions?.find((f) => f.id === army.faction!.id)?.members ?? []).filter((m) => m !== nationId && s.nations[m]?.alive && atWar(s, m, defenderId)) : []
+  recordBattle(s, report, captured && wasCapital, partners)
   if (captured) {
     addOpinion(s, defenderId, nationId, 'Seized our land', -8, 0.2)
     addInfamy(s, nationId, JUSTIFY.infamyCapture)

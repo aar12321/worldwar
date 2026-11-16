@@ -957,6 +957,10 @@ export interface GameState {
   guarantees: Pledge[]
   /** "a>b" -> war score a has earned against b (0..100). */
   warScore: Record<string, number>
+  /** "a>b" -> where what `a` earned against `b` came from. Absent until a battle is fought; the parts add up to `warScore` (the screen's breakdown). */
+  warLedger?: Record<string, { battles: number; casualties: number; missiles: number }>
+  /** Country -> the nation it was taken from, for land now held by a conqueror. Its value counts toward the war score for as long as it is held. */
+  occupied?: Record<RegionId, NationId>
   /** Sorted "a|b" -> turn the war started. */
   warStarted: Record<string, number>
   /** "holder>target" -> remembered grievances and favours. */

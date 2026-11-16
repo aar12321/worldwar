@@ -62,6 +62,7 @@ import { tickTraining, trainMonths } from './training'
 import { UNIT_TYPES, type Army, type AttackOrder, type BattleReport, type GameState, type Order, type TrainingJob, type UnitCounts, type WorldMap } from './types'
 import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
+import { fadeWarScore } from './warscore'
 import { applyGovern, describePatch } from './puppets'
 
 /** A project's name, whether it is a nation's or a country's. */
@@ -393,6 +394,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   // The pooled armies of factions at war attack as one.
   runFactionCampaigns(s, map, rng)
   resolveRebels(s, map, rng)
+  fadeWarScore(s)
   // Armies that fought this turn are back at their posts for the next one.
   for (const n of Object.values(s.nations)) {
     n.military.exposed = 0
