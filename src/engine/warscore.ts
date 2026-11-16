@@ -40,7 +40,7 @@ function addWarScore(s: GameState, a: NationId, b: NationId, amount: number, sou
   const now = clamp(before + amount, 0, WARSCORE.max)
   s.warScore[key] = now
   const gained = now - before
-  if (gained > 0) {
+  if (gained > 0 && WARSCORE.live) {
     const l = ((s.warLedger ??= {})[key] ??= { battles: 0, casualties: 0, missiles: 0 })
     l[source] += gained
   }
@@ -122,7 +122,15 @@ export function recordBattle(s: GameState, b: BattleReport, capitalTaken: boolea
   const att = b.attacker.nationId
   const def = b.defender.nationId
   if (att === 'rebels' || def === 'rebels') return
-  const live = WARSCORE.live
+  if (!WARSCORE.live) {
+    // The old tally, step for step (the golden hashes depend on the order of the additions).
+    addWarScore(s, att, def, totalUnits(b.defender.losses) * WARSCORE.perLossInflicted, 'casualties')
+    addWarScore(s, def, att, totalUnits(b.attacker.losses) * WARSCORE.perLossInflicted, 'casualties')
+    if (b.winner === 'attacker') addWarScore(s, att, def, WARSCORE.battleWin + (b.captured ? (capitalTaken ? WARSCORE.capitalCapture : WARSCORE.capture) : 0), 'battles')
+    else addWarScore(s, def, att, WARSCORE.battleWin, 'battles')
+    return
+  }
+  const live = true
   // A nation the battle destroyed has no war left to score.
   if (live && (!s.nations[att]?.alive || !s.nations[def]?.alive)) return
   const kills = (units: BattleReport['attacker']['losses']) => {
@@ -134,7 +142,6 @@ export function recordBattle(s: GameState, b: BattleReport, capitalTaken: boolea
     addWarScore(s, who, def, kills(b.defender.losses), 'casualties')
     if (b.winner === 'attacker') {
       addWarScore(s, who, def, WARSCORE.battleWin, 'battles')
-      if (!live && b.captured) addWarScore(s, who, def, capitalTaken ? WARSCORE.capitalCapture : WARSCORE.capture, 'battles')
     }
     addWarScore(s, def, who, kills(b.attacker.losses), 'casualties')
     if (b.winner === 'defender') addWarScore(s, def, who, WARSCORE.battleWin, 'battles')
