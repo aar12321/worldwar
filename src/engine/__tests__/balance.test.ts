@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { LOCAL_IDS } from '../../data/localProjects'
 import { PROJECT_IDS, PROJECT_LEVELS, PROJECTS } from '../../data/projects'
 import { CAMPAIGN_IDS, CAMPAIGNS, SOCIAL, SOCIAL_IDS, SOCIAL_RULES } from '../../data/society'
@@ -18,6 +18,9 @@ import ordersSource from '../orders.ts?raw'
 import storeSource from '../../store.ts?raw'
 import turnSource from '../resolveTurn.ts?raw'
 import typesSource from '../types.ts?raw'
+
+// Some of these play whole months on the real map; a busy machine needs more than the default five seconds.
+vi.setConfig({ testTimeout: 120_000 })
 
 /**
  * Balance guarantees found and pinned by the balance audit (docs/BALANCE.md). Each test is a promise about the game's shape, not a

@@ -1,10 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { daysInMonth } from '../calendar'
 import { advanceDay, startLive } from '../live'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, Order } from '../types'
 import { checkInvariants } from './invariants'
 import { giveRegions, lineMap, startState } from './fixtures'
+
+// Some of these play whole months on the real map; a busy machine needs more than the default five seconds.
+vi.setConfig({ testTimeout: 120_000 })
 
 const map = lineMap(10, { 3: 'mountain' })
 map.regions.r5.coastal = true

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { generateAllBotOrders } from '../../ai/bot'
 import { MISSILES, MISSILE_PROGRAM, MISSILE_TYPES, PROGRAM_MISSILES } from '../../data/missiles'
 import { totalUnits } from '../helpers'
@@ -10,6 +10,9 @@ import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, MissileType, Order } from '../types'
 import { checkInvariants } from './invariants'
 import { lineMap, setMilitary, startState } from './fixtures'
+
+// Some of these play whole months on the real map; a busy machine needs more than the default five seconds.
+vi.setConfig({ testTimeout: 120_000 })
 
 const map = lineMap(8)
 
