@@ -31,4 +31,4 @@ Branch `worktree-agent-a1e893934dd9f4c37`, merged with `claude/laughing-planck-9
 
 ## Check results
 
-See the end of `docs/UX.md` for the final `npx tsc -b`, `npm run lint` and `npx vitest run` results.
+See section 7 of `docs/UX.md`: tsc clean, lint 0 errors, vitest 1073 pass and 1 AI test fails (not UI). Faction, Space, Deployment and World reaction are registered and smoke-tested.

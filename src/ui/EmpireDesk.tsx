@@ -164,11 +164,11 @@ function Provinces() {
         {far.length > 0 && (spec.regionalCapitals > 0 || spec.moveCapital) && (
           <div className="rounded-xl bg-white/5 divide-y divide-white/8">
             {far.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-[13px]">
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-[13px]">
                 <span className="min-w-0 truncate">
                   {map.regions[r.id].name} <span className="text-white/55">· {Math.round(capitalDistance(game, map, player, r.id, caps))} km from a capital</span>
                 </span>
-                <span className="flex gap-1.5 shrink-0">
+                <span className="flex flex-wrap gap-1.5">
                   {spec.regionalCapitals > 0 && <OrderButton order={{ type: 'setRegionalCapital', nationId: player.id, regionId: r.id, on: true }} label="Regional" cost={`${EMPIRE_RULES.regionalCapitalInfluence} infl.`} />}
                   {spec.moveCapital && <OrderButton order={{ type: 'moveCapital', nationId: player.id, regionId: r.id }} label="Capital" cost={`${EMPIRE_RULES.capitalMoveInfluence} infl.`} effect={wait > 0 ? `In ${wait} months` : `Stability -${EMPIRE_RULES.capitalMoveStability}`} />}
                 </span>

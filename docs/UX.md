@@ -39,11 +39,11 @@ Numbers from the measuring script (smaller is better; "tiny" counts distinct con
 
 | size | before: under 12 px | before: under 44 px | before: clipped | after: under 12 px | after: under 44 px | after: clipped |
 |---|---|---|---|---|---|---|
-| desktop | 0 | 257 | 12 | AFTER_D_SMALL | AFTER_D_TINY | AFTER_D_CLIP |
-| tablet | 0 | 257 | 12 | AFTER_T_SMALL | AFTER_T_TINY | AFTER_T_CLIP |
-| phone | 264 | 59 | 36 | AFTER_P_SMALL | AFTER_P_TINY | AFTER_P_CLIP |
+| desktop | 0 | 257 | 12 | 0 | 264 | 12 |
+| tablet | 0 | 257 | 12 | 0 | 262 | 14 |
+| phone | 264 | 59 | 36 | 0 | 23 | 15 |
 
-No screen scrolled horizontally before or after.
+No screen scrolled horizontally before or after. The desktop and tablet "under 44 px" counts are mouse-sized controls (32 px icons, 32 px tabs) and are expected; the phone count that remains is mostly 22 px checkboxes inside 44 px label rows. Two real phone overflows found by the smoke test (Empire Provinces buttons, Agencies target picker) were fixed.
 
 ### Before and after
 
@@ -171,7 +171,12 @@ Meaning is never color alone (signs, words and icons stay). Touch: 44 px minimum
 - Playwright (kept outside the repo): smoke test opens every registered desk and tab on desktop and phone, in a turn game and a live game, asserting no page error,
   no console error, no horizontal scroll and no empty desk; a keyboard-only walkthrough (21 checks).
 
-RESULTS_BLOCK
+Final results on this branch (merged with the stage 1 features: factions, world reaction, space, deployment, borders, missiles, aircraft):
+
+- `npx tsc -b`: clean. `npm run lint`: 0 errors (warnings only, mostly fast-refresh export notes).
+- `npx vitest run`: 69 of 71 files pass, 1073 tests pass, 1 fails: `src/ai/bot.test.ts` "easy rivals leave the player alone early and never gang up" (AI behavior, not touched by this work). The golden turn tests pass untouched. UI helper tests: 65.
+- Smoke (desktop 1440x900 and phone 390x844, turn and live games): 9 desks and 29 to 30 desk/tab screens per run, 0 page or console errors, 0 horizontal page scroll. The Research desk is flagged by the script's "is a drawer shown" check only because it draws its own layout; it renders (checked directly).
+- Screens added by the merge were checked: Faction, Space, Deployment, World reaction open from the rail, More sheet, palette and keys (F, and tab keys) with no change to those screens' code beyond registration.
 
 ## 8. Merge notes for other work
 
