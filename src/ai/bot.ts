@@ -19,13 +19,13 @@ import { validateOrder } from '../engine/orders'
 import { clockMonth } from '../engine/calendar'
 import { createRng, type Rng } from '../engine/rng'
 import { MARKET_GOODS, marketPrices, stockOf, tradeRoom, type MarketPrices } from '../engine/trade'
-import type { BuildingType, GameState, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
+import type { BuildingType, GameState, MissileType, NationId, Order, PeaceTerms, ProposalDraft, RegionId, TechBranch, TradeResource, UnitType, WorldMap } from '../engine/types'
 import { TRADE_RESOURCES, UNIT_TYPES } from '../engine/types'
 import { MAX_REPARATIONS, puppetValue, regionValue } from '../engine/warscore'
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
 import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
-import { assessStrategy, cashMonths, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
+import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
 
 export const BOT = {
   firstWarTurn: 3,
@@ -281,7 +281,9 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       if (diff.skill >= 1) {
         const attackers = recentAttackers(s, n)
         if (attackers.length > 0) {
-          const kinds = MISSILE_TYPES.filter((k) => missileStock(n, k) >= 1).sort((a, b) => missileStock(n, b) - missileStock(n, a) || (a < b ? -1 : 1))
+          // Retaliation in kind: the kind that struck it first, then whatever else it holds the most of.
+          const inKind = attackers.map((a) => n.struckWith?.[a]).filter((k): k is MissileType => !!k)
+          const kinds = MISSILE_TYPES.filter((k) => missileStock(n, k) >= 1).sort((a, b) => Number(inKind.includes(b)) - Number(inKind.includes(a)) || missileStock(n, b) - missileStock(n, a) || (a < b ? -1 : 1))
           const targets = Object.values(s.regions).filter((r) => attackers.includes(r.owner)).sort((a, b) => b.line - a.line || (a.id < b.id ? -1 : 1))
           for (const kind of kinds) for (const r of targets.slice(0, 6)) if (tryAdd({ type: 'strike', nationId, target: r.id, weapon: 'missile', kind, count: Math.min(6, missileStock(n, kind)) })) return true
         }
@@ -298,6 +300,10 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
       if (diff.skill === 2 && enemies.length > 0) {
         const node = wantedAircraft(s, n, enemies)
         if (node && tryAdd({ type: 'startAircraftDev', nationId, node })) return true
+      }
+      // ---- strategy hook: each missile kind has its job (tactical thins armies, cruise softens a front, ballistic only as a last resort) ----
+      if (diff.skill >= 1 && enemies.length > 0 && rng.chance(diff.skill === 2 ? 0.5 : 0.3)) {
+        for (const shot of chooseMissileStrikes(sight, strat, enemies)) if (tryAdd({ type: 'strike', nationId, target: shot.target, weapon: 'missile', kind: shot.kind, count: shot.count })) return true
       }
       // Hard rivals strike first with missiles and, once a year, from orbit.
       if (diff.skill === 2 && enemies.length > 0 && rng.chance(0.35)) {

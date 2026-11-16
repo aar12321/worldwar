@@ -142,6 +142,7 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   if (spec.opinion) addOpinion(s, region.owner, nationId, 'Bombarded us with ballistic missiles', spec.opinion, 0.3)
   // The struck nation remembers, and a nation that can answer will.
   ;(victim.struckBy ??= {})[nationId] = s.turn
+  ;(victim.struckWith ??= {})[nationId] = kind
   addLog(s, 'battle', `${fired} ${spec.name.toLowerCase()}${fired === 1 ? '' : 's'} from ${n.name} hit ${place}${stopped > 0 ? ` (${fxD && fxD.hunt > 0 ? 'shield and fighters' : 'the shield'} stopped ${stopped}%)` : ''}: ${parts.join(', ') || 'little damage'}.`, [nationId, region.owner])
 }
 

@@ -362,6 +362,8 @@ export interface Nation {
   missileBuilt?: { turn: number; count: number }
   /** The last month each nation struck this one with missiles, so it can answer. */
   struckBy?: Record<NationId, number>
+  /** The kind of missile each of them last struck this nation with, so it can answer in kind. */
+  struckWith?: Record<NationId, MissileType>
   /** Aircraft developments begun or finished (see `data/aircraft.ts`). Absent until the first one is started, so a nation that never uses them is unchanged. */
   aircraft?: Partial<Record<AircraftNodeId, AircraftState>>
   /** Social programs in force. Absent until the first one is set, so a nation that never uses them is unchanged. */

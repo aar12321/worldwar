@@ -8,7 +8,7 @@ import { playWorld } from '../engine/__tests__/strategySim'
 import { buildTurnContext, generateBotOrders } from './bot'
 import { perceivedPower } from './diplomat'
 import { addOpinion, opinionOf } from './opinion'
-import { assessStrategy, chooseWarTarget, MIN_ODDS, pickUnit, planAttacks, warLooksWinnable, wantsPeace, type Sight } from './strategy'
+import { assessStrategy, chooseMissileStrikes, chooseWarTarget, MIN_ODDS, pickUnit, planAttacks, warLooksWinnable, wantsPeace, type Sight } from './strategy'
 
 const sightOf = (s: GameState, map: WorldMap, id: NationId): Sight => {
   const ctx = buildTurnContext(s, map)
@@ -276,6 +276,59 @@ describe('units', () => {
     const defend = count('defend')
     expect(defend.armor ?? 0).toBeLessThan(attack.armor ?? 0)
     expect(defend.artillery ?? 0).toBeGreaterThan(attack.artillery ?? 0)
+  })
+})
+
+describe('missiles: each kind has its job', () => {
+  const armed = () => {
+    const { s, map } = world()
+    s.wars.push('r0|r1')
+    s.warStarted['r0|r1'] = 8
+    s.nations.r0.arsenal = { cruise: 6, tactical: 6, ballistic: 6 }
+    return { s, map }
+  }
+
+  it('tactical missiles go at a big army, cruise missiles at a front it can attack, and ballistic ones are held back', () => {
+    const { s, map } = armed()
+    const sight = sightOf(s, map, 'r0')
+    const shots = chooseMissileStrikes(sight, assessStrategy(sight), ['r1'])
+    expect(shots.map((x) => x.kind).sort()).toEqual(['cruise', 'tactical'])
+    expect(shots.find((x) => x.kind === 'cruise')!.count).toBeLessThanOrEqual(4)
+  })
+
+  it('does not waste tactical missiles on a trifle of an army', () => {
+    const { s, map } = armed()
+    setMilitary(s, 'r1', { infantry: 1 })
+    const sight = sightOf(s, map, 'r0')
+    expect(chooseMissileStrikes(sight, assessStrategy(sight), ['r1']).map((x) => x.kind)).not.toContain('tactical')
+  })
+
+  it('fires ballistic missiles only as a last resort: losing badly, or facing a power twice its size', () => {
+    const { s, map } = armed()
+    s.warScore['r1>r0'] = 30
+    setMilitary(s, 'r1', { infantry: 30, armor: 10, artillery: 6 })
+    const sight = sightOf(s, map, 'r0')
+    const strat = assessStrategy(sight)
+    expect(strat.posture).toBe('defend')
+    const shots = chooseMissileStrikes(sight, strat, ['r1'])
+    expect(shots.find((x) => x.kind === 'ballistic')?.target).toBe('r1')
+  })
+
+  it('answers a strike in the kind it was struck with', () => {
+    const { s, map } = armed()
+    s.nations.r0.struckBy = { r1: s.turn - 1 }
+    s.nations.r0.struckWith = { r1: 'ballistic' }
+    s.nations.r0.arsenal = { cruise: 9, ballistic: 2 }
+    s.nations.r0.systems.shield = 0
+    s.nations.r0.agencies.foreign.level = 1
+    let first: string | undefined
+    for (let t = 10; t < 40 && !first; t++) {
+      const c = { ...structuredClone(s), turn: t } as GameState
+      c.nations.r0.struckBy = { r1: t - 1 }
+      const strike = generateBotOrders(c, map, 'r0').find((o) => o.type === 'strike' && o.nationId === 'r0' && (o.kind === 'ballistic' || o.kind === 'cruise'))
+      if (strike && strike.type === 'strike') first = strike.kind
+    }
+    expect(first).toBe('ballistic')
   })
 })
 

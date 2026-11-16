@@ -9,6 +9,9 @@ import { lineMax } from '../engine/economy'
 import { atWar, canUseUnit, hasCasusBelli, hasPact, isAllied, pairKey, totalUnits } from '../engine/helpers'
 import type { Rng } from '../engine/rng'
 import type { GameState, NationId, RegionId, UnitCounts, UnitType, WorldMap } from '../engine/types'
+import { MISSILE_TYPES } from '../data/missiles'
+import { missileStock } from '../engine/missiles'
+import type { MissileType } from '../engine/types'
 import { canAttackRegion, forecastAttack, garrisonStrength } from '../engine/warfare'
 import { netWarScore, regionValue } from '../engine/warscore'
 import type { TurnContext } from './bot'
@@ -432,6 +435,52 @@ export function alliedWarTargets(sight: Sight): NationId[] {
   const out = new Set<NationId>()
   for (const a of ctx.allies.get(id) ?? []) for (const e of ctx.enemies.get(a) ?? []) if (e !== id && !atWar(s, id, e) && !isAllied(s, id, e) && !recentlyProposed(s, id, e, 'peace', 1)) out.add(e)
   return [...out].sort()
+}
+
+export interface MissileShot {
+  target: RegionId
+  kind: MissileType
+  count: number
+  why: string
+}
+
+/**
+ * Which missiles to fire at whom, from what is in store. Each kind has a job: tactical missiles thin a big army (they do nothing to a
+ * Defense Line), cruise missiles harass, wearing down the line of the front it means to attack and stopping factories, and ballistic
+ * missiles, which the world never forgives, only when the bot is losing badly or facing a power twice its size. Hypersonic missiles
+ * are the army's own and keep their old rule in bot.ts. The salvo is capped so a few missiles are never spent on a trifle.
+ */
+export function chooseMissileStrikes(sight: Sight, strat: Strategy, enemies: NationId[]): MissileShot[] {
+  const { s, id, ctx } = sight
+  const n = s.nations[id]
+  if (!enemies.length) return []
+  const myPower = Math.max(0.5, ctx.power.get(id) ?? 0)
+  const out: MissileShot[] = []
+  const foeRegions = (e: NationId) => Object.values(s.regions).filter((r) => r.owner === e).sort((a, b) => b.line - a.line || (a.id < b.id ? -1 : 1))
+  const byPower = [...enemies].sort((a, b) => (ctx.power.get(b) ?? 0) - (ctx.power.get(a) ?? 0) || (a < b ? -1 : 1))
+  const biggest = byPower[0]
+  for (const kind of MISSILE_TYPES) {
+    if (kind === 'hypersonic') continue
+    const have = missileStock(n, kind)
+    if (have < 1) continue
+    if (kind === 'tactical') {
+      // An army worth thinning: the enemy's strength at home is a real share of its own.
+      const e = byPower.find((x) => (ctx.home.get(x) ?? 0) >= myPower * 0.5)
+      if (e && have >= 2) out.push({ target: foeRegions(e)[0].id, kind, count: Math.min(have, 8), why: `thin ${s.nations[e].name}'s army` })
+    } else if (kind === 'cruise') {
+      // Harassment, spent a few at a time on the weakest enemy's front so the line is already thin when the army arrives.
+      const e = [...byPower].reverse().find((x) => foeRegions(x).some((r) => canAttackRegion(s, sight.map, id, r.id).ok))
+      if (e && have >= 3) {
+        const front = foeRegions(e).filter((r) => canAttackRegion(s, sight.map, id, r.id).ok)[0]
+        if (front) out.push({ target: front.id, kind, count: Math.min(have, 4), why: `soften the front in ${s.nations[e].name}` })
+      }
+    } else if (kind === 'ballistic') {
+      const desperate = strat.posture === 'defend' && strat.worstNet <= -15
+      const outsized = (ctx.power.get(biggest) ?? 0) > myPower * 2
+      if ((desperate || outsized) && have >= 2) out.push({ target: foeRegions(biggest)[0].id, kind, count: Math.min(have, 4), why: 'a last resort against a stronger enemy' })
+    }
+  }
+  return out
 }
 
 /** Months of income held as cash. A bot sitting on far more than it needs should spend it. */
