@@ -117,6 +117,28 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
         } else if (e.flight.nationId === player) say('error', `Your missiles were wasted: ${e.why === 'taken' ? `${place(target)} was already yours when they landed` : e.why === 'changed' ? `${place(target)} changed hands before they landed` : 'the war ended before they landed'}.`)
         break
       }
+      case 'nukeLaunched': {
+        if (e.flight.nationId === player) break
+        if (e.flight.foe === player) say('error', `ALERT: ${nation(e.flight.nationId)} has launched a nuclear missile at ${place(e.flight.target)}. It lands ${absDate(e.flight.lands)}. Offer peace now: a war that ends first calls it off.`)
+        else say('info', `${nation(e.flight.nationId)} has launched a nuclear missile at ${place(e.flight.target)}.`)
+        break
+      }
+      case 'nuke': {
+        const target = e.flight.target
+        const impact = map.regions[target]
+        const victim = e.flight.foe
+        if (e.landed && impact) {
+          // The whole world sees it: rings that reach across the globe and a long shake.
+          const fx = useFx.getState()
+          for (let i = 0; i < 3; i++) fx.addRing({ lat: impact.lat, lng: impact.lng, color: i === 1 ? '#ffffff' : '#ff2d95', maxRadius: 8 + i * 3 }, 2600 + i * 500)
+          if (!settings.reducedMotion) fx.shake(1.5)
+          if (e.flight.nationId === player) say('error', `Your missile destroyed ${place(target)}. The world's strongest powers are at war with you.`)
+          else if (victim === player) say('error', `NUCLEAR STRIKE: ${nation(e.flight.nationId)} destroyed ${place(target)}.`)
+          else say('error', `${nation(e.flight.nationId)} used a nuclear weapon on ${place(target)}. The world is in shock.`)
+        } else if (e.flight.nationId === player) say('info', `Your nuclear missile did not land: ${e.why === 'taken' ? `${place(target)} was already yours` : e.why === 'changed' ? `${place(target)} changed hands` : 'the war ended first'}.`)
+        else if (victim === player) say('success', `The nuclear missile aimed at ${place(target)} was called off: ${e.why === 'peace' ? 'the war ended' : 'the target changed'}.`)
+        break
+      }
       case 'trained': {
         const mineJobs = e.jobs.filter((j) => j.nationId === player)
         if (mineJobs.length === 0) break

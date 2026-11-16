@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { incomingArmies } from '../engine/armies'
 import { absDay, clockOf, dayDate, daysInMonth } from '../engine/calendar'
 import type { GameState } from '../engine/types'
+import { getWorld } from '../map/world'
 import { liveHold, useGame, type Hold } from '../store'
 import { liveClock } from './liveClock'
 
@@ -149,6 +150,32 @@ export function IncomingChip() {
         {first} day{first === 1 ? '' : 's'}
       </span>
       <span className="text-white/65 shrink-0">Armies ›</span>
+    </button>
+  )
+}
+
+/** The game while a nuclear missile is heading for one of the player's countries, else nothing. */
+const nukeComing = (s: { game: GameState | null }) => {
+  const g = s.game
+  return g && (g.nukes ?? []).some((f) => g.regions[f.target]?.owner === g.playerId && f.nationId !== g.playerId) ? g : null
+}
+
+/** The loudest warning in the game: a nuclear missile is on its way to one of your countries, with the days left. Opens the diplomacy desk to the one who fired it. */
+export function NukeChip() {
+  const game = useGame(nukeComing)
+  const openDiplomacy = useGame((s) => s.openDiplomacy)
+  if (!game) return null
+  const mine = (game.nukes ?? []).filter((f) => game.regions[f.target]?.owner === game.playerId && f.nationId !== game.playerId)
+  const first = mine.reduce((a, b) => (b.lands < a.lands ? b : a), mine[0])
+  const days = Math.max(0, Math.ceil(first.lands - clockOf(game)))
+  const place = getWorld().map.regions[first.target]?.name ?? first.target
+  return (
+    <button className="advice-pill pointer-events-auto live-alert" onClick={() => openDiplomacy(first.nationId)} title="Offer peace: a war that ends before it lands calls it off" data-testid="nuke-alert">
+      <span className="w-2 h-2 rounded-full shrink-0 bg-[#ff2d95]" />
+      <span className="truncate">
+        NUCLEAR MISSILE from {game.nations[first.nationId]?.name ?? 'an enemy'} · {place} in {days} day{days === 1 ? '' : 's'}
+      </span>
+      <span className="text-white/65 shrink-0">Offer peace ›</span>
     </button>
   )
 }

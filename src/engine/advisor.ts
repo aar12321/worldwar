@@ -5,7 +5,11 @@ import { TECHS } from '../data/techTree'
 import { BUILDING_SPECS, UNIT_SPECS, buildingCost, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from './arms'
 import { incomingArmies } from './armies'
-import { absDate, clockOf } from './calendar'
+import { absDate, clockOf, isLive } from './calendar'
+import { COALITION } from '../data/coalition'
+import { NUCLEAR } from '../data/nuclear'
+import { activePlans, strikeDate, strikeMonth, threatOf } from './coalition'
+import { nuclearThreats } from './nuclear'
 import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
 import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
@@ -30,7 +34,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
-  | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' }
+  | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' }
   | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
@@ -288,6 +292,56 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
         action: 'See the country',
         target: { desk: 'map', region: top.region },
       })
+    }
+  }
+
+  // Nuclear missiles on their way to your countries, in a live game: the one warning that matters more than any other.
+  for (const f of s.nukes ?? []) {
+    if (s.regions[f.target]?.owner !== nationId || f.nationId === nationId) continue
+    add('now', 300 - Math.min(40, Math.max(0, f.lands - clockOf(s)) * 4), {
+      id: `incoming-nuke-${f.id}`,
+      title: `A nuclear missile from ${s.nations[f.nationId]?.name ?? 'an enemy'} is heading for ${name(f.target)}`,
+      detail: `It lands on ${absDate(Math.ceil(f.lands))}. An Interceptor Shield stops only a part of it. Peace before it lands calls it off: offer terms now, and bring what you can out of the country.`,
+      action: 'Offer peace',
+      target: { desk: 'diplomacy', nation: f.nationId },
+    })
+  }
+  // An enemy that holds the bomb.
+  const bombers = nuclearThreats(s, nationId)
+  if (bombers.length > 0) {
+    const who = s.nations[bombers[0]]?.name ?? 'An enemy'
+    add('soon', 80, {
+      id: 'enemy-bomb',
+      title: `${who} has a nuclear warhead and is at war with you`,
+      detail: `A desperate or provoked Hard rival may use it${isLive(s) ? `; you would get ${NUCLEAR.flightDays} days of warning` : ''}. A shield stops only a quarter of it. The surest defense is peace, or sparing it a reason.`,
+      action: 'See the war',
+      target: { desk: 'diplomacy', nation: bombers[0] },
+    })
+  }
+
+  // The world is watching a growing power: a joint strike being prepared, or rising alarm.
+  if (n.tier >= 2) {
+    const plan = activePlans(s, nationId)[0]
+    if (plan) {
+      const left = Math.max(0, strikeMonth(s, plan) - s.turn)
+      add(left <= 1 ? 'now' : 'soon', 95 - left * 10, {
+        id: 'coalition-plan',
+        title: `${plan.members.length} rivals plan to strike you together${left === 0 ? ' this month' : ` in ${left} month${left === 1 ? '' : 's'}`}`,
+        detail: `${plan.members.map((m) => s.nations[m]?.name ?? m).join(', ')} will attack ${name(plan.focus[0])} and your other weak borders on the same ${isLive(s) ? `day (${strikeDate(s, plan)})` : 'month'}. Strengthen those borders, offer pacts, or break their treaty before it comes.`,
+        action: 'See the world\'s reaction',
+        target: { desk: 'empire', tab: 'reaction' },
+      })
+    } else {
+      const threat = threatOf(s, map, nationId, { output: false })
+      if (threat.pressure >= COALITION.planFrom) {
+        add('soon', 25 + Math.round(threat.pressure * 20), {
+          id: 'coalition-alarm',
+          title: `The world is ${threat.level >= 3 ? 'uniting against you' : 'alarmed by your growth'}`,
+          detail: `Your threat is ${Math.round(threat.score)} of 100 (${threat.levelName.toLowerCase()}). Rivals are drawing together and may strike first. Pacts, aid and a better reputation calm them.`,
+          action: 'See the world\'s reaction',
+          target: { desk: 'empire', tab: 'reaction' },
+        })
+      }
     }
   }
 

@@ -29,6 +29,13 @@ export function ConfirmDialog() {
       }
     >
       <p className="text-[15px] text-white/85">{c.text}</p>
+      {c.points && (
+        <ul className="mt-3 space-y-2 text-[14px] text-white/80 list-disc pl-5 marker:text-[#ff453a]">
+          {c.points.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+      )}
     </Modal>
   )
 }

@@ -92,7 +92,14 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   }
   if (game.pendingEvent && !EVENT_BY_ID[game.pendingEvent.eventId]) game.pendingEvent = null
   if (game.settings.mode === 'live') cleanLive(game, map)
-  else delete game.monthStart
+  else {
+    delete game.monthStart
+    // A turn game has no warheads in the air: one that was saved with some (from a live game) is left without.
+    delete game.nukes
+  }
+  // Coalition plans: kept only if whole. Games without any carry no such field.
+  if (game.coalitions !== undefined) game.coalitions = (Array.isArray(game.coalitions) ? game.coalitions : []).filter((p) => !!p && !!game.nations[p.target]?.alive && Array.isArray(p.members) && Array.isArray(p.focus) && Number.isFinite(p.strikeTurn) && Number.isFinite(p.strikeDay))
+  if (game.shock !== undefined && !Number.isFinite(game.shock)) delete game.shock
   // Statecraft: spending levels from the old budget, bonds from old debt, people, the bank, tiers.
   for (const r of Object.values(game.regions)) r.buildings.hospital ??= 0
   ensureStatecraft(game, map)
@@ -141,5 +148,7 @@ function cleanLive(game: GameState, map: WorldMap) {
   if (game.pendingDay !== undefined && (!finite(game.pendingDay) || !game.pendingEvent)) delete game.pendingDay
   const armyIds = new Set(game.armies.map((a) => a.id))
   game.launches = (Array.isArray(game.launches) ? game.launches : []).filter((l) => !!l && finite(l.at) && !!l.order && !!game.nations[l.order.nationId]?.alive && !!game.regions[l.order.target] && !armyIds.has(l.id))
+  // Warheads in the air: kept only if whole. A game that never had one carries no such field.
+  if (game.nukes !== undefined) game.nukes = (Array.isArray(game.nukes) ? game.nukes : []).filter((f) => !!f && finite(f.lands) && !!game.nations[f.nationId]?.alive && !!map.regions[f.target])
   game.flights = (Array.isArray(game.flights) ? game.flights : []).filter((f) => !!f && finite(f.lands) && finite(f.count) && !!game.nations[f.nationId]?.alive && !!map.regions[f.target])
 }

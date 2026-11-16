@@ -11,14 +11,14 @@ const nm = (s: GameState, id: NationId | null) => (id ? s.nations[id]?.name ?? i
 
 const fill = (text: string, s: GameState, c: Crisis) => text.replace('{area}', c.area).replace('{nation}', nm(s, c.nation)).replace('{rival}', nm(s, c.rival))
 
-/** How strained the world is: reputations for aggression, wars, and trouble in the news. 0 to 100. */
+/** How strained the world is: reputations for aggression, wars, trouble in the news, and the shock of a nuclear strike. 0 to 100. */
 export function worldTension(s: GameState): number {
   const all = Object.values(s.nations)
   const alive = Math.max(1, all.filter((n) => n.alive).length)
   const gone = all.length - alive
   const infamy = Object.values(s.infamy).reduce((sum, v) => sum + v, 0)
   // Measured against how many nations are left, so a crowded world is not always tense.
-  const raw = (infamy / alive) * 10 + (s.wars.length / alive) * 50 + s.crises.length * 5 + (gone / Math.max(1, all.length)) * 20
+  const raw = (infamy / alive) * 10 + (s.wars.length / alive) * 50 + s.crises.length * 5 + (gone / Math.max(1, all.length)) * 20 + (s.shock ?? 0)
   return Math.round(Math.max(0, Math.min(100, raw)))
 }
 

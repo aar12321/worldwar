@@ -34,7 +34,7 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
 /** The five desks, plus News and Settings which open from the top bar. */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
-export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
+export type EmpireTab = 'overview' | 'provinces' | 'world' | 'reaction' | 'stats'
 export type { PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
@@ -482,6 +482,7 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'leaveAlliance' || order.type === 'breakPact') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
   if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital') && (order.count === undefined || Number.isInteger(order.count))
+  if (order.type === 'nuke') return typeof order.target === 'string'
   if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)
   if (order.type === 'setDirective') return typeof order.company === 'string' && ['payout', 'expand', 'focus'].includes(order.directive)
   if (order.type === 'operation') return typeof order.target === 'string' && typeof order.op === 'string'

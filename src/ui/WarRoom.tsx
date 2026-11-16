@@ -17,6 +17,7 @@ import { usePlayerView } from './hooks'
 import { OrderButton } from './panel'
 import { UnitIcon } from './icons'
 import { MilitaryCompare } from './MilitaryCompare'
+import { NuclearCard } from './NuclearCard'
 import { Modal } from './Modal'
 import { speak } from './plain'
 
@@ -331,6 +332,9 @@ function WarRoomDialog({ target }: { target: RegionId }) {
             <span className="text-right tabular-nums">{bill.toFixed(1)} money every month</span>
           </section>
         )}
+
+        {/* Superpower weapon: its own section and component, so nothing above depends on it. */}
+        <NuclearCard target={target} />
       </div>
     </Modal>
   )

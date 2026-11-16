@@ -5,7 +5,7 @@ import { LIVE } from '../../data/live'
 import { armyAt, greatCircle, planTrip } from '../../engine/armies'
 import { clockOf } from '../../engine/calendar'
 import { atWar, formatDivisions, totalUnits } from '../../engine/helpers'
-import type { Army, MissileFlight } from '../../engine/types'
+import type { Army, MissileFlight, NukeFlight } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
 import { armyStatus } from '../armyText'
@@ -44,6 +44,8 @@ interface ArcDatum {
   startLng: number
   endLat: number
   endLng: number
+  /** A nuclear warhead: a thicker, higher, slower arc in its own colors. */
+  nuke?: boolean
 }
 
 export interface ThreatRing {
@@ -66,7 +68,11 @@ const pathDashAnimateTime = (d: object) => (d as PathDatum).animate
 /** How high above the countries badges and routes ride, clear of the raised countries you can attack or have selected. */
 const ARMY_ALT = 0.05
 const pathStroke = () => 3.2
-const arcColor = () => ['rgba(255,214,10,0.95)', 'rgba(255,69,58,0.95)']
+const arcColor = (d: object) => ((d as ArcDatum).nuke ? ['rgba(255,255,255,1)', 'rgba(255,45,149,1)'] : ['rgba(255,214,10,0.95)', 'rgba(255,69,58,0.95)'])
+const arcStroke = (d: object) => ((d as ArcDatum).nuke ? 1.5 : 0.5)
+const arcAltitude = (d: object) => ((d as ArcDatum).nuke ? 0.55 : null)
+const arcDashLength = (d: object) => ((d as ArcDatum).nuke ? 0.9 : 0.35)
+const arcDashGap = (d: object) => ((d as ArcDatum).nuke ? 0.25 : 1.6)
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 
@@ -152,10 +158,10 @@ class LayerCache {
   }
 
   /** Missiles in the air, one arc each. */
-  syncArcs(flights: MissileFlight[] | undefined): ArcDatum[] {
+  syncArcs(flights: MissileFlight[] | undefined, nukes?: NukeFlight[]): ArcDatum[] {
     const next = new Map<string, ArcDatum>()
     let changed = false
-    for (const f of flights ?? []) {
+    for (const f of [...(flights ?? []), ...(nukes ?? [])]) {
       const from = map.regions[f.from]
       const to = map.regions[f.target]
       if (!from || !to) continue
@@ -165,7 +171,7 @@ class LayerCache {
         continue
       }
       changed = true
-      next.set(f.id, { id: f.id, startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng })
+      next.set(f.id, { id: f.id, startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, ...('count' in f ? {} : { nuke: true }) })
     }
     if (next.size !== this.arcs.size) changed = true
     this.arcs = next
@@ -195,6 +201,7 @@ function legPoints(a: Pick<Army, 'from' | 'to' | 'via'>): [number, number, numbe
 export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, reduced: boolean) {
   const armies = useGame((s) => s.game?.armies)
   const flights = useGame((s) => s.game?.flights)
+  const nukes = useGame((s) => s.game?.nukes)
   const playerId = useGame((s) => s.game?.playerId)
   const selected = useGame((s) => s.selectedArmy)
   const mapMode = useGame((s) => s.mapMode)
@@ -292,7 +299,7 @@ export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, armies])
   const pathsData = useMemo(() => (preview ? [...routes, preview] : routes), [routes, preview])
-  const arcsData = useMemo(() => cache.syncArcs(flights), [cache, flights])
+  const arcsData = useMemo(() => cache.syncArcs(flights, nukes), [cache, flights, nukes])
 
   // A warning ring over each of your countries an enemy army is marching on.
   const threatKey = useMemo(() => {
@@ -332,10 +339,11 @@ export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, 
       pathTransitionDuration: 0,
       arcsData,
       arcColor,
-      arcStroke: 0.5,
+      arcStroke,
+      arcAltitude,
       arcAltitudeAutoScale: 0.4,
-      arcDashLength: 0.35,
-      arcDashGap: 1.6,
+      arcDashLength,
+      arcDashGap,
       arcDashAnimateTime: reduced ? 0 : flightMs,
     },
   }

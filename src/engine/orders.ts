@@ -20,6 +20,7 @@ import { companyEffects, tradeValue, validateDirective, validateTrade } from './
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
 import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
+import { buildWarheadCost, buildWarheadProblem, nukeProblem } from './nuclear'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
@@ -34,10 +35,10 @@ import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike', 'eventChoice'])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'operation', 'domestic', 'strike', 'nuke', 'eventChoice'])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
-const LIVE_NOW = new Set<Order['type']>(['strike', 'respond', 'propose'])
+const LIVE_NOW = new Set<Order['type']>(['strike', 'nuke', 'respond', 'propose'])
 
 /**
  * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, an answer to an offer
@@ -185,6 +186,13 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       const k = buildMissilesCost(o)
       c.capital = k.capital
       c.steel = k.steel
+      break
+    }
+    case 'buildWarhead': {
+      const k = buildWarheadCost()
+      c.capital = k.capital
+      c.steel = k.steel
+      c.tp = k.tp
       break
     }
     case 'strike': {
@@ -562,6 +570,10 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return validateFundSystem(s, o, pending)
     case 'strike':
       return validateStrike(s, map, o, pending)
+    case 'buildWarhead':
+      return buildWarheadProblem(s, o, pending)
+    case 'nuke':
+      return nukeProblem(s, map, o, pending)
     case 'fundMissiles':
       return fundMissilesProblem(n)
     case 'buildMissiles':

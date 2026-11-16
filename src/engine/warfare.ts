@@ -114,6 +114,7 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
   if (s.armies) s.armies = s.armies.filter((a) => a.nationId !== id)
   if (s.launches) s.launches = s.launches.filter((l) => l.order.nationId !== id)
   if (s.flights) s.flights = s.flights.filter((f) => f.nationId !== id)
+  if (s.nukes) s.nukes = s.nukes.filter((f) => f.nationId !== id)
   const involves = (k: string) => k.split(/[|>]/).includes(id)
   s.wars = s.wars.filter((k) => !involves(k))
   s.alliances = s.alliances.filter((k) => !involves(k))
