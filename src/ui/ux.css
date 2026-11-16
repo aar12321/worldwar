@@ -1134,3 +1134,10 @@ body.resizing {
     display: none;
   }
 }
+
+/* The map colors control sits to the right of the desk rail on wide screens, so the Borders legend never hides under it. */
+@media (min-width: 901px) {
+  .map-modes {
+    left: 120px !important;
+  }
+}
