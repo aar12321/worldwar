@@ -180,8 +180,14 @@ function Controls({ puppet, pending }: { puppet: Nation; pending: boolean }) {
   return (
     <div className="space-y-3 border-t border-white/10 pt-3">
       <div className="grid gap-3 md:grid-cols-2">
-        <NumberStepper label="Tax rate" unit="%" value={tax} min={Math.round(TAX_LIMITS.min * 100)} max={Math.round(PUPPET.maxTax * 100)} step={1} onChange={setTax} hint={`Neutral ${pctTxt(PUPPET.tax.neutral)}; above it loyalty falls each month. Up to ${pctTxt(PUPPET.maxTax)}.`} />
-        <NumberStepper label="Draft rate" unit="%" value={draft} min={Math.round(DRAFT_LIMITS.min * 100)} max={Math.round((puppet.laws.includes('conscription_act') || law?.id === 'conscription_act' ? PUPPET.maxDraft : DRAFT_LIMITS.max) * 100)} step={1} onChange={setDraft} hint={`Neutral ${pctTxt(PUPPET.draft.neutral)}. More than 20% needs the Conscription law.`} />
+        <div className="space-y-1">
+          <div className="label">Tax rate</div>
+          <NumberStepper label="Tax rate" unit="%" value={tax} min={Math.round(TAX_LIMITS.min * 100)} max={Math.round(PUPPET.maxTax * 100)} step={1} onChange={setTax} hint={`Neutral ${pctTxt(PUPPET.tax.neutral)}; above it loyalty falls each month. Up to ${pctTxt(PUPPET.maxTax)}.`} />
+        </div>
+        <div className="space-y-1">
+          <div className="label">Draft rate</div>
+          <NumberStepper label="Draft rate" unit="%" value={draft} min={Math.round(DRAFT_LIMITS.min * 100)} max={Math.round((puppet.laws.includes('conscription_act') || law?.id === 'conscription_act' ? PUPPET.maxDraft : DRAFT_LIMITS.max) * 100)} step={1} onChange={setDraft} hint={`Neutral ${pctTxt(PUPPET.draft.neutral)}. More than 20% needs the Conscription law.`} />
+        </div>
       </div>
       <div className="space-y-2">
         <div className="label">Tribute</div>
@@ -230,6 +236,7 @@ function Controls({ puppet, pending }: { puppet: Nation; pending: boolean }) {
           })}
         </div>
       </div>
+      <div className="label">Aid</div>
       <NumberStepper label="Aid" unit="money" value={aid} onChange={setAid} min={0} max={PUPPET.aid.max} step={10} quick={[0, 50, 100, 200]} slider={false} hint={`Half reaches its treasury. Buys about +${aidNow.toFixed(1)} loyalty now, with a falling return.`} />
 
       <CostEffect
@@ -244,6 +251,7 @@ function Controls({ puppet, pending }: { puppet: Nation; pending: boolean }) {
                 `Loyalty now ${Math.round(pv.loyalty)}, ${signed1(pv.shock)} at once.`,
                 `It settles near ${Math.round(pv.settlesAfter)} (now ${Math.round(pv.settlesNow)}). Monthly pressure ${signed1(pv.pressureNow)} to ${signed1(pv.pressureAfter)}.`,
                 `Tribute a month: ${pv.yieldNow.amount.toFixed(1)} ${unitOf(pv.yieldNow.form)} to ${pv.yieldAfter.amount.toFixed(1)} ${unitOf(pv.yieldAfter.form)}${pv.yieldAfter.form === pv.yieldNow.form ? '' : ' (a different form)'}.`,
+                pv.yieldAfter.amount < 0.05 && pv.yieldAfter.form !== 'money' ? `${puppet.name} has almost no ${unitOf(pv.yieldAfter.form)} to give, so this tribute would bring you next to nothing.` : '',
                 pv.settlesAfter < PUPPET.rebelBelow ? `At that loyalty it rebels, and may break free.` : pv.settlesAfter < PUPPET.warLoyalty ? 'At that loyalty it will not follow you to war.' : '',
               ].filter(Boolean)
             : []
