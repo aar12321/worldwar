@@ -290,7 +290,7 @@ describe('favours, apologies and repair', () => {
     s.nations.r3.foodShortage = true
     s.relations!.last = {}
     run(s, rel({ act: 'aid', target: 'r3', resource: 'food', amount: 20 }))
-    for (let i = 0; i < RELATIONS.favourMonths + 2; i++) s = month(s)
+    for (let i = 0; i < 38; i++) s = month(s)
     expect(favoursOwed(s, 'r3', 'r0')).toBe(0)
   })
 
@@ -390,6 +390,8 @@ describe('joint war plans', () => {
     const solo = atWar()
     const joint = atWar()
     run(joint, rel({ act: 'warPlan', target: 'r3', enemy: 'r5' }))
+    // The plan took an id: take one in the other world too, so both fights draw the same dice.
+    solo.nextId = joint.nextId
     for (const s of [solo, joint]) {
       s.regions.r5.line = 6
       setMilitary(s, 'r0', { infantry: 12 })
@@ -517,7 +519,7 @@ describe('keeping a relationship up', () => {
     let s = world()
     s.pacts['r0|r3'] = 999
     s = month(s)
-    for (let i = 0; i < RELATIONS.neglectAfter + 4; i++) s = month(s)
+    for (let i = 0; i < 16; i++) s = month(s)
     expect(parts(s, 'r3', 'r0')).toContain('Neglected')
     const h = relationHealth(s, 'r0', 'r3', op(s, 'r3', 'r0'))
     expect(h.warning).toMatch(/neglected|cool/i)
@@ -528,7 +530,7 @@ describe('keeping a relationship up', () => {
     let s = world()
     s.pacts['r0|r3'] = 999
     s = month(s)
-    for (let i = 0; i < RELATIONS.neglectAfter - 2; i++) s = month(s)
+    for (let i = 0; i < 10; i++) s = month(s)
     run(s, rel({ act: 'culture', target: 'r3' }))
     for (let i = 0; i < 6; i++) s = month(s)
     expect(parts(s, 'r3', 'r0')).not.toContain('Neglected')
