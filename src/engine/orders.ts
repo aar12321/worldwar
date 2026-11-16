@@ -19,6 +19,7 @@ import { nextWeaponLevel } from './arms'
 import { companyEffects, tradeValue, validateDirective, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
+import { pauseAircraftDevProblem, startAircraftDevCost, startAircraftDevProblem } from './aircraft'
 import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
@@ -187,6 +188,9 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.steel = k.steel
       break
     }
+    case 'startAircraftDev':
+      c.tp = startAircraftDevCost(o).tp
+      break
     case 'strike': {
       const k = strikeCost(o)
       c.capital = k.capital
@@ -581,6 +585,10 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return fundMissilesProblem(n)
     case 'buildMissiles':
       return buildMissilesProblem(s, o, pending)
+    case 'startAircraftDev':
+      return startAircraftDevProblem(s, n, o, pending)
+    case 'pauseAircraftDev':
+      return pauseAircraftDevProblem(n, o, pending)
     case 'buyShares':
     case 'sellShares':
       return validateTrade(s, o, pending)
