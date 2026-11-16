@@ -44,11 +44,11 @@ describe('the desk registry', () => {
 
   it('shows the rail desks in order, grouped, and keeps News and Settings out of it', () => {
     const ids = navDesks(turns).map((d) => d.id)
-    expect(ids).toEqual(['briefing', 'economy', 'empire', 'tech', 'military', 'diplomacy', 'faction'])
+    expect(ids).toEqual(['briefing', 'economy', 'empire', 'tech', 'military', 'diplomacy', 'relations', 'faction'])
     expect(groupedNav(turns).map((g) => [g.id, g.desks.length])).toEqual([
       ['home', 1],
       ['nation', 3],
-      ['world', 3],
+      ['world', 4],
     ])
   })
 })

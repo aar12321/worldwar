@@ -2,6 +2,13 @@ import type { ReactNode } from 'react'
 import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, FactionIcon, Frame, MilitaryIcon, NewsIcon, ResearchIcon, SettingsIcon } from './icons'
 
 /** Small glyphs for the navigation chrome and for desks that have no icon of their own yet. */
+export function RelationsIcon({ size = 20 }: { size?: number }) {
+  return (
+    <Frame size={size}>
+      <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />
+    </Frame>
+  )
+}
 export function SearchIcon({ size = 18 }: { size?: number }) {
   return (
     <Frame size={size}>
@@ -113,6 +120,7 @@ const ICONS: Record<string, () => ReactNode> = {
   settings: () => <SettingsIcon />,
   flag: () => <FlagIcon />,
   faction: () => <FactionIcon />,
+  relations: () => <RelationsIcon />,
   space: () => <RocketIcon />,
   aircraft: () => <PlaneIcon />,
   map: () => <MapIcon />,

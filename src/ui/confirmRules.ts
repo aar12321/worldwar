@@ -10,6 +10,16 @@ import { leadingFactions, nukeAir, nukeThrough } from '../engine/nuclear'
 import { PUPPET } from '../data/puppets'
 import { previewGovern } from '../engine/puppets'
 import { formatDivisions, regionsOf, totalUnits } from '../engine/helpers'
+import { VISIT } from '../data/relations'
+import { opinionOf } from '../ai/opinion'
+import { getWorld } from '../map/world'
+
+const opinionNow = (game: GameState, o: Extract<Order, { type: 'relate' }>) => opinionOf(game, getWorld().map, o.target, o.nationId)
+
+function opinionRisk(game: GameState, map: WorldMap, o: Extract<Order, { type: 'relate' }>): boolean {
+  void map
+  return !!game.nations[o.target] && opinionNow(game, o) < VISIT.riskBelow
+}
 
 export interface PendingConfirm {
   title: string
@@ -105,6 +115,27 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
         if (a.mode === 'outsource' || spec.crew > 0 || spec.payload >= 300) return asks(`${a.mode === 'house' ? 'Fly' : 'Hire a company for'} the ${spec.name.toLowerCase()}?`, `It takes months and cannot be called back.${risk}${chance}`, a.mode === 'house' ? 'Fly it' : 'Hire them', spec.crew > 0)
       }
       return null
+    }
+    case 'relate': {
+      const them = name(o.target)
+      switch (o.act) {
+        case 'cede':
+          return asks(`Give ${game.regions[o.give ?? '']?.owner === o.nationId ? (map.regions[o.give ?? '']?.name ?? 'this country') : 'this country'} to ${them}?`, 'The country, its people and its buildings become theirs for good. They will be grateful and owe you two favours.', 'Give it away', true)
+        case 'techShare':
+          return asks(`Share this technology with ${them}?`, 'They keep it for good, and it makes them stronger.', 'Share it')
+        case 'endPlan':
+          return asks('End the joint war plan?', `${them} will remember being left alone in the war.`, 'End it', true)
+        case 'endProgram':
+          return asks('Walk away?', 'They will think less of you, and a joint venture returns only half your stake.', 'Walk away', true)
+        case 'closeEmbassy':
+          return asks('Close the embassy?', 'They will take it as a slight, and you lose your window onto them.', 'Close it', true)
+        case 'warPlan':
+          return asks(`Agree a joint war plan with ${them}?`, 'While it lasts neither of you can declare war on the other, and whoever takes a country pays the partner a share of its value.', 'Agree the plan')
+        case 'visit':
+          return opinionRisk(game, map, o) ? asks(`Visit ${them}?`, 'They do not think well of you. There is a real chance of a protocol incident.', 'Go anyway') : null
+        default:
+          return null
+      }
     }
     case 'repealLaw':
       return null

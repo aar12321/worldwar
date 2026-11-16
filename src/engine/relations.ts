@@ -488,14 +488,13 @@ export function applyRelate(s: GameState, map: WorldMap, o: RelateOrder): void {
       const rng = actRng(s, o)
       const op = isHuman(s, o.target) ? 0 : opinionOf(s, map, o.target, o.nationId)
       let extra = ''
-      let got = 0
       if (op < VISIT.riskBelow && rng.chance(VISIT.incident)) {
         cool(s, o.target, o.nationId, 'Protocol incident', VISIT.incidentCost, 0.8)
         extra = ' A protocol incident marred it.'
       } else {
-        got = warm(s, o.target, o.nationId, spec!.label, spec!.boost, spec!.decay)
+        warm(s, o.target, o.nationId, spec!.label, spec!.boost, spec!.decay)
         if (op >= VISIT.warmAbove && rng.chance(VISIT.warm)) {
-          got += warm(s, o.target, o.nationId, 'Warm reception', VISIT.warmBonus, 0.6)
+          warm(s, o.target, o.nationId, 'Warm reception', VISIT.warmBonus, 0.6)
           extra = ' They gave you a warm reception.'
         }
       }

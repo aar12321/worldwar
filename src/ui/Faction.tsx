@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { LocateButton } from './Locate'
 import { opinionLabel, opinionOf } from '../ai/opinion'
 import { CHARTER_TEXT, FACTION, POOL_NAMES } from '../data/factions'
 import { PROPOSAL_COSTS, UNIT_SPECS } from '../data/unitTypes'
@@ -164,7 +165,10 @@ function Members({ game, f, me }: { game: GameState; f: Faction; me: NationId })
                 {id === f.founder && <span className="chip" title="The founder">Founder</span>}
                 {!(id === me && !names[id]) && <span className="chip">{person ? (names[id] ? `Player: ${names[id]}` : 'Player') : 'Rival'}</span>}
               </span>
-              <span className="text-[18px] font-semibold tabular-nums">{pct(shares[id] ?? 0)}</span>
+              <span className="flex items-center gap-2">
+                {n && <LocateButton id={id} label="Locate" compact />}
+                <span className="text-[18px] font-semibold tabular-nums">{pct(shares[id] ?? 0)}</span>
+              </span>
             </div>
             <div className="mt-2">
               <Bar value={shares[id] ?? 0} color={MEMBER_COLORS[idx % MEMBER_COLORS.length]} label={`${n?.name} ownership share`} />

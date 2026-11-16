@@ -294,6 +294,12 @@ export interface GameStore {
   openDiplomacy(nationId: NationId | null, opts?: { peace?: boolean }): void
   /** Opens the Faction desk. */
   openFaction(nation?: NationId | null): void
+  /** Opens the Relations desk, on a partner if one is given. */
+  openRelations(nation?: NationId | null): void
+  /** Closes the open desk, selects the nation's country, turns the globe to it with a pulse ring, and offers a way back to the desk. */
+  locateNation(id: NationId): void
+  /** The nation the Relations desk has open. */
+  relFocus: NationId | null
   issueOrder(order: Order): boolean
   /** Issues several orders at once, one save and one summary. Returns how many went through. */
   issueBatch(orders: Order[]): { done: number; failed: number }
@@ -836,6 +842,7 @@ export const useGame = create<GameStore>((set, get) => ({
   mapMode: 'political',
   diploFocus: null,
   factionFocus: null,
+  relFocus: null,
   diploPeace: false,
   fxQueue: [],
   fxTotal: 0,
@@ -1079,6 +1086,29 @@ export const useGame = create<GameStore>((set, get) => ({
 
   openDiplomacy(nationId, opts) {
     set({ panel: 'diplomacy', diploFocus: nationId, diploPeace: !!opts?.peace })
+  },
+
+  openRelations(nation) {
+    set({ panel: 'relations', diploFocus: null, relFocus: nation ?? null })
+  },
+
+  locateNation(id) {
+    const st = get()
+    const game = st.game
+    const n = game?.nations[id]
+    if (!game || !n) return
+    const { map } = getWorld()
+    const regionId = game.regions[n.capital]?.owner === id ? n.capital : Object.values(game.regions).find((r) => r.owner === id)?.id
+    const r = regionId ? map.regions[regionId] : undefined
+    if (!regionId || !r) return
+    const back = st.panel !== 'none' ? { panel: st.panel, tab: st.deskTabs[st.panel], nation: id } : null
+    set({ selectedRegion: regionId, selectedArmy: null, panel: 'none', diploFocus: null })
+    globeBridge.api?.pointOfView({ lat: r.lat, lng: r.lng, altitude: 1.5 }, st.settings.reducedMotion ? 0 : 900)
+    // A pulse ring that opens three times, so the eye finds the country.
+    const fx = useFx.getState()
+    for (let i = 0; i < 3; i++) setTimeout(() => useFx.getState().addRing({ lat: r.lat, lng: r.lng, color: n.color || '#64d2ff', maxRadius: 9 }, 2200), (st.settings.reducedMotion ? 0 : 900) + i * 650)
+    void fx
+    get().toast(`${n.name} on the map.`, 'info', 6000, back ? { label: 'Back to desk', run: () => (back.panel === 'relations' ? get().openRelations(back.nation) : get().openTab(back.panel, back.tab)) } : undefined)
   },
 
   openFaction(nation) {

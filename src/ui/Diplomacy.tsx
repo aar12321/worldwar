@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
+import { LocateButton } from './Locate'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { powerView, showPower } from '../engine/intel'
 import { coalitionActive, nationNeighbors, opinionLabel, opinionReport, type OpinionReport } from '../ai/opinion'
@@ -450,6 +451,7 @@ interface RowContext {
 function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focused: boolean }) {
   const view = usePlayerView()!
   const selectRegion = useGame((s) => s.selectRegion)
+  const openRelations = useGame((s) => s.openRelations)
   const { game, player } = view
   const { map } = getWorld()
   const ref = useRef<HTMLDivElement>(null)
@@ -487,7 +489,10 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           <Dot color={n.color} />
           <span className="font-semibold truncate">{n.name}</span>
         </button>
-        <span className={`text-[12px] font-medium whitespace-nowrap ${statusColor}`}>{status}</span>
+        <span className="flex items-center gap-2">
+          <LocateButton id={id} compact />
+          <span className={`text-[12px] font-medium whitespace-nowrap ${statusColor}`}>{status}</span>
+        </span>
       </div>
       <div className="flex items-center gap-2 text-[12px] text-white/70">
         {human ? (
@@ -521,6 +526,9 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           </button>
         ) : (
           <>
+            <button className="btn" onClick={() => openRelations(id)} title="Visits, embassies, aid, ventures, joint war plans and favours">
+              Build relations →
+            </button>
             <button className={`btn btn-primary ${mode === 'trade' ? 'bg-[#0a84ff]/25' : ''}`} onClick={() => toggle('trade')}>
               Trade
             </button>

@@ -97,6 +97,8 @@ export function buildPaletteItems(): PaletteItem[] {
     if (!n.alive || n.id === game.playerId) continue
     const lands = `${regionsOf(game, n.id).length} countries`
     out.push({ id: `dip:${n.id}`, label: `Diplomacy with ${n.name}`, hint: lands, group: 'Nations', keywords: n.name, run: () => st.openDiplomacy(n.id) })
+    out.push({ id: `rel:${n.id}`, label: `Relations with ${n.name}`, hint: 'visits, aid, ventures, plans', group: 'Nations', keywords: `${n.name} relationship opinion`, run: () => st.openRelations(n.id) })
+    out.push({ id: `loc:${n.id}`, label: `Locate ${n.name} on the map`, hint: 'closes the desk and turns the globe', group: 'Nations', keywords: `${n.name} find show where`, run: () => st.locateNation(n.id) })
     out.push({ id: `ag:${n.id}`, label: `Agencies: ${n.name}`, hint: 'operations', group: 'Nations', keywords: n.name, run: () => st.openAgencies(n.id) })
   }
 

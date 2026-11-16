@@ -174,6 +174,20 @@ export const DESKS: DeskDef[] = [
 
   { id: 'diplomacy', label: 'Diplomacy', hint: 'Offers, treaties and every nation’s opinion of you', icon: 'diplomacy', key: 'd', group: 'world', order: 60, shell: 'custom', load: lazyOf(() => import('./Diplomacy'), 'DiplomacyPanel'), keywords: ['treaty', 'alliance', 'pact', 'peace', 'offers', 'sanctions', 'trade', 'nations'], badge: (c) => c.offers || null },
 
+  {
+    id: 'relations',
+    label: 'Relations',
+    hint: 'Win nations over and keep them: visits, embassies, aid, ventures, joint war plans, favours',
+    icon: 'relations',
+    key: 'o',
+    group: 'world',
+    order: 62,
+    shell: 'custom',
+    load: lazyOf(() => import('./Relations'), 'RelationsPanel'),
+    keywords: ['relationship', 'opinion', 'visit', 'embassy', 'aid', 'venture', 'locate', 'favour', 'war plan', 'trade', 'partners', 'attache'],
+    badge: (c) => (c.game ? c.game.relations?.requests.filter((q) => q.to === c.game!.playerId).length || null : null),
+  },
+
   { id: 'faction', label: 'Faction', hint: 'Votes, the common pool and contracts of your faction', icon: 'faction', key: 'f', group: 'world', order: 65, shell: 'custom', load: lazyOf(() => import('./Faction'), 'FactionPanel'), keywords: ['alliance', 'bloc', 'vote', 'pool', 'contracts', 'members'], badge: (c) => c.factionDue || null },
 
   { id: 'log', label: 'News', hint: 'What has happened lately', icon: 'news', key: 'n', aliases: ['l'], group: 'home', order: 90, nav: false, shell: 'custom', load: lazyOf(() => import('./SidePanels'), 'LogPanel'), keywords: ['log', 'dispatches', 'history', 'events'] },
