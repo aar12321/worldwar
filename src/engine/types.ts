@@ -1,6 +1,7 @@
 import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
 import type { AircraftNodeId } from '../data/aircraft'
 import type { SystemId } from '../data/systems'
+import type { SpaceAction, SpaceState, SpaceWorld } from '../data/space'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
@@ -355,6 +356,8 @@ export interface Nation {
   stateOwned: SectorId[]
   seizedUntil: number
   projects: Partial<Record<ProjectId, ProjectState>>
+  /** The space agency: talent, rockets, flights, labs, outposts. Absent until the first space order, so a nation that never uses it is unchanged. */
+  space?: SpaceState
   /** Cruise, tactical and ballistic missiles in store (hypersonic ones are `military.units.missile`). */
   arsenal?: Partial<Record<MissileType, number>>
   /** The missile program's level, 0 to 3. */
@@ -620,6 +623,8 @@ export type Order =
   | { type: 'buildWarhead'; nationId: NationId }
   /** Fires a nuclear warhead at a country of a nation you are at war with. */
   | { type: 'nuke'; nationId: NationId; target: RegionId }
+  /** Anything the space program does: hire, develop and build rockets, launch missions, run the labs, claim and build on other worlds. Applies at once. */
+  | { type: 'space'; nationId: NationId; action: SpaceAction }
   /** Starts an aircraft development (research is paid now, money month by month). */
   | { type: 'startAircraftDev'; nationId: NationId; node: AircraftNodeId }
   /** Puts a development on hold, which frees its slot and its monthly bill, or takes it up again. */
@@ -846,6 +851,8 @@ export interface GameState {
   marketPressure?: Partial<Record<TradeResource, number>>
   /** Factions: member countries pooling money, materials and soldiers to vote on wars together. Absent until one is founded. */
   factions?: Faction[]
+  /** Who holds each world beyond Earth, and how many flights the world has flown. Absent until someone starts a space program. */
+  space?: SpaceWorld
   /** Live mode only: the day of the month, from 0. `turn` is still the month. */
   day?: number
   /** Live mode only: armies marching, fighting or coming home. */

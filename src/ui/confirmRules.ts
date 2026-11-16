@@ -1,3 +1,4 @@
+import { BODIES, MISSIONS } from '../data/space'
 import { SOCIAL, SOCIAL_RULES } from '../data/society'
 import { describeOrder } from '../engine/resolveTurn'
 import { orderCost } from '../engine/orders'
@@ -77,6 +78,16 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
       return asks('Leave the faction?', 'You take back what is left of your claim, less the exit fee (or nothing, if the charter forfeits). Soldiers stay in the pool while the faction is at war, and the members will think less of you.', 'Leave', true)
     case 'factionPropose':
       return o.proposal.kind === 'war' ? asks(`Put war on ${name(o.proposal.target)} to the vote?`, 'If the members pass it, every member that can joins the war, and the pooled army attacks. The influence is spent whether or not it passes.', 'Put it to the vote') : null
+    case 'space': {
+      const a = o.action
+      if (a.kind === 'claim') return asks(`Claim ${BODIES[a.body].name}?`, 'Only you may build there from now on, and rivals will not forget it.', 'Claim it')
+      if (a.kind === 'launch') {
+        const spec = MISSIONS[a.mission]
+        const risk = spec.crew > 0 ? ` ${spec.crew} astronauts will fly it, and a failure can kill them.` : ' A failure loses the payload and the rocket.'
+        if (a.mode === 'outsource' || spec.crew > 0 || spec.payload >= 300) return asks(`${a.mode === 'house' ? 'Fly' : 'Hire a company for'} the ${spec.name.toLowerCase()}?`, `It takes months and cannot be called back.${risk}`, a.mode === 'house' ? 'Fly it' : 'Hire them', spec.crew > 0)
+      }
+      return null
+    }
     case 'repealLaw':
       return null
     default:

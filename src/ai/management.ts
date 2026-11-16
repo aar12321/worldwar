@@ -14,6 +14,7 @@ import { activeProjects, levelCost, monthlyCost, projectLevel } from '../engine/
 import { LOCAL } from '../data/localProjects'
 import { SOCIAL } from '../data/society'
 import { socialLevel } from '../engine/society'
+import { manageSpace } from './space'
 import { activeLocal, localLevel } from '../engine/works'
 import type { ProjectId, SocialId } from '../engine/types'
 
@@ -239,6 +240,9 @@ function manageStatecraft(s: GameState, nationId: NationId, econ: EconomyReport,
       if (foe) tryAdd({ type: 'resolution', nationId, kind: 'sanctions', target: foe })
     }
   }
+
+  // A space program: modest for a Medium rival, serious for a Hard one, always inside what the country can spare.
+  spent += manageSpace(s, nationId, econ, skill, tryAdd, budget - spent)
   return spent
 }
 

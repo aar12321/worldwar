@@ -64,7 +64,9 @@ export function validateStrike(s: GameState, map: WorldMap, o: Strike, pending: 
   if (o.weapon === 'orbital') {
     if (pending.some((p) => p.type === 'strike' && p.weapon === 'orbital')) return 'Only one orbital strike a month'
     if ((n.systems?.orbital ?? 0) < 1) return 'Needs an Orbital Network'
-    const cooldown = FRONTIER.orbitalCooldown - Math.round(scaleBonus(3, projectPower(n, 'spaceComplex')))
+    // Each reconnaissance satellite in orbit (two at most) gives the weapon a month back: it knows where to aim sooner.
+    const recon = Math.min(2, (n.space?.sats ?? []).filter((x) => x.kind === 'recon').length)
+    const cooldown = FRONTIER.orbitalCooldown - Math.round(scaleBonus(3, projectPower(n, 'spaceComplex'))) - recon
     if (s.turn - n.lastOrbital < cooldown) return `The orbital weapon recharges in ${cooldown - (s.turn - n.lastOrbital)} months`
     return null
   }

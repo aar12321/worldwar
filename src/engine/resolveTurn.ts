@@ -15,6 +15,7 @@ import { applyPauseAircraftDev, applyStartAircraftDev } from './aircraft'
 import { applyBuildMissiles, applyFundMissiles } from './missiles'
 import { applyBuildWarhead, fireNuke, launchNuke, runNuclear } from './nuclear'
 import { runCoalitions } from './coalition'
+import { applySpace, describeSpace, runSpaceWorld } from './space'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -180,6 +181,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return 'Build a nuclear warhead'
     case 'nuke':
       return `Launch a nuclear missile at ${region(o.target)}`
+    case 'space':
+      return describeSpace(o.action)
     case 'fundMissiles':
       return 'Raise the missile program'
     case 'buildMissiles':
@@ -264,6 +267,9 @@ const PHASES: Order['type'][][] = [
   ['fundAgency', 'fundSystem'],
   ['fundMissiles', 'buildMissiles', 'buildWarhead', 'startAircraftDev', 'pauseAircraftDev'],
   ['operation', 'domestic', 'strike', 'nuke'],
+  ['fundMissiles', 'buildMissiles', 'startAircraftDev', 'pauseAircraftDev'],
+  ['space'],
+  ['operation', 'domestic', 'strike'],
 ]
 
 /**
@@ -372,6 +378,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runSystems(s)
   runNuclear(s)
   runCoalitions(s, map, rng)
+  runSpaceWorld(s)
   runWorld(s, gross, workforce)
   updateTiers(s)
   recordHistory(s, gross, net)
@@ -672,6 +679,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'fundSystem':
       fundSystem(s, o.nationId, o.system, o.levels ?? 1)
+      break
+    case 'space':
+      applySpace(s, n, o.action)
       break
     case 'fundMissiles':
       applyFundMissiles(s, n)

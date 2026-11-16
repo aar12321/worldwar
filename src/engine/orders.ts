@@ -20,6 +20,7 @@ import { companyEffects, tradeValue, validateDirective, validateTrade } from './
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
 import { FACTION_ORDERS, factionOrderCost, factionProblem, isFactionOrder, sameFaction } from './factions'
+import { spaceCost, spaceProblem } from './space'
 import { pauseAircraftDevProblem, startAircraftDevCost, startAircraftDevProblem } from './aircraft'
 import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
 import { buildWarheadCost, buildWarheadProblem, nukeProblem } from './nuclear'
@@ -178,6 +179,14 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'fundSystem':
       c.capital = fundSystemCost(s, o)
       break
+    case 'space': {
+      const k = s.nations[o.nationId] ? spaceCost(s, s.nations[o.nationId], o.action) : c
+      c.capital = k.capital
+      c.tp = k.tp
+      c.pp = k.pp
+      c.steel = k.steel
+      break
+    }
     case 'fundMissiles': {
       const k = fundMissilesCost(s.nations[o.nationId])
       c.capital = k.capital
@@ -590,6 +599,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return buildWarheadProblem(s, o, pending)
     case 'nuke':
       return nukeProblem(s, map, o, pending)
+    case 'space':
+      return spaceProblem(s, n, o.action, nationWorkforce(s, map, o.nationId), pending.filter((p): p is Extract<Order, { type: 'space' }> => p.type === 'space' && p.nationId === o.nationId).map((p) => p.action))
     case 'fundMissiles':
       return fundMissilesProblem(n)
     case 'buildMissiles':
