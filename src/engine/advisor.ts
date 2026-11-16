@@ -13,7 +13,7 @@ import { activePlans, strikeDate, strikeMonth, threatOf } from './coalition'
 import { nuclearThreats } from './nuclear'
 import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
-import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
+import { enemiesOf, hasPact, isAllied, maxWars, puppetsOf, totalUnits } from './helpers'
 import { factionOf, votesWaiting } from './factions'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { fundMissilesCost, launchSite, missileStock, programLevel, recentAttackers } from './missiles'
@@ -22,6 +22,7 @@ import { spaceAdvice } from './space'
 import { monthsToElection } from './politics'
 import { ACADEMY, PROJECT_LEVELS, PROJECTS, programCost } from '../data/projects'
 import { TIERS } from '../data/empire'
+import { PUPPET } from '../data/puppets'
 import { empireCount, tierOf } from './empire'
 import { academyCost, activeProjects, levelCost, levelMonths, projectLevel, projectProblem } from './industry'
 import { campaignPrice, campaignProblem } from './society'
@@ -39,7 +40,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
-  | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' }
+  | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' | 'puppets' }
   | { desk: 'military'; tab: 'forces' | 'deploy' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
@@ -583,6 +584,19 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   if (n.space) for (const a of spaceAdvice(s, n, econ.workforce)) add(a.urgency, a.bonus, { id: a.id, title: a.title, detail: a.detail, action: a.action, target: a.target })
 
   out.sort((a, b) => b.weight - a.weight || (a.id < b.id ? -1 : 1))
+  // Puppets going wrong: a restive one loses its stability, rebels and may break free, and is a liability in your wars.
+  for (const id of puppetsOf(s, nationId)) {
+    const p = s.nations[id]
+    if (p.loyalty === undefined || p.loyalty >= PUPPET.restive) continue
+    const urgent = p.loyalty < PUPPET.rebelBelow
+    add(urgent ? 'now' : 'soon', Math.round(PUPPET.restive - p.loyalty), {
+      id: `puppet-${id}`,
+      title: `${p.name} is ${urgent ? 'on the edge of revolt' : 'restive'} (loyalty ${Math.round(p.loyalty)})`,
+      detail: `${urgent ? 'It rebels, will not follow you to war and may break free. ' : 'Its people are unsettled. '}Ease its taxes, draft or tribute, repeal a harsh law, send aid or post a garrison.`,
+      action: 'Rule the puppet',
+      target: { desk: 'empire', tab: 'puppets' },
+    })
+  }
   return out.slice(0, limit)
 }
 

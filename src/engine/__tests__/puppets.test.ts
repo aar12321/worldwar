@@ -140,6 +140,9 @@ describe('ruling a puppet', () => {
     const s = world()
     s.nations.r1.laws = ['free_trade', 'austerity', 'rationing']
     expect(validateOrder(s, map, govern({ law: { id: 'press_control', on: true } }))).toMatch(/only 3|no room/)
+    // Even a puppet whose own rank would allow more laws takes no more than three from its master.
+    s.nations.r1.tier = 3
+    expect(validateOrder(s, map, govern({ law: { id: 'press_control', on: true } }))).toMatch(/only 3/)
   })
 
   it('cannot rule a puppet that another player runs', () => {
@@ -229,6 +232,30 @@ describe('loyalty', () => {
     expect(equilibrium(-100)).toBe(0)
   })
 
+  it('with nothing pressing on it, a devoted puppet slips back toward 60 and a bitter one recovers toward it', () => {
+    const hi = world()
+    hi.nations.r1.loyalty = 100
+    const lo = world()
+    lo.nations.r1.loyalty = 20
+    const a = monthsOf(hi, 3)
+    const b = monthsOf(lo, 3)
+    expect(a.nations.r1.loyalty!).toBeLessThan(100)
+    expect(a.nations.r1.loyalty!).toBeGreaterThan(60)
+    expect(b.nations.r1.loyalty!).toBeGreaterThan(20)
+    expect(b.nations.r1.loyalty!).toBeLessThan(60)
+  })
+
+  it('a puppet under 35 loses stability each month, in proportion; one above does not', () => {
+    const calm = world()
+    calm.nations.r1.loyalty = 60
+    const sore = world()
+    sore.nations.r1.loyalty = 15
+    const a = resolveTurn(calm, map, [])
+    const b = resolveTurn(sore, map, [])
+    // The same seed and land: the only difference is the unrest (35 - 15) * 0.04 = 0.8 a month, before any rebels.
+    expect(a.nations.r1.stability - b.nations.r1.stability).toBeGreaterThan(0.5)
+  })
+
   it('stripping rights (martial law) costs loyalty at once and every month', () => {
     const s = world()
     const before = s.nations.r1.loyalty!
@@ -259,8 +286,12 @@ describe('loyalty', () => {
     expect(applyOrderNow(after, map, govern({ aid: 100 })).error).toBeNull()
     // Month-end orders are not applied by applyOrderNow's validation path; run through the turn instead.
     const next = resolveTurn(s, map, [govern({ aid: 100 })])
+    const twin = resolveTurn(s, map, [])
     expect(m - next.nations.r0.resources.capital).toBeGreaterThan(50)
+    // Half of the 100 reaches its treasury, over what the same month would have brought it.
+    expect(next.nations.r1.resources.capital - twin.nations.r1.resources.capital).toBeGreaterThan(40)
     expect(next.nations.r1.resources.capital).toBeGreaterThan(p)
+    expect(next.nations.r1.loyalty!).toBeGreaterThan(twin.nations.r1.loyalty!)
   })
 
   it('a garrison and the master’s investment raise the pressure', () => {
@@ -319,6 +350,28 @@ describe('loyalty', () => {
     // r2 borders r1.
     expect(next.casusBelli['r2|r0']).toBeGreaterThanOrEqual(s.turn)
     expect(next.reasons['r2|r0']).toMatch(/Free/)
+  })
+})
+
+describe('a peace that makes a puppet', () => {
+  it('gives it a loyalty and the default tribute, and nothing else changes about it', () => {
+    const s = startState(map, 'r0', 5)
+    s.humans = ['r0', 'r1']
+    s.nations.r1.isPlayer = true
+    s.nations.r0.resources.pp = 400
+    s.wars = ['r0|r1']
+    s.warScore['r0>r1'] = 90
+    s.nations.r1.warWeariness = 60
+    const propose: Order = { type: 'propose', nationId: 'r0', target: 'r1', proposal: { kind: 'peace', terms: { cede: [], reparations: 0, puppet: true } } }
+    expect(validateOrder(s, map, propose)).toBeNull()
+    const sent = resolveTurn(s, map, [propose])
+    const offer = sent.proposals.find((p) => p.from === 'r0' && p.to === 'r1')
+    expect(offer).toBeDefined()
+    const done = resolveTurn(sent, map, [{ type: 'respond', nationId: 'r1', proposalId: offer!.id, accept: true }])
+    expect(done.nations.r1.overlord).toBe('r0')
+    expect(done.nations.r1.loyalty).toBeGreaterThan(50)
+    expect(done.nations.r1.loyalty).toBeLessThanOrEqual(PUPPET.start)
+    expect(done.nations.r1.tribute).toBeUndefined()
   })
 })
 

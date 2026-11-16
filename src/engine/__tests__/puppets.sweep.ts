@@ -19,7 +19,8 @@ import { resolveTurn } from '../resolveTurn'
 import { transferRegion } from '../warfare'
 import type { Difficulty, GameState, Order } from '../types'
 
-export type Policy = 'none' | 'conquest' | 'default' | 'squeeze' | 'balanced' | 'invest'
+/** none: no puppet at all; conquest: the land taken outright; handsoff: a puppet nobody rules; bot: ruled by the Medium bot (src/ai/puppets.ts); the rest are scripted. */
+export type Policy = 'none' | 'conquest' | 'handsoff' | 'bot' | 'squeeze' | 'balanced' | 'invest'
 
 export interface Row {
   policy: Policy
@@ -80,7 +81,9 @@ function run(policy: Policy, seed: number, months: number, difficulty: Difficult
     const rule = policy === 'none' || policy === 'conquest' ? [] : script(s, policy, map)
     const ppBefore = s.nations[MASTER].resources.pp
     if (s.nations[PUPPET]?.overlord === MASTER && s.nations[PUPPET].loyalty !== undefined) tribute += extraction(s, map, MASTER).total
-    const orders = [...generateAllBotOrders(s, map), ...generateBotOrders(s, map, s.playerId, true), ...rule]
+    // Every bot order for the master's puppet is dropped except in the `bot` run, so a scripted policy is the only ruler.
+    const botOrders = [...generateAllBotOrders(s, map), ...generateBotOrders(s, map, s.playerId, true)].filter((o) => policy === 'bot' || o.type !== 'governPuppet')
+    const orders = [...botOrders, ...rule]
     s = resolveTurn(s, map, orders)
     void ppBefore
     influence += rule.length
@@ -104,7 +107,7 @@ function run(policy: Policy, seed: number, months: number, difficulty: Difficult
 
 export function puppetSweep(opts: { seeds: number[]; months: number; difficulty?: Difficulty; policies?: Policy[] }): Row[] {
   const rows: Row[] = []
-  for (const seed of opts.seeds) for (const policy of opts.policies ?? (['none', 'conquest', 'default', 'squeeze', 'balanced', 'invest'] as Policy[])) rows.push(run(policy, seed, opts.months, opts.difficulty ?? 'normal'))
+  for (const seed of opts.seeds) for (const policy of opts.policies ?? (['none', 'conquest', 'handsoff', 'bot', 'squeeze', 'balanced', 'invest'] as Policy[])) rows.push(run(policy, seed, opts.months, opts.difficulty ?? 'normal'))
   return rows
 }
 
