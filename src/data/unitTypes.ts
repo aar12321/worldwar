@@ -1,6 +1,5 @@
 import type { PolicyEffects } from './government'
-import type { BuildingType, LawId, ProposalKind, TradeResource, UnitCounts, UnitType } from '../engine/types'
-import { UNIT_TYPES } from '../engine/types'
+import type { BuildingType, LawId, ProposalKind, TradeResource, UnitType } from '../engine/types'
 
 export interface UnitSpec {
   name: string
@@ -162,25 +161,6 @@ export function emptyTraining(): UnitTraining {
 export function clampTraining(level: number): number {
   if (!Number.isFinite(level)) return 0
   return Math.max(0, Math.min(TRAINING.max, Math.floor(level)))
-}
-
-/**
- * Older saves stored one rank for the whole army. That rank is copied onto
- * every unit type that still has troops.
- */
-export function asTraining(raw: unknown, units?: UnitCounts): UnitTraining {
-  if (raw && typeof raw === 'object') {
-    const source = raw as Partial<UnitTraining>
-    const out = emptyTraining()
-    for (const k of UNIT_TYPES) out[k] = clampTraining(Number(source[k] ?? 0))
-    return out
-  }
-  const rank = clampTraining(typeof raw === 'number' ? raw : 0)
-  const out = emptyTraining()
-  for (const k of UNIT_TYPES) {
-    if (!units || units[k] > 0) out[k] = rank
-  }
-  return out
 }
 
 /** Permanent weapon levels. Each level raises one unit type's attack and defense. */

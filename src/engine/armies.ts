@@ -5,7 +5,7 @@ import { LIVE } from '../data/live'
 import { GENERAL_TRAITS } from '../data/projects'
 import { commanderTrait } from './generals'
 import { REACH } from '../data/war'
-import { atWar, clamp, distanceKm, emptyUnits, newId, totalUnits } from './helpers'
+import { atWar, clamp, distanceKm, emptyUnits, newId } from './helpers'
 import { fireMissiles } from './systems'
 import { freeUnits } from './deployment'
 import { canAttackRegion, commitShare } from './warfare'
@@ -288,8 +288,6 @@ export function dominantUnit(units: UnitCounts): UnitType {
   return best
 }
 
-export const armiesOf = (s: Pick<GameState, 'armies'>, nationId?: NationId): Army[] => (s.armies ?? []).filter((a) => !nationId || a.nationId === nationId)
-
 /** Armies on their way out to attack a country this nation holds. */
 export const incomingArmies = (s: GameState, nationId: NationId): Army[] => (s.armies ?? []).filter((a) => a.phase === 'outbound' && s.regions[a.target]?.owner === nationId)
 
@@ -303,13 +301,6 @@ export function calledOff(s: GameState, a: Army): ArmyOutcome | null {
   if (!owner || !s.nations[owner]?.alive) return 'changed'
   if (atWar(s, a.nationId, owner)) return null
   return a.foe && owner !== a.foe ? 'changed' : 'peace'
-}
-
-/** Divisions a nation has in the field. */
-export function inTheField(s: Pick<GameState, 'armies'>, nationId: NationId): number {
-  let sum = 0
-  for (const a of s.armies ?? []) if (a.nationId === nationId) sum += totalUnits(a.units)
-  return sum
 }
 
 export function recallProblem(s: GameState, nationId: NationId, armyId: string): string | null {

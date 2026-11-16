@@ -1,6 +1,6 @@
 import { AIR_UNITS, BORDER, GROUND_UNITS, NAVAL_UNITS, STATION } from '../data/deployment'
 import { addLog, clamp, emptyUnits, forceUnits, pairKey, totalUnits } from './helpers'
-import type { BorderRecord, Deployment, GameState, MissileType, Nation, NationId, Order, RegionId, UnitCounts, UnitType, Via, WorldMap } from './types'
+import type { BorderRecord, Deployment, GameState, MissileType, NationId, Order, RegionId, UnitCounts, UnitType, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
 /**
@@ -20,8 +20,6 @@ import { UNIT_TYPES } from './types'
 type Share = Record<UnitType, number>
 
 const sum = (u: UnitCounts, kinds: UnitType[]) => kinds.reduce((t, k) => t + u[k], 0)
-
-export const deploymentOf = (n: Pick<Nation, 'military'> | undefined): Deployment | undefined => n?.military.deployment
 
 /** Share of the ground forces on all borders, never more than all of them. */
 export function groundPosted(d: Deployment): number {

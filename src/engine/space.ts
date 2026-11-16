@@ -1,4 +1,4 @@
-import { BODIES, BODY_IDS, type BodyId, COMPANIES, DOMESTIC, LABS, MINES, MINE_LEVELS, MISSIONS, NODES, OUTPOST, PAD, ROCKETS, ROCKET_IDS, ROCKET_RULES, SAMPLE_NAMES, SPACE, type CompanySpec, type Mission, type MissionId, type MissionSpec, type NodeId, type RocketId, type SampleKind, type SpaceAction, type SpaceState, type SpaceWorld } from '../data/space'
+import { BODIES, BODY_IDS, type BodyId, COMPANIES, DOMESTIC, LABS, MINES, MINE_LEVELS, MISSIONS, NODES, OUTPOST, PAD, ROCKETS, ROCKET_IDS, ROCKET_RULES, SAMPLE_NAMES, SPACE, type CompanySpec, type Mission, type MissionId, type MissionSpec, type RocketId, type SampleKind, type SpaceAction, type SpaceState, type SpaceWorld } from '../data/space'
 import { addToSector } from './business'
 import { addLog, clamp, enemiesOf, hasTech } from './helpers'
 import { createRng } from './rng'
@@ -55,10 +55,6 @@ export const freeAstronauts = (sp: SpaceState) => sp.astronauts - reservedStaff(
 /** Places on the launch site: rockets building and in-house flights being built or launched use one each. */
 export const padSlots = (n: Nation) => (n.space?.pads ?? 0) + spaceComplexLevel(n)
 export const padsInUse = (sp: SpaceState) => sp.builds.length + sp.missions.filter((m) => m.mode === 'house' && (m.phase === 'build' || m.phase === 'launch')).length
-
-export const labSlots = (sp: SpaceState) => sp.labs
-
-export const hasDiscovery = (n: Pick<Nation, 'space'>, id: NodeId) => !!n.space?.discoveries.includes(id)
 
 // ---- Companies ----
 

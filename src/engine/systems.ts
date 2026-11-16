@@ -18,10 +18,6 @@ export function systemUpkeep(n: { systems?: Partial<Record<SystemId, number>> })
   return total
 }
 
-export function systemLevel(s: GameState, nationId: NationId, id: SystemId): number {
-  return s.nations[nationId]?.systems?.[id] ?? 0
-}
-
 export function validateFundSystem(s: GameState, o: Fund, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
   const spec = SYSTEM_SPECS[o.system]

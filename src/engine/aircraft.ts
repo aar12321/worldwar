@@ -3,7 +3,7 @@ import { TECH_BY_ID } from '../data/techTree'
 import { REACH } from '../data/war'
 import { tierGate, tierOf } from './empire'
 import { addLog, hasTech, totalUnits } from './helpers'
-import type { AircraftState, GameState, Nation, NationId, Order, UnitCounts, UnitType } from './types'
+import type { GameState, Nation, NationId, Order, UnitCounts, UnitType } from './types'
 
 type Start = Extract<Order, { type: 'startAircraftDev' }>
 type Pause = Extract<Order, { type: 'pauseAircraftDev' }>
@@ -20,7 +20,6 @@ const KEYS = Object.keys({
 
 const empty = (): AircraftEffects => Object.fromEntries(KEYS.map((k) => [k, 0])) as unknown as AircraftEffects
 
-export const devState = (n: Pick<Nation, 'aircraft'>, id: AircraftNodeId): AircraftState | undefined => n.aircraft?.[id]
 export const devDone = (n: Pick<Nation, 'aircraft'>, id: AircraftNodeId): boolean => !!n.aircraft?.[id]?.done
 
 /** Finished developments, in the order of the tree. */

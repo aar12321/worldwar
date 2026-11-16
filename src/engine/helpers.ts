@@ -113,13 +113,6 @@ export function regionsOf(s: GameState, id: NationId): RegionId[] {
     .sort()
 }
 
-/** Highest factory level in any country the nation owns, summed across countries. */
-export function factoryCount(s: GameState, id: NationId): number {
-  let n = 0
-  for (const r of Object.values(s.regions)) if (r.owner === id) n += r.buildings.factory
-  return n
-}
-
 export function formatDivisions(n: number): string {
   const rounded = Math.round(n * 10) / 10
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
@@ -140,12 +133,6 @@ export function forceUnits(s: Pick<GameState, 'nations' | 'armies'>, id: NationI
   if (!away?.length) return home
   const out = { ...home }
   for (const a of away) for (const k of Object.keys(out) as UnitType[]) out[k] += a.units[k]
-  return out
-}
-
-export function sumUnits(list: UnitCounts[]): UnitCounts {
-  const out = emptyUnits()
-  for (const u of list) for (const k of Object.keys(out) as UnitType[]) out[k] += u[k]
   return out
 }
 

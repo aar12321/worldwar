@@ -41,13 +41,6 @@ export function activeLocal(s: GameState, nationId: NationId): { regionId: Regio
   return out
 }
 
-/** Every project built or under way in the countries a nation holds. */
-export function localCount(s: GameState, nationId: NationId): number {
-  let n = 0
-  for (const r of Object.values(s.regions)) if (r.owner === nationId && r.works) n += Object.keys(r.works).length
-  return n
-}
-
 // ---- What a country has ----
 
 /** Whether the country has what a project needs, or what it lacks. */

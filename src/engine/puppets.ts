@@ -25,9 +25,6 @@ type Ledger = Map<NationId, { gross: number; paid: number }>
 
 export const isRuled = (n: Nation | undefined): n is Nation & { overlord: NationId; loyalty: number } => !!n?.overlord && n.loyalty !== undefined
 
-/** The loyalty of a puppet, or undefined when it has none (a nation that is not a puppet, or an old puppet). */
-export const loyaltyOf = (n: Nation | undefined): number | undefined => (n?.overlord ? n.loyalty : undefined)
-
 /** Whether the puppet follows its master into a war: always, until loyalty is tracked and has fallen low. */
 export const willFollow = (n: Nation | undefined): boolean => n?.loyalty === undefined || n.loyalty >= PUPPET.warLoyalty
 

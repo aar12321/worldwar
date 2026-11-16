@@ -1,4 +1,4 @@
-import type { BudgetKey, GovernmentType } from '../engine/types'
+import type { GovernmentType } from '../engine/types'
 
 /** Everything a government, a law or a budget can change about how a country runs. Missing means no change. */
 export interface PolicyEffects {
@@ -84,38 +84,8 @@ export const REFORM = {
   cooldown: 24,
 }
 
-export interface BudgetSpec {
-  name: string
-  blurb: string
-}
-
-export const BUDGET_KEYS: BudgetKey[] = ['military', 'education', 'health', 'infrastructure']
-
-export const BUDGET: Record<BudgetKey, BudgetSpec> = {
-  military: { name: 'Military', blurb: 'Cheaper upkeep for your units and buildings.' },
-  education: { name: 'Education', blurb: 'Faster research, and businesses grow faster.' },
-  health: { name: 'Health', blurb: 'Happier, steadier people.' },
-  infrastructure: { name: 'Infrastructure', blurb: 'Cheaper upgrades and more trade through your ports.' },
-}
-
 /** Shares each go from the minimum to the maximum; an even split is the neutral point. */
 export const BUDGET_LIMITS = { min: 0.05, max: 0.6, even: 0.25 }
-export const EVEN_BUDGET: Record<BudgetKey, number> = { military: 0.25, education: 0.25, health: 0.25, infrastructure: 0.25 }
-
-/** What a budget does: each share above or below an even split pushes its effect. Zero-sum, so there is no free lunch. */
-export function budgetEffects(b: Record<BudgetKey, number>): Partial<PolicyEffects> {
-  const d = (k: BudgetKey) => (b[k] ?? BUDGET_LIMITS.even) - BUDGET_LIMITS.even
-  return {
-    upkeep: -0.8 * d('military'),
-    research: 1.5 * d('education'),
-    growth: 1.0 * d('education'),
-    stability: 40 * d('health'),
-    trade: 1.2 * d('infrastructure'),
-  }
-}
-
-/** Share by which an infrastructure budget changes building prices. Negative is cheaper. */
-export const buildDiscount = (b: Record<BudgetKey, number>) => -0.8 * ((b.infrastructure ?? BUDGET_LIMITS.even) - BUDGET_LIMITS.even)
 
 export const CORPORATE_TAX = { min: 0, max: 0.4, default: 0.15 }
 

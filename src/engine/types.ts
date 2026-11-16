@@ -211,7 +211,6 @@ export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'artillery', 'fighter', 'air', 'naval', 'drone', 'robot', 'missile']
 export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic', 'hospital']
 export const TRADE_RESOURCES: TradeResource[] = ['capital', 'food', 'tp', 'manpower', 'oil', 'steel', 'goods']
-export const MATERIALS_LIST: Material[] = ['oil', 'steel', 'goods']
 
 /** Static geography, never mutated during play. */
 export interface MapRegion {

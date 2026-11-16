@@ -65,12 +65,6 @@ export function repayBonds(n: Nation, amount: number) {
   syncDebt(n)
 }
 
-/** A default writes off half of every bond. */
-export function writeOffBonds(n: Nation, share: number) {
-  for (const b of n.bonds ?? []) b.amount *= 1 - share
-  syncDebt(n)
-}
-
 /** Why a nation cannot sell these bonds, or null. `room` is what lenders still offer. */
 export function bondProblem(s: GameState, n: Nation, amount: number, term: number | undefined, war: boolean | undefined, room: number, locked: boolean, gross: number): string | null {
   if (!Number.isFinite(amount) || amount < TREASURY.min) return `Bonds start at ${TREASURY.min} money`

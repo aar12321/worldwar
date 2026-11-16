@@ -1,4 +1,4 @@
-import { BODIES, BODY_IDS, HE3, LABS, MINES, MINE_IDS, MINE_LEVELS, MISSIONS, NODES, OUTPOST, PAD, ROCKETS, ROCKET_IDS, ROCKET_RULES, SAT_EFFECT, SAT_RULES, SPACE, SPACE_UPKEEP, type BodyId, type MineId, type NodeEffect, type RocketId, type SpaceState } from '../data/space'
+import { BODIES, BODY_IDS, HE3, LABS, MINES, MINE_IDS, MINE_LEVELS, MISSIONS, NODES, OUTPOST, PAD, ROCKETS, ROCKET_RULES, SAT_EFFECT, SAT_RULES, SPACE, SPACE_UPKEEP, type BodyId, type MineId, type NodeEffect, type RocketId, type SpaceState } from '../data/space'
 import type { PolicyEffects } from '../data/government'
 import type { Nation } from './types'
 
@@ -226,7 +226,3 @@ export function spaceEffects(n: SpaceNation): SpaceEffects {
   }
   return { policy, steel: y.steel, oil: y.oil, money: y.money, research: y.research, power: y.power, health: b.health, bill: spaceBill(sp, n), yield: y }
 }
-
-/** Rocket classes a nation could fly at its launch site. */
-export const padAllows = (sp: SpaceState | undefined, id: RocketId) => (sp?.pads ?? 0) >= ROCKETS[id].pad
-export const ROCKET_ORDER = ROCKET_IDS

@@ -79,9 +79,6 @@ export function growSectors(
   }
 }
 
-/** Money to add `size` units to a sector that is already `at` units. */
-export const fundingCost = (at: number, units = 1) => units * (BUSINESS.fundBase + BUSINESS.fundPerSize * at)
-
 /** Size a grant of `amount` money adds to a sector that is `at` units big. */
 export const fundingGain = (at: number, amount: number) => amount / (BUSINESS.fundBase + BUSINESS.fundPerSize * at)
 

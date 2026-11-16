@@ -106,6 +106,3 @@ export function deploymentOrder(s: GameState, map: WorldMap, id: NationId, skill
   return { type: 'setDeployment', nationId: id, ...want }
 }
 
-/** The share of each arm on station, for a posture, as the reserve it leaves. Used by tests and screens. */
-export const reserveOf = (p: Posture) => ({ ground: 1 - Object.values(p.border).reduce((t, v) => t + v, 0), navy: 1 - p.coastal - p.subs, air: 1 - p.air })
-

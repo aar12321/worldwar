@@ -3,7 +3,6 @@ import { PERSONALITIES } from '../data/personalities'
 import { TERRAIN } from '../data/terrain'
 import { COMMITS, type Commit, type Stance } from '../data/war'
 import { clockMonth } from '../engine/calendar'
-import { recentlyProposed } from '../engine/diplomacy'
 import type { EconomyReport } from '../engine/economy'
 import { lineMax } from '../engine/economy'
 import { atWar, canUseUnit, hasCasusBelli, hasPact, isAllied, pairKey, totalUnits } from '../engine/helpers'
@@ -432,14 +431,6 @@ export function goodAlly(sight: Sight, candidate: NationId): boolean {
   // Weak friends bring nothing but their quarrels (an honorable nation keeps faith with them anyway).
   if (theirs < myPower * 0.25 && n.personality !== 'honorable') return false
   return !bigWar
-}
-
-/** A reason to look twice at an enemy of an ally: it is a fight the bot may already have friends in. */
-export function alliedWarTargets(sight: Sight): NationId[] {
-  const { s, id, ctx } = sight
-  const out = new Set<NationId>()
-  for (const a of ctx.allies.get(id) ?? []) for (const e of ctx.enemies.get(a) ?? []) if (e !== id && !atWar(s, id, e) && !isAllied(s, id, e) && !recentlyProposed(s, id, e, 'peace', 1)) out.add(e)
-  return [...out].sort()
 }
 
 export interface MissileShot {
