@@ -15,8 +15,8 @@ import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
 import { difficultyOf } from '../data/difficulty'
 import { FACTION } from '../data/factions'
-import { alliesOf, enemiesOf, hasPact, isAllied, maxWars, puppetsOf, totalUnits } from './helpers'
-import { factionOf, votesWaiting } from './factions'
+import { alliesOf, enemiesOf, hasPact, isAllied, maxWars, puppetsOf, territoriesOf, totalUnits } from './helpers'
+import { factionOf, seatsUsed, votesWaiting } from './factions'
 import { invitablePartners } from './partners'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { fundMissilesCost, launchSite, missileStock, programLevel, recentAttackers } from './missiles'
@@ -44,7 +44,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
-  | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' | 'puppets' }
+  | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' | 'puppets' | 'territories' }
   | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
@@ -361,7 +361,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
 
   // Partners you could bring into your faction, or a faction to found with them: the same people the Diplomacy desk lists.
   const myFaction = factionOf(s, nationId)
-  if (myFaction && myFaction.members.length < FACTION.maxMembers) {
+  if (myFaction && seatsUsed(s, myFaction) < FACTION.maxMembers) {
     const best = invitablePartners(s, map, nationId, myFaction, pending).find((c) => c.relations.includes('ally') || c.relations.includes('pact'))
     if (best && !pending.some((o) => o.type === 'factionInvite' && o.target === best.id)) {
       const them = s.nations[best.id].name
@@ -631,6 +631,31 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       action: 'Rule the puppet',
       target: { desk: 'empire', tab: 'puppets' },
     })
+  }
+  // Territories: an army that sits idle in a war, goods that could be sold, land that has served long enough to annex.
+  for (const id of territoriesOf(s, nationId)) {
+    const t = s.nations[id]
+    const army = totalUnits(t.military.units)
+    const warring = enemiesOf(s, id).length > 0
+    if (warring && army >= 2 && t.military.lastAttackTurn < s.turn - 1 && !pending.some((o) => o.type === 'commandTerritory' && o.territory === id)) {
+      add('soon', 6 + Math.min(10, Math.round(army)), {
+        id: `territory-army-${id}`,
+        title: `${t.name}'s army is idle`,
+        detail: `It fights in your wars but only your own orders move it. Command it from the Territories tab, or tick "Send territory forces" in the War Room.`,
+        action: 'Command it',
+        target: { desk: 'empire', tab: 'territories' },
+      })
+    }
+    const hasDeal = s.deals.some((d) => d.kind === 'trade' && (d.from === id || d.to === id))
+    if (!hasDeal && (t.resources.oil > 80 || t.resources.steel > 80 || t.resources.food > 160)) {
+      add('idea', 8, {
+        id: `territory-trade-${id}`,
+        title: `${t.name} has goods to spare`,
+        detail: 'A territory cannot refuse a trade deal. Force one to sell its surplus, or to supply you.',
+        action: 'Force a deal',
+        target: { desk: 'empire', tab: 'territories' },
+      })
+    }
   }
   return out.slice(0, limit)
 }

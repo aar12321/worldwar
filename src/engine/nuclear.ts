@@ -82,7 +82,7 @@ export function nukeProblem(s: GameState, map: WorldMap, o: Nuke, pending: Order
   const r = s.regions[o.target]
   if (!r || !map.regions[o.target]) return 'Unknown country'
   if (r.owner === o.nationId || !atWar(s, o.nationId, r.owner)) return 'You can only strike a country you are at war with'
-  if (s.nations[r.owner]?.overlord === o.nationId) return 'They are your puppet'
+  if (s.nations[r.owner]?.overlord === o.nationId || s.nations[r.owner]?.territoryOf === o.nationId) return 'They are your puppet or territory'
   if (pending.some((p) => p.type === 'nuke' && p.nationId === o.nationId)) return 'One warhead at a time'
   if (warheadsOf(n) < 1) return 'You have no warhead. Build one first.'
   const last = n.nuclear?.last
@@ -197,7 +197,7 @@ export function detonate(s: GameState, map: WorldMap, rng: Rng, nationId: Nation
  * The victim and its friends are left out: they are already in the war.
  */
 export function leadingFactions(s: GameState, attacker: NationId, count: number, victim?: NationId): NationId[][] {
-  const mine = new Set<NationId>([attacker, ...Object.values(s.nations).filter((x) => x.alive && x.overlord === attacker).map((x) => x.id)])
+  const mine = new Set<NationId>([attacker, ...Object.values(s.nations).filter((x) => x.alive && (x.overlord === attacker || x.territoryOf === attacker)).map((x) => x.id)])
   for (const b of blocsOf(s)) if (b.members.some((m) => mine.has(m))) for (const m of b.members) mine.add(m)
   const humans = new Set(s.humans)
   const groups: { members: NationId[]; power: number }[] = []
@@ -235,7 +235,7 @@ export function worldReacts(s: GameState, map: WorldMap, rng: Rng, attacker: Nat
   const friends = new Set<NationId>([attacker, ...alliesOf(s, attacker)])
   let sanctioners = 0
   for (const other of Object.keys(s.nations).sort()) {
-    if (friends.has(other) || !s.nations[other].alive || s.nations[other].overlord === attacker || s.nations[attacker].overlord === other) continue
+    if (friends.has(other) || !s.nations[other].alive || s.nations[other].overlord === attacker || s.nations[other].territoryOf === attacker || s.nations[attacker].overlord === other || s.nations[attacker].territoryOf === other) continue
     if (s.sanctions.some((x) => x.from === other && x.to === attacker && x.until >= s.turn + NUCLEAR.sanctionsMonths - 1)) continue
     s.sanctions = s.sanctions.filter((x) => !(x.from === other && x.to === attacker))
     s.sanctions.push({ from: other, to: attacker, until: s.turn + NUCLEAR.sanctionsMonths })

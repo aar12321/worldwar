@@ -10,6 +10,7 @@ import { createRng } from '../engine/rng'
 import type { GameState, Order } from '../engine/types'
 import { giveRegions, lineMap, setMilitary, startState } from '../engine/__tests__/fixtures'
 import { getWorld } from '../map/world'
+import { TERRITORY } from '../data/territories'
 import { buildTurnContext, generateAllBotOrders, generateBotOrders, peaceTerms } from './bot'
 import { manageCountry, sameSpending, taylorRate, wantedCorporateTax, wantedSpending } from './management'
 
@@ -91,6 +92,8 @@ describe('bot management', () => {
 
   it('Medium and Hard turn a crushing win over a country worth ruling into a puppet, Easy never does', () => {
     const s = startState(map)
+    // About puppets: the Hard bot's option of a territory (territories.test.ts) is switched off here.
+    TERRITORY.ai.maxTerritories = [0, 0, 0]
     // r2 holds three countries (land worth ruling); r1 holds as many, so r2 does not out-earn it.
     giveRegions(s, 'r2', ['r3', 'r4'])
     giveRegions(s, 'r1', ['r0', 'r5'])
@@ -103,6 +106,7 @@ describe('bot management', () => {
     expect(peaceTerms(s, map, 'r1', 'r2', 28, false, 2).puppet).toBe(true)
     s.nations.r2.overlord = 'r3'
     expect(peaceTerms(s, map, 'r1', 'r2', 90, false, 2).puppet).toBeUndefined()
+    TERRITORY.ai.maxTerritories = [0, 0, 1]
   })
 
   it('easy bots keep the old basics and never touch the new levers', () => {

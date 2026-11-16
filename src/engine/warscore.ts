@@ -6,6 +6,7 @@ import { regionWorkforce } from './economy'
 import { clamp, pairKey, totalUnits } from './helpers'
 import { militaryPower } from './militaryStats'
 import { liberationProblem } from './puppets'
+import { territoryProblem, territoryValue } from './territories'
 import type { BattleReport, GameState, NationId, PeaceTerms, RegionId, WorldMap } from './types'
 
 export const WARSCORE = {
@@ -306,6 +307,7 @@ export function termsCost(s: GameState, map: WorldMap, terms: PeaceTerms, propos
     else if (owner === proposer) concession += regionValue(s, map, id)
   }
   if (terms.puppet) demand += puppetValue(s, map, target)
+  if (terms.territory) demand += territoryValue(s, map, target)
   if (terms.liberate !== undefined && s.nations[terms.liberate]) demand += liberateValue(s, map, terms.liberate)
   if (terms.reparations > 0) demand += terms.reparations * 1.2
   else concession += -terms.reparations * 1.2
@@ -316,7 +318,18 @@ export function validatePeaceTerms(s: GameState, map: WorldMap, terms: PeaceTerm
   if (terms.puppet) {
     if (s.nations[target].overlord) return `${s.nations[target].name} is already a puppet`
     if (s.nations[proposer].overlord) return 'A puppet cannot make puppets'
+    if (s.nations[target].territoryOf) return `${s.nations[target].name} is a territory`
+    if (s.nations[proposer].territoryOf) return 'A territory cannot make puppets'
   }
+  if (terms.territory) {
+    if (terms.puppet || terms.liberate !== undefined) return 'A nation cannot be made a territory and a puppet in one deal, or have a puppet freed with it'
+    const why = territoryProblem(s, proposer, target)
+    if (why) return why
+  }
+  // A territory owes no war reparations, to anyone.
+  if (terms.reparations > 0 && s.nations[target]?.territoryOf) return `${s.nations[target].name} is a territory and owes no reparations`
+  if (terms.reparations < 0 && s.nations[proposer]?.territoryOf) return `${s.nations[proposer].name} is a territory and owes no reparations`
+  if (terms.territory && terms.reparations > 0) return 'A territory owes no reparations'
   if (terms.liberate !== undefined) {
     const why = liberationProblem(s, proposer, target, terms.liberate)
     if (why) return why

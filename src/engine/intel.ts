@@ -9,7 +9,7 @@ export function hasIntel(game: GameState, viewer: NationId, target: NationId): b
   const v = game.nations[viewer]
   const t = game.nations[target]
   if (!t) return false
-  if (t.overlord === viewer || v?.overlord === target) return true
+  if (t.overlord === viewer || v?.overlord === target || t.territoryOf === viewer || v?.territoryOf === target) return true
   if (isAllied(game, viewer, target) || atWar(game, viewer, target)) return true
   return (game.intel?.[`${viewer}|${target}`] ?? -1) >= game.turn
 }

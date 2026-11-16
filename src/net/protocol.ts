@@ -12,7 +12,53 @@ export interface RoomSettings {
   /** Seconds each month lasts before the game moves on without the slow players. 0 means wait for everyone. */
   timer: 0 | 60 | 90 | 120 | 180
   seed: number
+  /** 'live': the clock runs and armies march, driven by the host. 'turns': everyone plans a month and presses Ready. Missing means 'turns' (rooms made before live play). */
+  mode?: 'turns' | 'live'
+  /** Live rooms: how fast the clock runs when the game starts. */
+  liveSpeed?: LiveSpeed
+  /** Live rooms: who may pause the clock and change its speed. 'host': only the host (others can ask). 'vote': any player can propose, and more than half of the players here must agree. */
+  liveControl?: ClockControl
 }
+
+export type LiveSpeed = 1 | 2 | 4
+export type ClockControl = 'host' | 'vote'
+
+/** Whether a room plays on the live clock. */
+export const isLiveRoom = (s: Pick<RoomSettings, 'mode'>) => s.mode === 'live'
+
+/** A request to change the shared clock. */
+export type ClockRequest = { kind: 'pause' } | { kind: 'resume' } | { kind: 'speed'; speed: LiveSpeed }
+
+/** A request that some players have asked for and not enough have agreed to yet. */
+export interface ClockVote {
+  req: ClockRequest
+  /** Names of the players who asked for it. */
+  by: string[]
+  need: number
+}
+
+/** The shared clock as every screen shows it. */
+export interface ClockView {
+  running: boolean
+  speed: LiveSpeed
+  /** Who last started, stopped or sped it up, by name. */
+  by: string
+  /** Why it is stopped, when it is not the players' doing. */
+  why?: 'over' | 'away' | 'asleep' | 'start'
+  vote?: ClockVote | null
+}
+
+/** One thing that happened in the host's game, in order. Every screen applies the same items to the same game and gets the same result. */
+export type StreamItem =
+  /** The clock moved on by this many days. */
+  | { k: 'day'; n: number }
+  /** An order the host accepted, from the player `by` (their command number is `cid`). */
+  | { k: 'cmd'; by: ClientId; cid: number; order: Order }
+  | { k: 'clock'; clock: ClockView }
+  /** The nations the AI plays now because their players are away. */
+  | { k: 'ai'; ids: NationId[] }
+  /** A checksum of the game at this absolute day, so a screen that drifted finds out. */
+  | { k: 'fp'; at: number; fp: string }
 
 export interface LobbyPlayer {
   clientId: ClientId
@@ -54,17 +100,27 @@ export type NetMessage =
   | { t: 'orders'; from: ClientId; turn: number; orders: Order[]; ready: boolean }
   | { t: 'ready'; from: ClientId; turn: number; ready: NationId[]; remainingMs: number | null }
   /** A game, in pieces. `to` says who asked for it; everyone else skips it. */
-  | { t: 'state'; from: ClientId; id: string; part: number; parts: number; data: string; turn: number; remainingMs: number | null; hostTerm: number; to?: ClientId }
+  | { t: 'state'; from: ClientId; id: string; part: number; parts: number; data: string; turn: number; remainingMs: number | null; hostTerm: number; to?: ClientId; liveSeq?: number; clock?: ClockView }
   | { t: 'need-state'; from: ClientId }
   | { t: 'chat'; from: ClientId; name: string; text: string; at: number }
   /** Each heartbeat also says who this screen thinks the host is, so two hosts find each other. */
-  | { t: 'ping'; from: ClientId; name: string; host: ClientId | null; term: number }
+  | { t: 'ping'; from: ClientId; name: string; host: ClientId | null; term: number; ts?: number; rtt?: number; hidden?: boolean }
   | { t: 'claim-host'; from: ClientId; term: number }
   /** The host sends a player away. */
   | { t: 'kick'; from: ClientId; target: ClientId }
   /** The host answers a newcomer to a running game with the seats that are free. */
   | { t: 'seats'; from: ClientId; to: ClientId; seats: OpenSeat[] }
   | { t: 'take-seat'; from: ClientId; nationId: NationId; name: string }
+  /** Live rooms: the host's ordered account of its game. `seq` counts up by one with each message, so a screen can tell it missed one. */
+  | { t: 'stream'; from: ClientId; term: number; seq: number; items: StreamItem[] }
+  /** Live rooms: a player's order for the host. `cid` counts that player's orders, so one sent twice is done once. */
+  | { t: 'cmd'; from: ClientId; cid: number; order: Order }
+  /** Live rooms: the host's answer to one order, to the player who sent it. */
+  | { t: 'ack'; from: ClientId; to: ClientId; cid: number; ok: boolean; reason?: string }
+  /** Live rooms: a player asks to pause, resume or change the speed. */
+  | { t: 'clock-req'; from: ClientId; req: ClockRequest }
+  /** Live rooms: the host answers a heartbeat at once, so the sender can tell how long the line takes. */
+  | { t: 'pong'; from: ClientId; to: ClientId; ts: number }
 
 /** Room codes avoid letters that look alike, so they can be read out loud. */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'

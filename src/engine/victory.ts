@@ -1,9 +1,10 @@
 import { scenarioGoalSentence } from '../data/scenarios'
 import { UNIT_SPECS } from '../data/unitTypes'
 import { tierSpec } from '../data/empire'
-import { forceUnits, puppetsOf, regionsOf, totalUnits } from './helpers'
+import { forceUnits, puppetsOf, regionsOf, territoriesOf, totalUnits } from './helpers'
 import { computeEconomy } from './economy'
 import { countWeight } from './puppets'
+import { territoryCountWeight } from './territories'
 import type { GameState, NationId, WorldMap } from './types'
 
 export function populationShare(s: GameState, nationId: NationId): number {
@@ -26,7 +27,7 @@ export function conquestGoal(victoryShare: number): number {
 /** Countries the player holds that were not the country they started as. */
 export function countriesTaken(s: GameState, id: NationId = s.playerId): number {
   // A puppet counts as half a country, more when it is loyal and less when it is restive (the weights the empire tier uses).
-  return regionsOf(s, id).filter((r) => r !== id).length + Math.floor(puppetsOf(s, id).reduce((sum, p) => sum + countWeight(s.nations[p]), 0))
+  return regionsOf(s, id).filter((r) => r !== id).length + Math.floor(puppetsOf(s, id).reduce((sum, p) => sum + countWeight(s.nations[p]), 0)) + territoryCountWeight(s, id)
 }
 
 /** Share of the world's output needed to win by economy: well under the conquest goals, but only big economies get there. */
@@ -59,12 +60,14 @@ export function worldGross(s: GameState, map: WorldMap): number {
 export function controlled(s: GameState, id: NationId): number {
   let total = regionsOf(s, id).length
   for (const p of puppetsOf(s, id)) total += regionsOf(s, p).length
+  // Territories are held land: they count for the map, never for people or output.
+  for (const q of territoriesOf(s, id)) total += regionsOf(s, q).length
   return total
 }
 
 /** True when every country still on the map is the nation's own or a puppet of it, however many steps down. */
 export function holdsTheWorld(s: GameState, id: NationId): boolean {
-  const lord = (n: string): string | null => s.nations[n]?.overlord ?? null
+  const lord = (n: string): string | null => s.nations[n]?.overlord ?? s.nations[n]?.territoryOf ?? null
   for (const n of Object.values(s.nations)) {
     if (!n.alive || n.id === id) continue
     let at: string | null = n.id
