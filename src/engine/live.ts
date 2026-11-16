@@ -6,10 +6,11 @@ import { addLog, atWar, newId, totalUnits } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { runMonth } from './resolveTurn'
 import { createRng } from './rng'
+import { interception } from './deployment'
 import { strikeHits } from './systems'
 import { detonate, nukeCalledOff } from './nuclear'
 import { jointDay } from './coalition'
-import type { Army, ArmyOutcome, AttackOrder, BattleReport, GameState, MissileFlight, NukeFlight, Order, TrainingJob, WorldMap } from './types'
+import type { Army, ArmyOutcome, AttackOrder, BattleReport, GameState, MissileFlight, NationId, NukeFlight, Order, RegionId, TrainingJob, Via, WorldMap } from './types'
 import { checkOutcome } from './victory'
 import { resolveAttack } from './warfare'
 
@@ -35,6 +36,10 @@ export type LiveEvent =
   /** A rival launched a nuclear missile as the month turned: the alert, with the day it lands. */
   | { kind: 'nukeLaunched'; flight: NukeFlight }
   | { kind: 'trained'; jobs: TrainingJob[] }
+  /** The defender's patrols sighted a landing force setting out for its coast: early warning, with the share they expect to sink. */
+  | { kind: 'contact'; army: Army; watcher: NationId; expected: number }
+  /** The defender's patrols met a landing at sea and sank part of it. The battle that follows is in `battle`. */
+  | { kind: 'intercept'; battleId: string; by: NationId; against: NationId; place: RegionId; sunk: number; via: Via }
 
 export interface LiveStep {
   state: GameState
@@ -110,6 +115,12 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
       if (!army) continue
       s.nations[l.order.nationId].resources.capital -= cost
       events.push({ kind: 'launched', army: snapshot(army) })
+      // A nation whose patrols watch its waters sights a landing force the day it sets out.
+      const watcher = s.regions[army.target]?.owner
+      if (army.bySea && watcher && s.nations[watcher]?.military.deployment) {
+        const expected = interception(s, watcher, army.via, army.units).share
+        if (expected > 0) events.push({ kind: 'contact', army: snapshot(army), watcher, expected })
+      }
     }
   }
 
@@ -155,6 +166,7 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
     a.outcome = report.captured ? 'captured' : report.winner === 'attacker' ? 'won' : 'repulsed'
     const destroyed = totalUnits(a.units) < 0.05
     events.push({ kind: 'battle', report, armyId: a.id, destroyed })
+    if (report.intercept) events.push({ kind: 'intercept', battleId: report.id, by: report.intercept.by, against: a.nationId, place: a.target, sunk: report.intercept.sunk, via: report.intercept.via })
     if (destroyed) {
       s.armies = (s.armies ?? []).filter((x) => x.id !== a.id)
     } else {

@@ -29,6 +29,7 @@ import { activeLocal, localLevel, localProblem } from './works'
 import { electionNeed } from './people'
 import type { BuildingType, GameState, Milestone, NationId, Order, ProjectId, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
+import { threatWatch } from './threats'
 import { canAttackRegion, forecastAttack, garrisonStrength } from './warfare'
 import { netWarScore } from './warscore'
 
@@ -39,7 +40,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
   | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' }
-  | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' | 'armies' }
+  | { desk: 'military'; tab: 'forces' | 'deploy' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
   | { desk: 'faction' }
@@ -90,6 +91,15 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       action: 'See the armies',
       target: { desk: 'military', tab: 'armies' },
     })
+  }
+
+  // Active military: a rival that can reach you with nobody watching, and forces that have never been stationed.
+  const watch = threatWatch(s, map, nationId)
+  const danger = watch.find((x) => x.level === 'high')
+  if (danger) {
+    add('now', 95, { id: `watch-${danger.nation}-${danger.route}`, title: `${s.nations[danger.nation]?.name ?? 'A rival'} can reach you and the way in is not guarded`, detail: danger.text, action: 'Post forces', target: { desk: 'military', tab: 'deploy' } })
+  } else if (!n.military.deployment && myUnits >= 3 && (watch.length > 0 || enemies.length > 0)) {
+    add('idea', 36, { id: 'station-forces', title: 'Station your forces', detail: 'Nothing of yours is on patrol or guarding a border, so a rival that strikes first meets no garrison and no patrols. Post part of your fleet, air force and troops, and keep the rest in reserve to attack with.', action: 'Open Deployment', target: { desk: 'military', tab: 'deploy' } })
   }
 
   // Struck with missiles lately: answer in kind if you can, or build the means. The same goes for turn and live games.

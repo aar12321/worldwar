@@ -2,6 +2,7 @@ import { TECH_BY_ID } from '../data/techTree'
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingRank } from '../data/unitTypes'
 import { aircraftSources } from './aircraft'
 import { combatMods } from './arms'
+import { freeUnits, postedUnits } from './deployment'
 import { COMBAT, hasCombinedArms } from './combat'
 import { forceUnits, nationModifiers, totalUnits } from './helpers'
 import { trainingSlots } from './training'
@@ -47,6 +48,9 @@ export interface MilitarySheet {
   combinedArmsBonus: number
   trainingSlots: number
   trainingUsed: number
+  /** Divisions on station (patrols, screens, garrisons) and divisions in the reserve, free to attack. */
+  onStation: number
+  reserve: number
 }
 
 /**
@@ -105,6 +109,8 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
     combinedArmsBonus: COMBAT.combinedArmsBonus + base.combinedArms,
     trainingSlots: trainingSlots(s, nationId),
     trainingUsed: (s.trainingQueue ?? []).filter((j) => j.nationId === nationId).length,
+    onStation: totalUnits(postedUnits(s, nationId)),
+    reserve: totalUnits(freeUnits(s, nationId)),
   }
 }
 
@@ -119,4 +125,14 @@ export function homePower(s: GameState, nationId: NationId): number {
   if (!s.nations[nationId]) return 0
   if (!s.armies?.some((a) => a.nationId === nationId)) return militaryPower(s, nationId)
   return militarySheet({ ...s, armies: [] }, nationId).totalPower
+}
+
+/** Strength of the reserve: what a nation can send to attack. The same as `militaryPower` for a nation with nothing on station. */
+export function freePower(s: GameState, nationId: NationId): number {
+  const n = s.nations[nationId]
+  if (!n) return 0
+  if (!n.military.deployment) return militaryPower(s, nationId)
+  const sheet = militarySheet(s, nationId)
+  const free = freeUnits(s, nationId)
+  return sheet.units.reduce((sum, l) => sum + (l.count > 0 ? l.power * Math.min(1, free[l.unit] / l.count) : 0), 0)
 }

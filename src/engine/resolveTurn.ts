@@ -16,6 +16,8 @@ import { applyBuildMissiles, applyFundMissiles } from './missiles'
 import { applyBuildWarhead, fireNuke, launchNuke, runNuclear } from './nuclear'
 import { runCoalitions } from './coalition'
 import { applySpace, describeSpace, runSpaceWorld } from './space'
+import { applyDeployment, runDeployment } from './deployment'
+import { applySetBorder } from './borders'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -183,6 +185,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Launch a nuclear missile at ${region(o.target)}`
     case 'space':
       return describeSpace(o.action)
+    case 'setDeployment':
+      return 'Post forces on station'
+    case 'setBorder':
+      return `${o.closed ? 'Close' : 'Reopen'} the border with ${nation(o.neighbor)}`
     case 'fundMissiles':
       return 'Raise the missile program'
     case 'buildMissiles':
@@ -251,7 +257,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
 const PHASES: Order['type'][][] = [
   ['eventChoice'],
   ['respond'],
-  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital'],
+  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
   ['factionFound', 'factionJoin', 'factionInvite'],
   ['factionLeave'],
@@ -370,6 +376,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runFactionMonth(s)
   runPolitics(s, map, rng)
   runEpidemics(s, map, nationNeighborMap(s, map), doctors)
+  runDeployment(s, map)
   runJustification(s, map, rng)
   runCrises(s, map, rng)
   runStocks(s, map, rng)
@@ -680,6 +687,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'space':
       applySpace(s, n, o.action)
+      break
+    case 'setDeployment':
+      applyDeployment(s, map, o)
+      break
+    case 'setBorder':
+      applySetBorder(s, o)
       break
     case 'fundMissiles':
       applyFundMissiles(s, n)

@@ -26,6 +26,7 @@ import { COVERAGE, EPIDEMIC, IMMIGRATION, PEOPLE } from '../data/people'
 import { ACADEMY, ARMS_EXPORTS, ENTERPRISE, GENERAL_TRAITS } from '../data/projects'
 import { bankCredit, inflationStability, interestOf, policyRate, realIncomeFactor, runBank, seigniorage } from './bank'
 import { accordTrade } from './council'
+import { lineBonus } from './deployment'
 import { adminReport, combineTraits, occupationFloor, settleSpeed, type AdminReport } from './empire'
 import { activeProjects, armsExportIncome, enterpriseIncome, industryCapMult, powerMult, programEffects, projectBill, projectPower, projectSpeed, runArmsExports, runProjects, scaleBonus, scaleFactor, worksEffects } from './industry'
 import { activeLocal, localBill, localEffects, runLocalProjects } from './works'
@@ -82,7 +83,7 @@ export function lineMax(s: GameState, map: WorldMap, regionId: string): number {
   const r = s.regions[regionId]
   const owner = s.nations[r.owner]
   const capital = owner?.capital === regionId ? WAR.lineCapital : owner?.regionalCapitals?.includes(regionId) ? EMPIRE_RULES.regionalCapitalLine : 0
-  return (TRAITS[traitOf(regionId, map.regions[regionId])].line ?? 0) + cityEffects(r).line + localEffects(r, map.regions[regionId]).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital
+  return (TRAITS[traitOf(regionId, map.regions[regionId])].line ?? 0) + cityEffects(r).line + localEffects(r, map.regions[regionId]).line + WAR.lineBase + regionWorkforce(r, map.regions[regionId]) * WAR.linePerWorkforce + r.buildings.barracks * WAR.linePerBarracks + capital + lineBonus(s, map, regionId)
 }
 
 /** Share of a country's output that counts, rising as conquered land is integrated (and, after a nuclear strike, as the ruins heal). The occupation policy sets the floor. */

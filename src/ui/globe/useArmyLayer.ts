@@ -30,7 +30,7 @@ export interface ArmyDatum {
   size: number
 }
 
-interface PathDatum {
+export interface PathDatum {
   id: string
   points: [number, number, number][]
   color: string
@@ -38,6 +38,8 @@ interface PathDatum {
   gap: number
   animate: number
   key: string
+  /** Line width. Routes use the default; border lines set their own. */
+  stroke?: number
 }
 
 interface ArcDatum {
@@ -73,7 +75,7 @@ const pathDashGap = (d: object) => (d as PathDatum).gap
 const pathDashAnimateTime = (d: object) => (d as PathDatum).animate
 /** How high above the countries badges and routes ride, clear of the raised countries you can attack or have selected. */
 const ARMY_ALT = 0.05
-const pathStroke = () => 3.2
+const pathStroke = (d: object) => (d as PathDatum).stroke ?? 3.2
 const arcColor = (d: object) => ((d as ArcDatum).nuke ? ['rgba(255,255,255,1)', 'rgba(255,45,149,1)'] : MISSILE_ARC[(d as ArcDatum).kind])
 /** Ballistic missiles are drawn heavier than cruise missiles, and a warhead heaviest of all. */
 const arcStroke = (d: object) => ((d as ArcDatum).nuke ? 1.5 : (d as ArcDatum).kind === 'ballistic' ? 0.8 : (d as ArcDatum).kind === 'cruise' ? 0.35 : 0.5)

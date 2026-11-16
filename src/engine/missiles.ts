@@ -3,6 +3,7 @@ import { AIRCRAFT_RULES, type AircraftEffects } from '../data/aircraft'
 import { MISSILES, MISSILE_PROGRAM, MISSILE_TYPES, PROGRAM_MISSILES } from '../data/missiles'
 import { aircraftEffects, pastDefenses } from './aircraft'
 import { interceptFactor } from './combat'
+import { airPatrolStop, patrolFighters } from './deployment'
 import { addInfamy, addLog, atWar, canUseUnit, clamp, distanceKm } from './helpers'
 import type { GameState, MissileFlight, MissileType, Nation, NationId, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -104,7 +105,9 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   const place = map.regions[target].name
   const fxA = aircraftEffects(n)
   const fxD = aircraftEffects(victim)
-  const through = getsThrough(victim.systems?.shield ?? 0, kind, fxA || fxD ? { attacker: fxA, defender: fxD, fighters: victim.military.units.fighter } : undefined)
+  // The victim's air patrols shoot some of a salvo down before the shield does its work.
+  const patrol = airPatrolStop(s, victim.id, kind)
+  const through = getsThrough(victim.systems?.shield ?? 0, kind, fxA || fxD ? { attacker: fxA, defender: fxD, fighters: victim.military.units.fighter + patrolFighters(s, victim.id) } : undefined) * (1 - patrol)
   const stopped = Math.round((1 - through) * 100)
   const parts: string[] = []
   if (spec.line > 0) {
@@ -142,7 +145,8 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   if (spec.opinion) addOpinion(s, region.owner, nationId, 'Bombarded us with ballistic missiles', spec.opinion, 0.3)
   // The struck nation remembers, and a nation that can answer will.
   ;(victim.struckBy ??= {})[nationId] = s.turn
-  addLog(s, 'battle', `${fired} ${spec.name.toLowerCase()}${fired === 1 ? '' : 's'} from ${n.name} hit ${place}${stopped > 0 ? ` (${fxD && fxD.hunt > 0 ? 'shield and fighters' : 'the shield'} stopped ${stopped}%)` : ''}: ${parts.join(', ') || 'little damage'}.`, [nationId, region.owner])
+  const stoppedBy = patrol > 0.005 ? 'the shield and the air patrols' : fxD && fxD.hunt > 0 ? 'shield and fighters' : 'the shield'
+  addLog(s, 'battle', `${fired} ${spec.name.toLowerCase()}${fired === 1 ? '' : 's'} from ${n.name} hit ${place}${stopped > 0 ? ` (${stoppedBy} stopped ${stopped}%)` : ''}: ${parts.join(', ') || 'little damage'}.`, [nationId, region.owner])
 }
 
 // ---- The missile program ----

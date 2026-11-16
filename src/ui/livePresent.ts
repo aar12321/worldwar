@@ -1,6 +1,8 @@
 import { UNIT_SPECS } from '../data/unitTypes'
 import { absDate } from '../engine/calendar'
 import { lineMax } from '../engine/economy'
+import { guessDivisions, hasIntel, showDivisions } from '../engine/intel'
+import { totalUnits } from '../engine/helpers'
 import type { LiveEvent, LiveStep } from '../engine/live'
 import type { Army, BattleReport, GameState, NationId } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -141,6 +143,24 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
           else say('error', `${nation(e.flight.nationId)} used a nuclear weapon on ${place(target)}. The world is in shock.`)
         } else if (e.flight.nationId === player) say('info', `Your nuclear missile did not land: ${e.why === 'taken' ? `${place(target)} was already yours` : e.why === 'changed' ? `${place(target)} changed hands` : 'the war ended first'}.`)
         else if (victim === player) say('success', `The nuclear missile aimed at ${place(target)} was called off: ${e.why === 'peace' ? 'the war ended' : 'the target changed'}.`)
+        break
+      }
+      case 'contact': {
+        // Early warning: the patrols of a nation that watches its waters sight a landing force the day it sets out.
+        if (e.watcher !== player) break
+        const exact = hasIntel(game, player, e.army.nationId)
+        const size = totalUnits(e.army.units)
+        const seen = showDivisions(exact ? size : guessDivisions(game, player, e.army.nationId, 'contact', size), exact)
+        const impact = map.regions[e.army.target]
+        if (impact) useFx.getState().addRing({ lat: impact.lat, lng: impact.lng, color: '#64d2ff', maxRadius: 3.4 }, 2200)
+        say('error', `Your patrols sighted ${nation(e.army.nationId)}'s landing force (${seen} divisions) heading for ${place(e.army.target)}. It arrives ${absDate(e.army.end)}. Your patrols should sink about ${Math.round(e.expected * 100)}% of it.`)
+        break
+      }
+      case 'intercept': {
+        const impact = map.regions[e.place]
+        if (impact) useFx.getState().addRing({ lat: impact.lat, lng: impact.lng, color: '#64d2ff', maxRadius: 3 }, 1800)
+        if (e.by === player) say('success', `Your patrols intercepted ${nation(e.against)}'s landing on ${place(e.place)} and sank ${e.sunk.toFixed(1)} divisions of it.`)
+        else if (e.against === player) say('error', `${nation(e.by)}'s patrols intercepted your landing on ${place(e.place)}: ${e.sunk.toFixed(1)} divisions were lost at sea.`)
         break
       }
       case 'trained': {

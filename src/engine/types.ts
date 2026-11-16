@@ -289,6 +289,38 @@ export interface Military {
   attacksThisTurn: number
   /** Share of the military committed this turn (0 to 1). Those units defend at half strength until the turn ends. */
   exposed: number
+  /** Where the forces stand guard: patrols, the submarine screen, border garrisons. Absent until the nation sets a posture. */
+  deployment?: Deployment
+}
+
+/**
+ * A standing posture: shares of each arm on station (see `engine/deployment.ts`). What is not on station is the reserve, the only
+ * part that can be sent to attack. Everything on station still costs upkeep and oil, and still defends, best at its own post.
+ */
+export interface Deployment {
+  /** Share of the warships on coastal patrol, 0 to 1. */
+  coastal: number
+  /** Share of the warships in the submarine screen. `coastal` and `subs` add up to at most 1. */
+  subs: number
+  /** Share of the fighters and drones flying air patrols. */
+  air: number
+  /** Share of the ground forces (infantry, tanks, artillery, robots) on the border with each neighboring nation. All the shares add up to at most 1. */
+  border: Record<NationId, number>
+  /** The month the posture last changed. It can change once a month. */
+  changed: number
+  /** How many of the nation's countries lie along each border it garrisons, as of the last month's upkeep. Spares the map a search every time. */
+  fronts?: Record<NationId, number>
+}
+
+/** What a pair of neighbors remember about their border: incidents, and who has closed it. Absent until something happens. */
+export interface BorderRecord {
+  /** Heat from border incidents as it stood in month `at`. It fades every month. */
+  heat?: number
+  at?: number
+  /** Border incidents so far. */
+  incidents?: number
+  /** Nations that have closed this border. */
+  closedBy?: NationId[]
 }
 
 export interface Resources {
@@ -631,6 +663,10 @@ export type Order =
   | { type: 'pauseAircraftDev'; nationId: NationId; node: AircraftNodeId; paused: boolean }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId; /** How many levels to buy at once. One if left out. */ levels?: number }
   | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
+  /** Posts forces on station. The shares replace the nation's whole posture; what is left over is the reserve. */
+  | { type: 'setDeployment'; nationId: NationId; coastal: number; subs: number; air: number; border: Record<NationId, number> }
+  /** Closes or reopens the border with a neighboring nation. */
+  | { type: 'setBorder'; nationId: NationId; neighbor: NationId; closed: boolean }
   | { type: 'buyShares'; nationId: NationId; company: string; shares: number }
   | { type: 'sellShares'; nationId: NationId; company: string; shares: number }
   | { type: 'setDirective'; nationId: NationId; company: string; directive: Directive }
@@ -673,6 +709,17 @@ export interface BattleRound {
   defenderLosses: UnitCounts
 }
 
+/** A landing met by the defender's patrols: who sank how many divisions of it before it came ashore. */
+export interface Interception {
+  by: NationId
+  /** Divisions of the landing force sunk or shot down. */
+  sunk: number
+  /** Share of the force that was lost. */
+  share: number
+  /** How the crossing went: the route. */
+  via: Via
+}
+
 export interface BattleReport {
   id: string
   turn: number
@@ -693,6 +740,10 @@ export interface BattleReport {
   armyId?: string
   /** The player chose how much of the military to send, instead of a preset. */
   chosen?: boolean
+  /** The defender's patrols met the landing at sea and sank part of it. */
+  intercept?: Interception
+  /** A surprise attack on a border nobody was guarding: how much stronger it made the attacker. */
+  surprise?: number
   /** Set by the screen on a battle watched again from the list, so the globe does not treat it as news. */
   replay?: boolean
 }
@@ -853,6 +904,8 @@ export interface GameState {
   factions?: Faction[]
   /** Who holds each world beyond Earth, and how many flights the world has flown. Absent until someone starts a space program. */
   space?: SpaceWorld
+  /** What neighbors remember about their borders, by sorted "a|b" key: incidents and closures. Absent until something happens. */
+  borders?: Record<string, BorderRecord>
   /** Live mode only: the day of the month, from 0. `turn` is still the month. */
   day?: number
   /** Live mode only: armies marching, fighting or coming home. */
