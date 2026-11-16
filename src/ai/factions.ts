@@ -18,17 +18,47 @@ function hashString(str: string): number {
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
 
-/** Whether a rival takes up an invitation: it likes the members, and has not been told by its difficulty to stay out of such things. */
-export function botAcceptsInvite(s: GameState, map: WorldMap, botId: NationId, f: Faction, rng: Rng): boolean {
-  if (!difficultyOf(s.settings.difficulty).coalitions) return false
+/** How much a rival wants to join a faction, before the die is cast: it likes the members, has allies among them, and is loyal. Null when it never would. */
+export function inviteScore(s: GameState, map: WorldMap, botId: NationId, f: Faction): number | null {
+  if (!difficultyOf(s.settings.difficulty).coalitions) return null
   const me = s.nations[botId]
-  if (!me?.alive || me.overlord) return false
+  if (!me?.alive || me.overlord) return null
   const persona = PERSONALITIES[me.personality ?? 'honorable']
   const feel = mean(f.members.map((m) => opinionOf(s, map, botId, m, { coalition: false })))
   // Someone it is at war with, or whose enemy it must now fight beside, is a poor partner.
-  if (f.members.some((m) => atWar(s, botId, m))) return false
+  if (f.members.some((m) => atWar(s, botId, m))) return null
   const friends = f.members.filter((m) => isAllied(s, botId, m)).length
-  return feel + friends * 12 + (persona.loyalty - 1) * 12 + rng.range(-4, 4) >= 8
+  return feel + friends * 12 + (persona.loyalty - 1) * 12
+}
+
+/** Whether a rival takes up an invitation: it likes the members, and has not been told by its difficulty to stay out of such things. */
+export function botAcceptsInvite(s: GameState, map: WorldMap, botId: NationId, f: Faction, rng: Rng): boolean {
+  const score = inviteScore(s, map, botId, f)
+  if (score === null) return false
+  return score + rng.range(-4, 4) >= 8
+}
+
+/** How a rival is likely to answer an invitation, for the screen: the die adds or takes at most 4 from the bar of 8. */
+export function inviteOutlook(s: GameState, map: WorldMap, botId: NationId, f: Faction): 'likely' | 'unsure' | 'unlikely' {
+  const score = inviteScore(s, map, botId, f)
+  if (score === null || score < 4) return 'unlikely'
+  return score >= 12 ? 'likely' : 'unsure'
+}
+
+/** How the members (all rivals) feel about a nation that asks to join: they like it, or have friends in common. */
+export function requestScore(s: GameState, map: WorldMap, f: Faction, asker: NationId): number | null {
+  if (!difficultyOf(s.settings.difficulty).coalitions) return null
+  if (f.members.some((m) => atWar(s, m, asker))) return null
+  const feel = mean(f.members.map((m) => opinionOf(s, map, m, asker, { coalition: false })))
+  const friends = f.members.filter((m) => isAllied(s, m, asker) || hasPact(s, m, asker)).length
+  return feel + friends * 8
+}
+
+/** Whether a faction run by rivals lets a nation in that asked. */
+export function botAdmits(s: GameState, map: WorldMap, f: Faction, asker: NationId, rng: Rng): boolean {
+  const score = requestScore(s, map, f, asker)
+  if (score === null) return false
+  return score + rng.range(-4, 4) >= 8
 }
 
 type TryAdd = (o: Order) => boolean

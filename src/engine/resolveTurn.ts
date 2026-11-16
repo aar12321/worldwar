@@ -269,6 +269,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Join ${s.factions?.find((f) => f.id === o.factionId)?.name ?? 'a faction'}`
     case 'factionInvite':
       return `Invite ${nation(o.target)} to the faction`
+    case 'factionRequest':
+      return `Ask to join ${s.factions?.find((f) => f.id === o.factionId)?.name ?? 'a faction'}`
     case 'factionLeave':
       return `Leave ${factionOf(s, o.nationId)?.name ?? 'the faction'}`
     case 'factionContribute':
@@ -298,7 +300,7 @@ const PHASES: Order['type'][][] = [
   ['respond'],
   ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder', 'setAlert', 'showOfForce', 'governPuppet'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
-  ['factionFound', 'factionJoin', 'factionInvite'],
+  ['factionFound', 'factionJoin', 'factionInvite', 'factionRequest'],
   ['factionLeave'],
   ['factionContribute', 'factionWithdraw'],
   ['factionPropose'],

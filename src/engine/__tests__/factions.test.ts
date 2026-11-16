@@ -149,7 +149,8 @@ describe('founding, inviting, joining and leaving', () => {
     easy.settings.difficulty = 'easy'
     ok(easy, { type: 'factionFound', nationId: 'r0', name: 'Iron Pact' })
     addOpinion(easy, 'r1', 'r0', 'Friends', 60, 0.1)
-    ok(easy, { type: 'factionInvite', nationId: 'r0', target: 'r1' })
+    // The order is refused with the reason, instead of being spent and turned down in silence.
+    expect(refused(easy, { type: 'factionInvite', nationId: 'r0', target: 'r1' })).toMatch(/will not join a faction on this difficulty/)
     expect(factionOf(easy, 'r1')).toBeNull()
   })
 

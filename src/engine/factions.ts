@@ -1,5 +1,6 @@
-import { botAcceptsInvite } from '../ai/factions'
+import { botAcceptsInvite, botAdmits } from '../ai/factions'
 import { addOpinion } from '../ai/opinion'
+import { difficultyOf } from '../data/difficulty'
 import { DEFAULT_CHARTER, FACTION, FACTION_WORDS, POOL_NAMES } from '../data/factions'
 import { COSTS, UNIT_SPECS } from '../data/unitTypes'
 import { JUSTIFY, REACH } from '../data/war'
@@ -9,6 +10,7 @@ import { militaryPower } from './militaryStats'
 import type { Rng } from './rng'
 import { marketPrices } from './trade'
 import type {
+  DispatchKind,
   Faction,
   FactionCharter,
   FactionContract,
@@ -35,9 +37,9 @@ import { launchFactionArmy, settleFactionArmy } from './armies'
 import { isLive } from './calendar'
 import { canAttackRegion, carryNeeded, resolveAttack, transferRegion } from './warfare'
 
-type FactionOrder = Extract<Order, { type: 'factionFound' | 'factionJoin' | 'factionInvite' | 'factionLeave' | 'factionContribute' | 'factionWithdraw' | 'factionPropose' | 'factionVote' }>
+type FactionOrder = Extract<Order, { type: 'factionFound' | 'factionJoin' | 'factionInvite' | 'factionRequest' | 'factionLeave' | 'factionContribute' | 'factionWithdraw' | 'factionPropose' | 'factionVote' }>
 
-export const FACTION_ORDERS = new Set<Order['type']>(['factionFound', 'factionJoin', 'factionInvite', 'factionLeave', 'factionContribute', 'factionWithdraw', 'factionPropose', 'factionVote'])
+export const FACTION_ORDERS = new Set<Order['type']>(['factionFound', 'factionJoin', 'factionInvite', 'factionRequest', 'factionLeave', 'factionContribute', 'factionWithdraw', 'factionPropose', 'factionVote'])
 export const isFactionOrder = (o: Order): o is FactionOrder => FACTION_ORDERS.has(o.type)
 
 const nm = (s: GameState, id: NationId) => s.nations[id]?.name ?? id
@@ -172,6 +174,9 @@ export function factionOrderCost(s: GameState, o: Order): { capital: number; pp:
         c.capital = o.gift.stock?.money ?? 0
         c.steel = o.gift.stock?.steel ?? 0
       }
+      break
+    case 'factionRequest':
+      c.pp = FACTION.requestInfluence
       break
     case 'factionPropose':
       c.pp = o.proposal?.kind === 'war' ? warInfluence(s, o.nationId, o.proposal.target) : FACTION.contractInfluence
@@ -329,11 +334,28 @@ export function factionProblem(s: GameState, map: WorldMap, o: FactionOrder, pen
       if (!mine) return 'You are not in a faction'
       const t = s.nations[o.target]
       if (!t?.alive || o.target === o.nationId) return 'Choose another nation'
-      if (factionOf(s, o.target)) return `${t.name} is already in a faction`
+      const theirs = factionOf(s, o.target)
+      if (theirs) return `${t.name} is already in a faction (${theirs.id === mine.id ? 'yours' : theirs.name})`
       if (t.overlord) return `${t.name} is a puppet`
       if (mine.members.length >= FACTION.maxMembers) return 'The faction is full'
-      if (atWarWithAny(s, o.target, mine)) return `${t.name} is at war with a member`
+      const foe = mine.members.find((m) => atWar(s, o.target, m))
+      if (foe) return `${t.name} is at war with a member (${nm(s, foe)})`
       if (mine.invites.some((i) => i.nation === o.target && i.expires >= s.turn) || pending.some((p) => p.type === 'factionInvite' && p.target === o.target)) return 'Already invited'
+      // A rival that its difficulty keeps out of such things turns every invitation down; say so instead of letting the order be wasted.
+      if (!isHuman(s, o.target) && !difficultyOf(s.settings.difficulty).coalitions && !mine.requests?.some((r) => r.nation === o.target && r.expires >= s.turn)) return `${t.name} will not join a faction on this difficulty`
+      return null
+    }
+    case 'factionRequest': {
+      if (mine) return `You are already in ${mine.name}`
+      if (n.overlord) return 'A puppet cannot join a faction'
+      const f = factionById(s, o.factionId)
+      if (!f) return 'No such faction'
+      if (f.members.length >= FACTION.maxMembers) return `${f.name} is full`
+      const foe = f.members.find((m) => atWar(s, o.nationId, m))
+      if (foe) return `You are at war with ${nm(s, foe)}, a member of ${f.name}`
+      if (f.invites.some((i) => i.nation === o.nationId && i.expires >= s.turn)) return `${f.name} has already invited you: join it`
+      if (f.requests?.some((r) => r.nation === o.nationId && r.expires >= s.turn) || pending.some((p) => p.type === 'factionRequest')) return 'Already asked'
+      if (!f.members.some((m) => isHuman(s, m)) && !difficultyOf(s.settings.difficulty).coalitions) return `Rivals on this difficulty keep ${f.name} closed`
       return null
     }
     case 'factionLeave': {
@@ -428,6 +450,15 @@ function say(s: GameState, f: Faction, text: string, kind: 'diplomacy' | 'war' =
   addLog(s, kind, text, [...new Set([...f.members, ...extra])])
 }
 
+const isHuman = (s: GameState, id: NationId) => s.humans.includes(id) || !!s.nations[id]?.isPlayer
+
+/** A line for the Diplomacy desk about how an invitation or request went, when a player is on either side of it. Rivals among themselves are not news. */
+function tell(s: GameState, kind: DispatchKind, from: NationId, to: NationId, text: string) {
+  if (!isHuman(s, from) && !isHuman(s, to)) return
+  s.dispatches.push({ kind, from, to, proposalKind: 'faction', text })
+  addLog(s, 'diplomacy', text, [from, to])
+}
+
 function pickName(raw: unknown) {
   return sanitizeName(raw).slice(0, FACTION.nameMax)
 }
@@ -460,24 +491,50 @@ export function executeFactionOrder(s: GameState, map: WorldMap, o: FactionOrder
     }
     case 'factionJoin': {
       const f = factionById(s, o.factionId)!
+      const inv = f.invites.find((i) => i.nation === o.nationId)
       join(s, f, o.nationId)
+      if (inv) tell(s, 'accepted', o.nationId, inv.by, `${n.name} accepted your invitation to ${f.name}.`)
       break
     }
     case 'factionInvite': {
       const f = factionOf(s, o.nationId)!
       const t = s.nations[o.target]
+      // It asked to come in, and a member now says yes: it is in.
+      if (f.requests?.some((r) => r.nation === o.target && r.expires >= s.turn) && !factionOf(s, o.target) && f.members.length < FACTION.maxMembers) {
+        join(s, f, o.target)
+        tell(s, 'accepted', o.target, o.nationId, `${t.name} is now in ${f.name}: ${n.name} took its request.`)
+        break
+      }
       // A rival answers at once; a player finds the invitation waiting and answers with a join order.
-      if (!s.humans.includes(o.target) && !t.isPlayer) {
+      if (!isHuman(s, o.target)) {
         if (botAcceptsInvite(s, map, o.target, f, rng)) {
           join(s, f, o.target)
+          tell(s, 'accepted', o.target, o.nationId, `${t.name} accepted your invitation to ${f.name}.`)
         } else {
           addOpinion(s, o.nationId, o.target, 'Turned down our faction', -2, 0.5)
           f.history.push({ turn: s.turn, text: `${t.name} turned down the invitation to ${f.name}.` })
+          tell(s, 'rejected', o.target, o.nationId, `${t.name} turned down your invitation to ${f.name}.`)
         }
         break
       }
       f.invites.push({ nation: o.target, by: o.nationId, expires: s.turn + FACTION.inviteMonths })
       say(s, f, `${n.name} invited ${t.name} to ${f.name}.`, 'diplomacy', [o.target])
+      break
+    }
+    case 'factionRequest': {
+      const f = factionById(s, o.factionId)!
+      if (f.members.some((m) => isHuman(s, m))) {
+        ;(f.requests ??= []).push({ nation: o.nationId, expires: s.turn + FACTION.requestMonths })
+        say(s, f, `${n.name} asked to join ${f.name}.`, 'diplomacy', [o.nationId])
+        break
+      }
+      if (botAdmits(s, map, f, o.nationId, rng)) {
+        join(s, f, o.nationId)
+        tell(s, 'accepted', f.founder, o.nationId, `${f.name} took you in.`)
+      } else {
+        f.history.push({ turn: s.turn, text: `${n.name} asked to join ${f.name} and was turned away.` })
+        tell(s, 'rejected', f.founder, o.nationId, `${f.name} turned down your request to join.`)
+      }
       break
     }
     case 'factionLeave':
@@ -552,6 +609,7 @@ function join(s: GameState, f: Faction, id: NationId) {
   f.members.push(id)
   f.ledger[id] = newLedger(s.turn)
   f.invites = f.invites.filter((i) => i.nation !== id)
+  if (f.requests) f.requests = f.requests.filter((r) => r.nation !== id)
   say(s, f, `${nm(s, id)} joined ${f.name}.`)
 }
 
@@ -913,6 +971,7 @@ export function runFactionMonth(s: GameState) {
     runContracts(s, f)
     runUpkeep(s, f)
     f.invites = f.invites.filter((i) => i.expires >= s.turn && s.nations[i.nation]?.alive && !factionOf(s, i.nation))
+    if (f.requests) f.requests = f.requests.filter((r) => r.expires >= s.turn && s.nations[r.nation]?.alive && !factionOf(s, r.nation))
     // A war proposal against a country that no longer exists, or whose war is already on, is dropped.
     f.proposals = f.proposals.filter((p) => p.kind !== 'war' || (s.nations[p.target!]?.alive && !f.wars.some((w) => w.target === p.target)))
   }
@@ -1023,6 +1082,10 @@ export function factionNews(before: GameState | null, next: GameState, player: N
     if (inv && !had && !f) out.push(`${next.nations[inv.by]?.name ?? 'A nation'} invited you to join ${g.name}. See the Faction desk.`)
   }
   if (!f) return out
+  // Someone asked to come in, and a member can say yes by inviting it.
+  for (const r of f.requests ?? []) {
+    if (r.expires >= next.turn && !was?.requests?.some((x) => x.nation === r.nation)) out.push(`${next.nations[r.nation]?.name ?? 'A nation'} asks to join ${f.name}. Invite it from the Faction desk.`)
+  }
   for (const p of f.proposals) {
     if (p.by === player || p.votes[player]) continue
     if (!was?.proposals.some((x) => x.id === p.id)) out.push(p.kind === 'war' ? `${f.name}: a vote on war with ${next.nations[p.target!]?.name ?? 'a country'} needs you.` : `${f.name}: a contract vote needs you.`)

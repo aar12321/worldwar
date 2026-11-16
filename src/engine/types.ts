@@ -607,7 +607,7 @@ export interface Dispatch {
   kind: DispatchKind
   from: NationId
   to: NationId
-  proposalKind: ProposalKind | 'deal' | 'war'
+  proposalKind: ProposalKind | 'deal' | 'war' | 'faction'
   text: string
 }
 
@@ -761,6 +761,8 @@ export type Order =
   | { type: 'factionFound'; nationId: NationId; name: string; charter?: Partial<FactionCharter> }
   | { type: 'factionJoin'; nationId: NationId; factionId: string }
   | { type: 'factionInvite'; nationId: NationId; target: NationId }
+  /** Ask the members of a faction to take you in. Rival-run factions answer when the month ends; with a player among its members the request waits for them. */
+  | { type: 'factionRequest'; nationId: NationId; factionId: string }
   | { type: 'factionLeave'; nationId: NationId }
   | { type: 'factionContribute'; nationId: NationId; gift: FactionGift }
   | { type: 'factionWithdraw'; nationId: NationId; gift: FactionGift }
@@ -1300,6 +1302,12 @@ export interface FactionInvite {
   expires: number
 }
 
+/** A nation asking to join a faction, waiting for a member who is a player to say yes by inviting it. */
+export interface FactionRequest {
+  nation: NationId
+  expires: number
+}
+
 export interface Faction {
   id: string
   name: string
@@ -1312,6 +1320,8 @@ export interface Faction {
   proposals: FactionProposal[]
   contracts: FactionContract[]
   invites: FactionInvite[]
+  /** Nations that asked to join. Absent until one does. */
+  requests?: FactionRequest[]
   wars: FactionWar[]
   /** The pooled army could not be fed or fuelled last month, so it fights at reduced strength. */
   short?: { oil?: boolean; food?: boolean }

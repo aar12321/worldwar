@@ -11,6 +11,10 @@ export const FACTION = {
   contractInfluence: 3,
   /** Months an invitation stays open. */
   inviteMonths: 3,
+  /** Influence it costs to ask a faction to take you in. */
+  requestInfluence: 5,
+  /** Months a request stays open with the players in a faction. */
+  requestMonths: 3,
   /** Months a proposal can be voted on, counted from the month it was put forward (the first vote month is the next one). */
   voteMonths: 2,
   /** Months what you put in stays locked after your last contribution. */

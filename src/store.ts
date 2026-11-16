@@ -557,6 +557,7 @@ export function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'factionFound') return typeof order.name === 'string'
   if (order.type === 'factionJoin') return typeof order.factionId === 'string'
   if (order.type === 'factionInvite') return typeof order.target === 'string'
+  if (order.type === 'factionRequest') return typeof order.factionId === 'string'
   if (order.type === 'factionLeave') return true
   if (order.type === 'factionContribute' || order.type === 'factionWithdraw') return !!order.gift && typeof order.gift === 'object'
   if (order.type === 'factionPropose') return !!order.proposal && (order.proposal.kind === 'war' ? typeof order.proposal.target === 'string' : order.proposal.kind === 'contract' && !!order.proposal.terms)

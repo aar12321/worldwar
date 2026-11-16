@@ -13,8 +13,11 @@ import { activePlans, strikeDate, strikeMonth, threatOf } from './coalition'
 import { nuclearThreats } from './nuclear'
 import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
-import { enemiesOf, hasPact, isAllied, maxWars, puppetsOf, totalUnits } from './helpers'
+import { difficultyOf } from '../data/difficulty'
+import { FACTION } from '../data/factions'
+import { alliesOf, enemiesOf, hasPact, isAllied, maxWars, puppetsOf, totalUnits } from './helpers'
 import { factionOf, votesWaiting } from './factions'
+import { invitablePartners } from './partners'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { fundMissilesCost, launchSite, missileStock, programLevel, recentAttackers } from './missiles'
 import { validateOrder } from './orders'
@@ -45,7 +48,7 @@ export type AdviceTarget =
   | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
-  | { desk: 'faction' }
+  | { desk: 'faction'; /** A nation to pick in the invitation list. */ nation?: NationId }
   | { desk: 'warRoom'; region: RegionId }
   | { desk: 'map'; region: RegionId }
 
@@ -354,6 +357,27 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   const invite = (s.factions ?? []).find((f) => !factionOf(s, nationId) && f.invites.some((i) => i.nation === nationId && i.expires >= s.turn))
   if (invite && !pending.some((o) => o.type === 'factionJoin')) {
     add('soon', 25, { id: 'faction-invite', title: `${invite.name} invited you`, detail: 'Members pool money, materials and soldiers and vote on wars together. You can leave later and take back your share.', action: 'See the invitation', target: { desk: 'faction' } })
+  }
+
+  // Partners you could bring into your faction, or a faction to found with them: the same people the Diplomacy desk lists.
+  const myFaction = factionOf(s, nationId)
+  if (myFaction && myFaction.members.length < FACTION.maxMembers) {
+    const best = invitablePartners(s, map, nationId, myFaction, pending).find((c) => c.relations.includes('ally') || c.relations.includes('pact'))
+    if (best && !pending.some((o) => o.type === 'factionInvite' && o.target === best.id)) {
+      const them = s.nations[best.id].name
+      add('idea', 20, {
+        id: 'faction-partner',
+        title: `Invite ${them} to your faction`,
+        detail: `${them} is your ${best.relations.includes('ally') ? 'ally' : 'pact partner'} but not in ${myFaction.name}. Members pool money and soldiers and vote on wars together.${best.outlook === 'unlikely' ? ' They are unlikely to say yes yet.' : ''}`,
+        action: 'Open the invitation list',
+        target: { desk: 'faction', nation: best.id },
+      })
+    }
+  } else if (!myFaction && !n.overlord) {
+    const ally = alliesOf(s, nationId).find((a) => s.nations[a]?.alive && !factionOf(s, a) && !s.nations[a].overlord && (difficultyOf(s.settings.difficulty).coalitions || s.humans.includes(a)))
+    if (ally && n.resources.pp >= FACTION.foundInfluence && !pending.some((o) => o.type === 'factionFound')) {
+      add('idea', 2, { id: 'faction-found', title: `Found a faction with ${s.nations[ally].name}`, detail: `You are allied. A faction pools money, oil and soldiers, and the members vote on wars together. It costs ${FACTION.foundInfluence} influence.`, action: 'Open the Faction desk', target: { desk: 'faction', nation: ally } })
+    }
   }
 
   // Quantum Codebreaking: where an enemy could strike next month, and how likely it is to work.

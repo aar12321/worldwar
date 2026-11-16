@@ -298,6 +298,7 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.pp = COSTS.suppressRebels
       break
     case 'factionFound':
+    case 'factionRequest':
     case 'factionContribute':
     case 'factionPropose': {
       const k = factionOrderCost(s, o)
