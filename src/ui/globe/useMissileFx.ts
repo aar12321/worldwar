@@ -159,11 +159,11 @@ export function useMissileFx(globe: MutableRefObject<GlobeMethods | undefined>, 
 
   // New salvo reports: the burst, the rings, the shake, the sortie. The first look at a game only remembers what is already there.
   useEffect(() => {
-    if (!salvos) return
     if (seenSalvos.current === null) {
-      seenSalvos.current = new Set(salvos.map((r) => r.id))
+      seenSalvos.current = new Set((salvos ?? []).map((r) => r.id))
       return
     }
+    if (!salvos) return
     const fresh: SalvoReport[] = salvos.filter((r) => !seenSalvos.current!.has(r.id))
     for (const r of fresh) seenSalvos.current.add(r.id)
     const fx = useFx.getState()
@@ -222,7 +222,7 @@ export function useMissileFx(globe: MutableRefObject<GlobeMethods | undefined>, 
     const a = d as ArcLike
     if (a.nuke) return ['rgba(255,255,255,1)', 'rgba(255,45,149,1)']
     const c = lookColor(a.kind, palette)
-    return [hex(c, 0.35), hex(c, 1)]
+    return [hex(c, 0.55), hex(c, 1)]
   }, [palette])
   const arcStroke = useCallback((d: object) => ((d as ArcLike).nuke ? 1.5 : LOOK[(d as ArcLike).kind].stroke), [])
   const arcAltitude = useCallback((d: object) => ((d as ArcLike).nuke ? 0.55 : LOOK[(d as ArcLike).kind].altitude), [])
@@ -235,7 +235,9 @@ export function useMissileFx(globe: MutableRefObject<GlobeMethods | undefined>, 
   const pointRadius = useCallback((d: object) => (d as Decal).radius, [])
   const pointColor = useCallback((d: object) => {
     const p = d as Decal
-    return p.kind === 'scorch' ? `rgba(26,18,12,${p.alpha.toFixed(3)})` : `rgba(168,162,156,${p.alpha.toFixed(3)})`
+    if (p.kind === 'scorch') return `rgba(20,12,8,${p.alpha.toFixed(3)})`
+    if (p.kind === 'ember') return `rgba(255,140,30,${p.alpha.toFixed(3)})`
+    return `rgba(190,184,178,${p.alpha.toFixed(3)})`
   }, [])
 
   return {

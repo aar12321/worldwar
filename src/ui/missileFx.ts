@@ -24,11 +24,11 @@ export interface KindLook {
 }
 
 export const LOOK: Record<MissileType, KindLook> = {
-  cruise: { color: '#4dc3ff', cb: '#56b4e9', stroke: 0.3, altitude: 0.05, dash: 0.1, blast: 2.2, shake: 0.2 },
-  tactical: { color: '#30d158', cb: '#009e73', stroke: 0.45, altitude: 0.14, dash: 0.16, blast: 2.6, shake: 0.28 },
-  hypersonic: { color: '#ffd60a', cb: '#e69f00', stroke: 0.6, altitude: 0.3, dash: 0.14, blast: 3.2, shake: 0.5 },
-  ballistic: { color: '#d56bff', cb: '#cc79a7', stroke: 0.95, altitude: 0.52, dash: 0.34, blast: 4.4, shake: 0.85 },
-  decoy: { color: '#9a9aa8', cb: '#b8b8b8', stroke: 0.2, altitude: 0.09, dash: 0.07, blast: 1.2, shake: 0.05 },
+  cruise: { color: '#4dc3ff', cb: '#56b4e9', stroke: 0.3, altitude: 0.05, dash: 0.1, blast: 3.2, shake: 0.2 },
+  tactical: { color: '#30d158', cb: '#009e73', stroke: 0.45, altitude: 0.14, dash: 0.16, blast: 3.6, shake: 0.28 },
+  hypersonic: { color: '#ffd60a', cb: '#e69f00', stroke: 0.6, altitude: 0.3, dash: 0.14, blast: 4.4, shake: 0.5 },
+  ballistic: { color: '#d56bff', cb: '#cc79a7', stroke: 0.95, altitude: 0.52, dash: 0.34, blast: 6, shake: 0.85 },
+  decoy: { color: '#9a9aa8', cb: '#b8b8b8', stroke: 0.2, altitude: 0.09, dash: 0.07, blast: 1.8, shake: 0.05 },
 }
 
 export const lookColor = (kind: MissileType, palette: Palette) => (palette === 'colorblind' ? LOOK[kind].cb : LOOK[kind].color)
@@ -91,26 +91,29 @@ export function planFx(r: SalvoReport, from: Pt | undefined, to: Pt, opts: { pal
     add(to, r.hit > 0 ? color : DEFENSE_COLOR.shield, r.hit > 0 ? look.blast * (0.6 + 0.4 * hitShare) : 1.6, 0, 1600)
     return { rings, shake: 0, sortie: false }
   }
-  if (from && !raid) add(from, color, 1.6, 0, 1100)
+  // A live game showed the launch when the salvo left, and the flight has already played out: the burst and the impact follow at once.
+  const live = r.day !== undefined
+  const pace = live ? 0.3 : 1
+  if (from && !raid && !live) add(from, color, 1.6, 0, 1100)
   if (stopped > 0.08 && from) {
     // The kill point: three quarters of the way along the flight, where the defence caught it.
     const p = greatCircle(from, to, 0.78)
     const air = r.fighters + r.patrol > r.shield + r.batteries
     const c = air ? DEFENSE_COLOR.air : DEFENSE_COLOR.shield
-    add(p, c, 1.2 + 2.2 * Math.min(1, stopped), 520, 1500)
+    add(p, c, 1.2 + 2.2 * Math.min(1, stopped), 520 * pace, 1500)
     // Debris: small bursts scattered round the kill point, one per few missiles stopped, never more than four.
     const bits = Math.min(4, Math.max(1, Math.round(stopped * r.fired * 0.35)))
     for (let i = 0; i < bits; i++) {
       const a = hash(`${r.id}|${i}`) * Math.PI * 2
       const d = 0.5 + hash(`${r.id}|d${i}`) * 1.4
-      add({ lat: p.lat + Math.sin(a) * d, lng: p.lng + Math.cos(a) * d }, c, 0.7, 600 + i * 140, 900)
+      add({ lat: p.lat + Math.sin(a) * d, lng: p.lng + Math.cos(a) * d }, c, 0.7, (600 + i * 140) * pace, 900)
     }
   }
   if (r.hit > 0) {
     const size = look.blast * (0.55 + 0.45 * hitShare) * (raid ? 0.8 : 1)
-    add(to, color, size, 900, 1700)
-    if ((r.kind === 'ballistic' || r.kind === 'hypersonic') && r.hit >= 3) add(to, '#ffffff', size * 1.5, 1050, 2000)
-    if (r.site) add(to, '#ff9f0a', size * 0.6, 1000, 1500)
+    add(to, color, size, 900 * pace, 1700)
+    if ((r.kind === 'ballistic' || r.kind === 'hypersonic') && r.hit >= 3) add(to, '#ffffff', size * 1.5, 1050 * pace, 2000)
+    if (r.site) add(to, '#ff9f0a', size * 0.6, 1000 * pace, 1500)
   }
   if (raid) for (let i = 0; i < Math.min(3, Math.round(r.aircraftLost * 3) + 1); i++) add({ lat: to.lat + (hash(`${r.id}|p${i}`) - 0.5) * 2.2, lng: to.lng + (hash(`${r.id}|q${i}`) - 0.5) * 2.2 }, '#e5e5ea', 0.8, 1300 + i * 200, 900)
   const shake = opts.mine && r.hit > 0 ? Math.min(1.6, look.shake * (0.5 + hitShare) + Math.min(0.5, r.dead * 0.05)) : 0
@@ -121,15 +124,15 @@ export interface Decal {
   id: string
   lat: number
   lng: number
-  /** `scorch` is a dark mark that lasts weeks, `smoke` a pale column that thins in days. */
-  kind: 'scorch' | 'smoke'
+  /** `scorch` is a dark mark that lasts weeks, `ember` a hot glow that dies in days, `smoke` a pale column that thins in days. */
+  kind: 'scorch' | 'ember' | 'smoke'
   radius: number
   altitude: number
   /** 0 to 1, fading with the days since the strike. */
   alpha: number
 }
 
-export const DECAL_LIFE = { scorch: 28, smoke: 9 }
+export const DECAL_LIFE = { scorch: 28, ember: 3, smoke: 9 }
 
 /** The day a report happened, absolute. */
 export const reportDay = (r: Pick<SalvoReport, 'turn' | 'day'>) => absDay(r.turn, r.day ?? 0)
@@ -145,11 +148,13 @@ export function decalsFrom(salvos: readonly SalvoReport[] | undefined, now: numb
     const at = regions[r.region]
     if (!at) continue
     const age = Math.max(0, now - reportDay(r))
-    const size = 0.25 + Math.min(1.1, Math.sqrt(r.hit) * 0.12 + r.dead * 0.04 + r.line * 0.03)
+    const size = 0.5 + Math.min(1.6, Math.sqrt(r.hit) * 0.16 + r.dead * 0.05 + r.line * 0.04)
     const scorch = 1 - age / DECAL_LIFE.scorch
+    const ember = 1 - age / DECAL_LIFE.ember
     const smoke = 1 - age / DECAL_LIFE.smoke
-    if (scorch > 0.02) out.push({ id: `${r.id}s`, lat: at.lat, lng: at.lng, kind: 'scorch', radius: size, altitude: 0.004, alpha: Math.min(1, scorch) * 0.7 })
-    if (smoke > 0.02) out.push({ id: `${r.id}m`, lat: at.lat, lng: at.lng, kind: 'smoke', radius: size * 1.5, altitude: 0.018 + 0.03 * (1 - smoke), alpha: Math.min(1, smoke) * 0.4 })
+    if (scorch > 0.02) out.push({ id: `${r.id}s`, lat: at.lat, lng: at.lng, kind: 'scorch', radius: size, altitude: 0.012, alpha: Math.min(1, scorch) * 0.85 })
+    if (ember > 0.02) out.push({ id: `${r.id}e`, lat: at.lat, lng: at.lng, kind: 'ember', radius: size * 0.55, altitude: 0.015, alpha: Math.min(1, ember) * 0.9 })
+    if (smoke > 0.02) out.push({ id: `${r.id}m`, lat: at.lat, lng: at.lng, kind: 'smoke', radius: size * 1.5, altitude: 0.022 + 0.04 * (1 - smoke), alpha: Math.min(1, smoke) * 0.5 })
   }
   return out.sort((a, b) => b.alpha - a.alpha).slice(0, FX_CAPS.decals)
 }

@@ -424,7 +424,7 @@ export function WorldGlobe() {
       ringsData={allRings}
       ringColor={ringColor}
       ringMaxRadius="maxRadius"
-      ringPropagationSpeed={3}
+      ringPropagationSpeed={4}
       ringRepeatPeriod={ringPeriod}
       {...army.props}
       {...missileFx.props}

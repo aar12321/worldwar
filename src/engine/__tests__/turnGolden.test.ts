@@ -46,6 +46,10 @@ import { withOldMissiles } from './oldMissiles'
  * (COMBAT.luck), units that soak up damage in proportion to what they cost (UNIT_SPECS.toughness), robots at 1.8 attack, and Siege and Blitz
  * rebalanced. Checked before pinning: with those numbers put back (withOldCombat) the old hashes return exactly, in the last test of this file,
  * so the new unit orders, the forecast, the planner and the auto-command change nothing for a game that does not use them.
+ * Re-pinned (the Hard-bot world and the small war; the Normal-bot world did not move) for the missile war (docs/MISSILE_WAR_STATUS.md): every missile kind now
+ * hurts people and the Defense Line, strikes write reports and tension, and Hard rivals play it. Checked before pinning: with the war switched off
+ * (withOldMissiles) every previous hash returns, in 'the missile war is the only thing that moved ...' below; and with it off AND the old combat
+ * the oldest hashes return, in 'the combat tuning ...'.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -116,14 +120,28 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned again for the combat tuning (docs/WAR_STATUS.md): see 'the combat tuning is the only thing that moved them' below.
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
-    expect(hash(JSON.stringify(s))).toBe('5e24dace6d64b')
+    // Re-pinned for the missile war (docs/MISSILE_WAR_STATUS.md): Hard rivals now play it (doctrine, radar, interceptors, raids, counterforce) and every
+    // strike writes salvo reports, a ledger and the world's tension. Checked: with the missile war switched off (withOldMissiles) the previous hash
+    // '5e24dace6d64b' returns, in 'the missile war is the only thing that moved them' below.
+    expect(hash(JSON.stringify(s))).toBe('a84a20e43a2f0')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('1c2e3ffb6159fd')
-    expect(hash(JSON.stringify(log))).toBe('17e9fe7b927733')
+    // Re-pinned for the missile war: the 3-missile strike now writes a salvo report, a ledger and tension, and kills some people; the later battles' reports move with it (log '17e9fe7b927733' before).
+    expect(hash(JSON.stringify(state))).toBe('d190f76c21120')
+    expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
   })
+
+  it('the missile war is the only thing that moved the Hard-bot world and the small war: switched off, the previous pins return', () => {
+    withOldMissiles(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('7d9d1f55d2a94')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('5e24dace6d64b')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('1c2e3ffb6159fd')
+      expect(hash(JSON.stringify(log))).toBe('17e9fe7b927733')
+    })
+  }, 400_000)
 
   it('the combat tuning is the only thing that moved them: with the old numbers put back the old hashes return', () => {
     // Fortune of the day off, every division as tough as every other, robots at 1.6, Siege and Blitz as they were (see oldCombat.ts).

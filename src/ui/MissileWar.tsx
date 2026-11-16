@@ -68,13 +68,13 @@ export function SalvoTimeline({ game, flight, mine }: { game: GameState; flight:
       </div>
       <ol className="grid grid-cols-4 gap-1 text-[11px]">
         {steps.map((s, i) => (
-          <li key={s} className={`rounded-md px-1.5 py-1 text-center ${i === at ? 'bg-white/18 font-semibold text-white' : i < at ? 'bg-white/8 text-white/70' : 'text-white/40'}`}>
+          <li key={s} className={`rounded-md border px-1.5 py-1 text-center ${i === at ? 'border-white/40 bg-white/18 font-semibold text-white' : i < at ? 'border-white/10 bg-white/8 text-white/70' : 'border-white/10 text-white/45'}`}>
             {s}
           </li>
         ))}
       </ol>
       <p className="text-[12px] text-white/65">
-        {mine === 'incoming' ? `Aimed at ${map.regions[flight.target]?.name}, held by ${victim}.` : 'Your salvo. It cannot be recalled.'}
+        {mine === 'incoming' ? `Aimed at ${map.regions[flight.target]?.name}${victim === nameOf(game, game.playerId) ? ', one of your countries' : `, held by ${victim}`}.` : 'Your salvo. It cannot be recalled.'}
         {flight.scrambled ? ' Fighters are scrambled against it.' : ''}
       </p>
     </div>
