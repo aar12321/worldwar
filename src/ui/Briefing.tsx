@@ -1,5 +1,5 @@
 import { isLive } from '../engine/calendar'
-import { OBJECTIVES, type Advice } from '../engine/advisor'
+import { OBJECTIVES, type Advice, type AdviceTarget } from '../engine/advisor'
 import { getWorld } from '../map/world'
 import { conquestGoal, controlled, countriesTaken, economicGoal, economicShare, goalSentence, populationShare } from '../engine/victory'
 import { useGame } from '../store'
@@ -52,6 +52,18 @@ function Progress({ label, value, goal, text }: { label: string; value: number; 
     </div>
   )
 }
+
+/** The parts of the game a new player does not meet in the first steps, each with the desk that holds it. */
+const EXPLORE: [string, AdviceTarget, string][] = [
+  ['People and care', { desk: 'economy', tab: 'people' }, 'Twenty-two programs, campaigns and what moves stability'],
+  ['Projects', { desk: 'economy', tab: 'projects' }, 'National projects and projects in your countries'],
+  ['Space program', { desk: 'economy', tab: 'space' }, 'Agency, rockets, missions, labs and outposts'],
+  ['Deployment and theatres', { desk: 'military', tab: 'theatres' }, 'Forces on station, alert levels and the fronts'],
+  ['Missiles and systems', { desk: 'military', tab: 'systems' }, 'The missile program, stock and Frontier systems'],
+  ['World reaction', { desk: 'empire', tab: 'reaction' }, 'How the world answers a growing power'],
+  ['Factions', { desk: 'faction' }, 'Pool strength with other countries and vote on war'],
+  ['Diplomacy', { desk: 'diplomacy' }, 'Offers, treaties and every nation\'s opinion'],
+]
 
 /** The first desk: your goal, your first steps, and what the advisor would do this month. */
 export function Briefing() {
@@ -132,6 +144,18 @@ export function Briefing() {
       <section className="space-y-2.5">
         <h3 className="text-[16px] font-semibold tracking-tight">Your advisor</h3>
         <AdviceList items={advice} />
+      </section>
+
+      <section className="space-y-2" aria-label="More to explore">
+        <h3 className="text-[16px] font-semibold tracking-tight">More to explore</h3>
+        <p className="text-[13px] text-white/70">Beyond the first steps, the game has these. Each button opens the right desk.</p>
+        <div className="flex flex-wrap gap-1.5">
+          {EXPLORE.map(([label, target, hint]) => (
+            <button key={label} className="btn btn-quiet" title={hint} onClick={() => goTo(target)}>
+              {label}
+            </button>
+          ))}
+        </div>
       </section>
 
       <button className="btn w-full py-2.5" onClick={() => setHelp(true)}>

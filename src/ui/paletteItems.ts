@@ -81,7 +81,10 @@ export function buildPaletteItems(): PaletteItem[] {
     out.push({ id: 'act:close', label: 'Close the open desk', keys: ['Esc'], group: 'Actions', run: () => st.setPanel(st.panel) })
   }
   out.push({ id: 'act:aircraft', label: 'Aircraft development', hint: 'Design and develop new aircraft (Military, Forces)', keywords: 'fighters bombers jets planes develop research', group: 'Actions', run: () => { st.openTab('military', 'forces'); st.setAircraftOpen(true) } })
-  out.push({ id: 'act:missiles', label: 'Missile program and stockpile', hint: 'Missile kinds, the program and strikes (Military, Forces)', keywords: 'rockets hypersonic strike warheads', group: 'Actions', run: () => st.openTab('military', 'forces') })
+  out.push({ id: 'act:missiles', label: 'Missile program and stockpile', hint: 'Missile kinds, the program and the stock (Military, Systems)', keywords: 'rockets hypersonic strike warheads cruise tactical ballistic build', group: 'Actions', run: () => st.openTab('military', 'systems') })
+  // The map's colors are buttons on the globe only while no desk is open, so the jump window offers them too.
+  for (const [mode, label, hint] of [['political', 'Nations', 'Each nation in its own color'], ['relations', 'Relations', 'Who is with you and who is against you'], ['fronts', 'Fronts', 'Defense Line left in your countries and your enemies\''], ['borders', 'Borders', 'Border tension, forces on station and sea chokepoints']] as const)
+    out.push({ id: `map:${mode}`, label: `Map colors: ${label}`, hint, keywords: 'globe map mode layer borders tension fronts relations straits', group: 'Actions', run: () => { if (useGame.getState().panel !== 'none') useGame.getState().setPanel(useGame.getState().panel); useGame.getState().setMapMode(mode) } })
   out.push({ id: 'act:help', label: 'How the game works', keys: ['?'], group: 'Actions', run: () => st.setHelp(true) })
   out.push({ id: 'act:keys', label: 'Keyboard shortcuts', hint: 'Every key the game answers', keywords: 'keys hotkeys cheat sheet', group: 'Actions', keys: ['?'], run: () => { st.setHelpTab('keys'); st.setHelp(true) } })
   out.push({ id: 'act:capital', label: 'Go to your capital', group: 'Actions', run: goTo(game.nations[game.playerId].capital) })

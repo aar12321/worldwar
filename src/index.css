@@ -770,7 +770,7 @@ body:has(.drawer) .country-card {
   z-index: 18;
   left: 16px;
   bottom: 16px;
-  width: 268px;
+  width: 300px;
   padding: 6px;
   border-radius: 14px;
 }
