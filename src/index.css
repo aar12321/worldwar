@@ -644,6 +644,11 @@ body:has(.drawer) .country-card {
 .modal-wide {
   width: min(960px, 100%);
 }
+/* The aircraft development tree: four columns of cards wants nearly the whole screen. */
+.modal-huge {
+  width: min(1360px, 100%);
+  max-height: min(94dvh, 980px);
+}
 .modal-body {
   flex: 1 1 auto;
   min-height: 0;

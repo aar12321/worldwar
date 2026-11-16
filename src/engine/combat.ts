@@ -1,6 +1,8 @@
+import { AIRCRAFT_RULES, type AircraftEffects } from '../data/aircraft'
 import { CYBER_JAM_MAX, CYBER_JAM_PER_LEVEL, FRONTIER, NANO_LESS_DAMAGE, SHIELD_STOPS, type SystemId } from '../data/systems'
 import { TERRAIN } from '../data/terrain'
 import { TRAINING, UNIT_SPECS } from '../data/unitTypes'
+import { pastDefenses } from './aircraft'
 import { emptyUnits, totalUnits, type AggregatedModifiers } from './helpers'
 import type { Rng } from './rng'
 import type { BattleRound, Terrain, UnitCounts, UnitType } from './types'
@@ -32,6 +34,11 @@ export interface Combatant {
   droneMult?: number
   /** Extra drone damage against an army heavy in tanks and guns. Set by resolveBattle. */
   droneBonus?: number
+  /** What this side's aircraft developments add up to. Missing when it has none. */
+  air?: AircraftEffects
+  /** Share of this side's drones, and of its hypersonic missiles, that get past the other side's hunter fighters. Set by resolveBattle. */
+  huntMult?: number
+  huntMissileMult?: number
 }
 
 export interface BattleInput {
@@ -88,12 +95,14 @@ export function jamFactor(ownCyber: number, enemyCyber: number): number {
  */
 export function airSuperiority(own: Combatant, other: Combatant): number {
   const f = (c: Combatant) => c.units.fighter * UNIT_SPECS.fighter.attack * (1 + (c.mods?.unitAttack.fighter ?? 0)) * (1 + (c.drill?.fighter ?? 0) * TRAINING.bonusPerLevel)
-  const a = f(own)
-  const b = f(other)
+  // Electronic warfare blinds the other side's fighters.
+  const a = f(own) * (1 - (other.air?.jam ?? 0))
+  const b = f(other) * (1 - (own.air?.jam ?? 0))
   return a + b <= 0 ? 0.5 : a / (a + b)
 }
 
-const bomberFactor = (superiority: number) => Math.max(0.4, Math.min(1.6, 0.4 + 1.2 * superiority))
+/** Stealthy bombers (a higher `floor`) keep more strength when the enemy rules the air. */
+const bomberFactor = (superiority: number, floor = 0) => Math.max(0.4 + floor, Math.min(1.6, 0.4 + 1.2 * superiority))
 
 /** Foot soldiers (infantry or robots), tanks and planes, each a real part of the force: a token tank does not make an army combined. */
 export function hasCombinedArms(u: UnitCounts): boolean {
@@ -140,9 +149,9 @@ export function sidePower(
     // Drones, robots and missiles are mostly electronics, so a shortage of oil does not slow them as much.
     const fuel = k === 'infantry' || k === 'robot' || k === 'missile' ? 1 : (c.vehicleMult ?? 1)
     let frontier = 1
-    if (k === 'drone') frontier = (c.droneMult ?? 1) * (c.interceptMult ?? 1) * (c.cyberMult ?? 1) * (c.droneBonus ?? 1)
+    if (k === 'drone') frontier = (c.droneMult ?? 1) * (c.interceptMult ?? 1) * (c.huntMult ?? 1) * (c.cyberMult ?? 1) * (c.droneBonus ?? 1)
     else if (k === 'robot') frontier = c.cyberMult ?? 1
-    else if (k === 'missile') frontier = c.interceptMult ?? 1
+    else if (k === 'missile') frontier = (c.interceptMult ?? 1) * (c.huntMissileMult ?? 1)
     power += c.units[k] * weights[k] * base * tech * drilled * stance * air * fuel * frontier * terrainMultiplier(terrain, k, c.mods)
   }
   if (hasCombinedArms(c.units)) {
@@ -179,12 +188,26 @@ function applyLosses(units: UnitCounts, losses: UnitCounts, damage: number, coas
   }
 }
 
+/** What a side's aircraft developments and the other side's change in the opening of a fight. `own` is the side being helped or hurt. */
+function dressForAirWar(own: Combatant, other: Combatant) {
+  const pierce = own.air?.pierce ?? 0
+  // Stealth: the other side's shield stops less of this side's bombers, drones and missiles.
+  if (pierce > 0 && own.interceptMult !== undefined) own.interceptMult = 1 - (1 - own.interceptMult) * (1 - pierce)
+  // The other side's hunters, blinded by electronic warfare and fooled by stealth, shoot down some missiles and drones.
+  const drones = pastDefenses(1, own.air, other.air, other.units.fighter)
+  if (drones < 1) own.huntMult = drones
+  const missiles = pastDefenses(1, own.air, other.air, other.units.fighter, AIRCRAFT_RULES.huntVs.hypersonic)
+  if (missiles < 1) own.huntMissileMult = missiles
+  const evade = own.air?.droneEvade ?? 0
+  if (evade > 0 && own.droneMult !== undefined) own.droneMult += (1 - own.droneMult) * evade
+}
+
 export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
   const { terrain, coastal } = input
   const att = { ...input.attacker, units: { ...input.attacker.units } }
   const def = { ...input.defender, units: { ...input.defender.units } }
-  att.bomberMult = bomberFactor(airSuperiority(att, def))
-  def.bomberMult = bomberFactor(airSuperiority(def, att))
+  att.bomberMult = bomberFactor(airSuperiority(att, def), att.air?.bomberFloor)
+  def.bomberMult = bomberFactor(airSuperiority(def, att), def.air?.bomberFloor)
   // The new weapons and what answers them: shields stop missiles and drones, fighters shoot drones down,
   // a higher Cyber Command jams drones and robots, and drones tear into tanks and guns.
   att.interceptMult = interceptFactor(sysLevel(def, 'shield'))
@@ -195,6 +218,12 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
   def.droneMult = droneAgainstFighters(def, att)
   att.droneBonus = droneAgainstHeavy(def.units)
   def.droneBonus = droneAgainstHeavy(att.units)
+  // Aircraft developments: the other side's hunter fighters shoot down missiles and drones, stealth and electronic warfare weaken
+  // shields and hunters, and swarm autonomy keeps drones alive against fighters. Skipped when neither side has any.
+  if (att.air || def.air) {
+    dressForAirWar(att, def)
+    dressForAirWar(def, att)
+  }
   const attackerLosses = emptyUnits()
   const defenderLosses = emptyUnits()
   const startAtt = totalUnits(att.units)
