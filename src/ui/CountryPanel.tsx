@@ -265,7 +265,7 @@ function BorderCard({ game, map, selected, mine }: { game: GameState; map: World
       ) : (
         <p className="text-[13px] text-white/75">Across the sea. Warships on patrol and the submarine screen guard it.</p>
       )}
-      <button className="btn btn-quiet px-3 py-1 text-[13px]" onClick={() => openMilitary('deploy')}>
+      <button className="btn px-3 py-1 text-[13px]" onClick={() => openMilitary("deploy")}>
         Deployment
       </button>
     </div>

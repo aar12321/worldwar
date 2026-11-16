@@ -85,8 +85,9 @@ export function stationBadges(game: GameState, map: WorldMap, player: NationId, 
     if (!n?.alive || !d) continue
     const view = deploymentView(game, player, v.id)
     const mine = v.id === player
+    // The Borders map is about borders: a rival's own badges stay out of it, apart from the garrison facing you.
     const name = mine ? 'Your' : `${n.name}'s`
-    if (view.exact) {
+    if (view.exact && (mine || !guesses)) {
       const base = centre(map, navalBase(game, map, v.id))
       if (view.coastal >= 0.25) out.push({ key: `${v.id}:ship`, lat: base.lat, lng: base.lng - 1.3, glyph: 'ship', text: showDivisions(view.coastal, true), color: n.color, mine, guess: false, title: `${name} coastal patrol: ${showDivisions(view.coastal, true)} divisions of warships` })
       if (view.subs >= 0.25) out.push({ key: `${v.id}:sub`, lat: base.lat, lng: base.lng + 1.3, glyph: 'sub', text: showDivisions(view.subs, true), color: n.color, mine, guess: false, title: `${name} submarine screen: ${showDivisions(view.subs, true)} divisions of warships` })
@@ -96,6 +97,7 @@ export function stationBadges(game: GameState, map: WorldMap, player: NationId, 
       }
     }
     for (const x of Object.keys(d.border).sort()) {
+      if (guesses && !mine && x !== player) continue
       const facing = view.exact ? garrisonDivisions(game, v.id, x) : x === player ? (view.border[player] ?? 0) : 0
       if (facing < 0.25 || (!view.exact && !guesses)) continue
       const spot = spots.get(pairKey(v.id, x))
@@ -174,7 +176,7 @@ export function borderPaths(game: GameState, map: WorldMap, player: NationId): P
       gap: v.closed ? 0.012 : 0,
       animate: 0,
       key: `border|${v.color}|${v.closed}|${v.cover.toFixed(1)}`,
-      stroke: (involved ? 0.7 : 0.4) + v.cover * 0.9,
+      stroke: (involved ? 1.4 : 0.8) + v.cover * 1.4,
     })
   })
   // Sea lanes: the player's own, and every chokepoint.
