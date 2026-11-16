@@ -156,6 +156,8 @@ describe('forces on station: what is free to attack', () => {
     expect(canAttackRegion(s, map, 'r0', 'r1')).toMatchObject({ ok: true, via: 'fleet' })
     post(s, map, setPost(s, 'r0', { coastal: 1 }))
     expect(canAttackRegion(s, map, 'r0', 'r1').ok).toBe(false)
+    // The refusal says where the ships are, rather than telling the player to train more.
+    expect(validateOrder(s, map, { type: 'attack', nationId: 'r0', target: 'r1' })).toMatch(/warships are on patrol/)
   })
 })
 

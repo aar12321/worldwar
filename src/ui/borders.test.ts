@@ -35,6 +35,8 @@ describe('the border lines come from the same map as the countries', () => {
 describe('forces on station on the globe', () => {
   it('shows your own, exact, as badges: a garrison on the border, patrols at your port, an air patrol over your capital', () => {
     const s = game()
+    s.nations.france.military.units.naval = 10
+    s.nations.france.military.units.fighter = 6
     post(s, 'france', { germany: 0.3, spain: 0.1 }, { coastal: 0.3, subs: 0.2, air: 0.3 })
     const badges = stationBadges(s, map, 'france', false)
     const kinds = badges.map((b) => b.glyph).sort()

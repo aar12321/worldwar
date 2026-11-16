@@ -162,5 +162,5 @@ export function borderLines(): BorderLine[] {
 /** The pairs of countries joined by one of the strategic sea lanes: the narrow seas and ocean crossings the map treats as chokepoints. */
 export function chokepoints(): [RegionId, RegionId][] {
   const regions = getWorld().map.regions
-  return STRATEGIC_SEA_LANES.map(([a, b]) => [slugify(a), slugify(b)] as [RegionId, RegionId]).filter(([a, b]) => regions[a] && regions[b])
+  return STRATEGIC_SEA_LANES.map(([a, b]) => [slugify(a), slugify(b)] as [RegionId, RegionId]).filter(([a, b]) => regions[a]?.seaLanes.includes(b))
 }

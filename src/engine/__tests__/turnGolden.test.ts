@@ -25,7 +25,7 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * Pinned again for Active Military (forces on station, borders): every bot now posts patrols and garrisons in its first month (a deliberate
  * change of what bots decide), keeps a smaller reserve to attack with, and its garrisons turn provocations back. Checked before pinning:
  * with the bots' posture orders taken out, the Normal-bot world hashes to its old pin exactly, once the memory of border incidents (the
- * new `borders` field) is dropped (see deployment.test.ts), and the small war, which uses the same bots, matched its old pin the same way.
+ * new `borders` field) is dropped (see deployment.test.ts), and so did the Hard-bot world and the small war (which uses the same bots) against their pins from just before this change.
  * So nothing else moved: the new rules change nothing for a nation that has never posted forces.
  */
 
@@ -94,13 +94,13 @@ describe('turn mode resolves exactly as pinned', () => {
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('3f02e58ed6156')
+    expect(hash(JSON.stringify(s))).toBe('1c63cc4ef4ae13')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('e3917e1d83cbf')
-    expect(hash(JSON.stringify(log))).toBe('1fcd1f01fd1956')
+    expect(hash(JSON.stringify(state))).toBe('7c77436f2d702')
+    expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
   })
 
   it('a turn game carries none of the live fields', () => {
