@@ -10,6 +10,8 @@ import { buyShares, runStocks, sellShares, setDirective } from './stocks'
 import { SYSTEM_SPECS } from '../data/systems'
 import { fundSystem, runStrike, runSystems } from './systems'
 import { MISSILES } from '../data/missiles'
+import { AIRCRAFT_NODES } from '../data/aircraft'
+import { applyPauseAircraftDev, applyStartAircraftDev } from './aircraft'
 import { applyBuildMissiles, applyFundMissiles } from './missiles'
 import { applySpace, describeSpace } from './space'
 import { INVEST, SECTORS } from '../data/business'
@@ -178,6 +180,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return 'Raise the missile program'
     case 'buildMissiles':
       return `Build ${o.count} ${MISSILES[o.kind].name.toLowerCase()}${o.count === 1 ? '' : 's'}`
+    case 'startAircraftDev':
+      return `Develop ${AIRCRAFT_NODES[o.node]?.name.toLowerCase() ?? 'aircraft'}`
+    case 'pauseAircraftDev':
+      return `${o.paused ? 'Pause' : 'Resume'} developing ${AIRCRAFT_NODES[o.node]?.name.toLowerCase() ?? 'aircraft'}`
     case 'setGovernor':
       return `Governor of ${region(o.regionId)}: ${GOVERNOR_LABELS[o.governor]}`
     case 'fundAgency':
@@ -229,7 +235,7 @@ const PHASES: Order['type'][][] = [
   ['research', 'researchProgram', 'build', 'startProject', 'pauseProject', 'rushProject', 'setRegionalCapital', 'fundAcademy', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['fundAgency', 'fundSystem'],
-  ['fundMissiles', 'buildMissiles'],
+  ['fundMissiles', 'buildMissiles', 'startAircraftDev', 'pauseAircraftDev'],
   ['space'],
   ['operation', 'domestic', 'strike'],
 ]
@@ -642,6 +648,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'buildMissiles':
       applyBuildMissiles(s, n, o)
+      break
+    case 'startAircraftDev':
+      applyStartAircraftDev(s, n, o)
+      break
+    case 'pauseAircraftDev':
+      applyPauseAircraftDev(n, o)
       break
     case 'strike':
       // Live missiles fly for a day before they land. Everything else lands at once.

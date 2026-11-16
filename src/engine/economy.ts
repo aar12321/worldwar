@@ -6,6 +6,7 @@ import { EMPIRE, WAR } from '../data/war'
 import { NO_EFFECTS, type PolicyEffects } from '../data/government'
 import { TRAITS, traitOf } from '../data/traits'
 import { agencyUpkeep } from './agencies'
+import { aircraftBill, runAircraft } from './aircraft'
 import { systemUpkeep } from './systems'
 import { companyEffects } from './stocks'
 import { addLog, clamp, enemiesOf, forceUnits, nationModifiers, pairKey, sanctionersOf } from './helpers'
@@ -186,6 +187,8 @@ export interface EconomyReport {
   projects: { building: number; upkeep: number }
   /** The space program: its bill this month, and what its mines earn. */
   space: { bill: ReturnType<typeof spaceEffects>['bill']; income: number }
+  /** Money this month's work on aircraft developments costs. */
+  aircraftBill: number
   enterpriseIncome: number
   armsExports: number
   seigniorage: number
@@ -383,6 +386,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
   const systems = systemUpkeep(n) * scaleFactor(0.75, gridPower)
   const upkeep = (unitUpkeep + spending.works + agencyUpkeep(n) + systems + (n.academy ?? 0) * ACADEMY.upkeep) * upkeepMult
   const projects = projectBill(n)
+  const aircraft = aircraftBill(n, projectSpeed(n, coverage.engineers))
   const localCosts = localBill(s, nationId)
   projects.building += localCosts.building
   projects.upkeep += localCosts.upkeep
@@ -457,6 +461,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'National projects', amount: -(projects.building + projects.upkeep), kind: 'cost' },
     { label: 'Space program', amount: -space.bill.total, kind: 'cost' },
     { label: 'Space mining', amount: space.money, kind: 'income' },
+    { label: 'Aircraft development', amount: -aircraft, kind: 'cost' },
     { label: 'Governors', amount: -governors, kind: 'cost' },
     { label: 'Settlers', amount: -settle, kind: 'cost' },
     { label: 'Quarantine', amount: -quarantine, kind: 'cost' },
@@ -520,6 +525,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     spending,
     projects,
     space: { bill: space.bill, income: space.money },
+    aircraftBill: aircraft,
     enterpriseIncome: enterprise,
     armsExports: arms,
     seigniorage: seign,
@@ -632,6 +638,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   if (n.projects) r.capital += runProjects(s, n, e.coverage.engineers)
   r.capital += runLocalProjects(s, n, projectSpeed(n, e.coverage.engineers))
   if (n.space) r.capital += runSpace(s, map, n, e.researchStaff)
+  if (n.aircraft) r.capital += runAircraft(s, n, projectSpeed(n, e.coverage.engineers))
   runArmsExports(s, n)
   return e
 }
