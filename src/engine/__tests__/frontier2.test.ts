@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FRONTIER, NANO_LESS_DAMAGE, SHIELD_STOPS, SYSTEM_SPECS, systemsCost } from '../../data/systems'
 import { UNIT_SPECS } from '../../data/unitTypes'
-import { interceptFactor, jamFactor, resolveBattle, sidePower, type Combatant } from '../combat'
+import { hitPoints, interceptFactor, jamFactor, resolveBattle, sidePower, type Combatant } from '../combat'
 import { createRng } from '../rng'
 import { canUseUnit, emptyUnits, maxAttacks, totalUnits } from '../helpers'
 import { orderCost, validateOrder } from '../orders'
@@ -18,14 +18,16 @@ const side = (units: Partial<UnitCounts>, sys: Combatant['sys'] = {}): Combatant
 function average(att: Combatant, def: Combatant, runs = 40) {
   let a = 0
   let d = 0
+  let dHp = 0
   let wins = 0
   for (let i = 0; i < runs; i++) {
     const out = resolveBattle({ attacker: att, defender: def, terrain: 'plains', coastal: false }, createRng(11, i))
     a += totalUnits(out.attackerLosses)
     d += totalUnits(out.defenderLosses)
+    dHp += hitPoints(out.defenderLosses)
     if (out.winner === 'attacker') wins++
   }
-  return { att: a / runs, def: d / runs, wins: wins / runs }
+  return { att: a / runs, def: d / runs, defHp: dHp / runs, wins: wins / runs }
 }
 
 describe('the new units', () => {
@@ -69,7 +71,14 @@ describe('what each new weapon does and what stops it', () => {
     expect(sidePower({ ...side({ drone: 6 }), droneBonus: 1.5 }, even, 'plains', false, false)).toBeGreaterThan(sidePower(side({ drone: 6 }), even, 'plains', false, false))
     const vsHeavy = average(side({ drone: 8 }), heavy)
     const vsLight = average(side({ drone: 8 }), light)
-    expect(vsHeavy.def / totalUnits(heavy.units)).toBeGreaterThan(vsLight.def / totalUnits(light.units))
+    // The bonus itself: with it switched off the same drones do less to the same tanks and guns. (Different armies cannot be compared by
+    // the share they lose: a tank soaks up more than a foot soldier, so heavy armies lose a smaller share at equal strength.)
+    const bonus = FRONTIER.droneVsHeavy
+    FRONTIER.droneVsHeavy = 0
+    const noBonus = average(side({ drone: 8 }), heavy)
+    FRONTIER.droneVsHeavy = bonus
+    expect(vsHeavy.defHp).toBeGreaterThan(noBonus.defHp)
+    expect(vsLight.defHp).toBeGreaterThan(0)
     const free = average(side({ drone: 8 }), side({ infantry: 8 }))
     const fighters = average(side({ drone: 8 }), side({ infantry: 8, fighter: 3 }))
     expect(fighters.att).toBeGreaterThan(free.att)

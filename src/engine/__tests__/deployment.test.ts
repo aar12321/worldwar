@@ -904,8 +904,8 @@ describe('a game where nobody stations forces plays as it always did', () => {
     delete s.borders
     expect(s.turn).toBe(13)
     // Re-pinned when the AI got its strategic layer (docs/STRATEGY.md): the bots decide differently on purpose, so the old hash no longer applies.
-    // Re-pinned by the value audit (docs/VALUE_AUDIT.md) when the never-read `people.focusSince` was removed: on the code just before, the same state hashed with that key skipped gave exactly this value.
-    expect(hash(JSON.stringify(s))).toBe('101a385ac39465')
+    // Re-pinned again for the combat tuning (docs/WAR_STATUS.md; the old hash 'bc68beaeedca7' returns with those numbers put back, see turnGolden.test.ts).
+    expect(hash(JSON.stringify(s))).toBe('103075820c12de')
   }, 300_000)
 })
 

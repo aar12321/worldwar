@@ -3,7 +3,9 @@ import { useMemo, useState } from 'react'
 import { computeEconomy } from '../engine/economy'
 import { enemiesOf, maxWars, pairKey } from '../engine/helpers'
 import type { NationId } from '../engine/types'
-import { attackableRegions, canAttackRegion, forecastAttack } from '../engine/warfare'
+import { commandLevel } from '../engine/commander'
+import { forecastMemo, roughOdds } from '../engine/forecast'
+import { attackableRegions, canAttackRegion } from '../engine/warfare'
 import { lineMax } from '../engine/economy'
 import { netWarScore } from '../engine/warscore'
 import { getWorld } from '../map/world'
@@ -61,7 +63,7 @@ export function WarsTab() {
   )
 }
 
-const TONE = { Likely: 'text-[#6eeb8a]', Even: 'text-[#ffd60a]', Risky: 'text-[#ff8a84]' }
+const TONE = { Likely: 'text-[#6eeb8a]', Even: 'text-[#ffd60a]', Unlikely: 'text-[#ff8a84]' }
 const FIRST_FRONTS = 5
 
 /** One war: the score, and its fronts with the weakest, most winnable country first. */
@@ -74,6 +76,7 @@ function EnemyCard({ enemyId, reachable, bill }: { enemyId: NationId; reachable:
   const { map } = getWorld()
   const game = view?.game
   const playerId = view?.player.id
+  const exact = !!game && !!playerId && commandLevel(game, playerId) >= 1
   const rows = useMemo(() => {
     if (!game || !playerId) return []
     return Object.values(game.regions)
@@ -81,11 +84,13 @@ function EnemyCard({ enemyId, reachable, bill }: { enemyId: NationId; reachable:
       .map((r) => {
         const max = lineMax(game, map, r.id)
         // An even-handed look: a main-force assault, a few plays, so the list stays quick.
-        const odds = reachable.has(r.id) ? forecastAttack(game, map, playerId, r.id, 'main', 'assault', 8) : null
+        const f = reachable.has(r.id) ? forecastMemo(game, map, playerId, { target: r.id, stance: 'assault', commit: 'main' }, 128) : null
+        // Without AI Battle Command the number is a rough band: a label and a rounded guess, never the exact chance.
+        const odds = f ? (exact ? { label: f.label, text: `${Math.round(f.winChance * 100)}%`, win: f.winChance } : (() => { const q = roughOdds(game, playerId, r.id, f.winChance); return { label: q.label, text: q.text.replace('about ', '~'), win: f.winChance } })()) : null
         return { id: r.id, line: Math.min(r.line, max), max, odds }
       })
-      .sort((a, b) => (b.odds?.winChance ?? -1) - (a.odds?.winChance ?? -1) || a.line - b.line || (a.id < b.id ? -1 : 1))
-  }, [game, map, enemyId, playerId, reachable])
+      .sort((a, b) => (b.odds?.win ?? -1) - (a.odds?.win ?? -1) || a.line - b.line || (a.id < b.id ? -1 : 1))
+  }, [game, map, enemyId, playerId, reachable, exact])
   if (!game || !playerId) return null
   const enemy = game.nations[enemyId]
   const months = game.turn - (game.warStarted[pairKey(playerId, enemyId)] ?? game.turn)
@@ -117,14 +122,14 @@ function EnemyCard({ enemyId, reachable, bill }: { enemyId: NationId; reachable:
               <div className="flex items-center justify-between gap-2 text-[14px]">
                 <button className="font-semibold hover:underline text-left min-w-0 truncate" onClick={() => selectRegion(r.id)}>
                   {map.regions[r.id].name}
-                  {i === 0 && r.odds && r.odds.winChance >= 0.5 && <span className="ml-1.5 text-[11px] font-semibold text-[#6eeb8a]">best target</span>}
+                  {i === 0 && r.odds && r.odds.win >= 0.5 && <span className="ml-1.5 text-[11px] font-semibold text-[#6eeb8a]">best target</span>}
                 </button>
                 <span className="tabular-nums text-white/75 whitespace-nowrap">
                   line {r.line.toFixed(1)} / {r.max.toFixed(1)}
                 </span>
                 {r.odds && (
                   <span className={`tabular-nums whitespace-nowrap text-[13px] font-semibold ${TONE[r.odds.label]}`} title="With your main force, in a full assault">
-                    {r.odds.label} {Math.round(r.odds.winChance * 100)}%
+                    {r.odds.label} {r.odds.text}
                   </span>
                 )}
                 <button className="btn btn-red" disabled={!reachable.has(r.id)} onClick={() => openWarRoom(r.id)}>

@@ -41,8 +41,8 @@ export const SYSTEM_SPECS: Record<SystemId, SystemSpec> = {
   ai: {
     name: 'AI Battle Command',
     tech: 'frontier_ai',
-    role: 'Software that plans, predicts and runs your campaigns. More attacks a month, exact battle forecasts, a better combined-arms bonus and advice on how to fight.',
-    levels: ['+1 attack a month. Combined arms +5%. Exact odds in the War Room.', '+2 attacks. Combined arms +10%. Recommends the best stance.', '+3 attacks. Combined arms +15%. Recommends the best force size too.'],
+    role: 'Software that plans, predicts and runs your campaigns. More attacks a month, exact battle forecasts, a better combined-arms bonus, advice on how to fight, and a planner that chooses the units for you.',
+    levels: ['+1 attack a month. Combined arms +5%. The exact chance to win (with its range and what decides it) instead of a rough band, and your targets ranked.', '+2 attacks. Combined arms +10%. Recommends the best stance and writes specific advice.', '+3 attacks. Combined arms +15%. Plans the best force (size and mix) for your goal in one click, and can run a standing auto-command.'],
     counter: 'Only helps you command. It does not make units stronger one by one, so it matters most with a big, mixed army.',
     baseCost: 100,
     upkeep: 2,

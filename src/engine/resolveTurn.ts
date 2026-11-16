@@ -43,7 +43,7 @@ import { EVENT_BY_ID } from '../data/events'
 import { CAMPAIGNS, LEVEL_NAMES, SOCIAL } from '../data/society'
 import { applyCampaign, applySocial } from './society'
 import { eventGap, resolveEvent, scheduleEvent, scheduleHumanEvents, settleUnanswered } from './events'
-import { addLog, forceUnits, reach, regionsOf } from './helpers'
+import { addLog, forceUnits, formatDivisions, reach, regionsOf } from './helpers'
 import { clockOf, isLive } from './calendar'
 import { launchArmy, launchStrike, turnBack } from './armies'
 import { answerCrisis, runCrises } from './crises'
@@ -55,13 +55,19 @@ import { runPolitics } from './politics'
 import { research } from './tech'
 import { fadeMarket, marketPrices, marketValue, pushMarket } from './trade'
 import { tickTraining, trainMonths } from './training'
-import { UNIT_TYPES, type Army, type AttackOrder, type BattleReport, type GameState, type Order, type TrainingJob, type WorldMap } from './types'
+import { UNIT_TYPES, type Army, type AttackOrder, type BattleReport, type GameState, type Order, type TrainingJob, type UnitCounts, type WorldMap } from './types'
 import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
 import { applyGovern, describePatch } from './puppets'
 
 /** A project's name, whether it is a nation's or a country's. */
 const projectName = (id: string) => (isLocalProject(id) ? LOCAL[id].name : PROJECTS[id as keyof typeof PROJECTS].name)
+
+/** A force in words: "8 infantry, 4 tanks". */
+export function describeForce(units: Partial<UnitCounts>): string {
+  const parts = UNIT_TYPES.filter((k) => (units[k] ?? 0) >= 0.05).map((k) => `${formatDivisions(units[k]!)} ${UNIT_SPECS[k].name.toLowerCase()}`)
+  return parts.length ? parts.join(', ') : 'no one'
+}
 
 export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
   const region = (id: string) => map.regions[id]?.name ?? id
@@ -150,7 +156,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'research':
       return `Research ${TECH_BY_ID[o.techId]?.name ?? o.techId}`
     case 'attack':
-      return `Attack ${region(o.target)}`
+      return `${o.auto ? 'Auto-command: ' : ''}${o.units ? `Attack ${region(o.target)} with ${describeForce(o.units)}` : `Attack ${region(o.target)}`}`
     case 'assignGeneral': {
       if (!o.generalId) return 'Remove the commander'
       const name = s.nations[o.nationId]?.generals.find((g) => g.id === o.generalId)?.name
@@ -362,13 +368,16 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
       continue
     }
     if (validateOrder(s, map, o)) continue
-    resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles, undefined, o.share)
+    resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles, undefined, o.share, o.units)
   }
   // The pooled armies of factions at war attack as one.
   runFactionCampaigns(s, map, rng)
   resolveRebels(s, map, rng)
   // Armies that fought this turn are back at their posts for the next one.
-  for (const n of Object.values(s.nations)) n.military.exposed = 0
+  for (const n of Object.values(s.nations)) {
+    n.military.exposed = 0
+    delete n.military.sent
+  }
 
   const alive = Object.values(s.nations)
     .filter((n) => n.alive)
@@ -447,7 +456,7 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
       const army = launchArmy(s, map, o, clockOf(s))
       return army ? { error: null, army } : { error: 'The attack could not be made' }
     }
-    const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles, undefined, o.share)
+    const result = resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles, undefined, o.share, o.units)
     s.outcome = checkOutcome(s, map)
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
   }

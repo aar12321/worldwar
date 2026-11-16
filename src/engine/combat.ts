@@ -61,6 +61,17 @@ export interface BattleOutcome {
 
 export const COMBAT = {
   damagePerPower: 0.18,
+  /** Each side's damage in a round is multiplied by a roll between these. */
+  rollMin: 0.85,
+  rollMax: 1.15,
+  /** The attacker must end the fight with this much more strength left than the defender to win it. */
+  winMargin: 1.1,
+  /**
+   * The fortune of the day: each side's damage in the whole battle is multiplied by one roll between 1 - luck and 1 + luck, on top of the
+   * round-by-round dice. Without it the dice average out over three rounds and the odds jump from 0% to 100% within a division or two of
+   * the same strength, which makes a forecast of "60% to win" meaningless. 0 turns it off (and draws no random numbers).
+   */
+  luck: 0.4,
   combinedArmsBonus: 0.25,
   defenderCombinedArmsShare: 0.5,
   minPresence: 0.5,
@@ -162,29 +173,36 @@ export function sidePower(
   return power * c.penalty
 }
 
+/** Divisions weighted by how much each soaks up (UNIT_SPECS.toughness): the "hit points" of a force. */
+export const hitPoints = (u: UnitCounts) => UNIT_TYPES.reduce((s, k) => s + u[k] * UNIT_SPECS[k].toughness, 0)
+
 function applyLosses(units: UnitCounts, losses: UnitCounts, damage: number, coastal: boolean, round?: UnitCounts) {
   const eligible = UNIT_TYPES.filter((k) => units[k] > 0 && (coastal || k !== 'naval'))
-  const total = eligible.reduce((s, k) => s + units[k], 0)
+  const hp = (k: UnitType) => units[k] * UNIT_SPECS[k].toughness
+  const total = eligible.reduce((s, k) => s + hp(k), 0)
   if (total <= 0) return
   let dmg = Math.min(damage, total)
   // Drone swarms are expendable: they take more than their share of the losses, so the soldiers behind them live. They do not take all of them.
   if (units.drone > 0) {
-    const weight = units.drone * COMBAT.droneLossWeight
-    const take = Math.min(units.drone, dmg * (weight / (weight + total - units.drone)))
-    units.drone -= take
-    losses.drone += take
-    if (round) round.drone += take
+    const own = hp('drone')
+    const weight = own * COMBAT.droneLossWeight
+    const take = Math.min(own, dmg * (weight / (weight + total - own)))
+    const lost = take / UNIT_SPECS.drone.toughness
+    units.drone -= lost
+    losses.drone += lost
+    if (round) round.drone += lost
     dmg -= take
   }
   const rest = eligible.filter((k) => k !== 'drone')
-  const restTotal = rest.reduce((s, k) => s + units[k], 0)
+  const restTotal = rest.reduce((s, k) => s + hp(k), 0)
   if (restTotal <= 0 || dmg <= 0) return
   dmg = Math.min(dmg, restTotal)
   for (const k of rest) {
-    const share = (units[k] / restTotal) * dmg
-    units[k] -= share
-    losses[k] += share
-    if (round) round[k] += share
+    const share = (hp(k) / restTotal) * dmg
+    const lost = share / UNIT_SPECS[k].toughness
+    units[k] -= lost
+    losses[k] += lost
+    if (round) round[k] += lost
   }
 }
 
@@ -226,19 +244,22 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
   }
   const attackerLosses = emptyUnits()
   const defenderLosses = emptyUnits()
-  const startAtt = totalUnits(att.units)
-  const startDef = totalUnits(def.units)
+  const startAtt = hitPoints(att.units)
+  const startDef = hitPoints(def.units)
   const rounds: BattleRound[] = []
   const even = { infantry: 1, armor: 1, artillery: 1, fighter: 1, air: 1, naval: 1, drone: 1, robot: 1, missile: 1 }
   const attackerPower = sidePower(att, even, terrain, coastal, false)
   const defenderPower = sidePower(def, even, terrain, coastal, true)
 
   const strike = att.units.drone + att.units.missile + def.units.drone + def.units.missile >= 0.05
+  const fortune = () => (COMBAT.luck > 0 ? rng.range(1 - COMBAT.luck, 1 + COMBAT.luck) : 1)
+  const attLuck = fortune()
+  const defLuck = fortune()
   for (const round of strike ? [STRIKE_ROUND, ...ROUNDS] : ROUNDS) {
     const ap = sidePower(att, round.weights, terrain, coastal, false)
     const dp = sidePower(def, round.weights, terrain, coastal, true)
-    const toDef = ap * rng.range(0.85, 1.15) * COMBAT.damagePerPower * (def.damageTaken ?? 1) * (1 - NANO_LESS_DAMAGE[sysLevel(def, 'nano')])
-    const toAtt = dp * rng.range(0.85, 1.15) * COMBAT.damagePerPower * (att.damageTaken ?? 1) * (1 - NANO_LESS_DAMAGE[sysLevel(att, 'nano')])
+    const toDef = ap * attLuck * rng.range(COMBAT.rollMin, COMBAT.rollMax) * COMBAT.damagePerPower * (def.damageTaken ?? 1) * (1 - NANO_LESS_DAMAGE[sysLevel(def, 'nano')])
+    const toAtt = dp * defLuck * rng.range(COMBAT.rollMin, COMBAT.rollMax) * COMBAT.damagePerPower * (att.damageTaken ?? 1) * (1 - NANO_LESS_DAMAGE[sysLevel(att, 'nano')])
     const roundDefLoss = emptyUnits()
     const roundAttLoss = emptyUnits()
     applyLosses(def.units, defenderLosses, toDef, coastal, roundDefLoss)
@@ -250,11 +271,11 @@ export function resolveBattle(input: BattleInput, rng: Rng): BattleOutcome {
   const evenWeights = even
   const attLeft = sidePower(att, evenWeights, terrain, coastal, false)
   const defLeft = sidePower(def, evenWeights, terrain, coastal, true)
-  const attLossFrac = startAtt > 0 ? totalUnits(attackerLosses) / startAtt : 1
-  const defLossFrac = startDef > 0 ? totalUnits(defenderLosses) / startDef : 1
+  const attLossFrac = startAtt > 0 ? hitPoints(attackerLosses) / startAtt : 1
+  const defLossFrac = startDef > 0 ? hitPoints(defenderLosses) / startDef : 1
   const attackerWins =
     totalUnits(att.units) >= 0.1 &&
-    (totalUnits(def.units) < 0.1 || (attLeft >= defLeft * 1.1 && defLossFrac >= attLossFrac))
+    (totalUnits(def.units) < 0.1 || (attLeft >= defLeft * COMBAT.winMargin && defLossFrac >= attLossFrac))
 
   const modifiers: string[] = [`Terrain: ${TERRAIN[terrain].name} (defense x${TERRAIN[terrain].defense})`]
   if (att.bomberMult !== 1 && input.attacker.units.air > 0) modifiers.push(att.bomberMult! > 1 ? 'Attacker rules the air: bombers hit harder' : 'Enemy fighters cripple the attacker\'s bombers')
