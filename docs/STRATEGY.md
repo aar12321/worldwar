@@ -36,7 +36,7 @@ What each metric means:
 | `quietNations` | nations that never fought in ten years |
 | `hoardMedian` | median months of income sitting in the treasury |
 
-Each row below is the mean of four games (seeds 1 to 4, a different player nation each), 120 months.
+The tables are the mean of two games (seeds 1 and 2, a different player nation each), 96 months, before (the AI at the merge of missiles and aircraft, with no strategic layer) and after. The first diagnosis (section 2) used four games of 120 months and showed the same picture.
 
 ## 2. The AI's strategic layer (`src/ai/strategy.ts`)
 
@@ -76,9 +76,16 @@ What the postures turn into:
   with the smallest force that clears the bar, stepping up a commit only if it wins much more (concentration of force). The score is
   win chance x land value (capital counts extra) minus the divisions it expects to lose.
 - **A reserve at home.** If another enemy is strong it sends no more than two thirds, or one third, of the army.
-- **Follow-through.** A war declared is followed up at once (a 65% chance each month for the first two months), a cracked front is
+- **Follow-through.** A war declared is followed up quickly (a 40% chance each month for the first two months), a cracked front is
   pressed (88%), otherwise a bot strikes now and then, more readily at a sure thing.
-- **A second front** in the same month, for Medium and Hard on the offensive, against a different enemy, only at 85% odds.
+- **A second front** in the same month, for Hard on the offensive, against a different enemy, only at 85% odds.
+- **Brakes on a snowball.** The first version of the layer never lost a fight, and one nation held 28 countries (14 before). Now a
+  bot digests its conquests (consolidate while more than 1 + countries/8 are unsettled), grows less eager as its empire grows
+  (appetite down 9% per country beyond four, never under 30%), and skilled rivals gang up on a nation holding eight or more.
+- **Missiles.** Tactical missiles thin a big army, cruise missiles soften the front it will attack, ballistic missiles only as a
+  last resort (losing badly or facing a power twice its size); a struck bot answers in the kind that hit it. Hard also develops
+  aircraft (interceptors first against missiles).
+- **Cash.** A bot with over a year of income banked cuts taxes and raises troops.
 - **Declaring wars.** A war is only declared if the target can be reached, no bigger hostile neighbor shares a land border, the bot
   is not already in a big war, and a forecast made on a copy of the state *with the war already declared* finds an attack worth
   making. A target already fighting someone else, or an enemy of an ally, counts as softer.
@@ -97,7 +104,31 @@ Determinism is kept: the only random numbers come from the bot's own seeded `rng
 
 ### Results
 
-RESULTS_TABLE
+| metric | Easy before | Easy after | Medium before | Medium after | Hard before | Hard after |
+| --- | --- | --- | --- | --- | --- | --- |
+| nations alive, month 96 | 100.5 | 113 | 76 | 77 | 66 | 72 |
+| biggest nation (countries) | 7 | 9 | 11 | 13 | 16 | 13.5 |
+| top five hold | 17% | 19% | 23% | 28% | 28% | 33% |
+| wars begun per year | 28.8 | 15.7 | 35.3 | 21.7 | 40.1 | 24.5 |
+| median war (months) | 13 | 5 | 10 | 4 | 10 | 4 |
+| wars that never saw a battle, median idle months | 20 | 11 | 20 | 11 | 17 | 11 |
+| wars with 3+ battles, no capture, 12+ months | 2 | 0.5 | 8 | 1 | 20 | 3.5 |
+| attacks per game | 259 | 210 | 448 | 302 | 622 | 363 |
+| share of attacks won | 72% | 92% | 65% | 91% | 49% | 94% |
+| mean forecast win chance of attacks launched | 0.76 | 1.00 | 0.67 | 1.00 | 0.46 | 1.00 |
+| attacks at under 40% win chance | 19% | 0% | 27% | 0% | 47% | 0% |
+| attacks thrown back untouched | 17% | 4% | 25% | 3% | 43% | 10% |
+| wars declared by the weaker side | 2% | 0% | 5% | 0% | 9% | 0% |
+| decisive wars (share of ended) | 66% | 64% | 73% | 76% | 70% | 75% |
+| nations that never fought | 29 | 74.5 | 13.5 | 40 | 7.5 | 36 |
+| median treasury (months of income) | 6.0 | 11.3 | 2.7 | 5.1 | 1.8 | 2.5 |
+
+Reading it: attacks are now made only when the forecast says they win, so the waste is gone and wars end quickly (a country usually
+falls to one decisive blow). Nobody snowballs on Medium: the biggest nation holds 13 countries at month 96 against 11. Costs: many
+more nations never fight (the layer is more careful, and a small nation next to a big one now defends), and **Easy and Medium
+bots bank more cash** because there are fewer wars to pay for; the tax cut and recruiting rule only partly offset that. Known
+weakness, left for the balance sweep. The after-the-merge world check: `superpowerSim` seed 22 reached 96 wars at once after
+garrisons landed and now reaches 20, so its bound is back to under half the nations; `liveSim` fights more than 10 battles again.
 
 ## 3. Scenarios (`src/data/scenarios.ts`, `src/engine/scenarios.ts`)
 
@@ -136,7 +167,37 @@ scenario, invariants every year, no war or alliance between dead or opposed nati
 
 ## 4. Engine tuning
 
-ENGINE_TUNING
+### Combat at the extremes (reviewed, no change)
+
+Forecasts of one all-in attack, 40 runs each, equal mixes of infantry, tanks, guns and fighters (defender 10 divisions):
+
+| attacker / defender | 0.1 | 0.25 | 0.5 | 1.0 | 1.5 | 4 | 40 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| win chance | 0 | 0 | 0 | 0 | 1 | 1 | 1 |
+| captures in one blow | 0 | 0 | 0 | 0 | 0 | 1 | 1 |
+| attacker losses (divisions) | 1.0 | 2.5 | 4.4 | 4.2 | 3.9 | 2.9 | 0.4 |
+
+The fight is close to a step: below about 1.2 to 1.3 the attacker always loses, above 1.5 it always wins, and one blow takes a
+country only at about 4 to 1. Nothing breaks at the extremes (no NaN, losses shrink with the odds). The defender's edge is
+deliberate, so the AI needs the forecast to attack well, which is what the strategy layer does.
+
+### Changes
+
+| change | before | after |
+| --- | --- | --- |
+| Wars nobody fights (AI vs AI, no country attacked for 12 months) fizzle into the usual truce (`WAR.staleMonths`, `fizzleStaleWars`) | wars with no battle sat idle a median 16 to 21 months, holding war slots and blocking pacts | idle wars end at 11 months; wars over two years: 25 per game to 0 |
+| Decisions scale with empire size (`EVENT_SCALE`, `eventScale`, `eventGap`): flat money, influence and food sums grow with the square root of the countries held (x2.2 for ten, x3 for 25); the gap between decisions falls from 12 months to 10, 8 and 6 at 4, 10 and 25 countries | a 25-country empire got the same 12-month gap and the same +12 influence as a single country | tested in `eventsScale.test.ts` |
+| Missile kinds record who struck with what (`struckWith`) so a bot answers in kind | any kind in store | the kind that hit it first |
+
+### Reviewed, left as they are (numbers from a 120-month run)
+
+- **War weariness**: +0.4 and +0.03 a month per war, 0.6 per division lost, -2 a month at peace, capped at 60. Median weariness 0, 90th percentile 12 at month 60: it matters only in long wars, and bots ask for peace at about 25 to 30.
+- **Opinion decay**: neighbors' median opinion -8, 17% to 27% of neighbor pairs below -20 over ten years; stable, alliances (40 to 60) and pacts form.
+- **Crises**: one starts about every ten months and boils over about half the time, a handful of wars in ten years against 200 or more others. Fine.
+- **Epidemics**: on average 3.5 of 172 nations sick, at most 17 at once; severity 0.35 clears in about five months.
+- **Espionage**: odds are clamped to 5% to 90% at every level.
+- **Peace valuation and surrender**: a capital falling with under three divisions left ends a nation (single-country nations die in one blow); war score demands are capped by a lead of up to 100, puppets cost 20 to 80. No pathologies found; the AI now asks for peace on points, stalemate and weariness, which was the missing half.
+- **Casus belli**: lifetimes (12 months, 8 for border incidents, 3 months to build a case) are purged each month already.
 
 ## 5. Re-running
 

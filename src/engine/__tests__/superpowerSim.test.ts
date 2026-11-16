@@ -72,8 +72,8 @@ describe('the world does not degenerate', () => {
       expect(out.months).toBeGreaterThanOrEqual(60)
       expect(out.nukes.length).toBeLessThanOrEqual(1)
       expect(out.alive).toBeGreaterThan(30)
-      // Garrisons slow conquest, so wars last longer and pile up (96 at once in seed 22 against 87.5 before). Loosened to 60% of nations; the balance sweep should look at this.
-      expect(out.maxWars).toBeLessThan(Object.values(s.nations).length * 0.6)
+      // After garrisons landed wars piled up (96 at once in seed 22). The strategy layer ends them (stale wars fizzle, bots seek peace sooner, no wars they cannot fight): 20 at once now, so the old bound is back.
+      expect(out.maxWars).toBeLessThan(Object.values(s.nations).length * 0.5)
     }, 1_800_000)
   }
 

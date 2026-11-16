@@ -51,8 +51,7 @@ describe('a year of a live game, played by the AI', () => {
     }
     expect(problems).toEqual([])
     expect(monthEnds).toBeGreaterThanOrEqual(11)
-    // Rivals post garrisons now, so fewer attacks leave their borders: 10 battles in the year (was 11+). Flagged for the balance sweep.
-    expect(battles).toBeGreaterThanOrEqual(8)
+    expect(battles).toBeGreaterThan(10)
     // A day tick copies the state when something happens, and costs almost nothing when it does not.
     const sorted = [...ms].sort((a, b) => a - b)
     const median = sorted[Math.floor(sorted.length / 2)]
