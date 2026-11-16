@@ -417,7 +417,7 @@ describe('counterforce: striking the launch sites', () => {
     expect(validateOrder(s, map, fire('tactical', 2, 'r1', 'site'))).toMatch(/No launch site/)
     s.regions.r1.buildings.factory = 1
     expect(validateOrder(s, map, fire('tactical', 2, 'r1', 'site'))).toBeNull()
-    expect(validateMissileStrike(s, map, { ...(fire('tactical', 2) as never), aim: 'nonsense' as never }, [])).toMatch(/Choose what to aim at/)
+    expect(validateMissileStrike(s, map, { ...(fire('tactical', 2) as Extract<Order, { type: 'strike' }>), aim: 'nonsense' as never }, [])).toMatch(/Choose what to aim at/)
   })
 
   it('kills no nuclear warheads, which sit in hardened silos', () => {
@@ -429,7 +429,7 @@ describe('counterforce: striking the launch sites', () => {
 })
 
 describe('bomber raids', () => {
-  const raid = (aim?: 'site', share?: number): Order => ({ type: 'raid', nationId: 'r0', target: 'r1', ...(aim ? { aim } : {}), ...(share ? { share } : {}) })
+  const raid = (aim?: 'site', share?: number): Extract<Order, { type: 'raid' }> => ({ type: 'raid', nationId: 'r0', target: 'r1', ...(aim ? { aim } : {}), ...(share ? { share } : {}) })
 
   it('fly out, meet fighters and batteries, lose aircraft and hit the country', () => {
     const s = war()
@@ -704,7 +704,7 @@ describe('the escalation ladder and world tension', () => {
 })
 
 describe('ceasefire and de-escalation', () => {
-  const offer = (s: GameState, target = 'r1'): Order => ({ type: 'missileTruce', nationId: 'r0', target })
+  const offer = (_s: GameState, target = 'r1'): Extract<Order, { type: 'missileTruce' }> => ({ type: 'missileTruce', nationId: 'r0', target })
 
   it('an AI rival refuses while the world is calm, accepts when the tension is up or it is losing the exchange', () => {
     const s = war()

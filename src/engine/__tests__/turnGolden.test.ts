@@ -7,6 +7,7 @@ import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { withOldCombat } from './oldCombat'
+import { withOldMissiles } from './oldMissiles'
 
 /**
  * Pins exactly how turn-based months resolve, so a change that was not meant to alter the rules (a refactor, a cache) shows up here.
@@ -126,7 +127,7 @@ describe('turn mode resolves exactly as pinned', () => {
 
   it('the combat tuning is the only thing that moved them: with the old numbers put back the old hashes return', () => {
     // Fortune of the day off, every division as tough as every other, robots at 1.6, Siege and Blitz as they were (see oldCombat.ts).
-    withOldCombat(() => {
+    withOldCombat(() => withOldMissiles(() => {
       const normal = botWorld(7, 'normal', 'poland', 12).s
       expect(hash(JSON.stringify(normal))).toBe('1b61219982f9c1')
       const hard = botWorld(5, 'hard', 'china', 30).s
@@ -134,7 +135,7 @@ describe('turn mode resolves exactly as pinned', () => {
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('14c280eef9180f')
       expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
-    })
+    }))
   }, 400_000)
 
   it('a turn game carries none of the live fields', () => {

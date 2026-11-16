@@ -84,8 +84,8 @@ export const MW = {
   falseAlarmInfamy: 2,
   // ---- Tension and the ladder ----
   /** Tension lost each month, and the extra when nobody fired a missile that month. */
-  tensionFade: 3,
-  tensionQuietFade: 3,
+  tensionFade: 2,
+  tensionQuietFade: 2,
   /** A counterforce strike raises tension this share as much. A nuclear strike adds this much. */
   siteTension: 0.6,
   nukeTension: 30,

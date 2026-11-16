@@ -1,4 +1,7 @@
+import { MW, rungOf } from '../data/missileWar'
 import { MISSILE_TYPES } from '../data/missiles'
+import { tensionOf } from '../engine/missileWar'
+import { missileWarOrders } from './missileWar'
 import { COALITION } from '../data/coalition'
 import { dueStrike, jointTarget, leadersOf, type ThreatReport } from '../engine/coalition'
 import { aiNuclearOrder } from '../engine/nuclear'
@@ -309,6 +312,10 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         const bomb = aiNuclearOrder(s, map, nationId, rng)
         if (bomb && tryAdd(bomb)) return true
       }
+      // The missile war: doctrine, radar and interceptors, counterforce, raids, ceasefires. It draws its random numbers from its own stream.
+      if (diff.skill >= 1 && MW.enabled) {
+        for (const o of missileWarOrders(s, map, nationId, diff.skill, createRng((s.seed ^ 0x4d57) >>> 0, s.turn * 100003 + hashString(nationId)))) if (tryAdd(o)) return true
+      }
       // Struck lately? A rival that can answer does, with what it has, at whoever hit it.
       if (diff.skill >= 1) {
         const attackers = recentAttackers(s, n)
@@ -334,11 +341,12 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         if (node && tryAdd({ type: 'startAircraftDev', nationId, node })) return true
       }
       // ---- strategy hook: each missile kind has its job (tactical thins armies, cruise softens a front, ballistic only as a last resort) ----
-      if (diff.skill >= 1 && enemies.length > 0 && rng.chance(diff.skill === 2 ? 0.5 : 0.3)) {
+      const brink = MW.enabled && rungOf(tensionOf(s)) >= MW.ladder.length - 1
+      if (!brink && diff.skill >= 1 && enemies.length > 0 && rng.chance(diff.skill === 2 ? 0.5 : 0.3)) {
         for (const shot of chooseMissileStrikes(sight, strat, enemies)) if (tryAdd({ type: 'strike', nationId, target: shot.target, weapon: 'missile', kind: shot.kind, count: shot.count })) return true
       }
       // Hard rivals strike first with missiles and, once a year, from orbit.
-      if (diff.skill === 2 && enemies.length > 0 && rng.chance(0.35)) {
+      if (!brink && diff.skill === 2 && enemies.length > 0 && rng.chance(0.35)) {
         const targets = Object.values(s.regions).filter((r) => enemies.includes(r.owner)).sort((a, b) => b.line - a.line || (a.id < b.id ? -1 : 1))
         for (const weapon of ['orbital', 'missile'] as const) {
           const salvo = Math.max(1, Math.min(6, Math.floor(n.military.units.missile / 2)))
