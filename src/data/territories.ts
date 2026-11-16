@@ -40,7 +40,6 @@ export const TERRITORY = {
 /** The rules of the peace table, in words, for the UI and the reports. */
 export const TERRITORY_TEXT = {
   term: 'Make them a territory',
-  short: 'Territory',
   hint: 'They become your territory for ever: you take 30% of all their revenue, they join your faction and fight in your wars, you command their army, and they owe you no reparations. They are not your people: their population does not count as yours.',
   describe: (name: string, master: string) => `${name} becomes a territory of ${master}: ${Math.round(TERRITORY.cut * 100)}% of its revenue goes to ${master} for ever`,
   log: (name: string, master: string) => `${name} is now a territory of ${master}.`,

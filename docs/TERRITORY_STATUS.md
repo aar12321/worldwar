@@ -34,6 +34,7 @@ A new vassal status next to puppets. Rules in `src/engine/territories.ts`, every
 
 ## Not done / unverified
 
-- Goldens: the full suite result is recorded in the final report; no golden was re-pinned (no feature use in them).
+- Goldens: none re-pinned and none moved (turnGolden and the other pinned worlds pass unchanged: no bot in them makes a territory). Full suite: 1624 passed; the 6 failures of the first run were fixed (wiring test knows commands, kept orders after reload, puppet AI tests switch the new Hard option off, one unused text key); `bot.test.ts` 'at most one new proposal' has an explicit 30s limit and takes 25-47s, so it times out under load and passes alone (not caused by this work).
+- Screenshots (1440x900 and 390x844) of the Territories tab and army card were read; the peace composer and War Room section were not captured.
 - No per-territory "Send with my army" in turn-based online play beyond the shared switch (the switch is a browser preference).
 - A territory's captured land is the territory's, not the master's: a design choice not tested against the AI over long games.
