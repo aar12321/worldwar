@@ -142,3 +142,11 @@ export function worthOf(units: Partial<UnitCounts>): number {
   for (const k of UNIT_TYPES) sum += (units[k] ?? 0) * raise(k)
   return sum / raise('infantry')
 }
+
+/** The units that share `f` of every free kind sends, in whole divisions (tenths when less than one is free). */
+export function shareOfPool(pool: UnitCounts, f: number): UnitCounts {
+  const out = { ...pool }
+  for (const k of SENDABLE) out[k] = f >= 1 ? (pool[k] >= 1 ? Math.floor(pool[k] + 1e-9) : tenth(pool[k])) : tenth(pool[k] * f)
+  out.missile = 0
+  return out
+}
