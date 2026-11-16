@@ -1,5 +1,6 @@
 import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
 import type { SystemId } from '../data/systems'
+import type { ScenarioGoal } from '../data/scenarios'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
@@ -725,6 +726,8 @@ export interface GameState {
   turn: number
   seed: number
   settings: GameSettings
+  /** The scenario this game started from, with its goal. Absent in a Standard game, so a Standard save is exactly what it always was. */
+  scenario?: { id: string; start: number; goal: ScenarioGoal }
   /** The nation of the player at this screen. In online games each screen sets its own. */
   playerId: NationId
   /** Every nation a person plays. One in a single-player game, two to four online. */
