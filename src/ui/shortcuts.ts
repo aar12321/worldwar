@@ -11,7 +11,7 @@ export const mapModeForKey = (key: string): MapMode | null => (Object.keys(MAP_M
 
 const MAP_KEYS = Object.values(MAP_MODE_KEYS).join(', ')
 
-const KEYS = `Esc: close. B briefing, E economy, M military, W wars, D diplomacy, R research, N news, I empire, A War Room for the selected country, ${MAP_KEYS}: map colors (with no desk open), / or Ctrl+K to jump anywhere, Ctrl+Z to undo, ? help.`
+const KEYS = `Esc: close. B briefing, E economy, M military, W wars, D diplomacy, F faction, R research, N news, I empire, A War Room for the selected country, ${MAP_KEYS}: map colors (with no desk open), / or Ctrl+K to jump anywhere, Ctrl+Z to undo, ? help.`
 
 /** The keys, as they work in this kind of game. */
 export const shortcutsFor = (live: boolean) => (live ? `Space: play or pause. 1, 2, 3: speed. ${KEYS}` : `Enter: next turn. ${KEYS}`)

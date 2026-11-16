@@ -16,6 +16,7 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * social programs, campaigns) changes nothing for a nation that does not use it.
  * The Hard-bot world was pinned again when Hard bots learned to use social programs, campaigns, the new projects and projects in
  * their countries: a deliberate change of what they decide. The Normal-bot world did not move. Pinned again when missiles became a program with several kinds, and struck rivals began to answer.
+ * Pinned again when Medium and Hard rivals learned to found and join factions, pay into them and vote (the bots' faction play uses its own random stream). Checked before pinning: with the faction play switched off, the previous hashes matched exactly, so nothing else moved; a game that never founds a faction carries no `factions` field.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -77,13 +78,13 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('1d71ef7fbf0dc5')
+    expect(hash(JSON.stringify(s))).toBe('f924d485be247')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('23d77e0bf045b')
+    expect(hash(JSON.stringify(s))).toBe('a4e5a305c0c2e')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {

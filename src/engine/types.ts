@@ -415,6 +415,12 @@ export interface TradeTerms {
   receive: ResourceBundle
   /** 0 for a one-off exchange, otherwise the amounts change hands every month for this many months. */
   months: number
+  /** A live contract: months to wait before the first delivery. */
+  start?: number
+  /** A live contract: money the proposer posts. It comes back when the contract is fulfilled and goes to the other side if the proposer breaks it. */
+  collateral?: number
+  /** A live contract: the other nation joins every war the proposer fights, for as long as it runs. */
+  joinWars?: boolean
 }
 
 export type ProposalDraft =
@@ -461,6 +467,19 @@ export interface Deal {
   receive: ResourceBundle
   /** Last turn on which the deal pays out. */
   until: number
+  /** Present on a live contract (a trade with a start, collateral or a duty to join wars). Absent on every other deal. */
+  contract?: ContractInfo
+}
+
+/** What makes a deal a live contract: when it starts, the collateral held for it, and the duty to join wars. */
+export interface ContractInfo {
+  /** First turn it pays out. */
+  start: number
+  /** Collateral the poster put up, held until the contract ends. */
+  held: number
+  poster: NationId
+  /** The nation that must join every war of the other side while it runs. */
+  joins?: NationId
 }
 
 export interface OpinionModifier {
@@ -594,6 +613,15 @@ export type Order =
   | { type: 'setSocial'; nationId: NationId; policy: SocialId; level: number }
   | { type: 'campaign'; nationId: NationId; campaign: CampaignId }
   | { type: 'suppressRebels'; nationId: NationId; regionId: RegionId }
+  /** Factions: found one, join one you were invited to, invite a nation, leave, pay into the common pool, take your share out, put a country to a war vote, vote. */
+  | { type: 'factionFound'; nationId: NationId; name: string; charter?: Partial<FactionCharter> }
+  | { type: 'factionJoin'; nationId: NationId; factionId: string }
+  | { type: 'factionInvite'; nationId: NationId; target: NationId }
+  | { type: 'factionLeave'; nationId: NationId }
+  | { type: 'factionContribute'; nationId: NationId; gift: FactionGift }
+  | { type: 'factionWithdraw'; nationId: NationId; gift: FactionGift }
+  | { type: 'factionPropose'; nationId: NationId; proposal: FactionProposalDraft }
+  | { type: 'factionVote'; nationId: NationId; proposalId: string; vote: 'yes' | 'no' }
   /** Online: this player's answer to the decision waiting for them (`GameState.pendingEvents`). */
   | { type: 'eventChoice'; nationId: NationId; index: number }
   /** Live mode: calls an army that is still on its way out back home. */
@@ -794,6 +822,8 @@ export interface GameState {
   history?: HistoryPoint[]
   /** How much buying (positive) or selling (negative) has pushed each world price lately. It fades every month. */
   marketPressure?: Partial<Record<TradeResource, number>>
+  /** Factions: member countries pooling money, materials and soldiers to vote on wars together. Absent until one is founded. */
+  factions?: Faction[]
   /** Live mode only: the day of the month, from 0. `turn` is still the month. */
   day?: number
   /** Live mode only: armies marching, fighting or coming home. */
@@ -898,4 +928,112 @@ export interface MissileFlight {
   lands: number
   /** Who held the target when it was fired. */
   foe?: NationId
+}
+
+// ---- Factions: countries that pool money, materials and soldiers and vote on war together ----
+
+/** What the common pool holds besides soldiers. */
+export type PoolResource = 'money' | 'oil' | 'steel' | 'goods' | 'food'
+export const POOL_RESOURCES: PoolResource[] = ['money', 'oil', 'steel', 'goods', 'food']
+export type PoolStock = Record<PoolResource, number>
+
+/** How a faction's own rules work: who counts how much in a vote, who gets conquered land, and what leaving costs. */
+export interface FactionCharter {
+  /** `majority`: each member has one vote. `weighted`: votes follow each member's ownership share. */
+  vote: 'majority' | 'weighted'
+  /** `share`: conquered countries are split by ownership share. `proposer`: they go to whoever proposed the war. */
+  spoils: 'share' | 'proposer'
+  /** `refund`: a leaver takes back what is left of what they put in, less a fee. `forfeit`: they leave everything behind. */
+  exit: 'refund' | 'forfeit'
+}
+
+/** A gift to the pool, or a withdrawal from it: money and materials, and soldiers by type. */
+export interface FactionGift {
+  stock?: Partial<PoolStock>
+  units?: Partial<UnitCounts>
+}
+
+/** What one member has put into the pool and not taken out. Ownership shares come from this. */
+export interface FactionLedger {
+  stock: PoolStock
+  units: UnitCounts
+  /** The month of the last contribution: it stays locked for a while after. */
+  last: number
+  joined: number
+}
+
+/** A standing deal between the pool and a member: the member supplies the pool each month, and may be paid from it. */
+export interface FactionContractTerms {
+  /** The member who supplies. */
+  member: NationId
+  /** What the member sends the pool each month. Supplies with nothing paid back count as contributions to its ledger. */
+  supply: Partial<PoolStock>
+  /** What the pool pays the member each month. */
+  pay: Partial<PoolStock>
+  /** Months from approval before the first delivery. */
+  start: number
+  months: number
+  /** Money the member puts up as a guarantee. */
+  collateral: number
+}
+
+export type FactionProposalDraft = { kind: 'war'; target: NationId } | { kind: 'contract'; terms: FactionContractTerms }
+
+export interface FactionProposal {
+  id: string
+  kind: 'war' | 'contract'
+  by: NationId
+  created: number
+  /** The last month in which it can still be voted on. */
+  expires: number
+  target?: NationId
+  terms?: FactionContractTerms
+  votes: Record<NationId, 'yes' | 'no'>
+}
+
+export interface FactionContract extends FactionContractTerms {
+  id: string
+  /** First and last month it delivers. */
+  from: number
+  until: number
+  /** The member's collateral, held by the pool. */
+  held: number
+}
+
+/** A war the faction fights together: the pooled army attacks the target every month. */
+export interface FactionWar {
+  id: string
+  target: NationId
+  /** The member whose training, weapons and technology the pooled army fights with. */
+  lead: NationId
+  proposer: NationId
+  since: number
+  /** Countries each member has been given from this war, so the split follows the shares. */
+  given: Record<NationId, number>
+  captured: RegionId[]
+}
+
+export interface FactionInvite {
+  nation: NationId
+  by: NationId
+  expires: number
+}
+
+export interface Faction {
+  id: string
+  name: string
+  founder: NationId
+  founded: number
+  charter: FactionCharter
+  members: NationId[]
+  pool: { stock: PoolStock; units: UnitCounts }
+  ledger: Record<NationId, FactionLedger>
+  proposals: FactionProposal[]
+  contracts: FactionContract[]
+  invites: FactionInvite[]
+  wars: FactionWar[]
+  /** The pooled army could not be fed or fuelled last month, so it fights at reduced strength. */
+  short?: { oil?: boolean; food?: boolean }
+  /** What happened lately: votes, wars, contracts, members. */
+  history: { turn: number; text: string }[]
 }

@@ -44,6 +44,10 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
       if (o.level >= before) return null
       return asks(`${before - o.level > 1 ? 'Cut' : 'Reduce'} ${SOCIAL[o.policy].name.toLowerCase()}?`, `People will lose it: stability falls by ${(before - o.level) * SOCIAL_RULES.cutStability} at once, and the benefit fades over a few months. Raising it again costs influence again.`, 'Cut it', true)
     }
+    case 'factionLeave':
+      return asks('Leave the faction?', 'You take back what is left of your claim, less the exit fee (or nothing, if the charter forfeits). Soldiers stay in the pool while the faction is at war, and the members will think less of you.', 'Leave', true)
+    case 'factionPropose':
+      return o.proposal.kind === 'war' ? asks(`Put war on ${name(o.proposal.target)} to the vote?`, 'If the members pass it, every member that can joins the war, and the pooled army attacks. The influence is spent whether or not it passes.', 'Put it to the vote') : null
     case 'repealLaw':
       return null
     default:

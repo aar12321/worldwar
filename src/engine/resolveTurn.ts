@@ -41,6 +41,7 @@ import { clockOf, isLive } from './calendar'
 import { launchArmy, launchStrike, turnBack } from './armies'
 import { answerCrisis, runCrises } from './crises'
 import { runJustification } from './justification'
+import { describeGift, executeFactionOrder, factionOf, isFactionOrder, resolveFactionVotes, runFactionCampaigns, runFactionMonth } from './factions'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
 import { runPolitics } from './politics'
@@ -211,6 +212,24 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       const def = ev ? EVENT_BY_ID[ev.eventId] : null
       return def ? `Decide: ${def.title} (${def.options[o.index]?.label ?? 'option'})` : 'Answer a decision'
     }
+    case 'factionFound':
+      return `Found the faction ${o.name}`
+    case 'factionJoin':
+      return `Join ${s.factions?.find((f) => f.id === o.factionId)?.name ?? 'a faction'}`
+    case 'factionInvite':
+      return `Invite ${nation(o.target)} to the faction`
+    case 'factionLeave':
+      return `Leave ${factionOf(s, o.nationId)?.name ?? 'the faction'}`
+    case 'factionContribute':
+      return `Put ${describeGift(o.gift)} into the pool`
+    case 'factionWithdraw':
+      return `Take ${describeGift(o.gift)} out of the pool`
+    case 'factionPropose':
+      return o.proposal.kind === 'war' ? `Propose war on ${nation(o.proposal.target)} to the faction` : 'Propose a supply contract to the faction'
+    case 'factionVote': {
+      const p = factionOf(s, o.nationId)?.proposals.find((x) => x.id === o.proposalId)
+      return `Vote ${o.vote} on ${p ? (p.kind === 'war' ? `war on ${nation(p.target!)}` : 'a contract') : 'a proposal'}`
+    }
   }
 }
 
@@ -219,6 +238,11 @@ const PHASES: Order['type'][][] = [
   ['respond'],
   ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
+  ['factionFound', 'factionJoin', 'factionInvite'],
+  ['factionLeave'],
+  ['factionContribute', 'factionWithdraw'],
+  ['factionPropose'],
+  ['factionVote'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose', 'resolution'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy', 'sellShares', 'buyShares'],
@@ -280,6 +304,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
     }
   }
 
+  // Factions: votes that have settled are carried out, so a joint war is on before the month's attacks.
+  resolveFactionVotes(s, map, rng)
   // Online, a decision nobody answered is made by the nation's ministers, so no month ever waits on one.
   settleUnanswered(s, map)
 
@@ -297,6 +323,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
     if (validateOrder(s, map, o)) continue
     resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles, undefined, o.share)
   }
+  // The pooled armies of factions at war attack as one.
+  runFactionCampaigns(s, map, rng)
   resolveRebels(s, map, rng)
   // Armies that fought this turn are back at their posts for the next one.
   for (const n of Object.values(s.nations)) n.military.exposed = 0
@@ -322,7 +350,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
     workforce.set(id, e.workforce)
     doctors.set(id, e.coverage.doctors)
   }
-  applyDeals(s)
+  applyDeals(s, map, rng)
+  runFactionMonth(s)
   runPolitics(s, map, rng)
   runEpidemics(s, map, nationNeighborMap(s, map), doctors)
   runJustification(s, map, rng)
@@ -656,6 +685,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       sellShares(s, o.nationId, o.company, o.shares)
       break
     default:
+      if (isFactionOrder(o)) executeFactionOrder(s, map, o, rng)
       break
   }
 }

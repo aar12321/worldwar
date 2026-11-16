@@ -9,6 +9,7 @@ import { absDate, clockOf } from './calendar'
 import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
 import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
+import { factionOf, votesWaiting } from './factions'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { validateOrder } from './orders'
 import { monthsToElection } from './politics'
@@ -34,6 +35,7 @@ export type AdviceTarget =
   | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
+  | { desk: 'faction' }
   | { desk: 'warRoom'; region: RegionId }
   | { desk: 'map'; region: RegionId }
 
@@ -264,6 +266,24 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       action: 'Read them',
       target: { desk: 'diplomacy', nation: first.from },
     })
+  }
+
+  // Factions: votes waiting on you, invitations, and a faction army with no war to fight.
+  const waiting = votesWaiting(s, nationId, pending)
+  if (waiting.length > 0) {
+    const { faction, proposal } = waiting[0]
+    const left = Math.max(0, proposal.expires - s.turn) + 1
+    add('now', 40, {
+      id: 'faction-vote',
+      title: proposal.kind === 'war' ? `${faction.name} votes on war with ${s.nations[proposal.target!]?.name ?? 'a country'}` : `${faction.name} votes on a supply contract`,
+      detail: `${waiting.length > 1 ? `${waiting.length} votes need you. ` : ''}${s.nations[proposal.by]?.name ?? 'A member'} put it forward. It is decided when the month ends or earlier if the count is settled, and at the latest in ${left} month${left === 1 ? '' : 's'}.`,
+      action: 'Vote',
+      target: { desk: 'faction' },
+    })
+  }
+  const invite = (s.factions ?? []).find((f) => !factionOf(s, nationId) && f.invites.some((i) => i.nation === nationId && i.expires >= s.turn))
+  if (invite && !pending.some((o) => o.type === 'factionJoin')) {
+    add('soon', 25, { id: 'faction-invite', title: `${invite.name} invited you`, detail: 'Members pool money, materials and soldiers and vote on wars together. You can leave later and take back your share.', action: 'See the invitation', target: { desk: 'faction' } })
   }
 
   // Quantum Codebreaking: where an enemy could strike next month, and how likely it is to work.

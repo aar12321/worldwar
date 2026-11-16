@@ -26,6 +26,7 @@ import { WarRoom } from './ui/WarRoom'
 // The globe (three.js, about 2 MB) and the big desks load in their own files, so the start screen appears at once.
 const WorldGlobe = lazy(() => import('./ui/Globe').then((m) => ({ default: m.WorldGlobe })))
 const DiplomacyPanel = lazy(() => import('./ui/Diplomacy').then((m) => ({ default: m.DiplomacyPanel })))
+const FactionPanel = lazy(() => import('./ui/Faction').then((m) => ({ default: m.FactionPanel })))
 const MilitaryPanel = lazy(() => import('./ui/MilitaryPanel').then((m) => ({ default: m.MilitaryPanel })))
 const EconomyDesk = lazy(() => import('./ui/EconomyDesk').then((m) => ({ default: m.EconomyDesk })))
 const TechTree = lazy(() => import('./ui/TechTree').then((m) => ({ default: m.TechTree })))
@@ -87,7 +88,7 @@ function useShortcuts() {
         const key = e.key.toLowerCase()
         if (key === 'w') st.openMilitary('wars')
         else {
-          const desks: Record<string, Panel> = { b: 'briefing', e: 'economy', c: 'economy', m: 'military', d: 'diplomacy', r: 'tech', t: 'tech', n: 'log', l: 'log', i: 'empire' }
+          const desks: Record<string, Panel> = { b: 'briefing', e: 'economy', c: 'economy', m: 'military', d: 'diplomacy', f: 'faction', r: 'tech', t: 'tech', n: 'log', l: 'log', i: 'empire' }
           const panel = desks[key]
           if (panel) st.setPanel(panel)
         }
@@ -170,6 +171,7 @@ export default function App() {
             {panel === 'economy' && <EconomyDesk key="economy" />}
             {panel === 'military' && <MilitaryPanel key="military" />}
             {panel === 'diplomacy' && <DiplomacyPanel key="diplomacy" />}
+            {panel === 'faction' && <FactionPanel key="faction" />}
             {panel === 'tech' && <TechTree key="tech" />}
             {panel === 'empire' && <EmpireDesk key="empire" />}
           </Suspense>

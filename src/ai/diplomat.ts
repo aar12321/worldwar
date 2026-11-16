@@ -132,6 +132,13 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
     }
     case 'trade': {
       if (atWar(s, botId, p.from)) return verdict(false, 'we do not trade with enemies')
+      if (p.terms.joinWars) {
+        // Fighting beside someone is a matter of trust, and it must not set us against our own friends.
+        if (!isAllied(s, botId, p.from) && op < 20) return verdict(false, 'we will not fight your wars on a promise')
+        const foes = enemiesOf(s, p.from).filter((e) => e !== botId)
+        if (foes.some((e) => isAllied(s, botId, e) || hasPact(s, botId, e))) return verdict(false, 'we are bound by treaty to one of your enemies')
+        if (bundleEmpty(p.terms.give) && bundleEmpty(p.terms.receive)) return verdict(true, 'we stand with our friends')
+      }
       const px = prices ?? marketPrices(s)
       const econ = computeEconomy(s, map, botId)
       const { give, receive, months } = p.terms
@@ -147,7 +154,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
         if (borders && ratio > 2.2 && op > -40) return verdict(true, 'we cannot refuse so mighty a neighbor')
         return verdict(false, 'we pay no tribute')
       }
-      let threshold = 1.05 - op * 0.004 - (persona.dealAppetite - 1) * 0.25 - (isAllied(s, botId, p.from) ? 0.05 : 0)
+      let threshold = 1.05 - op * 0.004 - (persona.dealAppetite - 1) * 0.25 - (isAllied(s, botId, p.from) ? 0.05 : 0) - Math.min(0.1, (p.terms.collateral ?? 0) / 1000)
       if (months > 0 && op < 0) threshold += 0.1
       const fairness = got / Math.max(0.01, paid)
       if (fairness >= threshold + noise / 150) return verdict(true, fairness > 1.25 ? 'an excellent bargain' : 'a fair exchange')

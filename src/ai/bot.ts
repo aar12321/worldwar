@@ -25,6 +25,7 @@ import { MAX_REPARATIONS, netWarScore, puppetValue, regionValue } from '../engin
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
 import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
+import { factionBotOrders } from './factions'
 
 export const BOT = {
   firstWarTurn: 3,
@@ -598,6 +599,9 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
     if (attention <= 0) break
     if (agenda[item]()) attention--
   }
+
+  // Factions: a rival joins, votes, pays in and (for a leader) puts wars to the vote. Its own random stream, so nothing else in the month moves.
+  if (s.factions?.length || diff.skill >= 1) factionBotOrders(s, map, nationId, tryAdd)
 
   const attackRatio = (diff.attackRatio / persona.risk) * (mistake === 'overconfident' ? 0.75 : 1)
   // A war declared on the player gives them a couple of months to raise a military before the first blow.
