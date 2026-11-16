@@ -1,11 +1,13 @@
 import { addOpinion } from '../ai/opinion'
 import { AIRCRAFT_RULES, type AircraftEffects } from '../data/aircraft'
+import { MW } from '../data/missileWar'
 import { MISSILES, MISSILE_PROGRAM, MISSILE_TYPES, PROGRAM_MISSILES } from '../data/missiles'
 import { aircraftEffects, pastDefenses } from './aircraft'
 import { interceptFactor } from './combat'
 import { airPatrolStop, patrolFighters } from './deployment'
 import { addInfamy, addLog, atWar, canUseUnit, clamp, distanceKm } from './helpers'
-import type { GameState, MissileFlight, MissileType, Nation, NationId, Order, RegionId, WorldMap } from './types'
+import { resolveSalvo, siteDown, specOf, trucePair } from './missileWar'
+import type { GameState, MissileFlight, MissileType, Nation, NationId, Order, RegionId, SalvoReport, StrikeAim, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
 type Strike = Extract<Order, { type: 'strike' }>
@@ -72,6 +74,8 @@ export function launchSite(s: GameState, map: WorldMap, nationId: NationId, targ
   let bestKm = Infinity
   for (const r of Object.values(s.regions).sort((x, y) => (x.id < y.id ? -1 : 1))) {
     if (r.owner !== nationId || r.buildings.factory <= 0 || !map.regions[r.id]) continue
+    // A launch site that a counterforce strike shut cannot fire until it reopens.
+    if (MW.enabled && siteDown(s, s.nations[nationId], r.id)) continue
     const km = distanceKm(map.regions[r.id], t)
     if (km <= MISSILES[kind].km && km < bestKm) {
       best = r.id
@@ -92,13 +96,20 @@ export function validateMissileStrike(s: GameState, map: WorldMap, o: Strike, pe
   if (!Number.isInteger(count) || count < 1) return 'Choose how many missiles to fire'
   const left = missilesFree(n, kind, pending)
   if (left < count) return left <= 0 ? `No ${noun}s left this month` : `Only ${left} ${noun}${left === 1 ? '' : 's'} left this month`
-  if (!launchSite(s, map, o.nationId, o.target, kind)) return `Out of range: ${spec.name.toLowerCase()}s reach ${spec.km} km from a country with a factory`
+  if (o.aim !== undefined && o.aim !== 'country' && o.aim !== 'site') return 'Choose what to aim at'
+  const victim = s.regions[o.target]?.owner
+  if (MW.enabled && victim && trucePair(s, o.nationId, victim) !== null) return 'A missile ceasefire holds with them'
+  if (o.aim === 'site' && (s.regions[o.target]?.buildings.factory ?? 0) <= 0) return 'No launch site there (it needs a factory)'
+  if (!launchSite(s, map, o.nationId, o.target, kind)) {
+    const shut = MW.enabled && Object.values(s.regions).some((r) => r.owner === o.nationId && r.buildings.factory > 0 && siteDown(s, n, r.id))
+    return shut ? 'Your launch sites are shut by a counterforce strike. They reopen in a month or two.' : `Out of range: ${spec.name.toLowerCase()}s reach ${spec.km} km from a country with a factory`
+  }
   return null
 }
 
-/** What a salvo of `fired` missiles of a kind does when it lands on a country. */
-export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, kind: MissileType, fired: number) {
-  const spec = MISSILES[kind]
+/** The rules before the missile war (kept so a test can prove nothing else moved): shield and hunters only, no reports, no tension. */
+function strikeHitsLegacy(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, kind: MissileType, fired: number) {
+  const spec = specOf(kind)
   const n = s.nations[nationId]
   const region = s.regions[target]
   const victim = s.nations[region.owner]
@@ -152,6 +163,19 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   addLog(s, 'battle', `${fired} ${spec.name.toLowerCase()}${fired === 1 ? '' : 's'} from ${n.name} hit ${place}${stopped > 0 ? ` (${stoppedBy} stopped ${stopped}%)` : ''}: ${parts.join(', ') || 'little damage'}.`, [nationId, region.owner])
 }
 
+/**
+ * What a salvo of `fired` missiles of a kind does when it lands on a country: the shield (with its rounds), batteries, radar, hunters and
+ * patrols stop a share, and what gets through hurts the people AND the Defense Line, whatever the kind (see data/missiles.ts and
+ * data/missileWar.ts). Returns the salvo's report for the war panel.
+ */
+export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, kind: MissileType, fired: number, opts: { aim?: StrikeAim; scrambled?: boolean; auto?: boolean; origin?: RegionId } = {}): SalvoReport | undefined {
+  if (!MW.enabled) {
+    strikeHitsLegacy(s, map, nationId, target, kind, fired)
+    return undefined
+  }
+  return resolveSalvo(s, map, nationId, target, kind, fired, opts)
+}
+
 // ---- The missile program ----
 
 export const programLevel = (n: Pick<Nation, 'missileProgram'>) => n.missileProgram ?? 0
@@ -170,8 +194,11 @@ export function buildRoom(n: Nation, turn: number): number {
   return Math.max(0, MISSILE_PROGRAM.capacity[programLevel(n)] - built)
 }
 
+/** Missiles of a kind the program could still build this month: small ones (decoys) take less of the capacity. */
+export const buildRoomFor = (n: Nation, turn: number, kind: MissileType, queued = 0): number => Math.max(0, Math.floor((buildRoom(n, turn) - queued) / MISSILES[kind].slots + 1e-9))
+
 /** Missiles of every program kind in store (hypersonic ones are the military's own units and have their own limits). */
-export const arsenalSize = (n: Nation): number => PROGRAM_MISSILES.reduce((sum, k) => sum + Math.floor((n.arsenal?.[k] ?? 0) + 1e-9), 0)
+export const arsenalSize = (n: Nation): number => PROGRAM_MISSILES.reduce((sum, k) => sum + Math.floor((n.arsenal?.[k] ?? 0) + 1e-9) * MISSILES[k].slots, 0)
 
 /** The most missiles the program can keep in its stores: a few months of its own production, so a stockpile has a ceiling. */
 export const storageCap = (n: Pick<Nation, 'missileProgram'>): number => MISSILE_PROGRAM.capacity[programLevel(n)] * MISSILE_PROGRAM.storageMonths
@@ -182,16 +209,16 @@ export function buildMissilesProblem(s: GameState, o: Build, pending: Order[]): 
   if (!spec || !PROGRAM_MISSILES.includes(o.kind)) return 'Unknown missile'
   if (!Number.isInteger(o.count) || o.count < 1) return 'Choose how many to build'
   if (programLevel(n) < spec.level) return `Needs the missile program at level ${spec.level}`
-  const queued = pending.reduce((sum, p) => (p.type === 'buildMissiles' && p.nationId === o.nationId ? sum + p.count : sum), 0)
-  const room = buildRoom(n, s.turn) - queued
+  const queued = pending.reduce((sum, p) => (p.type === 'buildMissiles' && p.nationId === o.nationId ? sum + p.count * MISSILES[p.kind].slots : sum), 0)
+  const room = buildRoomFor(n, s.turn, o.kind, queued)
   if (o.count > room) return room <= 0 ? 'The program has built all it can this month' : `The program can build ${room} more this month`
   if (n.resources.oil < spec.oil * o.count) return `Not enough oil (needs ${spec.oil * o.count})`
-  const space = storageCap(n) - arsenalSize(n) - queued
+  const space = Math.floor((storageCap(n) - arsenalSize(n) - queued) / spec.slots + 1e-9)
   if (o.count > space) return space <= 0 ? `The stores are full (${storageCap(n)} missiles). Fire some first.` : `The stores have room for ${space} more`
   return null
 }
 
-export const buildMissilesCost = (o: Build) => ({ capital: MISSILES[o.kind].money * o.count, steel: MISSILES[o.kind].steel * o.count })
+export const buildMissilesCost = (o: Build) => ({ capital: Math.ceil(MISSILES[o.kind].money * o.count), steel: MISSILES[o.kind].steel * o.count })
 
 export function applyFundMissiles(s: GameState, n: Nation) {
   // The research is paid here: the generic order charge covers money, influence, soldiers and steel, not research.
@@ -203,7 +230,7 @@ export function applyFundMissiles(s: GameState, n: Nation) {
 export function applyBuildMissiles(s: GameState, n: Nation, o: Build) {
   n.resources.oil -= MISSILES[o.kind].oil * o.count
   ;(n.arsenal ??= {})[o.kind] = (n.arsenal[o.kind] ?? 0) + o.count
-  n.missileBuilt = { turn: s.turn, count: (n.missileBuilt?.turn === s.turn ? n.missileBuilt.count : 0) + o.count }
+  n.missileBuilt = { turn: s.turn, count: (n.missileBuilt?.turn === s.turn ? n.missileBuilt.count : 0) + o.count * MISSILES[o.kind].slots }
 }
 
 /** Whether a nation is at war with one that struck it lately, for the AI to answer in kind. */

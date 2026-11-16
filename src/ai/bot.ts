@@ -1,4 +1,7 @@
+import { MW, rungOf } from '../data/missileWar'
 import { MISSILE_TYPES } from '../data/missiles'
+import { tensionOf } from '../engine/missileWar'
+import { missileWarOrders } from './missileWar'
 import { COALITION } from '../data/coalition'
 import { dueStrike, jointTarget, leadersOf, type ThreatReport } from '../engine/coalition'
 import { aiNuclearOrder } from '../engine/nuclear'
@@ -335,17 +338,26 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
         const node = wantedAircraft(s, n, enemies)
         if (node && tryAdd({ type: 'startAircraftDev', nationId, node })) return true
       }
+      // The missile war, first half: ceasefire offers, counterforce, bomber raids, recon. It draws its random numbers from its own stream.
+      if (diff.skill >= 1 && MW.enabled) {
+        for (const o of missileWarOrders(s, map, nationId, diff.skill, createRng((s.seed ^ 0x4d57) >>> 0, s.turn * 100003 + hashString(nationId)), 'strike')) if (tryAdd(o)) return true
+      }
       // ---- strategy hook: each missile kind has its job (tactical thins armies, cruise softens a front, ballistic only as a last resort) ----
-      if (diff.skill >= 1 && enemies.length > 0 && rng.chance(diff.skill === 2 ? 0.5 : 0.3)) {
+      const brink = MW.enabled && rungOf(tensionOf(s)) >= MW.ladder.length - 1
+      if (!brink && diff.skill >= 1 && enemies.length > 0 && rng.chance(diff.skill === 2 ? 0.5 : 0.3)) {
         for (const shot of chooseMissileStrikes(sight, strat, enemies)) if (tryAdd({ type: 'strike', nationId, target: shot.target, weapon: 'missile', kind: shot.kind, count: shot.count })) return true
       }
       // Hard rivals strike first with missiles and, once a year, from orbit.
-      if (diff.skill === 2 && enemies.length > 0 && rng.chance(0.35)) {
+      if (!brink && diff.skill === 2 && enemies.length > 0 && rng.chance(0.35)) {
         const targets = Object.values(s.regions).filter((r) => enemies.includes(r.owner)).sort((a, b) => b.line - a.line || (a.id < b.id ? -1 : 1))
         for (const weapon of ['orbital', 'missile'] as const) {
           const salvo = Math.max(1, Math.min(6, Math.floor(n.military.units.missile / 2)))
           for (const r of targets.slice(0, 6)) if (tryAdd(weapon === 'missile' ? { type: 'strike', nationId, target: r.id, weapon, count: salvo } : { type: 'strike', nationId, target: r.id, weapon })) return true
         }
+      }
+      // The missile war, second half: doctrine, radar, interceptor rounds, batteries, decoys. After the older strike logic so that keeps its turn.
+      if (diff.skill >= 1 && MW.enabled) {
+        for (const o of missileWarOrders(s, map, nationId, diff.skill, createRng((s.seed ^ 0x4d57) >>> 0, s.turn * 100003 + hashString(nationId)), 'prepare')) if (tryAdd(o)) return true
       }
       for (const kind of ['foreign', 'domestic'] as const) {
         if (n.agencies[kind].level < cap && money > levelCost(n.agencies[kind].level) * 3 && rng.chance(0.15) && tryAdd({ type: 'fundAgency', nationId, agency: kind })) return true

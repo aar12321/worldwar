@@ -195,10 +195,10 @@ export function IncomingMissilesChip() {
   if (!game) return null
   const salvos = incomingSalvos(game, game.playerId)
   return (
-    <button className="advice-pill pointer-events-auto live-alert" onClick={() => open('systems')} title="Raise an Interceptor Shield or build missiles to answer" data-alert="missiles">
+    <button className="advice-pill pointer-events-auto live-alert" onClick={() => open('missiles')} title="Scramble fighters, restock interceptors, answer in kind" data-alert="missiles">
       <span className="w-2 h-2 rounded-full shrink-0 bg-[#bf5af2]" />
       <span className="truncate">{incomingText(salvos)}</span>
-      <span className="text-white/65 shrink-0">Systems ›</span>
+      <span className="text-white/65 shrink-0">Missile War ›</span>
     </button>
   )
 }

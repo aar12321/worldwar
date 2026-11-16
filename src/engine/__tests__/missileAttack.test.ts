@@ -84,7 +84,7 @@ describe('what the missile screens read from the engine', () => {
     n.arsenal = { ballistic: 2 }
     expect(missileKinds(n)).toEqual(['ballistic'])
     n.missileProgram = 2
-    expect(missileKinds(n)).toEqual(['cruise', 'tactical', 'ballistic'])
+    expect(missileKinds(n)).toEqual(['cruise', 'tactical', 'ballistic', 'decoy'])
     n.techs.push('frontier_hypersonic')
     expect(missileKinds(n)).toContain('hypersonic')
   })

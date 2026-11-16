@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { MISSILES } from '../data/missiles'
 import { FRONTIER } from '../data/systems'
+import { AIMS } from '../data/missileWar'
+import { strikeForecast } from '../engine/missileForecast'
 import { launchSite, missileKinds, missileStock, missilesFree } from '../engine/missiles'
 import { strikeCost } from '../engine/systems'
-import type { GameState, MissileType, Nation, Order, RegionId } from '../engine/types'
+import type { GameState, MissileType, Nation, Order, RegionId, StrikeAim } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { OrderButton } from './panel'
@@ -52,6 +54,7 @@ function KindRow({ game, player, target, orders, live, kind }: { game: GameState
   const { map } = getWorld()
   const openMilitary = useGame((s) => s.openMilitary)
   const [count, setCount] = useState(3)
+  const [aim, setAim] = useState<StrikeAim>('country')
   const spec = MISSILES[kind]
   const stock = missileStock(player, kind)
   const free = missilesFree(player, kind, orders)
@@ -59,7 +62,10 @@ function KindRow({ game, player, target, orders, live, kind }: { game: GameState
   const victim = game.nations[game.regions[target].owner]
   const shield = shieldNote(victim.systems?.shield ?? 0, kind)
   const site = launchSite(game, map, player.id, target, kind)
-  const fire = (c: number) => ({ type: 'strike' as const, nationId: player.id, target, weapon: 'missile' as const, kind, count: c })
+  const canSite = game.regions[target].buildings.factory > 0
+  const useAim: StrikeAim = canSite ? aim : 'country'
+  const fire = (c: number) => ({ type: 'strike' as const, nationId: player.id, target, weapon: 'missile' as const, kind, count: c, ...(useAim === 'site' ? { aim: 'site' as const } : {}) })
+  const forecast = stock >= 1 ? strikeForecast(game, map, player.id, target, kind, n, useAim) : null
   const launch = `${strikeCost(fire(1)).capital} money`
   const effect = live ? `Flies ${spec.days === 1 ? 'a day' : `${spec.days} days`}, then hits.` : 'Resolves when the month ends.'
   return (
@@ -85,9 +91,25 @@ function KindRow({ game, player, target, orders, live, kind }: { game: GameState
       <p className={`text-[12px] ${shield.through < 1 ? 'text-[#ffd60a]' : 'text-white/65'}`} data-shield={shield.through < 1 ? 'yes' : 'no'}>
         {shield.text}
       </p>
+      {stock >= 1 && (
+        <div className="space-y-1.5">
+          <div className="inline-flex rounded-lg overflow-hidden border border-white/15" role="group" aria-label="What to aim at">
+            {(['country', 'site'] as const).map((a) => (
+              <button key={a} className={`px-2.5 py-1.5 text-[13px] ${useAim === a ? 'bg-[#0a84ff] text-white' : 'bg-white/6 text-white/80'} disabled:opacity-40`} onClick={() => setAim(a)} aria-pressed={useAim === a} disabled={a === 'site' && !canSite} title={a === 'site' && !canSite ? 'No launch site here: it needs a factory' : AIMS[a].blurb}>
+                {AIMS[a].name}
+              </button>
+            ))}
+          </div>
+          {forecast && (
+            <p className="text-[12px] text-white/85" data-forecast={Math.round(forecast.chance * 100)}>
+              <b>Forecast for {n}:</b> {forecast.text.replace(`${spec.name}: `, '')}
+            </p>
+          )}
+        </div>
+      )}
       {stock >= 1 ? (
         <div className="grid gap-2 sm:grid-cols-2 items-start">
-          <OrderButton order={fire(1)} label={`Fire 1 ${missileName(kind)}`} cost={launch} effect={effect} tone="btn-red" />
+          <OrderButton order={fire(1)} label={`${useAim === 'site' ? 'Counterforce: ' : ''}Fire 1 ${missileName(kind)}`} cost={launch} effect={effect} tone="btn-red" />
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[13px] text-white/75">Custom</span>

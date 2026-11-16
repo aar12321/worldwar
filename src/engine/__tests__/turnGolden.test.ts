@@ -8,6 +8,7 @@ import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { PRESENCE } from '../../data/presence'
 import { withOldCombat } from './oldCombat'
+import { withOldMissiles } from './oldMissiles'
 
 /** Runs `fn` with what forces on station do in the world (docs/MILITARY_STATUS.md) switched off. */
 function withoutPresence<T>(fn: () => T): T {
@@ -60,6 +61,10 @@ function withoutPresence<T>(fn: () => T): T {
  * Re-pinned (all three) for Presence (docs/MILITARY_STATUS.md): readiness and alert levels, patrol trade, straits, blockades, watch intelligence, incidents,
  * shows of force, and rivals that read a posted border. Checked before pinning: with `PRESENCE.on` switched off (the last test of this file) the previous
  * pins (7d9d1f55d2a94, 5e24dace6d64b, 1c2e3ffb6159fd) return exactly, so nothing else moved.
+ * Re-pinned (the Hard-bot world and the small war; the Normal-bot world did not move) for the missile war (docs/MISSILE_WAR_STATUS.md): every missile kind now
+ * hurts people and the Defense Line, strikes write reports and tension, and Hard rivals play it. Checked before pinning: with the war switched off
+ * (withOldMissiles) every previous hash returns, in 'the missile war is the only thing that moved ...' below; and with it off AND the old combat
+ * the oldest hashes return, in 'the combat tuning ...'.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -130,18 +135,47 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned again for the combat tuning (docs/WAR_STATUS.md): see 'the combat tuning is the only thing that moved them' below.
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
-    expect(hash(JSON.stringify(s))).toBe('1780819090232c')
+    // All of presence, the missile war and the combat tuning on; the layers below show what each added.
+    expect(hash(JSON.stringify(s))).toBe('12f18d5b0a2e88')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('16f99cdbf99edf')
-    expect(hash(JSON.stringify(log))).toBe('17e9fe7b927733')
+    expect(hash(JSON.stringify(state))).toBe('197cfe617d07ae')
+    expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
   })
+
+  it('layer 1, the combat tuning alone: presence and the missile war switched off, the pins from before them return', () => {
+    withoutPresence(() => withOldMissiles(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('7d9d1f55d2a94')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('5e24dace6d64b')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('1c2e3ffb6159fd')
+      expect(hash(JSON.stringify(log))).toBe('17e9fe7b927733')
+    }))
+  }, 400_000)
+
+  it('layer 2, presence added: the missile war switched off, the pins from before the missile war return', () => {
+    withOldMissiles(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('115b6530ffb6b2')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1780819090232c')
+      expect(hash(JSON.stringify(smallWar().state))).toBe('16f99cdbf99edf')
+    })
+  }, 400_000)
+
+  it('layer 3, the missile war added: presence switched off, the pins from before presence return', () => {
+    withoutPresence(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('7d9d1f55d2a94')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('2bbdc71bb6ad1')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('d190f76c21120')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    })
+  }, 400_000)
 
   it('the combat tuning is the only thing that moved them: with the old numbers put back the old hashes return', () => {
     // Fortune of the day off, every division as tough as every other, robots at 1.6, Siege and Blitz as they were (see oldCombat.ts).
-    withoutPresence(() => withOldCombat(() => {
+    withoutPresence(() => withOldCombat(() => withOldMissiles(() => {
       const normal = botWorld(7, 'normal', 'poland', 12).s
       expect(hash(JSON.stringify(normal))).toBe('1b61219982f9c1')
       const hard = botWorld(5, 'hard', 'china', 30).s
@@ -149,15 +183,7 @@ describe('turn mode resolves exactly as pinned', () => {
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('14c280eef9180f')
       expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
-    }))
-  }, 400_000)
-
-  it('presence is the only thing that moved them: switched off, the pins from before it return', () => {
-    withoutPresence(() => {
-      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('7d9d1f55d2a94')
-      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('5e24dace6d64b')
-      expect(hash(JSON.stringify(smallWar().state))).toBe('1c2e3ffb6159fd')
-    })
+    })))
   }, 400_000)
 
   it('a turn game carries none of the live fields', () => {

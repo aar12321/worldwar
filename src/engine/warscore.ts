@@ -1,3 +1,4 @@
+import { MW } from '../data/missileWar'
 import { PUPPET } from '../data/puppets'
 import { DIPLOMACY } from '../data/unitTypes'
 import { EMPIRE } from '../data/war'
@@ -100,4 +101,10 @@ export function validatePeaceTerms(s: GameState, map: WorldMap, terms: PeaceTerm
   const budget = Math.max(0, netWarScore(s, proposer, target))
   if (demand - concession > budget) return `Demands (${demand - concession}) exceed your war score (${budget})`
   return null
+}
+
+/** What a missile strike earns toward the peace table: the Defense Line it cut and the share of people it killed, a little each, capped per salvo. */
+export function addMissileScore(s: GameState, attacker: NationId, victim: NationId, lineCut: number, percentKilled: number) {
+  const amount = Math.min(MW.scoreMax, lineCut * MW.scoreLine + percentKilled * MW.scorePerPercent)
+  if (amount > 0.01) addWarScore(s, attacker, victim, amount)
 }

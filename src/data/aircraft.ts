@@ -122,7 +122,7 @@ export const AIRCRAFT_RULES = {
   /** The most that hunters can ever stop of one salvo. */
   huntMax: 0.95,
   /** How well fighters catch each kind of missile: slow low flyers most, ballistic warheads least. */
-  huntVs: { cruise: 1.3, tactical: 1, hypersonic: 0.5, ballistic: 0.25 } as Record<MissileType, number>,
+  huntVs: { cruise: 1.3, tactical: 1, hypersonic: 0.5, ballistic: 0.25, decoy: 1.3 } as Record<MissileType, number>,
   /** Bombers are this share of the force for the payload bonus to be in full. */
   bomberShareFull: 0.25,
 }
