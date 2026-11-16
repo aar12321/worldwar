@@ -40,7 +40,7 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
  * so a new desk needs no change here.
  */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'faction' | 'empire' | 'log' | 'settings' | (string & {})
-export type EmpireTab = 'overview' | 'provinces' | 'world' | 'reaction' | 'stats' | 'puppets'
+export type EmpireTab = 'overview' | 'provinces' | 'world' | 'reaction' | 'stats' | 'puppets' | 'territories'
 export type { PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'space' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' | 'missiles'
