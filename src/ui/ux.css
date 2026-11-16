@@ -1126,3 +1126,11 @@ body.resizing {
     text-overflow: clip;
   }
 }
+
+/* On a phone an open desk covers the globe, so the soft hint pills (space flights, advice) step aside; red alerts stay. */
+@media (max-width: 900px) {
+  body:has([data-panel-body]) .advice-pill:not(.live-alert),
+  body:has([data-panel-body]) .pill-stack:not(:has(.live-alert)) {
+    display: none;
+  }
+}

@@ -9,7 +9,7 @@ import { speak } from '../../plain'
 /** A small chip: a label and a value, for samples and staff. */
 export function Chip({ children, tone }: { children: ReactNode; tone?: 'good' | 'warn' | 'bad' }) {
   const color = tone === 'bad' ? 'text-[#ff8a84]' : tone === 'warn' ? 'text-[#ffd60a]' : tone === 'good' ? 'text-[#6eeb8a]' : 'text-white/80'
-  return <span className={`inline-flex items-center rounded-full bg-white/8 px-2.5 py-0.5 text-[12px] tabular-nums ${color}`}>{children}</span>
+  return <span className={`inline-flex items-center whitespace-nowrap shrink-0 rounded-full bg-white/8 px-2.5 py-0.5 text-[12px] tabular-nums ${color}`}>{children}</span>
 }
 
 /** A search box that says what it searches. */
