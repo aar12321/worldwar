@@ -1,4 +1,5 @@
 import { MISSILES } from '../data/missiles'
+import { airReach } from './aircraft'
 import { launchSite, strikeKind } from './missiles'
 import { LIVE } from '../data/live'
 import { GENERAL_TRAITS } from '../data/projects'
@@ -69,7 +70,7 @@ export function launchPoint(s: GameState, map: WorldMap, nationId: NationId, tar
     for (const r of Object.values(s.regions)) {
       if (r.owner !== nationId || !map.regions[r.id]) continue
       const km = distanceKm(map.regions[r.id], t)
-      if (via === 'fleet' ? r.buildings.port > 0 && km <= REACH.seaKm : r.buildings.factory > 0 && km <= REACH.airKm) candidates.push(r.id)
+      if (via === 'fleet' ? r.buildings.port > 0 && km <= REACH.seaKm : r.buildings.factory > 0 && km <= airReach(s.nations[nationId])) candidates.push(r.id)
     }
   }
   let best: RegionId | null = null

@@ -89,6 +89,17 @@ Missiles are weapons that need no army. A nation can have four kinds, each hurti
 - **An attack on land never carries missiles by itself.** The War Room has no "missiles to fire" slider, and an attack order that names no missiles fires none (an order may name some on purpose). Fire them from the Missiles section.
 - A nation that is struck remembers who did it (`Nation.struckBy`). Medium and Hard rivals answer in kind, and the advisor tells you to answer from the War Room, or to raise the program, and to keep a shield up.
 
+## Aircraft development
+
+The **Develop** button on Military, Forces opens a large screen with a tree of sixteen aircraft developments in four branches. It answers missiles and drones, and gives bombers and fighters new abilities.
+
+- **Interceptors**: radar network, long-range air-to-air missiles, **missile-hunter fighters** and an integrated air shield. Fighters kept at home shoot down a share of every incoming missile salvo and drone swarm: it works with the Interceptor Shield (the shield stops its share, then the hunters their share of what is left), cruise missiles are easiest to catch and ballistic warheads hardest, and a wing of three fighters at home covers everything (fewer cover less). In `missiles.ts` this is `getsThrough(shield, kind, air)`; the same cover blunts hypersonic batteries in an attack and drones and missiles in a battle.
+- **Stealth and electronic war**: radar-absorbing coatings, stealth bombers, electronic warfare pods and a blackout doctrine. Bombers keep more of their strength when the enemy rules the air; enemy shields and hunters stop less of your missiles, drones and bombers; enemy hunters and fighters are blinded.
+- **Range and payload**: drop tanks, aerial refuelling and a strategic bomber wing push airbase reach beyond 7000 km (up to 13000 km), landings by air lose less of their penalty, and attacks with many bombers push the Defense Line back harder.
+- **Unmanned wingmen**: wingmen, swarm autonomy, loyal wingman fighters and an autonomous air force. Stronger drones that survive enemy fighters, better fighters, and faster development.
+
+Each development has a cost in research (paid the day it starts), money (paid month by month while it is worked on, the same total at any pace), months of work (engineers set the pace, like national projects), earlier developments, a technology and an empire tier (Nation, Regional power, Great power, Superpower). A nation develops one thing at a time, two from a Great power; pausing one frees its slot and its monthly bill. A card shows what it changes on the unit stat sheet (attack and defense before and after) and why it is locked. The numbers on the screen are the numbers battles use: developments add to the combat modifiers (`combatMods`) that the stat sheet, battles, the forecast and the AI all read. Hard bots at war, or facing missiles, develop their aircraft (interceptors first when missiles threaten). Everything is data in `src/data/aircraft.ts` and pure rules in `src/engine/aircraft.ts`; a nation that never develops anything has no `aircraft` field and plays exactly as before.
+
 ## Live mode
 
 Pick **Live** on the start screen and the same game runs on a clock: a month takes about a minute at normal speed (a day every two seconds), with pause, 2x and 4x. A new game starts paused; **Space** plays or pauses, **1**, **2** and **3** set the speed. Everything else works as in Turns: the economy, research, diplomacy, agencies, crises, stocks, Frontier systems, governors and bulk upgrades.
@@ -143,6 +154,7 @@ src/
     calendar.ts     real month lengths and absolute days for the live clock
     orders.ts       validation and costs. Orders in MONTH_END_ORDERS wait for Next turn; the rest apply at once
     militaryStats.ts  the per-unit stat sheet and military power (battles and the AI read the same numbers)
+    aircraft.ts     aircraft development: the tree's rules, slots, monthly work, what finished developments add up to (hunters, stealth, reach, payload); data in data/aircraft.ts
     combat.ts / warfare.ts  3-round battles, whole-country capture, garrisons, rebels
     arms.ts / training.ts   weapon levels, training slots and queue
     economy.ts / diplomacy.ts / espionage.ts / tech.ts / victory.ts
