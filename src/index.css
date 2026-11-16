@@ -1159,3 +1159,26 @@ body:has(.drawer) .armies-dock {
     margin: -13px -6px;
   }
 }
+
+/* Dropdown lists: the closed box is translucent, so the open list needs its own solid dark background and light text, or names vanish. */
+select {
+  color-scheme: dark;
+}
+select.field {
+  text-overflow: ellipsis;
+  min-height: 40px;
+}
+select option,
+select optgroup {
+  background-color: #1c1c20;
+  color: #f5f5f7;
+  font-size: 15px;
+  padding: 6px 8px;
+}
+select option:checked {
+  background-color: #0a84ff;
+  color: #ffffff;
+}
+select option:disabled {
+  color: #8e8e93;
+}
