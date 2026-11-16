@@ -124,8 +124,8 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
     // Like governments understand each other; an open society and a closed one do not.
     const hg = h.government
     const tg = s.nations[target]?.government
-    if (tg && hg === tg) push('Same system of government', 4)
-    else if (tg && ((hg === 'democracy' && (tg === 'junta' || tg === 'one_party')) || (tg === 'democracy' && (hg === 'junta' || hg === 'one_party')))) push('Opposed systems of government', -4)
+    if (tg && hg === tg) push('Same system of government', 2)
+    else if (tg && ((hg === 'democracy' && (tg === 'junta' || tg === 'one_party')) || (tg === 'democracy' && (hg === 'junta' || hg === 'one_party')))) push('Opposed systems of government', -2)
   }
   const borders = ctx.borders ?? nationNeighbors(s, map, holder).has(target)
   if (borders) push('Border tensions', h.personality === 'expansionist' ? -14 : -6)

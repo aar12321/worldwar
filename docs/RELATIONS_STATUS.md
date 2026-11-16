@@ -37,7 +37,7 @@ All actions are one order, `{ type: 'relate', act, target, ... }`, with a cost, 
 | Mediate | 5 influence | +8 from them, +5 from the other side; -2 war weariness for both if at war | 10 mo |
 | Call in a favour | one favour | money +25, influence +4 or research +6 from them; they think -2 of you | 3 mo; favours last 36 months, at most 3 per partner |
 
-**Keeping it up.** Treaty anniversary +6 (fades 0.5) every 12 months of a pact or alliance. Steadfast ally: +0.4 a month after a year, to 10. Neglect: with a pact, alliance, trade deal or embassy and no contact for 12 months, -0.8 a month to -10. Contact is any act or running program. Opinion modifiers fade on their own, so the desk shows "relations cool by X a month unless maintained" and when they would be merely cordial. A new line, **Same system of government** +4 (or **Opposed systems** -4, democracy against junta or one-party), applies to every opinion.
+**Keeping it up.** Treaty anniversary +6 (fades 0.5) every 12 months of a pact or alliance. Steadfast ally: +0.4 a month after a year, to 10. Neglect: with a pact, alliance, trade deal or embassy and no contact for 12 months, -0.8 a month to -10. Contact is any act or running program. Opinion modifiers fade on their own, so the desk shows "relations cool by X a month unless maintained" and when they would be merely cordial. A new line, **Same system of government** +2 (or **Opposed systems** -2, democracy against junta or one-party), applies to every opinion.
 
 **Joint war plans.** Hits are recorded per plan. If the partner struck the same country in the same month (live: within 3 days) the second blow is a combined strike: the Defense Line drops a further 0.9. If either partner takes a country the other is paid `split` of its value from the taker's treasury. Plan partners share war-score credit like a faction's army. A strike window sets the country and, live, the day (both armies leave on the same day through the existing joint-strike clock). The plan ends with the war, on time, or when one side makes a separate peace (-10 from the other).
 
@@ -53,7 +53,7 @@ Relations desk (`O`; phone: More sheet and the bar): Nations (search, sort, filt
 
 ## Goldens
 
-The Normal and Hard bot worlds moved (the small war did not): rivals now act in the desk and opinions carry the government line. Proof: with `RELATIONS.on` switched off, in the last-but-one test of `turnGolden.test.ts`, the previous pins (`6b42de15579c5`, `196fdf3f5c5b29`, and the small war's two) return exactly, and every layer test runs with it off too. New pins: `adef6947e39d3`, `16982d2a7f37bd`.
+The Normal and Hard bot worlds moved (the small war did not): rivals now act in the desk and opinions carry the government line. Proof: with `RELATIONS.on` switched off, in the last-but-one test of `turnGolden.test.ts`, the previous pins (`6b42de15579c5`, `196fdf3f5c5b29`, and the small war's two) return exactly, and every layer test runs with it off too. New pins (after the merge with Territory and the +-2 government line): `1f72167c03ee2`, `1719b377e4ad6a`.
 
 ## Sims (Hard, 60 months, seeds 1 to 3, bots in every seat)
 

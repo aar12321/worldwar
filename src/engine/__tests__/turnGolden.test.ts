@@ -146,7 +146,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('adef6947e39d3')
+    expect(hash(JSON.stringify(s))).toBe('1f72167c03ee2')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -156,7 +156,7 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
     // All of presence, the missile war and the combat tuning on; the layers below show what each added.
-    expect(hash(JSON.stringify(s))).toBe('16982d2a7f37bd')
+    expect(hash(JSON.stringify(s))).toBe('1719b377e4ad6a')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
