@@ -56,6 +56,12 @@ export const puppetsOf = (s: GameState, id: NationId): NationId[] =>
     .filter((n) => n.alive && n.overlord === id)
     .map((n) => n.id)
 
+/** Nations that are territories of `id` (see `engine/territories.ts`). */
+export const territoriesOf = (s: GameState, id: NationId): NationId[] =>
+  Object.values(s.nations)
+    .filter((n) => n.alive && n.territoryOf === id)
+    .map((n) => n.id)
+
 export const isAllied = (s: GameState, a: NationId, b: NationId) => a !== b && s.alliances.includes(pairKey(a, b))
 
 function partnersIn(keys: string[], id: NationId): NationId[] {

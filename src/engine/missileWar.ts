@@ -411,7 +411,7 @@ export function raidProblem(s: GameState, map: WorldMap, o: Raid, pending: Order
   const r = s.regions[o.target]
   if (!r || !map.regions[o.target]) return 'Unknown country'
   if (r.owner === o.nationId || !atWar(s, o.nationId, r.owner)) return 'You can only raid a country you are at war with'
-  if (s.nations[r.owner]?.overlord === o.nationId) return 'They are your puppet'
+  if (s.nations[r.owner]?.overlord === o.nationId || s.nations[r.owner]?.territoryOf === o.nationId) return 'They are your puppet or territory'
   if (o.aim !== undefined && o.aim !== 'country' && o.aim !== 'site') return 'Choose what to bomb'
   if (o.share !== undefined && (!Number.isFinite(o.share) || o.share < 0.1 || o.share > 1)) return 'Send between 10% and 100% of your bombers'
   if (trucePair(s, o.nationId, r.owner) !== null) return 'A missile ceasefire holds with them'

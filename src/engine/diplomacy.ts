@@ -3,7 +3,7 @@ import { addOpinion, decayOpinions } from '../ai/opinion'
 import { LIBERATE_TEXT, PUPPET } from '../data/puppets'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
 import { EMPIRE, JUSTIFY, WAR } from '../data/war'
-import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, justificationOf, maxWars, newId, pairKey, puppetsOf } from './helpers'
+import { addInfamy, addLog, alliesOf, atWar, enemiesOf, grantJustification, guarantorsOf, hasCasusBelli, hasPact, isAllied, justificationOf, maxWars, newId, pairKey, puppetsOf, territoriesOf } from './helpers'
 import type { Rng } from './rng'
 import { bundleEmpty, bundleValue, describeBundle, marketPrices, shortfall, transferBundle, validateTradeTerms } from './trade'
 import type { Deal, Dispatch, GameState, NationId, Proposal, ProposalDraft, WorldMap } from './types'
@@ -11,6 +11,8 @@ import { clearWarScore, REPARATION_MONTHS, validatePeaceTerms } from './warscore
 import { transferRegion } from './warfare'
 import { tierOf } from './empire'
 import { bindPuppet, clearPuppetFields, freePuppet, puppetJoinsWar, willFollow } from './puppets'
+import { TERRITORY, TERRITORY_TEXT } from '../data/territories'
+import { bindTerritory, territoryJoinsWar } from './territories'
 
 export const TRUCE_TURNS = 12
 export const PACT_TURNS = 24
@@ -137,7 +139,15 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
       }
       puppetJoinsWar(s, puppet, side, foe)
     }
+    // Territories fight beside their master without being asked and cannot refuse.
+    for (const t of territoriesOf(s, side)) {
+      if (t === foe || atWar(s, t, foe) || !s.nations[t]?.alive || s.nations[foe]?.territoryOf === side) continue
+      territoryJoinsWar(s, t, side, foe)
+    }
   }
+  // A war on a territory is a war on its master: it joins, unless a treaty or its own limit on wars stands in the way.
+  const lord = s.nations[b]?.territoryOf
+  if (lord && lord !== a && s.nations[lord]?.alive && !atWar(s, lord, a) && !isAllied(s, lord, a) && !hasPact(s, lord, a) && s.nations[a]?.territoryOf !== lord) declareWar(s, map, lord, a, rng, false)
   if (!callAllies) return
   for (const ally of [...new Set([...alliesOf(s, b), ...guarantorsOf(s, b)])].sort()) {
     const n = s.nations[ally]
@@ -167,7 +177,7 @@ export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId
 }
 
 /** One side of a war: the nation, its allies and its puppets. */
-const sideOf = (s: GameState, id: NationId): NationId[] => [...new Set([id, ...alliesOf(s, id), ...puppetsOf(s, id)])].filter((x) => s.nations[x]?.alive)
+const sideOf = (s: GameState, id: NationId): NationId[] => [...new Set([id, ...alliesOf(s, id), ...puppetsOf(s, id), ...territoriesOf(s, id)])].filter((x) => s.nations[x]?.alive)
 
 /** Wars between the two sides, other than the one between `a` and `b` themselves: what a general peace would also end. */
 export function generalPeaceTies(s: GameState, a: NationId, b: NationId): [NationId, NationId][] {
@@ -195,6 +205,8 @@ function makePeace(s: GameState, a: NationId, b: NationId) {
   s.proposals = s.proposals.filter((p) => !(p.kind === 'peace' && ((p.from === a && p.to === b) || (p.from === b && p.to === a))))
   for (const id of [a, b]) s.nations[id].warWeariness = Math.max(0, s.nations[id].warWeariness - 10)
   addLog(s, 'diplomacy', `${name(s, a)} and ${name(s, b)} have signed a peace treaty (truce for ${TRUCE_TURNS} months).`, [a, b])
+  // A territory fights only its master's wars, so the peace ends the ones it fought for them.
+  for (const [lord, foe] of [[a, b], [b, a]] as const) for (const t of territoriesOf(s, lord)) if (atWar(s, t, foe) && t !== foe) makePeace(s, t, foe)
 }
 
 /** Why `from` cannot make this proposal to `to` right now, or null. Once accepted, peace terms no longer need war score to back them. */
@@ -204,6 +216,7 @@ export function validateProposal(s: GameState, map: WorldMap, from: NationId, to
   switch (d.kind) {
     case 'peace':
       if (!atWar(s, from, to)) return 'Not at war'
+      if (t.territoryOf && from !== t.territoryOf) return `${name(s, t.territoryOf)} makes peace for its territory ${t.name}`
       if (d.terms.general && !accepted && generalPeaceTies(s, from, to).length === 0) return 'Nobody else on either side is at war: untick "Include allies on both sides"'
       return validatePeaceTerms(s, map, d.terms, from, to, !accepted)
     case 'pact':
@@ -257,6 +270,7 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
       if (p.terms.reparations > 0) parts.push(`${name(s, p.to)} pays ${p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
       if (p.terms.reparations < 0) parts.push(`${name(s, p.from)} pays ${-p.terms.reparations} money/month for ${REPARATION_MONTHS} months`)
       if (p.terms.liberate !== undefined && s.nations[p.terms.liberate]) parts.unshift(LIBERATE_TEXT.describe(s.nations[p.terms.liberate].name, name(s, p.to)))
+      if (p.terms.territory) parts.unshift(TERRITORY_TEXT.describe(name(s, p.to), name(s, p.from)))
       if (p.terms.puppet) parts.unshift(`${name(s, p.to)} becomes a puppet of ${name(s, p.from)} and pays ${Math.round(DIPLOMACY.puppet.tribute * 100)}% of its income`)
       const base = parts.length ? parts.join('; ') : 'White peace: no territory or payments change hands'
       const ties = p.terms.general ? generalPeaceTies(s, p.from, p.to) : []
@@ -312,6 +326,11 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
         bindPuppet(s, p.to, p.from)
         addOpinion(s, p.to, p.from, 'Our overlord', -10, 0.1)
         addLog(s, 'war', `${name(s, p.to)} is now a puppet state of ${name(s, p.from)}.`, [p.from, p.to])
+      }
+      if (p.terms.territory) {
+        bindTerritory(s, p.to, p.from)
+        addOpinion(s, p.to, p.from, 'Our master', TERRITORY.madeOpinion, 0.1)
+        addLog(s, 'war', TERRITORY_TEXT.log(name(s, p.to), name(s, p.from)), [p.from, p.to])
       }
       if (p.terms.reparations !== 0) {
         const payer = p.terms.reparations > 0 ? p.to : p.from
@@ -414,6 +433,17 @@ export function propose(s: GameState, map: WorldMap, from: NationId, to: NationI
   settle(s, map, p, v.accept, v.reason, rng)
 }
 
+/** A master forces a trade deal on its territory: with its master it is made at once, with anyone else the other side still has to agree. */
+export function forceDeal(s: GameState, map: WorldMap, territory: NationId, partner: NationId, terms: import('./types').TradeTerms, rng: Rng) {
+  if (partner === s.nations[territory]?.territoryOf) {
+    const p: Proposal = { kind: 'trade', terms, id: newId(s, 'p'), from: territory, to: partner, created: s.turn, expires: s.turn + PROPOSAL_TURNS }
+    s.proposalMemory[`${territory}>${partner}:trade`] = s.turn
+    settle(s, map, p, true, 'its master commands it', rng)
+    return
+  }
+  propose(s, map, territory, partner, { kind: 'trade', terms }, rng)
+}
+
 export function respond(s: GameState, map: WorldMap, nationId: NationId, proposalId: string, accept: boolean, rng: Rng) {
   const p = s.proposals.find((x) => x.id === proposalId && x.to === nationId)
   if (!p) return
@@ -493,6 +523,8 @@ export function applyDeals(s: GameState, map?: WorldMap, rng?: Rng) {
     const from = s.nations[d.from]
     const to = s.nations[d.to]
     const c = d.contract
+    // A territory owes no reparations, whenever the deal was made.
+    if (d.kind === 'reparations' && from?.territoryOf) continue
     if (!from?.alive || !to?.alive) {
       // A contract's collateral goes back to its poster if the poster is still there.
       if (c && c.held > 0 && s.nations[c.poster]?.alive) s.nations[c.poster].resources.capital += c.held

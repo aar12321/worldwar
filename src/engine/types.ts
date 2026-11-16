@@ -428,6 +428,11 @@ export interface Nation {
   ruledAt?: number
   /** Puppets only: the month the puppet last called on the world for help against its master. */
   calledOut?: number
+  /**
+   * Territories only: the master that holds this nation as a territory (see `engine/territories.ts`). A territory is not a puppet: it has
+   * no `overlord`, no loyalty and no tribute. Absent on every nation that is not a territory, and in every game that has none.
+   */
+  territoryOf?: NationId
   /** Turn of the last corruption sweep. Stolen money takes time to build up again. */
   lastSweep?: number
   /** Size of each private business sector. */
@@ -514,10 +519,23 @@ export interface PeaceTerms {
   puppet?: boolean
   /** A general peace: allies and puppets of each side who are fighting the other side stop too, with the same truce. */
   general?: boolean
+  /** The loser becomes a TERRITORY of the proposer (see `engine/territories.ts`): never together with `puppet`, `liberate` or reparations. */
+  territory?: boolean
   /** Liberation: a puppet of the target (the loser) is set free, independent, with no tribute. The proposer needs a cause (see `liberationCause`). */
   liberate?: NationId
   /** Capital per month for REPARATION_MONTHS. Positive: the target pays the proposer. Negative: the proposer pays. */
   reparations: number
+}
+
+export interface TerritoryRecord {
+  master: NationId
+  /** The turn it became a territory. */
+  since: number
+  /** All the master has taken from it, in money. */
+  taken: number
+  /** What was taken last month, and the revenue it was taken from. */
+  last: number
+  revenue: number
 }
 
 export interface TradeTerms {
@@ -701,6 +719,14 @@ export type Order =
   | { type: 'annexPuppet'; nationId: NationId; target: NationId }
   /** A master rules its puppet: tax, draft, a law, spending, the form of the tribute, aid. Once a month for each puppet, at the month's end. */
   | { type: 'governPuppet'; nationId: NationId; target: NationId; patch: PuppetPatch }
+  /** A master commands its territory's military and diplomacy: `order` is one of `TERRITORY.commands`, given as the territory (its `nationId` is the territory's) and paid from its treasury. */
+  | { type: 'commandTerritory'; nationId: NationId; territory: NationId; order: Order }
+  /** A master forces its territory into a trade deal with `partner` (the partner still has to agree) or with the master itself (no answer needed). */
+  | { type: 'forceTrade'; nationId: NationId; territory: NationId; partner: NationId; terms: TradeTerms }
+  /** A master lets a territory go: independent, out of its faction. */
+  | { type: 'releaseTerritory'; nationId: NationId; target: NationId }
+  /** A master absorbs a territory that has served long enough. */
+  | { type: 'annexTerritory'; nationId: NationId; target: NationId }
   | { type: 'crisisAction'; nationId: NationId; crisisId: string; action: 'aid' | 'mediate' | 'support' }
   | { type: 'propose'; nationId: NationId; target: NationId; proposal: ProposalDraft }
   | { type: 'respond'; nationId: NationId; proposalId: string; accept: boolean }
@@ -936,6 +962,8 @@ export interface GameState {
   casusBelli: Record<string, number>
   /** "holder|target" -> what the reason for war is, shown to the player. */
   reasons: Record<string, string>
+  /** Territories: territory -> who holds it, since when, and what the master has taken. Absent until a territory exists, and again when none is left. */
+  territories?: Record<NationId, TerritoryRecord>
   /** Wars begun to free a puppet: "holder>master" -> the puppets the holder went to war for. Absent until one is. Cleared when the war ends. */
   liberationWars?: Record<string, NationId[]>
   /** How much each nation is distrusted for starting wars, taking land and covert acts. It fades. */

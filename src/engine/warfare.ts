@@ -23,6 +23,7 @@ import { cleanUnits, shareOf, SENDABLE } from './deploy'
 import { forgetWarScore, recordBattle } from './warscore'
 import { addInfamy, addLog, atWar, distanceKm, emptyUnits, forceUnits, nationModifiers, newId, pairKey, reach, regionsOf, totalUnits } from './helpers'
 import { clearPuppetFields } from './puppets'
+import { dropTerritories } from './territories'
 import type { Rng } from './rng'
 import type { Army, BattleReport, GameState, Interception, Military, Nation, NationId, RegionId, UnitCounts, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -118,6 +119,8 @@ export function killNation(s: GameState, id: NationId, by: NationId | null) {
   const n = s.nations[id]
   if (!n.alive) return
   n.alive = false
+  // Territories it held are free; if it was a territory itself, its master loses it.
+  dropTerritories(s, id)
   // A fallen puppet is nobody's puppet if it ever rises again.
   if (n.loyalty !== undefined) {
     n.overlord = null
@@ -686,6 +689,7 @@ function secede(s: GameState, map: WorldMap, regionId: RegionId, strength: numbe
     const known = (parent?.techs ?? []).filter((t, _i, all) => (TECH_BY_ID[t]?.requires ?? []).every((r) => all.includes(r)) && (TECH_BY_ID[t]?.cost ?? 0) <= WAR.secedeTechCost)
     s.nations[nationId] = {
       ...structuredClone(base),
+      territoryOf: undefined,
       overlord: null,
       overlordSince: undefined,
       debt: 0,

@@ -106,7 +106,7 @@ export function NationPicker({ items, value, onChange, placeholder = 'Search cou
 // ---- the card and the members ----
 
 function FactionCard({ game, f, me }: { game: GameState; f: Faction; me: NationId }) {
-  const shares = sharesOf(f)
+  const shares = sharesOf(f, game)
   const value = poolValue(f)
   const power = poolPower(game, f)
   const founder = game.nations[f.founder]
@@ -141,7 +141,7 @@ function FactionCard({ game, f, me }: { game: GameState; f: Faction; me: NationI
 }
 
 function Members({ game, f, me }: { game: GameState; f: Faction; me: NationId }) {
-  const shares = sharesOf(f)
+  const shares = sharesOf(f, game)
   const names = usePlayerNames()
   const rows = [...f.members].sort((a, b) => shares[b] - shares[a] || (a < b ? -1 : 1))
   return (

@@ -1,5 +1,6 @@
 import { COALITION } from '../data/coalition'
 import { LIBERATE_TEXT } from '../data/puppets'
+import { TERRITORY_TEXT } from '../data/territories'
 import { PERSONALITIES } from '../data/personalities'
 import { difficultyOf } from '../data/difficulty'
 import { alarmBetween, leadersOf, type ThreatReport } from '../engine/coalition'
@@ -51,6 +52,9 @@ function valueFor(s: GameState, id: NationId, b: ResourceBundle, prices: MarketP
 /** Amount of a resource a nation keeps back and will not trade away. */
 export const TRADE_RESERVE: Record<TradeResource, number> = { capital: 25, food: 8, tp: 0, manpower: 30, oil: 6, steel: 8, goods: 8 }
 
+/** A rival gives itself up as a territory only when the war has gone this far against it: well past the point where it would take a puppet's chains. */
+export const TERRITORY_AI_ACCEPT = 16
+
 export interface Verdict {
   accept: boolean
   reason: string
@@ -73,6 +77,12 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
   const noise = rng.range(-6, 6)
   const verdict = (accept: boolean, reason: string): Verdict => ({ accept, reason: withOpinion(reason, op), opinion: op })
 
+  // A territory's master speaks for it: it takes its master's trade deals without a word and turns down everything else.
+  if (me.territoryOf) {
+    const master = s.nations[me.territoryOf]?.name ?? 'its master'
+    if (p.from === me.territoryOf && p.kind === 'trade') return verdict(true, 'our master commands it')
+    if (p.kind !== 'trade') return verdict(false, `${master} speaks for us`)
+  }
   switch (p.kind) {
     case 'peace': {
       const net = netWarScore(s, p.from, botId)
@@ -84,6 +94,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       const others = p.terms.general ? generalPeaceTies(s, p.from, botId).length : 0
       const score = me.warWeariness * 1.1 + (ratio - 1) * 25 + net * 0.6 + concession - demand * 0.8 + op * 0.15 + bias - (fresh ? 12 : 0) - 8 - Math.min(10, others * 2.5) + noise
       if (p.terms.puppet && score <= 8) return verdict(false, 'we will never be your puppet')
+      if (p.terms.territory && score <= TERRITORY_AI_ACCEPT) return verdict(false, TERRITORY_TEXT.refusal)
       if (p.terms.liberate !== undefined && score <= 8) return verdict(false, LIBERATE_TEXT.refusal)
       if (score > 0) {
         if (me.warWeariness > 25) return verdict(true, 'the war has bled us dry')

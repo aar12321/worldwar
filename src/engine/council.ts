@@ -30,8 +30,8 @@ export function projectedVote(s: GameState, map: WorldMap, proposer: NationId, k
     const weight = Math.max(1, gross?.get(n.id) ?? 1)
     total += weight
     let vote: Vote['vote']
-    if (n.id === proposer || n.overlord === proposer || alliesOf(s, proposer).includes(n.id)) vote = 'yes'
-    else if (n.id === target || n.id === target2 || (target && n.overlord === target)) vote = 'no'
+    if (n.id === proposer || n.overlord === proposer || n.territoryOf === proposer || alliesOf(s, proposer).includes(n.id)) vote = 'yes'
+    else if (n.id === target || n.id === target2 || (target && (n.overlord === target || n.territoryOf === target))) vote = 'no'
     else {
       const op = opinionOf(s, map, n.id, proposer, { coalition: false })
       let lean = op

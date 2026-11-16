@@ -107,7 +107,7 @@ export function borderTension(s: GameState, map: WorldMap, a: NationId, b: Natio
   if (hasCasusBelli(s, a, b) || hasCasusBelli(s, b, a)) add('A grievance', BORDER.grievance)
   if (isAllied(s, a, b)) add('Allies', BORDER.alliance)
   else if (hasPact(s, a, b)) add('Non-aggression pact', BORDER.pact)
-  if (s.nations[a]?.overlord === b || s.nations[b]?.overlord === a) add('Puppet and master', BORDER.puppet)
+  if (s.nations[a]?.overlord === b || s.nations[b]?.overlord === a || s.nations[a]?.territoryOf === b || s.nations[b]?.territoryOf === a) add('Puppet and master', BORDER.puppet)
   if (s.deals.some((d) => d.kind === 'trade' && ((d.from === a && d.to === b) || (d.from === b && d.to === a)))) add('Trade partners', BORDER.trade)
   return { total: Math.round(clamp(parts.reduce((t, p) => t + p.value, 0), 0, 100)), parts }
 }
@@ -192,7 +192,7 @@ export function validateSetBorder(s: GameState, map: WorldMap, o: SetBorder): st
   if (o.closed && now) return 'That border is already closed'
   if (!o.closed && !now) return 'That border is not closed'
   if (o.closed && isAllied(s, o.nationId, o.neighbor)) return `${other.name} is your ally`
-  if (o.closed && (other.overlord === o.nationId || s.nations[o.nationId].overlord === o.neighbor)) return 'You cannot close the border with your own puppet or master'
+  if (o.closed && (other.overlord === o.nationId || s.nations[o.nationId].overlord === o.neighbor || other.territoryOf === o.nationId || s.nations[o.nationId].territoryOf === o.neighbor)) return 'You cannot close the border with your own puppet or master'
   return null
 }
 
