@@ -894,6 +894,10 @@ body:has(.drawer) .map-modes {
   .pill-stack {
     top: calc(var(--hud-h) + 4px);
   }
+  /* On a phone one chip is enough: a red alert shows alone, and the plainer chips under it (the Briefing and Space chips) wait, so the stack never sits on the country card. */
+  .pill-stack .live-alert ~ .advice-pill:not(.live-alert) {
+    display: none;
+  }
   .hud-live {
     gap: 4px !important;
   }
