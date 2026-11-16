@@ -28,6 +28,9 @@ export function ColoniesSection() {
         <StatTile label="Steel and oil" value={`${money(econ.steelProduction)} / ${money(econ.oilProduction)}`} sub="all sources, a month" />
         <StatTile label="Bases" value={BODY_IDS.filter((b) => sp?.bodies[b]?.outpost).length} sub="outposts, stations, colonies" />
       </Tiles>
+      <p className="span-all text-[13px] text-white/70">
+        Mined steel and oil go into your stores and can be sold at world prices on the <b>Market</b> tab; rare metals and helium-3 are sold at home for money automatically. Helium-3 also feeds the grid, and doubles up with a national fusion plant.
+      </p>
       <div className="span-all">
       <Card title="Taking a world" hint="It is hard on purpose. Fly a survey probe, then land, then claim it (a claim costs influence and shuts out everyone else), then send the cargo that founds an outpost. Rivals are racing for the same worlds.">
         {claimed.length === 0 ? (

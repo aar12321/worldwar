@@ -1,4 +1,4 @@
-import { BODIES, BODY_IDS, COMPANIES, DOMESTIC, LABS, MINES, MINE_LEVELS, MISSIONS, NODES, OUTPOST, PAD, ROCKETS, ROCKET_IDS, ROCKET_RULES, SAMPLE_NAMES, SPACE, type CompanySpec, type Mission, type MissionId, type MissionSpec, type NodeId, type RocketId, type SampleKind, type SpaceAction, type SpaceState, type SpaceWorld } from '../data/space'
+import { BODIES, BODY_IDS, type BodyId, COMPANIES, DOMESTIC, LABS, MINES, MINE_LEVELS, MISSIONS, NODES, OUTPOST, PAD, ROCKETS, ROCKET_IDS, ROCKET_RULES, SAMPLE_NAMES, SPACE, type CompanySpec, type Mission, type MissionId, type MissionSpec, type NodeId, type RocketId, type SampleKind, type SpaceAction, type SpaceState, type SpaceWorld } from '../data/space'
 import { addToSector } from './business'
 import { addLog, clamp, enemiesOf, hasTech } from './helpers'
 import { createRng } from './rng'
@@ -758,6 +758,20 @@ export function missionProgress(s: GameState, m: Mission, daysInMonthNow: number
 }
 
 export { ROCKET_IDS }
+
+/**
+ * The world's month for space: a claim belongs to a nation, so when that nation falls the world is free again. Does nothing, and
+ * touches nothing, in a game where nobody has begun a space program.
+ */
+export function runSpaceWorld(s: GameState) {
+  const claims = s.space?.claims
+  if (!claims) return
+  for (const [body, c] of Object.entries(claims) as [BodyId, { owner: NationId; turn: number }][]) {
+    if (s.nations[c.owner]?.alive) continue
+    delete claims[body]
+    addLog(s, 'news', `${BODIES[body].name} is unclaimed again: ${s.nations[c.owner]?.name ?? 'its owner'} is gone.`, [c.owner])
+  }
+}
 
 /** One line for the order list. */
 export function describeSpace(a: SpaceAction): string {

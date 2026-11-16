@@ -369,6 +369,56 @@ describe('a treasury in the red stops the work, not the pay', () => {
   })
 })
 
+describe('worlds are held by nations, and the Orbital Network listens to the satellites', () => {
+  it('a claim lapses when the nation that held it falls, and the world can be claimed again', () => {
+    let s = world()
+    equip(s, 'outpost_moon')
+    sp(s).bodies.moon = { landed: true, surveyed: true }
+    must(s, { kind: 'claim', body: 'moon' })
+    s = months(s, 1)
+    expect(s.space!.claims.moon?.owner).toBe('r0')
+    s.nations.r0.alive = false
+    s = resolveTurn(s, map, [])
+    expect(s.space!.claims.moon).toBeUndefined()
+    expect(s.log.some((l) => /unclaimed again/.test(l.text))).toBe(true)
+    // Another nation that landed can now file.
+    const rival = s.nations.r1
+    rival.techs.push('air_propeller', 'air_jets')
+    rival.resources.pp = 100
+    ;(rival.space = newSpace()).bodies.moon = { landed: true, surveyed: true }
+    expect(spaceProblem(s, rival, { kind: 'claim', body: 'moon' }, 10)).toBeNull()
+  })
+
+  it('every reconnaissance satellite (two at most) shortens the wait for the next orbital strike by a month', () => {
+    const s = world()
+    const n = s.nations.r0
+    n.techs.push('frontier_space')
+    n.systems.orbital = 1
+    n.lastOrbital = s.turn - 11
+    s.wars.push('r0|r1')
+    const strike = { type: 'strike', nationId: 'r0', target: 'r1', weapon: 'orbital' } as Order
+    expect(validateOrder(s, map, strike)).toMatch(/recharges in 1 months/)
+    equip(s, 'sat_recon')
+    sp(s).sats.push({ kind: 'recon', until: 999 })
+    expect(validateOrder(s, map, strike)).toBeNull()
+  })
+
+  it('edge cases: no talent, no money, no samples, no agency', () => {
+    const s = world()
+    expect(go(s, { kind: 'launch', mission: 'sounding_test', mode: 'house' })).toMatch(/sounding rocket in the hangar|engineers/)
+    expect(go(s, { kind: 'develop', rocket: 'sounding' })).toMatch(/Needs 3 engineers/)
+    s.nations.r0.resources.capital = 2
+    expect(go(s, { kind: 'hire', role: 'engineer', count: 4 })).toMatch(/Not enough money/)
+    equip(s, 'sat_comms')
+    s.nations.r0.resources.capital = 10
+    expect(go(s, { kind: 'launch', mission: 'sat_comms', mode: 'outsource', company: 'apex' })).toMatch(/Not enough money/)
+    s.nations.r0.resources.capital = 1000
+    sp(s).labs = 1
+    expect(go(s, { kind: 'research', node: 'life_support' })).toMatch(/Needs 1 lunar regolith/)
+    expect(go(s, { kind: 'claim', body: 'mars' })).toMatch(/Land on Mars first/)
+  })
+})
+
 describe('in-house against a private company', () => {
   it('a company costs a premium over what the flight costs in-house, builds no experience, and is faster to build', () => {
     const s = world()

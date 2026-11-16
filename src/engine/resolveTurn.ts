@@ -13,7 +13,7 @@ import { MISSILES } from '../data/missiles'
 import { AIRCRAFT_NODES } from '../data/aircraft'
 import { applyPauseAircraftDev, applyStartAircraftDev } from './aircraft'
 import { applyBuildMissiles, applyFundMissiles } from './missiles'
-import { applySpace, describeSpace } from './space'
+import { applySpace, describeSpace, runSpaceWorld } from './space'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -339,6 +339,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runCrises(s, map, rng)
   runStocks(s, map, rng)
   runSystems(s)
+  runSpaceWorld(s)
   runWorld(s, gross, workforce)
   updateTiers(s)
   recordHistory(s, gross, net)
