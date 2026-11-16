@@ -6,6 +6,7 @@ import { EMPIRE, WAR } from '../data/war'
 import { NO_EFFECTS, type PolicyEffects } from '../data/government'
 import { TRAITS, traitOf } from '../data/traits'
 import { agencyUpkeep } from './agencies'
+import { aircraftBill, runAircraft } from './aircraft'
 import { systemUpkeep } from './systems'
 import { companyEffects } from './stocks'
 import { addLog, clamp, enemiesOf, forceUnits, nationModifiers, pairKey, sanctionersOf } from './helpers'
@@ -183,6 +184,8 @@ export interface EconomyReport {
   /** What spending on the people and public works costs this month. */
   spending: ReturnType<typeof spendingBill>
   projects: { building: number; upkeep: number }
+  /** Money this month's work on aircraft developments costs. */
+  aircraftBill: number
   enterpriseIncome: number
   armsExports: number
   seigniorage: number
@@ -373,6 +376,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
   const systems = systemUpkeep(n) * scaleFactor(0.75, gridPower)
   const upkeep = (unitUpkeep + spending.works + agencyUpkeep(n) + systems + (n.academy ?? 0) * ACADEMY.upkeep) * upkeepMult
   const projects = projectBill(n)
+  const aircraft = aircraftBill(n, projectSpeed(n, coverage.engineers))
   const localCosts = localBill(s, nationId)
   projects.building += localCosts.building
   projects.upkeep += localCosts.upkeep
@@ -445,6 +449,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'Housing', amount: -spending.housing, kind: 'cost' },
     { label: 'Programs for the people', amount: -societyCost.total, kind: 'cost' },
     { label: 'National projects', amount: -(projects.building + projects.upkeep), kind: 'cost' },
+    { label: 'Aircraft development', amount: -aircraft, kind: 'cost' },
     { label: 'Governors', amount: -governors, kind: 'cost' },
     { label: 'Settlers', amount: -settle, kind: 'cost' },
     { label: 'Quarantine', amount: -quarantine, kind: 'cost' },
@@ -507,6 +512,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     admin,
     spending,
     projects,
+    aircraftBill: aircraft,
     enterpriseIncome: enterprise,
     armsExports: arms,
     seigniorage: seign,
@@ -618,6 +624,7 @@ export function applyEconomy(s: GameState, map: WorldMap, nationId: NationId, rn
   if (n.bank) runBank(s, n, e.gross, e.credit.score, e.credit.room, e.credit.rate, e.credit.locked)
   if (n.projects) r.capital += runProjects(s, n, e.coverage.engineers)
   r.capital += runLocalProjects(s, n, projectSpeed(n, e.coverage.engineers))
+  if (n.aircraft) r.capital += runAircraft(s, n, projectSpeed(n, e.coverage.engineers))
   runArmsExports(s, n)
   return e
 }

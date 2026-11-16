@@ -2,6 +2,8 @@ import { addOpinion, forgetNation } from '../ai/opinion'
 import { BANKING } from '../data/banking'
 import { COMBAT_MEDICINE, DEMAND, MEDICINE } from '../data/people'
 import { GENERAL_TRAITS } from '../data/projects'
+import { AIRCRAFT_RULES } from '../data/aircraft'
+import { aircraftEffects, airReach, bomberBonus, pastDefenses } from './aircraft'
 import { updateTiers } from './empire'
 import { commanderTrait } from './generals'
 import { blendPeople } from './people'
@@ -60,7 +62,7 @@ export function canAttackRegion(s: GameState, map: WorldMap, nationId: NationId,
     if (!from) continue
     const km = distanceKm(from, t)
     if (fleet && r.buildings.port > 0 && km <= REACH.seaKm) return { ok: true, bySea: true, via: 'fleet' }
-    if (air && r.buildings.factory > 0 && km <= REACH.airKm) by = 'air'
+    if (air && r.buildings.factory > 0 && km <= airReach(n)) by = 'air'
   }
   return by ? { ok: true, bySea: true, via: by } : { ok: false, bySea: false }
 }
@@ -265,7 +267,8 @@ function makeCombatant(n: Nation | null, military: Military | null, garrison: Un
     vehicleMult = MATERIALS.noOilStrength
     notes.push(`no oil (tanks, planes and ships at ${Math.round(MATERIALS.noOilStrength * 100)}%)`)
   }
-  return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes, vehicleMult, sys: n ? { ...n.systems } : undefined }
+  const air = n ? aircraftEffects(n) : undefined
+  return { units, drill, mods: n ? combatMods(n) : null, penalty: p, penaltyNotes: notes, vehicleMult, sys: n ? { ...n.systems } : undefined, ...(air ? { air } : {}) }
 }
 
 /**
@@ -324,6 +327,16 @@ function scaled(units: UnitCounts, weights: Record<string, number>): UnitCounts 
   return out
 }
 
+/**
+ * The share of hypersonic batteries' damage that gets past the defender's shield and, with developments, its hunter fighters
+ * (those standing in this fight). Exactly the shield's own number when neither side has any developments.
+ */
+function batteryThrough(attacker: Combatant, defender: Combatant, shield: number): number {
+  const base = interceptFactor(shield)
+  if (!attacker.air && !defender.air) return base
+  return pastDefenses(base, attacker.air, defender.air, defender.units.fighter, AIRCRAFT_RULES.huntVs.hypersonic)
+}
+
 /** Builds both sides of an attack, or null if it is not allowed. Shared by the real fight and the forecast. */
 /** `army` is a live-mode army that is fighting: its own units attack, and nothing is taken from the national military. */
 function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, commit: Commit, stance: Stance, missiles?: number, army?: Army, custom?: number): Setup | null {
@@ -344,8 +357,9 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   const attNotes: string[] = []
   let attPenalty = 1
   if (reach.bySea) {
-    // An Orbital Network helps every landing, from sea or air.
-    const reduction = Math.min(0.9, nationModifiers(attackerNation).amphibiousPenaltyReduction + FRONTIER.orbitalLanding * (attackerNation.systems?.orbital ?? 0))
+    // An Orbital Network helps every landing, from sea or air. Ground crews and drop tanks help a landing by air.
+    const by = army ? army.via : reach.via
+    const reduction = Math.min(0.9, nationModifiers(attackerNation).amphibiousPenaltyReduction + FRONTIER.orbitalLanding * (attackerNation.systems?.orbital ?? 0) + (by === 'air' ? (aircraftEffects(attackerNation)?.landing ?? 0) : 0))
     attPenalty *= 1 - 0.4 * (1 - reduction)
     attNotes.push(`amphibious assault (-${Math.round(40 * (1 - reduction))}%)`)
   }
@@ -376,8 +390,8 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
       attNotes.push(`patrols sank ${Math.round(icpt.share * 100)}% of the landing force`)
     }
   }
-  // The player chooses how many missiles to fire. Left out, a share of them fire with the force sent.
-  if (!army && missiles !== undefined) attacker.units.missile = Math.min(Math.max(0, Math.floor(missiles)), Math.floor(attackerNation.military.units.missile + 1e-9))
+  // An attack fires only the missiles it names. Left out, none go: missiles are fired on purpose, as strikes or by name in an attack, never by a share of the stock.
+  if (!army) attacker.units.missile = Math.min(Math.max(0, Math.floor(missiles ?? 0)), Math.floor(attackerNation.military.units.missile + 1e-9))
   attacker.boost = spec.boost
   attacker.damageTaken = spec.ownLosses
   const garrison = emptyUnits()
@@ -420,7 +434,7 @@ export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, 
   const max = lineMax(s, map, target)
   const before = Math.min(s.regions[target].line, max)
   const spec = blitzSpec(s.nations[nationId], stance)
-  const missileCut = setup.attacker.units.missile * FRONTIER.missileLine * interceptFactor(s.nations[s.regions[target].owner]?.systems?.shield ?? 0)
+  const missileCut = setup.attacker.units.missile * FRONTIER.missileLine * batteryThrough(setup.attacker, setup.defender, s.nations[s.regions[target].owner]?.systems?.shield ?? 0)
   let wins = 0
   let damage = 0
   let captures = 0
@@ -434,7 +448,7 @@ export function forecastAttack(s: GameState, map: WorldMap, nationId: NationId, 
     wins++
     const ratio = Math.min(WAR.maxPowerRatio, Math.max(WAR.minPowerRatio, out.attackerPower / Math.max(0.1, out.defenderPower)))
     // The same push as the real fight, artillery included.
-    const push = WAR.advanceBase * ratio * spec.advance * gunBonus(setup.attacker.units, stance)
+    const push = WAR.advanceBase * ratio * spec.advance * gunBonus(setup.attacker.units, stance) * bomberBonus(setup.attacker.air, setup.attacker.units)
     damage += Math.min(before, push + missileCut)
     if (push + missileCut >= before) captures++
   }
@@ -516,12 +530,12 @@ export function resolveAttack(
   let lineAfter = lineBefore
   if (outcome.winner === 'attacker') {
     const ratio = Math.min(WAR.maxPowerRatio, Math.max(WAR.minPowerRatio, outcome.attackerPower / Math.max(0.1, outcome.defenderPower)))
-    const guns = gunBonus(attacker.units, stance)
+    const guns = gunBonus(attacker.units, stance) * bomberBonus(attacker.air, attacker.units)
     lineAfter = Math.max(0, lineBefore - WAR.advanceBase * ratio * spec.advance * guns)
     if (spec.siegeTurns > 0) targetRegion.sabotaged = Math.max(targetRegion.sabotaged, spec.siegeTurns)
   }
   // Hypersonic batteries crack the Defense Line directly, win or lose, unless the shield stops them.
-  const missileHits = attacker.units.missile * FRONTIER.missileLine * interceptFactor(defenderNation.systems?.shield ?? 0)
+  const missileHits = attacker.units.missile * FRONTIER.missileLine * batteryThrough(attacker, defender, defenderNation.systems?.shield ?? 0)
   if (missileHits > 0 && lineAfter > 0) lineAfter = Math.max(outcome.winner === 'attacker' ? 0 : 0.5, lineAfter - missileHits)
   targetRegion.line = lineAfter
   targetRegion.attackedTurn = s.turn

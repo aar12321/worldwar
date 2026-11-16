@@ -1,5 +1,6 @@
 import { TECH_BY_ID } from '../data/techTree'
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingRank } from '../data/unitTypes'
+import { aircraftSources } from './aircraft'
 import { combatMods } from './arms'
 import { freeUnits, postedUnits } from './deployment'
 import { COMBAT, hasCombinedArms } from './combat'
@@ -10,7 +11,7 @@ import { UNIT_TYPES } from './types'
 
 /** One thing that changes a unit's stats, so the player can see where a number comes from. */
 export interface BonusSource {
-  kind: 'tech' | 'weapons' | 'drill'
+  kind: 'tech' | 'weapons' | 'drill' | 'aircraft'
   label: string
   attack: number
   defense: number
@@ -77,6 +78,7 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
       const d = mod?.unitDefense?.[unit] ?? 0
       if (a || d) sources.push({ kind: 'tech', label: TECH_BY_ID[id].name, attack: a, defense: d })
     }
+    for (const a of aircraftSources(n, unit)) sources.push({ kind: 'aircraft', label: `Development: ${a.label}`, attack: a.attack, defense: a.defense })
     if (weaponLevel > 0) sources.push({ kind: 'weapons', label: `Weapons level ${weaponLevel}`, attack: weaponLevel * WEAPONS.bonusPerLevel, defense: weaponLevel * WEAPONS.bonusPerLevel })
     if (drillRank > 0) sources.push({ kind: 'drill', label: `${trainingRank(drillRank)} drill`, attack: drillBonus, defense: drillBonus })
     return {

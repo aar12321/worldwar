@@ -1,9 +1,11 @@
 import { addOpinion } from '../ai/opinion'
-import { MISSILES, MISSILE_PROGRAM, PROGRAM_MISSILES } from '../data/missiles'
+import { AIRCRAFT_RULES, type AircraftEffects } from '../data/aircraft'
+import { MISSILES, MISSILE_PROGRAM, MISSILE_TYPES, PROGRAM_MISSILES } from '../data/missiles'
+import { aircraftEffects, pastDefenses } from './aircraft'
 import { interceptFactor } from './combat'
 import { airPatrolStop } from './deployment'
-import { addInfamy, addLog, atWar, clamp, distanceKm } from './helpers'
-import type { GameState, MissileType, Nation, NationId, Order, RegionId, WorldMap } from './types'
+import { addInfamy, addLog, atWar, canUseUnit, clamp, distanceKm } from './helpers'
+import type { GameState, MissileFlight, MissileType, Nation, NationId, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
 type Strike = Extract<Order, { type: 'strike' }>
@@ -34,9 +36,33 @@ export function takeMissiles(n: Nation, kind: MissileType, count: number): numbe
   return fired
 }
 
-/** The share of a salvo a shield lets through: the shield's own rating, made harsher or kinder by the kind of missile. */
-export function getsThrough(shield: number, kind: MissileType): number {
-  return clamp(1 - (1 - interceptFactor(shield)) * MISSILES[kind].intercept, 0.05, 1)
+/** The kinds a nation can use now: some are in store, or it can make or train them. The War Room and the program list these. */
+export function missileKinds(n: Nation): MissileType[] {
+  return MISSILE_TYPES.filter((k) => missileStock(n, k) >= 1 || (k === 'hypersonic' ? canUseUnit(n, 'missile') : programLevel(n) >= MISSILES[k].level))
+}
+
+/** Missiles in the air (live games) that will land on a country this nation holds, fired by someone else. */
+export function incomingMissiles(s: Pick<GameState, 'flights' | 'regions'>, nationId: NationId): MissileFlight[] {
+  return (s.flights ?? []).filter((f) => f.nationId !== nationId && s.regions[f.target]?.owner === nationId)
+}
+
+/** The fighters at home on each side of a strike, with what their developments add up to: hunters shoot missiles down, stealth gets past shields. */
+export interface AirDefense {
+  attacker?: AircraftEffects
+  defender?: AircraftEffects
+  /** Fighters the defender has at home, in divisions. */
+  fighters: number
+}
+
+/**
+ * The share of a salvo that gets through: the shield's own rating, made harsher or kinder by the kind of missile, and then the
+ * defender's missile-hunter fighters (a full wing of three or more at home, less with fewer; slow cruise missiles are easiest to
+ * catch, ballistic warheads hardest). The attacker's stealth and electronic warfare weaken both. Without `air` it is the shield alone.
+ */
+export function getsThrough(shield: number, kind: MissileType, air?: AirDefense): number {
+  const base = clamp(1 - (1 - interceptFactor(shield)) * MISSILES[kind].intercept, 0.05, 1)
+  if (!air || (!air.attacker && !air.defender)) return base
+  return clamp(pastDefenses(base, air.attacker, air.defender, air.fighters, AIRCRAFT_RULES.huntVs[kind]), 0.05, 1)
 }
 
 /** Where a strike would leave from: the nearest of your countries with a factory that reaches the target, or null if none does. */
@@ -77,9 +103,11 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   const region = s.regions[target]
   const victim = s.nations[region.owner]
   const place = map.regions[target].name
+  const fxA = aircraftEffects(n)
+  const fxD = aircraftEffects(victim)
   // The victim's air patrols shoot some of a salvo down before the shield does its work.
   const patrol = airPatrolStop(s, victim.id, kind)
-  const through = getsThrough(victim.systems?.shield ?? 0, kind) * (1 - patrol)
+  const through = getsThrough(victim.systems?.shield ?? 0, kind, fxA || fxD ? { attacker: fxA, defender: fxD, fighters: victim.military.units.fighter } : undefined) * (1 - patrol)
   const stopped = Math.round((1 - through) * 100)
   const parts: string[] = []
   if (spec.line > 0) {
@@ -117,7 +145,8 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   if (spec.opinion) addOpinion(s, region.owner, nationId, 'Bombarded us with ballistic missiles', spec.opinion, 0.3)
   // The struck nation remembers, and a nation that can answer will.
   ;(victim.struckBy ??= {})[nationId] = s.turn
-  addLog(s, 'battle', `${fired} ${spec.name.toLowerCase()}${fired === 1 ? '' : 's'} from ${n.name} hit ${place}${stopped > 0 ? ` (${patrol > 0.005 ? 'the shield and the air patrols' : 'the shield'} stopped ${stopped}%)` : ''}: ${parts.join(', ') || 'little damage'}.`, [nationId, region.owner])
+  const stoppedBy = patrol > 0.005 ? 'the shield and the air patrols' : fxD && fxD.hunt > 0 ? 'shield and fighters' : 'the shield'
+  addLog(s, 'battle', `${fired} ${spec.name.toLowerCase()}${fired === 1 ? '' : 's'} from ${n.name} hit ${place}${stopped > 0 ? ` (${stoppedBy} stopped ${stopped}%)` : ''}: ${parts.join(', ') || 'little damage'}.`, [nationId, region.owner])
 }
 
 // ---- The missile program ----
@@ -154,6 +183,8 @@ export function buildMissilesProblem(s: GameState, o: Build, pending: Order[]): 
 export const buildMissilesCost = (o: Build) => ({ capital: MISSILES[o.kind].money * o.count, steel: MISSILES[o.kind].steel * o.count })
 
 export function applyFundMissiles(s: GameState, n: Nation) {
+  // The research is paid here: the generic order charge covers money, influence, soldiers and steel, not research.
+  n.resources.tp -= fundMissilesCost(n).tp
   n.missileProgram = programLevel(n) + 1
   if (n.isPlayer) addLog(s, 'economy', `${n.name} raised its missile program to level ${n.missileProgram}.`, [n.id])
 }

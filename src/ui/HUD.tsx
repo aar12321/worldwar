@@ -9,7 +9,7 @@ import { tierSpec } from '../data/empire'
 import { useGame } from '../store'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
 import { HelpIcon, NewsIcon, SettingsIcon } from './icons'
-import { IncomingChip, LiveControls, LiveDate, MonthBar } from './LiveControls'
+import { IncomingChip, IncomingMissilesChip, LiveControls, LiveDate, MonthBar } from './LiveControls'
 import { EventChip } from './EventModal'
 import { OnlinePeople, OnlineStatus } from './Online'
 import { isLive } from '../engine/calendar'
@@ -311,6 +311,7 @@ export function HUD() {
       <div className="pill-stack">
         {online && <EventChip />}
         {live && <IncomingChip />}
+        {live && <IncomingMissilesChip />}
         {top && top.urgency === 'now' && panel === 'none' && !(live && top.id.startsWith('incoming-')) && (
           <button className="advice-pill pointer-events-auto" onClick={() => setPanel('briefing')} title="Open the Briefing (B)">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#ff453a' }} />

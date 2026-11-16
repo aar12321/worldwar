@@ -16,6 +16,12 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * social programs, campaigns) changes nothing for a nation that does not use it.
  * The Hard-bot world was pinned again when Hard bots learned to use social programs, campaigns, the new projects and projects in
  * their countries: a deliberate change of what they decide. The Normal-bot world did not move. Pinned again when missiles became a program with several kinds, and struck rivals began to answer.
+ * The small-war scenario was pinned again when an attack stopped carrying a share of the missile stock by itself (the bug: mass-produced missiles all flew with the first attack). Its first attack now fires none of the 14 missiles, so 11 are left after the 3-missile strike instead of about 2. Checked: the strike's effect is identical (the target's line is 5.55 either way) and the second attack's line differs only by the changed random draws. The two bot-world pins did not move: no bot in them carried missiles into an attack.
+ * The Hard-bot world was pinned once more when Hard bots at war began developing their aircraft (radar, ground crews, coatings: ten starts in
+ * the thirty months, by India, Japan, Nigeria, Russia, the USA). Checked before pinning: with that one AI call turned off the old hash matched
+ * again, so the aircraft rules themselves (stat bonuses, hunters, reach, the monthly bill and research paid at the start) change nothing for a
+ * nation that has not started a development; the Normal-bot world and the small war did not move.
+ * Pinned once more after the missile program began to pay its research (it was checked but never charged), which changes what Hard bots at war can afford.
  * Pinned again for Active Military (forces on station, borders): every bot now posts patrols and garrisons in its first month (a deliberate
  * change of what bots decide), keeps a smaller reserve to attack with, and its garrisons turn provocations back. Checked before pinning:
  * with the bots' posture orders taken out, the Normal-bot world hashes to its old pin exactly, once the memory of border incidents (the

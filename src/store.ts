@@ -217,6 +217,8 @@ interface GameStore {
   helpOpen: boolean
   /** Country whose War Room is open, if any. */
   warRoom: RegionId | null
+  /** The aircraft development screen (Military, Forces) is open. */
+  aircraftOpen: boolean
   settings: Settings
   toasts: Toast[]
   hasSave: boolean
@@ -273,6 +275,7 @@ interface GameStore {
   setPrograms(programs: Partial<Programs>, rate?: number): void
   attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number, share?: number): boolean
   openWarRoom(target: RegionId | null): void
+  setAircraftOpen(open: boolean): void
   endTurn(): void
   /** Live games: start or stop the clock. */
   play(): void
@@ -548,12 +551,12 @@ export type Hold = 'online' | 'over' | 'event' | 'battle' | 'report' | 'planning
  * The reason is the one the player sees, in the order the windows are drawn: the end of the game when no battle is playing, then
  * the jump-to box and a question being asked, then help, a battle, the report, a decision, and last the War Room.
  */
-export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'> & Partial<Pick<GameStore, 'paletteOpen' | 'confirm'>>): Hold | null {
+export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'> & Partial<Pick<GameStore, 'paletteOpen' | 'confirm' | 'aircraftOpen'>>): Hold | null {
   if (st.online) return 'online'
   if (!st.game) return 'over'
   const battle = st.fxQueue.length > 0
   if (st.game.outcome !== 'playing' && !battle) return 'over'
-  if (st.paletteOpen || st.confirm) return 'planning'
+  if (st.paletteOpen || st.confirm || st.aircraftOpen) return 'planning'
   if (st.helpOpen) return 'help'
   if (battle) return 'battle'
   if (st.summary) return 'report'
@@ -640,7 +643,7 @@ function receiveMonth(prev: GameState | null, next: GameState) {
   // Offers other players sent this month wait in the inbox; say so, since nobody is looking at the Diplomacy desk.
   const offers = next.proposals.filter((p) => p.to === player).length - (prev?.proposals.filter((p) => p.to === player).length ?? 0)
   if (offers > 0) st.toast(offers === 1 ? 'You have a new offer waiting in Diplomacy.' : `You have ${offers} new offers waiting in Diplomacy.`, 'info', 6000)
-  useGame.setState({ game: next, orders: [], undoStack: [], eventDismissedTurn: null, ...shown, warRoom: null })
+  useGame.setState({ game: next, orders: [], undoStack: [], eventDismissedTurn: null, ...shown, warRoom: null, aircraftOpen: false })
   persistOnline()
   if (!wasOut && next.eliminated.includes(player) && next.outcome === 'playing') st.toast('Your nation has fallen. You can keep watching the game.', 'error', 9000)
 }
@@ -687,7 +690,7 @@ async function connect(name: string, code: string, role: 'create' | 'join' | 're
         if (base && base.turn === state.turn) return
         base = state
         immediate = []
-        useGame.setState({ game: state, orders: [], undoStack: [], eventDismissedTurn: null, selectedRegion: state.playerId, panel: 'briefing', economyTab: 'country', economyRegion: null, militaryTab: 'forces', mapMode: 'political', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, helpOpen: false })
+        useGame.setState({ game: state, orders: [], undoStack: [], eventDismissedTurn: null, selectedRegion: state.playerId, panel: 'briefing', economyTab: 'country', economyRegion: null, militaryTab: 'forces', mapMode: 'political', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, helpOpen: false })
         patch({ status: 'playing', connecting: false, seats: null })
         persistOnline()
       },
@@ -695,13 +698,13 @@ async function connect(name: string, code: string, role: 'create' | 'join' | 're
       onSeats: (seats) => patch({ seats, connecting: false }),
       onKicked: () => {
         leaveSession()
-        useGame.setState({ online: null, game: null, orders: [], undoStack: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
+        useGame.setState({ online: null, game: null, orders: [], undoStack: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: hasStoredSave() })
         useGame.getState().toast('The host removed you from the game.', 'error', 9000)
       },
       onRematch: () => {
         base = null
         immediate = []
-        useGame.setState({ game: null, orders: [], undoStack: [], eventDismissedTurn: null, selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
+        useGame.setState({ game: null, orders: [], undoStack: [], eventDismissedTurn: null, selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false })
         patch({ status: 'lobby', ready: [], deadline: null })
       },
       onState: receiveMonth,
@@ -747,7 +750,7 @@ function enterGame(game: GameState, orders: Order[] | undefined): boolean {
   withMonth(game)
   const kept = (orders ?? []).filter((o): o is Order => keptOrder(o, game.playerId))
   save(game, kept, true)
-  useGame.setState({ running: false, undoStack: [], confirm: null, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: kept, selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: true })
+  useGame.setState({ running: false, undoStack: [], confirm: null, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: kept, selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: true })
   useGame.getState().toast('Game loaded.', 'success', 2500)
   return true
 }
@@ -771,6 +774,7 @@ export const useGame = create<GameStore>((set, get) => ({
   summary: null,
   helpOpen: false,
   warRoom: null,
+  aircraftOpen: false,
   settings: loadSettings(),
   toasts: [],
   hasSave: hasStoredSave(),
@@ -811,6 +815,7 @@ export const useGame = create<GameStore>((set, get) => ({
       fxTotal: 0,
       summary: null,
       warRoom: null,
+      aircraftOpen: false,
       hasSave: true,
       helpOpen: false,
     })
@@ -821,7 +826,7 @@ export const useGame = create<GameStore>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
       const game = withMonth(normalizeGame(JSON.parse(raw) as GameState, getWorld().map))
-      set({ running: false, undoStack: [], selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
+      set({ running: false, undoStack: [], selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
@@ -834,7 +839,7 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     const { game, orders } = get()
     if (game) save(game, orders, true)
-    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
+    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: hasStoredSave() })
   },
 
   abandonGame() {
@@ -843,7 +848,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return
     }
     save(null)
-    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: false })
+    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: false })
   },
 
   setPalette(open) {
@@ -1129,6 +1134,10 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ warRoom: target })
   },
 
+  setAircraftOpen(open) {
+    set({ aircraftOpen: open })
+  },
+
   attack(target, commit = 'main', stance = 'assault', missiles, share) {
     const { game, settings, online } = get()
     if (!game) return false
@@ -1141,7 +1150,7 @@ export const useGame = create<GameStore>((set, get) => ({
       }
       const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}) })
       if (ok) {
-        set({ warRoom: null })
+        set({ warRoom: null, aircraftOpen: false })
         get().toast(`Attack on ${map.regions[target].name} planned. It plays out when the month ends.`, 'info', 4500)
       }
       return ok
@@ -1151,7 +1160,7 @@ export const useGame = create<GameStore>((set, get) => ({
     // In a live game the army sets out and fights when it arrives.
     if (result.army) {
       const a = result.army
-      set({ warRoom: null, game: next })
+      set({ warRoom: null, aircraftOpen: false, game: next })
       save(next)
       get().toast(`An army left for ${map.regions[target].name}. It arrives ${absDate(a.end)}.`, 'info', 5000)
       return true
@@ -1160,7 +1169,7 @@ export const useGame = create<GameStore>((set, get) => ({
       get().toast(result.error ?? 'The attack could not be made', 'error')
       return false
     }
-    set({ warRoom: null })
+    set({ warRoom: null, aircraftOpen: false })
     const queue = settings.battleScenes === 'off' ? [] : [result.battle]
     if (result.battle.captured) flashCapture(target, false, next.nations[game.playerId].color)
     if (result.battle.intercept) get().toast(`Their patrols met your landing at sea and sank ${result.battle.intercept.sunk.toFixed(1)} divisions of it.`, 'error', 5000)
@@ -1332,7 +1341,7 @@ export const useGame = create<GameStore>((set, get) => ({
 
   leaveOnline() {
     leaveSession()
-    set({ online: null, undoStack: [], eventDismissedTurn: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
+    set({ online: null, undoStack: [], eventDismissedTurn: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: hasStoredSave() })
   },
 
   sendChat(text) {

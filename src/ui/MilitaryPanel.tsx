@@ -17,6 +17,9 @@ import { ACADEMY, GENERAL_TRAITS } from '../data/projects'
 import { tierOf } from '../engine/empire'
 import { academyCost } from '../engine/industry'
 import { DeploymentTab } from './DeploymentTab'
+import { AIRCRAFT_IDS, AIRCRAFT_NODES } from '../data/aircraft'
+import { activeDevs, devSlots, finishedDevs } from '../engine/aircraft'
+import { Bar } from './kit'
 import { SystemsTab } from './SystemsTab'
 import { WarsTab } from './WarsPanel'
 
@@ -139,6 +142,46 @@ function UnitCard({ line }: { line: UnitStatLine }) {
   )
 }
 
+/** The way into aircraft development: what is in hand and how far along, with the big Develop button. */
+function AircraftCard() {
+  const view = usePlayerView()!
+  const setOpen = useGame((s) => s.setAircraftOpen)
+  const { player, econ } = view
+  const active = activeDevs(player)
+  const done = finishedDevs(player).length
+  const slots = devSlots(player)
+  return (
+    <section className="inset-card p-3.5 space-y-2.5" aria-label="Aircraft development">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[16px] font-semibold">Aircraft development</div>
+          <div className="text-[13px] text-white/70">
+            Better fighters and bombers: radar, missile hunters, stealth, range, payload and drone wingmen. {done} of {AIRCRAFT_IDS.length} developed · {active.length} of {slots} in hand{econ.aircraftBill > 0 ? ` · ${fmt(econ.aircraftBill, 1)} money a month` : ''}.
+          </div>
+        </div>
+        <button className="btn btn-primary px-5 py-2.5 text-[15px] shrink-0" onClick={() => setOpen(true)}>
+          Develop
+        </button>
+      </div>
+      {active.map((id) => {
+        const p = player.aircraft![id]!
+        const node = AIRCRAFT_NODES[id]
+        return (
+          <div key={id} className="space-y-1">
+            <div className="flex justify-between text-[13px]">
+              <span>{node.name}</span>
+              <span className="text-white/70 tabular-nums">
+                {p.progress.toFixed(1)} of {node.months} months
+              </span>
+            </div>
+            <Bar value={p.progress / node.months} color="#6cb4ff" label={`${node.name} progress`} />
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
 function Forces() {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
@@ -178,6 +221,8 @@ function Forces() {
           </div>
         ))}
       </section>
+
+      <AircraftCard />
 
       <section className="unit-grid">
         {sheet.units.map((line) => (

@@ -12,12 +12,10 @@ import type { GameState, NationId, RegionId } from '../engine/types'
 import { UNIT_TYPES } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { FRONTIER } from '../data/systems'
-import { missilesLeft } from '../engine/systems'
 import { usePlayerView } from './hooks'
-import { OrderButton } from './panel'
 import { UnitIcon } from './icons'
 import { MilitaryCompare } from './MilitaryCompare'
+import { MissileSection } from './MissileSection'
 import { Modal } from './Modal'
 import { speak } from './plain'
 
@@ -65,14 +63,11 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   // A chosen share of the military, in percent. null means one of the three presets.
   const [custom, setCustom] = useState<number | null>(null)
   const customShare = custom === null ? undefined : custom / 100
-  // null means the default: the share of the missiles that goes with the force sent.
-  const [fire, setFire] = useState<number | null>(null)
-  const [salvo, setSalvo] = useState(1)
   const { map } = getWorld()
   const game = view?.game
   const player = view?.player
-  const free = game && player ? missilesLeft(player.military.units.missile, view?.orders ?? [], player.id) : 0
-  const missiles = free > 0 ? Math.min(free, fire ?? Math.min(free, Math.ceil(free * (customShare ?? COMMITS[commit].share)))) : undefined
+  // An attack on land never carries missiles by itself. They are fired on purpose, from the Missiles section below.
+  const missiles = 0
   const forecasts = useMemo(() => {
     if (!game || !player) return null
     return Object.fromEntries(STANCE_KEYS.map((st) => [st, forecastAttack(game, map, player.id, target, commit, st, undefined, missiles, customShare)])) as Record<Stance, ReturnType<typeof forecastAttack>>
@@ -98,14 +93,6 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const aiLevel = player.systems?.ai ?? 0
   // AI Battle Command recommends the stance with the best mix of line damage, odds and losses.
   const bestStance = aiLevel >= 2 && forecasts ? STANCE_KEYS.reduce((best, st) => (score(forecasts[st]) > score(forecasts[best]) ? st : best), STANCE_KEYS[0]) : null
-  // Missiles the attack itself will fire are not free for a strike.
-  const strikeMax = Math.max(0, free - (missiles ?? 0))
-  const salvoSize = Math.max(1, Math.min(salvo, Math.max(1, strikeMax)))
-  const strikeOrders = [
-    { type: 'strike' as const, nationId: player.id, target, weapon: 'missile' as const, count: salvoSize },
-    { type: 'strike' as const, nationId: player.id, target, weapon: 'orbital' as const },
-  ]
-  const hasStrikeWeapons = player.military.units.missile >= 1 || (player.systems?.orbital ?? 0) > 0
   const bill = computeEconomy(game, map, player.id).warBills.find((b) => b.enemy === owner.id)?.amount ?? 0
   const nominal = customShare ?? COMMITS[commit].share
   // Only the reserve can be sent: forces on station keep their posts.
@@ -250,19 +237,6 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </p>
         </section>
 
-        {free > 0 && (
-          <section className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <h3 className="text-[15px] font-semibold">Missiles to fire</h3>
-              <span className="text-[14px] tabular-nums text-white/80">
-                {missiles ?? 0} of {free}
-              </span>
-            </div>
-            <input type="range" className="w-full" min={0} max={free} step={1} value={missiles ?? 0} onChange={(e) => setFire(+e.target.value)} aria-label="Missiles to fire in this battle" />
-            <p className="text-[13px] text-white/70">They strike first, before the air war, and crack the Defense Line directly. Each one fired is used up. A shield stops part of them.</p>
-          </section>
-        )}
-
         <section className="space-y-2">
           <h3 className="text-[15px] font-semibold">How to fight</h3>
           <div className="grid gap-2" role="radiogroup" aria-label="Stance">
@@ -297,28 +271,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </div>
         </section>
 
-        {hasStrikeWeapons && (
-          <section className="space-y-2">
-            <h3 className="text-[15px] font-semibold">Strike from afar</h3>
-            <p className="text-[13px] text-white/70">{live ? 'Weapons that need no army. Missiles leave at once and land a day later; an orbital strike hits at once. An Interceptor Shield stops part of them.' : 'Weapons that need no army. They resolve when the month ends, and an Interceptor Shield stops part of them.'}</p>
-            {player.military.units.missile >= 1 && (
-              <div className="space-y-1">
-                <div className="flex items-baseline justify-between text-[14px]">
-                  <span>Missiles in this strike</span>
-                  <span className="tabular-nums text-white/80">
-                    {Math.min(salvoSize, Math.max(1, strikeMax))} of {strikeMax} free this month
-                  </span>
-                </div>
-                <input type="range" className="w-full" min={1} max={Math.max(1, strikeMax)} step={1} value={Math.min(salvoSize, Math.max(1, strikeMax))} onChange={(e) => setSalvo(+e.target.value)} aria-label="Missiles in this strike" />
-                <p className="text-[12px] text-white/65">You can fire as many strikes {live ? '' : 'a month '}as you have missiles. Each missile fired is used up.</p>
-              </div>
-            )}
-            <div className="grid gap-2 sm:grid-cols-2">
-              {player.military.units.missile >= 1 && <OrderButton order={strikeOrders[0]} label={`Fire ${salvoSize} missile${salvoSize === 1 ? '' : 's'}`} cost={`${FRONTIER.strikeMoney} money`} effect="Cuts the Defense Line and stops factories for 2 months." />}
-              {(player.systems?.orbital ?? 0) > 0 && <OrderButton order={strikeOrders[1]} label="Orbital strike" cost={`${FRONTIER.orbitalMoney} money, ${FRONTIER.orbitalPP} influence`} effect="Once a year. Cuts the line hard, wrecks a building, and shames you." />}
-            </div>
-          </section>
-        )}
+        <MissileSection game={game} player={player} target={target} orders={view.orders} live={live} />
 
         {f && (
           <section className="inset-card p-3.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[14px]">
