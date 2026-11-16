@@ -78,7 +78,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('1cac8201a01d77')
+    expect(hash(JSON.stringify(s))).toBe('42d9f7570a194')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
