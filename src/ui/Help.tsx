@@ -20,6 +20,7 @@ const LIVE_STEPS = [
 ]
 
 /** The words the game explains. The help window lists them; `Term` (widgets.tsx) shows the same text on hover, focus or tap. */
+// oxlint-disable-next-line react/only-export-components
 export const TERMS: [string, string][] = [
   ['Money', 'Comes from taxes, factories and ports. Pays for upgrades, units, their upkeep and your wars.'],
   ['Food', 'Farms grow it; people and soldiers eat it. Run out and your military fights 30% weaker.'],

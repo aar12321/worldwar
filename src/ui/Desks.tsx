@@ -43,6 +43,7 @@ function DeskLoading({ title }: { title: string }) {
 function DeskHost({ def }: { def: DeskDef }) {
   const ctx = useRegCtx()
   const tabs = visibleTabs(def.id, ctx)
+  // The lazy component is cached per desk (see lazyBody), so it is the same component on every render.
   const Body = lazyBody(def)
   return (
     <PanelShell title={def.label} kicker={def.kicker?.(ctx) ?? def.hint ?? ''} panel={def.id as Panel} wide tabs={tabs.length > 1 ? <DeskTabs desk={def.id} /> : undefined}>
@@ -50,6 +51,7 @@ function DeskHost({ def }: { def: DeskDef }) {
         <TabHost desk={def.id} />
       ) : Body ? (
         <Suspense fallback={<Skeleton lines={6} />}>
+          {/* oxlint-disable-next-line react/static-components */}
           <Body />
         </Suspense>
       ) : (
@@ -69,6 +71,7 @@ export function DeskSlot({ id }: { id: string }) {
   if (Desk) {
     return (
       <Suspense fallback={<DeskLoading title={def.label} />}>
+        {/* oxlint-disable-next-line react/static-components */}
         <Desk />
       </Suspense>
     )
