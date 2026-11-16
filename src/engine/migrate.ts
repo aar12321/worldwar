@@ -164,7 +164,9 @@ function cleanLive(game: GameState, map: WorldMap) {
       point(a.from) &&
       point(a.to) &&
       !!a.units &&
-      UNIT_TYPES.every((k) => finite(a.units[k]) && a.units[k] >= 0),
+      UNIT_TYPES.every((k) => finite(a.units[k]) && a.units[k] >= 0) &&
+      // A joint army whose faction or war is gone is dropped: its soldiers were the pool's copies, so nothing is lost with it.
+      (a.faction === undefined || (!!a.faction && typeof a.faction.id === 'string' && !!a.faction.base && UNIT_TYPES.every((k) => finite(a.faction!.base[k]) && a.faction!.base[k] >= 0) && !!game.factions?.some((f) => f.id === a.faction!.id && f.wars.some((w) => w.id === a.faction!.war)))),
   )
   for (const a of game.armies) {
     a.commit = ['probe', 'main', 'allin'].includes(a.commit) ? a.commit : 'main'

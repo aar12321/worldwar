@@ -1,6 +1,7 @@
 import { armiesToRecall, holdsBackLaunch } from '../ai/liveBot'
 import { LIVE } from '../data/live'
-import { bringHome, calledOff, sendHome, turnBack, launchArmy } from './armies'
+import { bringHome, calledOff, holdsHome, sendHome, turnBack, launchArmy } from './armies'
+import { fightFactionArmy, launchFactionArmies } from './factions'
 import { absDay, clockOf, dayDate, daysInMonth, isLive } from './calendar'
 import { addLog, atWar, newId, totalUnits } from './helpers'
 import { orderCost, validateOrder } from './orders'
@@ -149,8 +150,8 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
     // An earlier fight today may have ended this army's nation.
     if (!s.armies?.some((x) => x.id === a.id)) continue
     // An earlier army may have taken the country today, or the country it set out from may have fallen while it marched.
-    const why: ArmyOutcome | null = calledOff(s, a) ?? (s.regions[a.home]?.owner !== a.nationId ? 'cut' : null)
-    const result = why ? null : resolveAttack(s, map, a.nationId, a.target, rng, a.commit, a.stance, undefined, a)
+    const why: ArmyOutcome | null = calledOff(s, a) ?? (!holdsHome(s, a) ? 'cut' : null)
+    const result = why ? null : a.faction ? fightFactionArmy(s, map, a, rng) : resolveAttack(s, map, a.nationId, a.target, rng, a.commit, a.stance, undefined, a)
     if (!result) {
       // It cannot fight after all: it marches back from where it stands.
       const reason = why ?? 'peace'
@@ -256,6 +257,8 @@ export function advanceDay(prev: GameState, map: WorldMap, input: LiveInput = {}
     s.day = 0
     for (const f of s.nukes ?? []) if (!flying.has(f.id)) events.push({ kind: 'nukeLaunched', flight: { ...f } })
     planLaunches(s, attacks)
+    // The pooled armies of factions at war set out on the 1st, the day a vote that declared the war passed, and every month they are home.
+    for (const army of launchFactionArmies(s, map, clockOf(s))) events.push({ kind: 'launched', army: structuredClone(army) })
     if (trained.length) events.push({ kind: 'trained', jobs: trained })
     // A game won or lost at the month's end stays that way, and a decision that came with the month is answered first.
     if (s.outcome !== 'playing') return { state: s, events, monthEnded: true }

@@ -123,7 +123,7 @@ export function militaryPower(s: GameState, nationId: NationId): number {
 /** Strength of the units at home, the ones that would defend if a country were attacked today. The same as `militaryPower` in a turn game. */
 export function homePower(s: GameState, nationId: NationId): number {
   if (!s.nations[nationId]) return 0
-  if (!s.armies?.some((a) => a.nationId === nationId)) return militaryPower(s, nationId)
+  if (!s.armies?.some((a) => a.nationId === nationId && !a.faction)) return militaryPower(s, nationId)
   return militarySheet({ ...s, armies: [] }, nationId).totalPower
 }
 

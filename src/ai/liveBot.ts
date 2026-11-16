@@ -43,10 +43,10 @@ export function armiesToRecall(s: GameState, map: WorldMap, today: number): stri
   const out: string[] = []
   const seen = new Set<NationId>()
   for (const a of s.armies ?? []) {
-    if (a.phase !== 'outbound' || a.end - today < 1 || seen.has(a.nationId) || !watchful(s, a.nationId)) continue
+    if (a.faction || a.phase !== 'outbound' || a.end - today < 1 || seen.has(a.nationId) || !watchful(s, a.nationId)) continue
     seen.add(a.nationId)
     if (!homeThreatened(s, map, a.nationId)) continue
-    const mine = (s.armies ?? []).filter((x) => x.nationId === a.nationId && x.phase === 'outbound' && x.end - today >= 1)
+    const mine = (s.armies ?? []).filter((x) => !x.faction && x.nationId === a.nationId && x.phase === 'outbound' && x.end - today >= 1)
     const strongest = mine.reduce((best, x) => (forceStrength(x.units) > forceStrength(best.units) || (forceStrength(x.units) === forceStrength(best.units) && x.id < best.id) ? x : best), mine[0])
     out.push(strongest.id)
   }

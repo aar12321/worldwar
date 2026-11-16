@@ -164,9 +164,58 @@ export function launchArmy(s: GameState, map: WorldMap, o: AttackOrder, today: n
   return army
 }
 
+/** Whether the country an army set out from is still held by its side: its nation, or any member of its faction for a joint army. */
+export function holdsHome(s: GameState, a: Army): boolean {
+  const owner = s.regions[a.home]?.owner
+  if (!owner) return false
+  if (a.faction) return owner === a.nationId || !!s.factions?.find((f) => f.id === a.faction!.id)?.members.includes(owner)
+  return owner === a.nationId
+}
+
+/** Settles a joint army's losses with its pool: what it has lost since the last settling comes off the pool. The army's own soldiers never rejoin a nation. */
+export function settleFactionArmy(s: GameState, a: Army) {
+  if (!a.faction) return
+  const f = s.factions?.find((x) => x.id === a.faction!.id)
+  if (f) for (const k of UNIT_TYPES) f.pool.units[k] = Math.max(0, f.pool.units[k] - Math.max(0, a.faction.base[k] - a.units[k]))
+  for (const k of UNIT_TYPES) a.faction.base[k] = a.units[k]
+}
+
+/**
+ * Sends a faction's pooled army against a country, as a real army that marches, fights on arrival and comes home. The pool keeps its
+ * soldiers (the army carries a copy and the pool is charged its losses), so nothing can be duplicated or lost on the road.
+ */
+export function launchFactionArmy(s: GameState, map: WorldMap, f: { id: string; pool: { units: UnitCounts } }, war: { id: string; lead: NationId }, region: RegionId, reach: { bySea: boolean; via?: Via; from?: RegionId }, today: number): Army {
+  const from = reach.from ?? region
+  const via = reach.via ?? 'land'
+  const days = Math.max(1, Math.round(travelDays(distanceKm(map.regions[from], map.regions[region]), via)))
+  const leaves = today + LIVE.musterDays
+  const army: Army = {
+    id: newId(s, 'a'),
+    nationId: war.lead,
+    units: { ...f.pool.units },
+    commit: 'main',
+    stance: 'assault',
+    share: 1,
+    via,
+    bySea: reach.bySea,
+    home: from,
+    target: region,
+    phase: 'outbound',
+    from: centre(map, from),
+    to: centre(map, region),
+    start: leaves,
+    end: leaves + days,
+    launched: today,
+    foe: s.regions[region]?.owner,
+    faction: { id: f.id, war: war.id, base: { ...f.pool.units } },
+  }
+  ;(s.armies ??= []).push(army)
+  return army
+}
+
 /** Where an army heading home should go: its launch country if it is still held, else the nearest country its nation holds. */
 export function homeFor(s: GameState, map: WorldMap, a: Army, at: GeoPoint): RegionId | null {
-  if (s.regions[a.home]?.owner === a.nationId) return a.home
+  if (holdsHome(s, a)) return a.home
   let best: RegionId | null = null
   let bestKm = Infinity
   for (const r of Object.values(s.regions).sort((x, y) => (x.id < y.id ? -1 : 1))) {
@@ -183,11 +232,14 @@ export function homeFor(s: GameState, map: WorldMap, a: Army, at: GeoPoint): Reg
 /** The army's units go back into the national military and the army is no more. */
 export function bringHome(s: GameState, a: Army) {
   const n = s.nations[a.nationId]
-  if (n?.alive) for (const k of UNIT_TYPES) n.military.units[k] += a.units[k]
+  // A joint army's soldiers are the pool's: only its losses are settled.
+  if (a.faction) settleFactionArmy(s, a)
+  else if (n?.alive) for (const k of UNIT_TYPES) n.military.units[k] += a.units[k]
   s.armies = (s.armies ?? []).filter((x) => x.id !== a.id)
 }
 
 function disband(s: GameState, a: Army) {
+  settleFactionArmy(s, a)
   s.armies = (s.armies ?? []).filter((x) => x.id !== a.id)
 }
 
@@ -263,6 +315,7 @@ export function inTheField(s: Pick<GameState, 'armies'>, nationId: NationId): nu
 export function recallProblem(s: GameState, nationId: NationId, armyId: string): string | null {
   const a = s.armies?.find((x) => x.id === armyId)
   if (!a || a.nationId !== nationId) return 'That army is not yours'
+  if (a.faction) return 'The joint army answers to its faction, not to one member'
   if (a.phase !== 'outbound') return a.phase === 'fighting' ? 'It is fighting now' : 'It is already on its way home'
   return null
 }

@@ -1,6 +1,7 @@
 import { PUPPET, TRIBUTE } from '../data/puppets'
 import { enemiesOf, puppetsOf, regionsOf } from '../engine/helpers'
 import { liberablePuppets, tributeOf } from '../engine/puppets'
+import { grossIncome } from '../engine/victory'
 import { liberateValue, puppetValue, regionValue } from '../engine/warscore'
 import type { Rng } from '../engine/rng'
 import type { GameState, NationId, Order, PuppetPatch, TributeForm, WorldMap } from '../engine/types'
@@ -79,16 +80,19 @@ function neededForm(s: GameState, master: NationId, puppet: NationId): TributeFo
  * When a rival asks for a puppet at the peace table instead of land (see `peaceTerms`). Never Easy. Medium wants a decisive win
  * (war score 35) and keeps one puppet; Hard settles for a clear win (25) and keeps up to three. Whoever it is, the loser must be a
  * country that is worth ruling (its land is worth at least `minLand` in war score), neither side may be a puppet already, and a
- * master never holds more puppets than 1 + half its own countries, so a small nation cannot snowball on tribute.
+ * master never holds more puppets (the loser's own included) than 1 + half its own countries, and never rules a country that earns more than 1.2 times what it does itself, so a small nation cannot snowball on tribute.
  */
-export const PUPPET_AI = { minNet: [99, 35, 25], maxPuppets: [0, 1, 3], minLand: 30 }
+export const PUPPET_AI = { minNet: [99, 35, 25], maxPuppets: [0, 1, 3], minLand: 30, maxRichness: 1.2, countriesPerPuppet: 2 }
 
 export function wantsPuppet(s: GameState, map: WorldMap, me: NationId, enemy: NationId, net: number, skill: 0 | 1 | 2): boolean {
   if (skill === 0 || net < PUPPET_AI.minNet[skill]) return false
   const m = s.nations[me]
   const e = s.nations[enemy]
   if (!m?.alive || !e?.alive || m.overlord || e.overlord || s.humans.includes(me)) return false
-  if (puppetsOf(s, me).length >= Math.min(PUPPET_AI.maxPuppets[skill], 1 + Math.floor(regionsOf(s, me).length / 2))) return false
+  // The loser's own puppets pass up to the winner with it, so they count against the cap too.
+  if (puppetsOf(s, me).length + 1 + puppetsOf(s, enemy).length > Math.min(PUPPET_AI.maxPuppets[skill], 1 + Math.floor(regionsOf(s, me).length / PUPPET_AI.countriesPerPuppet))) return false
+  // A puppet much richer than its master would out-earn it on tribute: that is a conquest to take apart, not a state to rule.
+  if (grossIncome(s, map, enemy) > PUPPET_AI.maxRichness * Math.max(1, grossIncome(s, map, me))) return false
   let land = 0
   for (const r of regionsOf(s, enemy)) land += regionValue(s, map, r)
   if (land < PUPPET_AI.minLand) return false

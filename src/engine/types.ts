@@ -1028,6 +1028,12 @@ export interface Army {
   outcome?: ArmyOutcome
   /** The nation that held the target when the army set out. Older saves do not have it. */
   foe?: NationId
+  /**
+   * Set on a faction's joint army (live games). `units` is a copy of what the pool sent: the pool keeps its soldiers, and what the
+   * army loses is taken off the pool (`base` is what was last settled). `nationId` is the lead member, whose training and weapons it
+   * fights with. It never joins a nation's military and cannot be recalled.
+   */
+  faction?: { id: string; war: string; base: UnitCounts }
 }
 
 /**

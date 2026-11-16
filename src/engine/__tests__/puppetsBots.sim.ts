@@ -4,6 +4,7 @@
  * and the largest empire at the end (a snowball check).
  */
 import { PUPPET } from '../../data/puppets'
+import { garrisonDivisions } from '../deployment'
 import { extraction } from '../puppets'
 import { empireCount } from '../empire'
 import { getWorld } from '../../map/world'
@@ -19,6 +20,8 @@ export interface PuppetLife {
   ended: number | null
   /** Tribute (money-equivalent) it paid over its life. */
   tribute: number
+  /** Months a garrison of at least one division of its master stood in it. */
+  garrisonMonths: number
 }
 
 export interface PuppetBotRun {
@@ -50,11 +53,12 @@ export function puppetBotRun(difficulty: Difficulty, seed: number, months: numbe
       by.set(n.overlord, (by.get(n.overlord) ?? 0) + 1)
       let life = lives.get(n.id)
       if (!life || life.master !== n.overlord || life.ended !== null) {
-        life = { id: n.id, master: n.overlord, born: month, loyalty: [], ended: null, tribute: 0 }
+        life = { id: n.id, master: n.overlord, born: month, loyalty: [], ended: null, tribute: 0, garrisonMonths: 0 }
         lives.set(n.id, life)
         all.push(life)
       }
       life.loyalty.push(n.loyalty ?? -1)
+      if (garrisonDivisions(s, n.overlord, n.id) >= 1) life.garrisonMonths++
     }
     for (const [master, k] of by) {
       if (!s.nations[master]?.alive) continue
@@ -106,5 +110,5 @@ export function puppetBotRun(difficulty: Difficulty, seed: number, months: numbe
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
 export function summarizeLife(l: PuppetLife) {
   const ls = l.loyalty.filter((x) => x >= 0)
-  return { id: l.id, master: l.master, born: l.born, months: l.loyalty.length, ended: l.ended, minL: Math.min(...ls, 100), avgL: Math.round(avg(ls)), lastL: ls[ls.length - 1] ?? -1, tribute: Math.round(l.tribute) }
+  return { id: l.id, master: l.master, born: l.born, months: l.loyalty.length, ended: l.ended, minL: Math.min(...ls, 100), avgL: Math.round(avg(ls)), lastL: ls[ls.length - 1] ?? -1, garrison: l.garrisonMonths, tribute: Math.round(l.tribute) }
 }

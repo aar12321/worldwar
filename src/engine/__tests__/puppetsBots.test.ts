@@ -1,4 +1,5 @@
 import { describe, it } from 'vitest'
+import { PUPPET_AI } from '../../ai/puppets'
 import type { Difficulty } from '../types'
 import { puppetBotRun, summarizeLife } from './puppetsBots.sim'
 
@@ -9,6 +10,8 @@ suite('puppets in bot play', () => {
   const diff = (env.VITE_PUPBOT ?? 'hard') as Difficulty
   const seeds = (env.VITE_PUPBOT_SEEDS ?? '1,2,3').split(',').map(Number)
   const months = Number(env.VITE_PUPBOT_MONTHS ?? 120)
+  // VITE_PUPBOT_OLD=1: the rules before bots learned to make puppets freely (Hard at war score 40, no cap), for a baseline.
+  if (env.VITE_PUPBOT_OLD) Object.assign(PUPPET_AI, { minNet: [99, 99, 40], maxPuppets: [0, 0, 99], minLand: 0, maxRichness: 1e9, countriesPerPuppet: 1e-9 })
   for (const seed of seeds)
     it(`${diff} seed ${seed}`, () => {
       const r = puppetBotRun(diff, seed, months)

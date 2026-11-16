@@ -31,6 +31,8 @@ import type {
   Army,
 } from './types'
 import { POOL_RESOURCES, UNIT_TYPES } from './types'
+import { launchFactionArmy, settleFactionArmy } from './armies'
+import { isLive } from './calendar'
 import { canAttackRegion, carryNeeded, resolveAttack, transferRegion } from './warfare'
 
 type FactionOrder = Extract<Order, { type: 'factionFound' | 'factionJoin' | 'factionInvite' | 'factionLeave' | 'factionContribute' | 'factionWithdraw' | 'factionPropose' | 'factionVote' }>
@@ -746,19 +748,31 @@ function upkeepNeed(u: UnitCounts): number {
   return UNIT_TYPES.reduce((a, k) => a + u[k] * UNIT_SPECS[k].upkeep, 0)
 }
 
-/** The pooled army's month on campaign: it attacks the weakest reachable country of each enemy, as one army, with the lead member's training, weapons and technology. */
+/** Whether a war of the faction is still on, with who is fighting it; a war that is over is dropped (and said so). Returns the members at war, or null. */
+function liveWar(s: GameState, f: Faction, war: FactionWar): NationId[] | null {
+  const target = s.nations[war.target]
+  const fighting = f.members.filter((m) => s.nations[m]?.alive && atWar(s, m, war.target))
+  if (!target?.alive || !fighting.length) {
+    f.wars = f.wars.filter((w) => w.id !== war.id)
+    say(s, f, target?.alive ? `${f.name}'s war on ${target.name} is over.` : `${f.name}'s war ended with the fall of ${nm(s, war.target)}${war.captured.length ? ` (${war.captured.length} countr${war.captured.length === 1 ? 'y' : 'ies'} taken)` : ''}.`, 'war')
+    return null
+  }
+  if (!fighting.includes(war.lead)) war.lead = bestLead(s, fighting)!
+  return fighting
+}
+
+/**
+ * The pooled army's month on campaign: it attacks the weakest reachable country of each enemy, as one army, with the lead member's
+ * training, weapons and technology. In a turn game the attacks are fought here, at once. In a live game they are not: the army
+ * sets out on the 1st and marches (`launchFactionArmies`), so only the housekeeping of the wars is done here.
+ */
 export function runFactionCampaigns(s: GameState, map: WorldMap, rng: Rng) {
   if (!s.factions?.length) return
+  const live = isLive(s)
   for (const f of [...s.factions].sort((a, b) => (a.id < b.id ? -1 : 1))) {
     for (const war of [...f.wars].sort((a, b) => (a.id < b.id ? -1 : 1))) {
-      const target = s.nations[war.target]
-      const fighting = f.members.filter((m) => s.nations[m]?.alive && atWar(s, m, war.target))
-      if (!target?.alive || !fighting.length) {
-        f.wars = f.wars.filter((w) => w.id !== war.id)
-        say(s, f, target?.alive ? `${f.name}'s war on ${target.name} is over.` : `${f.name}'s war ended with the fall of ${nm(s, war.target)}${war.captured.length ? ` (${war.captured.length} countr${war.captured.length === 1 ? 'y' : 'ies'} taken)` : ''}.`, 'war')
-        continue
-      }
-      if (!fighting.includes(war.lead)) war.lead = bestLead(s, fighting)!
+      if (!liveWar(s, f, war)) continue
+      if (live) continue
       const attacks = f.members.length >= FACTION.secondAttackMembers ? FACTION.attacksPerMonth : 1
       const hit = new Set<RegionId>()
       for (let i = 0; i < attacks; i++) {
@@ -772,9 +786,32 @@ export function runFactionCampaigns(s: GameState, map: WorldMap, rng: Rng) {
   }
 }
 
-/** One attack by the pooled army. Returns whether it was fought. */
+/**
+ * Live games: on the 1st (the day a vote that declared the war passed, and every month after) each faction at war that has its army
+ * at home sends it, whole, against the weakest country of the first enemy it can reach. It is a real army: it marches, fights on
+ * arrival through the same code the turn game uses, and comes home. One army a faction at a time (a turn game's second attack of the
+ * month is not made in a live one). Returns the armies launched.
+ */
+export function launchFactionArmies(s: GameState, map: WorldMap, today: number): Army[] {
+  const out: Army[] = []
+  if (!s.factions?.length) return out
+  for (const f of [...s.factions].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (s.armies?.some((a) => a.faction?.id === f.id) || poolUnits(f) < 0.1) continue
+    for (const war of [...f.wars].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      if (!s.nations[war.target]?.alive || !s.nations[war.lead]?.alive) continue
+      const goal = reachableTargets(s, map, f, war.target)[0]
+      if (!goal) continue
+      const army = launchFactionArmy(s, map, f, war, goal.region, goal.reach, today)
+      f.history.push({ turn: s.turn, text: `The joint army marches on ${map.regions[goal.region].name}, ${army.end - army.start} day${army.end - army.start === 1 ? '' : 's'} away.` })
+      out.push(army)
+      break
+    }
+  }
+  return out
+}
+
+/** One attack by the pooled army, at once (turn games). Returns whether it was fought. */
 function fight(s: GameState, map: WorldMap, f: Faction, war: FactionWar, region: RegionId, reach: Reach, rng: Rng): boolean {
-  const lead = s.nations[war.lead]
   const from = reach.from ?? region
   const army: Army = {
     id: `${f.id}-${s.turn}`,
@@ -793,20 +830,40 @@ function fight(s: GameState, map: WorldMap, f: Faction, war: FactionWar, region:
     start: 0,
     end: 0,
     launched: s.turn,
+    faction: { id: f.id, war: war.id, base: { ...f.pool.units } },
   }
+  const result = fightFactionArmy(s, map, army, rng, true)
+  if (!result) return false
+  delete result.report.armyId
+  return true
+}
+
+/**
+ * A joint army fights: the attack itself, then what follows from it (the pool's losses, the report, the spoils shared out, the
+ * captured land given to members). `exact`: the army was made this very turn from the whole pool, so the pool simply becomes what is left.
+ */
+export function fightFactionArmy(s: GameState, map: WorldMap, army: Army, rng: Rng, exact = false) {
+  const f = factionById(s, army.faction?.id ?? '')
+  const war = f?.wars.find((w) => w.id === army.faction!.war)
+  const lead = s.nations[army.nationId]
+  if (!f || !war || !lead?.alive) return null
+  const region = army.target
   // A pool that could not feed or fuel its army fights as a nation without oil or food does.
   const was = { oil: lead.oilShortage, food: lead.foodShortage }
   if (f.short?.oil) lead.oilShortage = true
   if (f.short?.food) lead.foodShortage = true
   const heldBefore = new Set(regionsOf(s, war.lead))
   const moneyBefore = lead.resources.capital
-  const result = resolveAttack(s, map, war.lead, region, rng, 'main', 'assault', undefined, army)
+  const result = resolveAttack(s, map, army.nationId, region, rng, 'main', 'assault', undefined, army)
   lead.oilShortage = was.oil
   lead.foodShortage = was.food
-  if (!result) return false
-  for (const k of UNIT_TYPES) f.pool.units[k] = army.units[k] < 1e-6 ? 0 : army.units[k]
+  if (!result) return null
+  if (exact) for (const k of UNIT_TYPES) f.pool.units[k] = army.units[k] < 1e-6 ? 0 : army.units[k]
+  else {
+    settleFactionArmy(s, army)
+    for (const k of UNIT_TYPES) if (f.pool.units[k] < 1e-6) f.pool.units[k] = 0
+  }
   const report = result.report
-  delete report.armyId
   report.modifiers.push(`Joint army of ${f.name}: ${f.members.length} members, ${poolUnits(f).toFixed(1)} divisions left, led by ${lead.name}`)
   f.history.push({ turn: s.turn, text: `The joint army ${report.captured ? 'captured' : report.winner === 'attacker' ? 'pushed back the defense of' : 'was repulsed attacking'} ${map.regions[region].name}.` })
   // Land that fell to the lead is shared out, and so is the treasure that came with it.
@@ -818,7 +875,7 @@ function fight(s: GameState, map: WorldMap, f: Faction, war: FactionWar, region:
     for (const m of f.members) if (s.nations[m]?.alive) s.nations[m].resources.capital += spoils * sh[m]
   }
   if (taken.length) shareOutLand(s, map, f, war, taken)
-  return true
+  return result
 }
 
 /** Hands each captured country to a member: by ownership share (the member furthest behind its share gets the next), or to the proposer by charter. */

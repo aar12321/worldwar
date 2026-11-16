@@ -932,7 +932,7 @@ describe('notifications and online play', () => {
 })
 
 describe('turn and live months are the same month for a faction', () => {
-  it('a vote, a joint war and the pool\'s upkeep give the same game on the 1st of a live month as at the end of a turn', () => {
+  it('a vote and a joint war give the same war in a live month as in a turn month (the fighting itself marches in live: see factionLive.test.ts)', () => {
     const { s: base } = formed(['r0', 'r1', 'r5'])
     giveRegions(base, 'r2', ['r3', 'r4'])
     for (const id of ['r2', 'r3', 'r4']) base.regions[id].line = 0.4
@@ -942,21 +942,20 @@ describe('turn and live months are the same month for a faction', () => {
     const id = factionOf(base, 'r0')!.proposals[0].id
     const monthOrders = (turn: number): Order[] => (turn === base.turn + 1 ? [{ type: 'factionVote', nationId: 'r1', proposalId: id, vote: 'yes' }] : [])
     let turn = structuredClone(base)
-    for (let i = 0; i < 3; i++) turn = resolveTurn(turn, map, monthOrders(turn.turn))
+    for (let i = 0; i < 2; i++) turn = resolveTurn(turn, map, monthOrders(turn.turn))
     let live = startLive(structuredClone(base))
     while (live.turn < turn.turn) {
       const last = (live.day ?? 0) >= daysInMonth(live.turn) - 1
       live = advanceDay(live, map, { monthOrders: last ? monthOrders(live.turn) : undefined, planner: () => [] }).state
     }
-    const strip = (s: GameState) => {
-      const c = JSON.parse(JSON.stringify(s))
-      for (const k of ['day', 'armies', 'launches', 'flights', 'pendingDay']) delete c[k]
-      delete c.settings.mode
-      return c
+    // What the vote and the declaration decided: members, ledger, who leads, who declared, the wars between nations. The pool's losses and
+    // the land it took are not compared: a turn game fights at once, a live game sends the army on its way (it has not arrived yet).
+    const core = (s: GameState) => {
+      const f = factionOf(s, 'r0')!
+      return JSON.stringify({ members: f.members, ledger: f.ledger, charter: f.charter, proposals: f.proposals, wars: f.wars.map((w) => ({ id: w.id, target: w.target, lead: w.lead, proposer: w.proposer, since: w.since })), nationsWars: s.wars, history: f.history.filter((h) => !/joint army|goes to/.test(h.text)) })
     }
     expect(factionOf(turn, 'r0')!.wars.length).toBe(1)
-    expect(JSON.stringify(strip(live).factions)).toBe(JSON.stringify(strip(turn).factions))
-    expect(JSON.stringify(strip(live).regions)).toBe(JSON.stringify(strip(turn).regions))
+    expect(core(live)).toBe(core(turn))
   })
 })
 

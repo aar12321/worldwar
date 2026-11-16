@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { liberationChoice } from '../../ai/puppets'
 import { peaceTerms } from '../../ai/bot'
 import { LIBERATE_TEXT, PUPPET } from '../../data/puppets'
+import { storedOpinion } from '../../ai/opinion'
 import { evaluateProposal } from '../../ai/diplomat'
 import { declareWar, describeProposal, propose, respond, validateProposal } from '../diplomacy'
 import { atWar, grantJustification } from '../helpers'
@@ -99,7 +100,6 @@ describe('liberate: a peace term that frees a puppet', () => {
     // Dragged into the war on its master's side.
     s.wars.push('r0|r2')
     s.nations.r2.tribute = { form: 'money', share: 0.3 }
-    const before = s.nations.r2.opinions?.r0 ?? 0
     const p = offer(s, terms({ liberate: 'r2' }))
     respond(s, map, 'r1', p.id, true, createRng(1, 1))
     const r2 = s.nations.r2
@@ -109,8 +109,7 @@ describe('liberate: a peace term that frees a puppet', () => {
     expect(atWar(s, 'r0', 'r1')).toBe(false)
     expect(atWar(s, 'r0', 'r2')).toBe(false)
     expect(extraction(s, map, 'r1').total).toBe(0)
-    expect(JSON.stringify(s.opinions ?? {})).toContain(LIBERATE_TEXT.opinion)
-    void before
+    expect(storedOpinion(s, 'r2', 'r0').find((m) => m.label === LIBERATE_TEXT.opinion)?.value).toBe(PUPPET.liberate.opinion)
     expect(s.log.some((l) => l.text === LIBERATE_TEXT.log(s.nations.r0.name, r2.name, s.nations.r1.name))).toBe(true)
     // The record of the war is gone with the peace.
     expect(s.liberationWars?.['r0>r1']).toBeUndefined()
