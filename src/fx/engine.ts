@@ -189,13 +189,7 @@ export class FxEngine {
     this.reduced = reduced
     this.caps = capsFor(tier, reduced)
     this.particles.setLimit(this.caps.particles)
-    // Trim effects that no longer fit.
-    while (this.live.length > this.caps.effects) {
-      const v = this.weakest()
-      if (!v) break
-      this.release(v)
-      this.stats.evicted++
-    }
+    // Effects already running play out; the new caps apply to everything added from now on (and to particles at once).
     this.touch()
   }
 
@@ -718,7 +712,7 @@ export class FxEngine {
       }
       if (this.tv[0]) {
         const hsz = Math.max(5, st.head * ppu * (1 + hot * 0.9))
-        if (segs > 0 || order < this.caps.fullFlights) {
+        if (order < 12 || (segs > 0 && order < 0)) {
           p.sprite('glow.fire', 0, hx, hy, hsz * (1.2 + 0.12 * Math.sin(this.now / 60 + b)), 0, (0.85 + 0.15 * hot) * alpha, hot > 0 ? '#ffd9a0' : color, true)
           if (hot > 0) p.sprite('glow.fire', 0, hx, hy, hsz * 1.7, 0, 0.5 * hot * alpha, '#ff6a2a', true)
           p.sprite('glow.fire', 0, hx, hy, hsz * 0.45, 0, alpha, '#ffffff', true)

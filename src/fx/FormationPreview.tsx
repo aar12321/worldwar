@@ -20,8 +20,7 @@ interface Shown {
 
 export function FormationPreview({ units, color, reduced, label }: { units: Partial<UnitCounts>; color: string; reduced: boolean; label: string }) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const state = useRef<{ shown: Shown[]; units: Partial<UnitCounts>; wake: () => void }>({ shown: [], units, wake: () => {} })
-  state.current.units = units
+  const state = useRef<{ shown: Shown[]; wake: () => void }>({ shown: [], wake: () => {} })
   const total = totalOf(units)
 
   // A change of force: squads that appear start small, squads that go shrink toward nothing.
@@ -113,14 +112,15 @@ export function FormationPreview({ units, color, reduced, label }: { units: Part
         raf = requestAnimationFrame(draw)
       }
     }
-    state.current.wake = wake
+    const st = state.current
+    st.wake = wake
     const onVis = () => !document.hidden && wake()
     document.addEventListener('visibilitychange', onVis)
     wake()
     return () => {
       document.removeEventListener('visibilitychange', onVis)
       if (raf) cancelAnimationFrame(raf)
-      state.current.wake = () => {}
+      st.wake = () => {}
     }
   }, [color, reduced])
 

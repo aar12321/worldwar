@@ -11,7 +11,9 @@ export function Ticker({ value, format = (v: number) => v.toFixed(1), ms = TIMIN
   const shown = useRef(value)
   const reduced = useGame((s) => s.settings.reducedMotion)
   const fmt = useRef(format)
-  fmt.current = format
+  useEffect(() => {
+    fmt.current = format
+  })
   useEffect(() => {
     const node = el.current
     if (!node) return

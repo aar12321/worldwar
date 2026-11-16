@@ -41,6 +41,11 @@ class Runtime {
   /** Frame times measured while animating, for the dev panel and the harness. */
   frameMs = 16.7
   running = 0
+  /** JS time spent in update + draw per frame (ms), smoothed, with the worst frame and the frame count, for the dev panel and the report. */
+  jsMs = 0
+  jsMax = 0
+  jsFrames = 0
+  jsSum = 0
 
   constructor() {
     fxEngine.wake = () => this.wake()
@@ -130,6 +135,7 @@ class Runtime {
       this.view.update(cam, this.cssW, this.cssH)
     }
     e.clockT = clock.t
+    const j0 = performance.now()
     const loop = this.needsLoop(clock)
     // Effects advance on wall time; flights and armies on the game clock (read above).
     if (!this.freeze && (loop || e.animating)) e.update(dtRaw)
@@ -140,6 +146,11 @@ class Runtime {
       e.draw(painter, this.view)
       this.lastStamp = this.view.stamp
       this.drawnLast = true
+      const spent = performance.now() - j0
+      this.jsMs += (spent - this.jsMs) * 0.1
+      this.jsMax = Math.max(this.jsMax, spent)
+      this.jsFrames++
+      this.jsSum += spent
     } else if (this.drawnLast && !e.enabled) {
       painter.ctx.setTransform(1, 0, 0, 1, 0, 0)
       painter.ctx.clearRect(0, 0, host.canvas.width, host.canvas.height)

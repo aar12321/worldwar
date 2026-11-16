@@ -70,7 +70,7 @@ describe('quality', () => {
     for (let i = 0; i < 2000; i++) a.sample(8)
     expect(a.tier).toBe('high')
     expect(a.steps).toBeGreaterThan(before)
-    expect(a.sample(900)).toBeNull()
+    expect(a.sample(5000)).toBeNull()
     expect(ADAPTIVE_DEFAULTS.fastMs).toBeLessThan(ADAPTIVE_DEFAULTS.slowMs)
   })
 
@@ -110,6 +110,12 @@ describe('engine caps and budget', () => {
     // Something less important than everything alive is turned away.
     expect(e.add(K.RING, { dur: 100, prio: 1 })).toBeNull()
     e.setQuality('low', false)
+    // What is playing finishes; nothing new gets past the lower cap.
+    const n = e.liveEffects
+    e.add(K.RING, { dur: 100, prio: PRIO.ring })
+    expect(e.liveEffects).toBeLessThanOrEqual(n)
+    e.update(6000)
+    for (let i = 0; i < 100; i++) e.update(100)
     expect(e.liveEffects).toBeLessThanOrEqual(CAPS.low.effects)
     e.setQuality('off', false)
     expect(e.add(K.RING, { dur: 100, prio: 99 })).toBeNull()

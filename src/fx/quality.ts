@@ -35,7 +35,7 @@ export interface Caps {
 }
 
 export const CAPS: Record<Tier, Caps> = {
-  high: { particles: 300, effects: 24, fullFlights: 40, trailSegments: 480, stripTrails: 24, armies: 40, decals: 24, bodiesPerSalvo: 12, ringSteps: 72, dpr: 1.5, glow: true },
+  high: { particles: 300, effects: 24, fullFlights: 32, trailSegments: 300, stripTrails: 16, armies: 40, decals: 24, bodiesPerSalvo: 12, ringSteps: 72, dpr: 1.5, glow: true },
   medium: { particles: 160, effects: 16, fullFlights: 20, trailSegments: 240, stripTrails: 8, armies: 20, decals: 16, bodiesPerSalvo: 6, ringSteps: 48, dpr: 1.25, glow: true },
   low: { particles: 60, effects: 8, fullFlights: 8, trailSegments: 100, stripTrails: 0, armies: 8, decals: 8, bodiesPerSalvo: 3, ringSteps: 28, dpr: 1, glow: false },
   off: { particles: 0, effects: 0, fullFlights: 0, trailSegments: 0, stripTrails: 0, armies: 0, decals: 0, bodiesPerSalvo: 0, ringSteps: 0, dpr: 1, glow: false },
@@ -90,9 +90,9 @@ export class AdaptiveQuality {
     return this.ema
   }
 
-  /** `frameMs` is the time since the previous frame. Stalls (a hidden tab, over 250 ms) are ignored. Returns the new tier on a step. */
+  /** `frameMs` is the time since the previous frame. Absurd gaps (a tab that was in the background, over two seconds) are ignored; the loop also resets its clock when the tab returns. Returns the new tier on a step. */
   sample(frameMs: number): Tier | null {
-    if (frameMs <= 0 || frameMs > 250) return null
+    if (frameMs <= 0 || frameMs > 2000) return null
     const dt = frameMs / 1000
     this.ema += (frameMs - this.ema) * 0.1
     this.sinceStep += dt
