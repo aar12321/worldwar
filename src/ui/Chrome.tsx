@@ -41,8 +41,8 @@ export function OrdersTray() {
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ duration: 0.14 }}
               onClick={() => removeOrder(i)}
-              className="tray-chip whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-medium hover:line-through bg-white/10 text-white/90"
-              title="Click to cancel"
+              className={`tray-chip whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-medium hover:line-through ${o.type === 'attack' && o.auto ? 'bg-[#30d158]/20 text-[#9bf0b1]' : 'bg-white/10 text-white/90'}`}
+              title={o.type === 'attack' && o.auto ? 'Planned by AI Battle Command. Click to cancel it.' : 'Click to cancel'}
               aria-label={`Cancel order: ${describeOrder(game, map, o)}`}
             >
               {describeOrder(game, map, o)}

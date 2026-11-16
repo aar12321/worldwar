@@ -156,7 +156,7 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'research':
       return `Research ${TECH_BY_ID[o.techId]?.name ?? o.techId}`
     case 'attack':
-      return o.units ? `Attack ${region(o.target)} with ${describeForce(o.units)}` : `Attack ${region(o.target)}`
+      return `${o.auto ? 'Auto-command: ' : ''}${o.units ? `Attack ${region(o.target)} with ${describeForce(o.units)}` : `Attack ${region(o.target)}`}`
     case 'assignGeneral': {
       if (!o.generalId) return 'Remove the commander'
       const name = s.nations[o.nationId]?.generals.find((g) => g.id === o.generalId)?.name

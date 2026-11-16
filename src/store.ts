@@ -4,6 +4,7 @@ import { createInitialState, type NewGameOptions } from './data/startingNations'
 import type { AdviceTarget, PeopleSection } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
 import { factionNews } from './engine/factions'
+import { commandLevel, DEFAULT_AUTO, planMonth, type AutoSettings } from './engine/commander'
 import { maxAttacks, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
 import { markMonth, statsOf } from './engine/monthMark'
@@ -13,7 +14,7 @@ import { absDate, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
 import { applyOrderNow, describeOrder, resolveTurn } from './engine/resolveTurn'
-import type { BattleReport, Dispatch, GameState, MonthMark, MonthStats, NationId, Order, Programs, RegionId, Spending } from './engine/types'
+import type { BattleReport, Dispatch, GameState, MonthMark, MonthStats, NationId, Order, Programs, RegionId, Spending, UnitCounts } from './engine/types'
 import { getWorld } from './map/world'
 import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type Lobby, type OpenSeat, type RoomSettings } from './net/protocol'
 import { loadOnlineSave, writeOnlineSave } from './net/saves'
@@ -299,7 +300,13 @@ export interface GameStore {
   setPolicy(patch: PolicyPatch): void
   /** Queues changes to the nation's programs (schools, immigration, occupation...) and interest rate for the end of the month. */
   setPrograms(programs: Partial<Programs>, rate?: number): void
-  attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number, share?: number): boolean
+  attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number, share?: number, units?: Partial<UnitCounts>): boolean
+  /** AI Battle Command's standing auto-command (level 3): the limits the player set. Saved on this device. */
+  autoCommand: AutoSettings
+  /** Changes the limits. Turning it on plans the month at once; turning it off takes the planned attacks out of the tray. */
+  setAutoCommand(patch: Partial<AutoSettings>): void
+  /** Plans (or re-plans) the month's attacks within the limits and puts them in the order tray, marked as auto-command. Returns how many. */
+  planAutoCommand(): number
   openWarRoom(target: RegionId | null): void
   setAircraftOpen(open: boolean): void
   endTurn(): void
@@ -367,6 +374,25 @@ function loadSettings(): Settings {
   } catch {
     return defaultSettings
   }
+}
+
+const AUTO_KEY = 'worlds-of-others-auto-command-v1'
+
+function loadAutoCommand(): AutoSettings {
+  try {
+    const raw = localStorage.getItem(AUTO_KEY)
+    if (!raw) return { ...DEFAULT_AUTO }
+    return sanitizeAuto(JSON.parse(raw) as Partial<AutoSettings>)
+  } catch {
+    return { ...DEFAULT_AUTO }
+  }
+}
+
+/** The player's limits, kept to what the planner accepts. */
+export function sanitizeAuto(a: Partial<AutoSettings>): AutoSettings {
+  const num = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d)
+  const objective = a.objective === 'losses' || a.objective === 'fast' || a.objective === 'defend' ? a.objective : 'win'
+  return { on: a.on === true, objective, maxAttacks: Math.round(num(a.maxAttacks, 1, 9, DEFAULT_AUTO.maxAttacks)), reserve: num(a.reserve, 0, 0.9, DEFAULT_AUTO.reserve), minWin: num(a.minWin, 0.3, 0.95, DEFAULT_AUTO.minWin) }
 }
 
 function writeOrders(orders: Order[]) {
@@ -810,6 +836,7 @@ export const useGame = create<GameStore>((set, get) => ({
   warRoom: null,
   aircraftOpen: false,
   settings: loadSettings(),
+  autoCommand: loadAutoCommand(),
   toasts: [],
   hasSave: hasStoredSave(),
   running: false,
@@ -1189,7 +1216,7 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ aircraftOpen: open })
   },
 
-  attack(target, commit = 'main', stance = 'assault', missiles, share) {
+  attack(target, commit = 'main', stance = 'assault', missiles, share, units) {
     const { game, settings, online } = get()
     if (!game) return false
     const { map } = getWorld()
@@ -1199,7 +1226,7 @@ export const useGame = create<GameStore>((set, get) => ({
         get().toast(`Your military can plan ${maxAttacks(game, game.playerId)} attacks a month`, 'error')
         return false
       }
-      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}) })
+      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}), ...(units ? { units } : {}) })
       if (ok) {
         set({ warRoom: null, aircraftOpen: false })
         get().toast(`Attack on ${map.regions[target].name} planned. It plays out when the month ends.`, 'info', 4500)
@@ -1207,7 +1234,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return ok
     }
     const next = structuredClone(game)
-    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}) }, get().orders)
+    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}), ...(units ? { units } : {}) }, get().orders)
     // In a live game the army sets out and fights when it arrives.
     if (result.army) {
       const a = result.army
@@ -1234,6 +1261,45 @@ export const useGame = create<GameStore>((set, get) => ({
     return true
   },
 
+  setAutoCommand(patch) {
+    const { game, autoCommand } = get()
+    const next = sanitizeAuto({ ...autoCommand, ...patch })
+    if (game && next.on && (commandLevel(game, game.playerId) < 3 || isLive(game) || (session && get().online?.status === 'playing'))) {
+      get().toast(isLive(game) ? 'Auto-command plans a month at a time: it is for turn games' : commandLevel(game, game.playerId) < 3 ? 'Auto-command needs AI Battle Command level 3' : 'Auto-command is not available in an online game', 'error')
+      next.on = false
+    }
+    set({ autoCommand: next })
+    try {
+      localStorage.setItem(AUTO_KEY, JSON.stringify(next))
+    } catch {
+      /* the limits are only a convenience; the game works without saving them */
+    }
+    if (!game) return
+    if (!next.on) {
+      // Off: the attacks it planned are taken out; anything the player queued by hand stays.
+      const kept = get().orders.filter((o) => !(o.type === 'attack' && o.auto))
+      if (kept.length !== get().orders.length) {
+        set({ orders: kept })
+        writeOrders(kept)
+      }
+    } else {
+      const n = get().planAutoCommand()
+      get().toast(n > 0 ? `Auto-command queued ${n} attack${n === 1 ? '' : 's'}. They are in the tray: click one to cancel it.` : 'Auto-command found no attack that meets your limits this month', 'info', 5000)
+    }
+  },
+
+  planAutoCommand() {
+    const { game, orders, autoCommand } = get()
+    if (!game || isLive(game) || game.outcome !== 'playing' || commandLevel(game, game.playerId) < 3) return 0
+    const { map } = getWorld()
+    const kept = orders.filter((o) => !(o.type === 'attack' && o.auto))
+    const plans = planMonth(game, map, game.playerId, autoCommand, kept, false)
+    const next = [...kept, ...plans.map((p) => ({ ...p.order, auto: true as const }))]
+    set({ orders: next })
+    writeOrders(next)
+    return plans.length
+  },
+
   endTurn() {
     const { game, orders, fxQueue, online } = get()
     if (!game || isLive(game) || game.pendingEvent || game.outcome !== 'playing' || fxQueue.length > 0) return
@@ -1248,6 +1314,8 @@ export const useGame = create<GameStore>((set, get) => ({
     const shown = presentMonth(game, next, game.playerId)
     save(next, [])
     set({ game: next, orders: [], undoStack: [], ...shown })
+    // A standing auto-command plans the new month at once, so its attacks are in the tray to look over (and take out) before the month ends.
+    if (get().autoCommand.on) get().planAutoCommand()
   },
 
   play() {
