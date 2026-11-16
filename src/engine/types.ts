@@ -768,10 +768,144 @@ export type Order =
   | { type: 'factionWithdraw'; nationId: NationId; gift: FactionGift }
   | { type: 'factionPropose'; nationId: NationId; proposal: FactionProposalDraft }
   | { type: 'factionVote'; nationId: NationId; proposalId: string; vote: 'yes' | 'no' }
+  /** Relationships: a state visit, an embassy, aid, a joint venture, a joint war plan and the rest (src/engine/relations.ts). Happens at once for a player; a rival's runs with the month's orders. */
+  | RelateOrder
   /** Online: this player's answer to the decision waiting for them (`GameState.pendingEvents`). */
   | { type: 'eventChoice'; nationId: NationId; index: number }
   /** Live mode: calls an army that is still on its way out back home. */
   | { type: 'recall'; nationId: NationId; armyId: string }
+
+/** Everything the Relations desk can do with another nation. */
+export type RelateAct =
+  | 'visit' | 'culture' | 'festival' | 'recognise' | 'apology' | 'support' | 'mediate'
+  | 'embassy' | 'attache' | 'closeEmbassy'
+  | 'students' | 'science' | 'tradeMission' | 'tariff' | 'venture' | 'endProgram'
+  | 'aid' | 'forgive' | 'techShare' | 'cede'
+  | 'exercise' | 'armsSale' | 'training' | 'intelShare' | 'basing' | 'sanction'
+  | 'warPlan' | 'endPlan' | 'strikeWindow'
+  | 'callFavour' | 'ask' | 'answer'
+
+export type RelateAid = 'food' | 'oil' | 'steel'
+export type RequestKind = 'aid' | 'venture' | 'plan' | 'trade' | 'visit' | 'support'
+
+/** One order of the relationship desk. Which fields matter depends on `act`; every other field is ignored. */
+export interface RelateOrder {
+  type: 'relate'
+  nationId: NationId
+  /** The partner. */
+  target: NationId
+  act: RelateAct
+  /** aid: what is sent. */
+  resource?: RelateAid
+  /** aid, venture, apology: how much. */
+  amount?: number
+  /** venture: the sector. */
+  sector?: SectorId
+  /** techShare: the technology. */
+  techId?: string
+  /** warPlan, mediate, sanction: the third nation. */
+  enemy?: NationId
+  /** warPlan: months it runs and the share of captured value the partner is paid. strikeWindow: the country to hit. */
+  months?: number
+  split?: number
+  region?: RegionId
+  /** endProgram, endPlan, answer: which one; answer: yes or no. */
+  id?: string
+  accept?: boolean
+  /** callFavour: what is asked for. */
+  ask?: 'money' | 'influence' | 'research'
+  /** ask (a rival's request to you): what kind. */
+  kind?: RequestKind
+  /** cede: the country given. */
+  give?: RegionId
+}
+
+/** A standing mission in another capital. An attaché also sits with their forces. */
+export interface Embassy {
+  from: NationId
+  to: NationId
+  since: number
+  attache?: boolean
+  /** The month the attaché arrived. */
+  attacheSince?: number
+}
+
+export type ProgramKind = 'students' | 'science' | 'route' | 'tariff' | 'basing' | 'venture'
+
+/** Something that runs for months between two nations: exchanges, joint research, trade routes, basing, a joint venture. */
+export interface RelProgram {
+  id: string
+  kind: ProgramKind
+  /** Who started it, and who it is with. */
+  a: NationId
+  b: NationId
+  start: number
+  until: number
+  /** venture: the sector, in the country `host`, and what each side put in. */
+  sector?: SectorId
+  host?: NationId
+  stake?: number
+}
+
+/** A time-limited operational alliance against one named enemy. */
+export interface WarPlan {
+  id: string
+  a: NationId
+  b: NationId
+  enemy: NationId
+  start: number
+  until: number
+  /** Share of a captured country's value that the one who did not take it is paid (0 to 0.5). */
+  split: number
+  /** The country both armies are to hit, and the month (and in a live game the day) it is to happen. */
+  strike?: { region: RegionId; turn: number; day?: number }
+  /** The last blows struck by each partner: the one who comes second inside the window fights as a joint strike. */
+  hits?: { nation: NationId; region: RegionId; turn: number; day?: number }[]
+  paid?: number
+}
+
+/** A rival asks the player for something. Ignoring it has consequences. */
+export interface RelRequest {
+  id: string
+  from: NationId
+  to: NationId
+  kind: RequestKind
+  created: number
+  expires: number
+  resource?: RelateAid
+  amount?: number
+  enemy?: NationId
+  sector?: SectorId
+  months?: number
+  text: string
+}
+
+export interface RelEntry {
+  turn: number
+  a: NationId
+  b: NationId
+  act: string
+  text: string
+}
+
+/** Everything the relationship desk keeps. Absent until a nation first does something there. */
+export interface RelationsState {
+  /** "from>to:act" -> the last month it was done, for the one cooldown each partner has per action. */
+  last: Record<string, number>
+  /** "holder>target" -> warmth earned lately by actions. It fades; the more there is, the less the next action is worth. */
+  soft: Record<string, number>
+  embassies: Embassy[]
+  programs: RelProgram[]
+  plans: WarPlan[]
+  /** "debtor>creditor" -> the months (inclusive) each favour owed is good for. */
+  favours: Record<string, number[]>
+  requests: RelRequest[]
+  log: RelEntry[]
+  /** Sorted "a|b" -> the month a pact or alliance began, for anniversaries and the steadfast-ally bonus. */
+  since: Record<string, number>
+  /** Sorted "a|b" -> the last month either did something warm for the other. A partner left alone too long cools. */
+  contact: Record<string, number>
+}
 
 export type ResolutionKind = 'sanctions' | 'ceasefire' | 'recognition' | 'accord'
 
@@ -1027,6 +1161,8 @@ export interface GameState {
   pendingDay?: number
   /** Live mode only: how the player's nation stood when the month began, and its battles since. It travels with the game, so a month's report is right across a save and a load. The screen keeps it; the clock does not touch it. */
   monthStart?: MonthMark
+  /** Relationships: embassies, exchanges, ventures, joint war plans, favours, requests. Absent until a nation first does something in the Relations desk. */
+  relations?: RelationsState
 }
 
 /** The numbers the monthly report compares: how the player's nation stood at one moment. */

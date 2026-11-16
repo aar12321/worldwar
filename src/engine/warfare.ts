@@ -1,4 +1,5 @@
 import { LIVE } from '../data/live'
+import { combinedStrike, planPartners, shareSpoils } from './relations'
 import { addOpinion, forgetNation } from '../ai/opinion'
 import { BANKING } from '../data/banking'
 import { COMBAT_MEDICINE, DEMAND, MEDICINE } from '../data/people'
@@ -564,6 +565,8 @@ export function resolveAttack(
   // Hypersonic batteries crack the Defense Line directly, win or lose, unless the shield stops them.
   const missileHits = attacker.units.missile * FRONTIER.missileLine * batteryThrough(attacker, defender, defenderNation.systems?.shield ?? 0)
   if (missileHits > 0 && lineAfter > 0) lineAfter = Math.min(lineAfter, Math.max(outcome.winner === 'attacker' ? 0 : 0.5, lineAfter - missileHits))
+  // A joint war plan: the second of two partners to hit the same country inside the window pushes the line back further.
+  if (s.relations?.plans.length) lineAfter = combinedStrike(s, nationId, target, defenderId, lineAfter, outcome.winner === 'attacker')
   targetRegion.line = lineAfter
   targetRegion.attackedTurn = s.turn
 
@@ -596,10 +599,11 @@ export function resolveAttack(
   if (captured) reach(attackerNation, 'capture')
   if (captured) transferRegion(s, map, target, nationId)
   // A faction's joint army fights under its lead: the members at war with the defender share the credit.
-  const partners = army?.faction ? (s.factions?.find((f) => f.id === army.faction!.id)?.members ?? []).filter((m) => m !== nationId && s.nations[m]?.alive && atWar(s, m, defenderId)) : []
+  const partners = army?.faction ? (s.factions?.find((f) => f.id === army.faction!.id)?.members ?? []).filter((m) => m !== nationId && s.nations[m]?.alive && atWar(s, m, defenderId)) : s.relations?.plans.length ? planPartners(s, nationId, defenderId).filter((m) => s.nations[m]?.alive && atWar(s, m, defenderId)) : []
   recordBattle(s, report, captured && wasCapital, partners)
   if (captured) {
     addOpinion(s, defenderId, nationId, 'Seized our land', -8, 0.2)
+    if (s.relations?.plans.length) shareSpoils(s, map, nationId, target, defenderId)
     addInfamy(s, nationId, JUSTIFY.infamyCapture)
   }
   const verb = captured ? 'captured' : outcome.winner === 'attacker' ? 'pushed back the defense of' : 'was repulsed attacking'

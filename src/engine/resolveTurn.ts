@@ -64,6 +64,8 @@ import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
 import { fadeWarScore } from './warscore'
 import { applyGovern, describePatch } from './puppets'
+import { applyRelate, runRelations } from './relations'
+import { describeRelate } from './relationsView'
 
 /** A project's name, whether it is a nation's or a country's. */
 const projectName = (id: string) => (isLocalProject(id) ? LOCAL[id].name : PROJECTS[id as keyof typeof PROJECTS].name)
@@ -263,6 +265,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       const def = ev ? EVENT_BY_ID[ev.eventId] : null
       return def ? `Decide: ${def.title} (${def.options[o.index]?.label ?? 'option'})` : 'Answer a decision'
     }
+    case 'relate':
+      return describeRelate(s, map, o)
     case 'factionFound':
       return `Found the faction ${o.name}`
     case 'factionJoin':
@@ -306,6 +310,7 @@ const PHASES: Order['type'][][] = [
   ['factionPropose'],
   ['factionVote'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose', 'resolution'],
+  ['relate'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy', 'sellShares', 'buyShares'],
   ['issueBonds', 'repayDebt', 'printMoney', 'wealthFund', 'setStateOwned', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
@@ -426,6 +431,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   }
   applyDeals(s, map, rng)
   runFactionMonth(s)
+  runRelations(s, map, rng)
   runPolitics(s, map, rng)
   runEpidemics(s, map, nationNeighborMap(s, map), doctors)
   runDeployment(s, map)
@@ -494,6 +500,9 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
 function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typeof createRng>) {
   const n = s.nations[o.nationId]
   switch (o.type) {
+    case 'relate':
+      applyRelate(s, map, o)
+      break
     case 'eventChoice':
       resolveEvent(s, map, o.index, o.nationId, false)
       break

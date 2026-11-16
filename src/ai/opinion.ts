@@ -4,6 +4,8 @@ import type { GameState, NationId, OpinionModifier, WorldMap } from '../engine/t
 import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
 import { sameFaction } from '../engine/factions'
 import { FACTION } from '../data/factions'
+import { RELATIONS } from '../data/relations'
+import { relationLines } from '../engine/relationParts'
 
 /** A coalition forms against the player once they hold this fraction of their victory target. */
 export const COALITION_THRESHOLD = 0.35
@@ -118,6 +120,13 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   const shared = mine.filter((e) => theirEnemies.includes(e)).length
   push('Common enemy', Math.min(30, shared * 15))
   if (sameFaction(s, holder, target)) push('Faction partners', FACTION.opinionBonus)
+  if (RELATIONS.on) {
+    // Like governments understand each other; an open society and a closed one do not.
+    const hg = h.government
+    const tg = s.nations[target]?.government
+    if (tg && hg === tg) push('Same system of government', 4)
+    else if (tg && ((hg === 'democracy' && (tg === 'junta' || tg === 'one_party')) || (tg === 'democracy' && (hg === 'junta' || hg === 'one_party')))) push('Opposed systems of government', -4)
+  }
   const borders = ctx.borders ?? nationNeighbors(s, map, holder).has(target)
   if (borders) push('Border tensions', h.personality === 'expansionist' ? -14 : -6)
   if (hasCasusBelli(s, holder, target)) push('Grievance', -15)
@@ -126,6 +135,8 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   // A reputation for aggression: the world is uneasy about a nation that starts wars and takes land, until it fades.
   push('Uneasy about its wars', -Math.min(30, (s.infamy?.[target] ?? 0) * 0.5))
   for (const m of storedOpinion(s, holder, target)) push(m.label, m.value)
+  // Embassies, running programs, a joint war plan, long friendship and neglect: worked out from the state, not stored.
+  if (s.relations) for (const l of relationLines(s, holder, target)) push(l.label, l.value)
   const total = Math.round(clamp(parts.reduce((sum, p) => sum + p.value, 0), -100, 100))
   return { total, parts }
 }

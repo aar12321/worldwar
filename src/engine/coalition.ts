@@ -215,7 +215,7 @@ function planStrike(s: GameState, map: WorldMap, rng: Rng, leader: NationId, thr
 /** The live clock's day of a month on which a joint strike's attacks all leave, or null if the order belongs to none. */
 export function jointDay(s: GameState, joint: string | undefined): number | null {
   if (!joint) return null
-  return (s.coalitions ?? []).find((p) => p.id === joint)?.strikeDay ?? null
+  return (s.coalitions ?? []).find((p) => p.id === joint)?.strikeDay ?? s.relations?.plans.find((p) => p.id === joint)?.strike?.day ?? null
 }
 
 // ---- What the screens show ----

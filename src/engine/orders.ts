@@ -44,6 +44,7 @@ import { showCost, validateSetAlert, validateShow } from './presence'
 import { unitsProblem } from './deploy'
 import { validateSetBorder } from './borders'
 import { annexFactor, governCost, governProblem, lockedByMaster } from './puppets'
+import { inPlanTogether, relationCost, relationProblem } from './relations'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
 export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'operation', 'domestic', 'strike', 'raid', 'nuke', 'eventChoice', ...FACTION_ORDERS])
@@ -297,6 +298,14 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'suppressRebels':
       c.pp = COSTS.suppressRebels
       break
+    case 'relate': {
+      const k = relationCost(s, o)
+      c.capital = k.capital
+      c.pp = k.pp
+      c.tp = k.tp
+      c.steel = k.steel
+      break
+    }
     case 'factionFound':
     case 'factionRequest':
     case 'factionContribute':
@@ -390,6 +399,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
   const n = s.nations[o.nationId]
   if (isFactionOrder(o)) return factionProblem(s, map, o, pending)
   switch (o.type) {
+    case 'relate':
+      return relationProblem(s, map, o, pending)
     case 'eventChoice': {
       const ev = s.pendingEvents?.[o.nationId]
       if (!ev) return 'No decision is waiting'
@@ -638,6 +649,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       if (isAllied(s, o.nationId, o.target)) return 'You are allied'
       if (hasPact(s, o.nationId, o.target)) return 'A non-aggression pact is in force'
       if (sameFaction(s, o.nationId, o.target)) return 'You are in the same faction. Leave it first.'
+      if (inPlanTogether(s, o.nationId, o.target)) return 'You have a joint war plan with them. End it first.'
       const pendingWars = pending.filter((p) => p.type === 'declareWar').length
       if (enemiesOf(s, o.nationId).length + pendingWars >= maxWars(s, o.nationId)) return `You are already fighting ${maxWars(s, o.nationId)} wars. End one first.`
       if (enemiesOf(s, o.target).length >= maxWars(s, o.target)) return `${t.name} is already fighting ${maxWars(s, o.target)} wars`
