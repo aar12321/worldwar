@@ -326,7 +326,10 @@ export function WorldGlobe() {
   }, [pins, battles, pops])
 
   const army = useArmyLayer(ref, reducedMotion)
-  const allRings = useMemo(() => (army.threatRings.length ? [...rings, ...army.threatRings] : rings), [rings, army.threatRings])
+  // Your launch site pulses purple while a flight of yours is under way.
+  const launchSite = game?.nations[game.playerId]?.space?.missions.length ? game.nations[game.playerId].capital : ''
+  const spaceRings = useMemo(() => (launchSite && map.regions[launchSite] ? [{ lat: map.regions[launchSite].lat, lng: map.regions[launchSite].lng, color: '#bf5af2', maxRadius: 3.2, repeat: 2200 }] : []), [launchSite])
+  const allRings = useMemo(() => (army.threatRings.length || spaceRings.length ? [...rings, ...army.threatRings, ...spaceRings] : rings), [rings, army.threatRings, spaceRings])
 
   const ringColor = useCallback((r: object) => (t: number) => withAlpha((r as { color: string }).color, Math.max(0, 1 - t)), [])
 

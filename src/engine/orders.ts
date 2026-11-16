@@ -19,6 +19,7 @@ import { nextWeaponLevel } from './arms'
 import { companyEffects, tradeValue, validateDirective, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
+import { spaceCost, spaceProblem } from './space'
 import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
@@ -175,6 +176,14 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'fundSystem':
       c.capital = fundSystemCost(s, o)
       break
+    case 'space': {
+      const k = s.nations[o.nationId] ? spaceCost(s, s.nations[o.nationId], o.action) : c
+      c.capital = k.capital
+      c.tp = k.tp
+      c.pp = k.pp
+      c.steel = k.steel
+      break
+    }
     case 'fundMissiles': {
       const k = fundMissilesCost(s.nations[o.nationId])
       c.capital = k.capital
@@ -562,6 +571,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return validateFundSystem(s, o, pending)
     case 'strike':
       return validateStrike(s, map, o, pending)
+    case 'space':
+      return spaceProblem(s, n, o.action, nationWorkforce(s, map, o.nationId), pending.filter((p): p is Extract<Order, { type: 'space' }> => p.type === 'space' && p.nationId === o.nationId).map((p) => p.action))
     case 'fundMissiles':
       return fundMissilesProblem(n)
     case 'buildMissiles':

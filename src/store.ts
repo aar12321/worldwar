@@ -36,7 +36,7 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
 export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
 export type { PeopleSection }
-export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
+export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'space' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts'

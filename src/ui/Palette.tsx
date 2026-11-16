@@ -20,6 +20,7 @@ const ECONOMY: [EconomyTab, string][] = [
   ['bank', 'Bank: rates, printing, bonds'],
   ['business', 'Business and state enterprises'],
   ['projects', 'Projects and public works'],
+  ['space', 'Space program: rockets, missions, labs, colonies'],
   ['market', 'Market'],
   ['stocks', 'Stocks'],
   ['government', 'Government and laws'],

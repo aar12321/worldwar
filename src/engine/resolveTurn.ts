@@ -11,6 +11,7 @@ import { SYSTEM_SPECS } from '../data/systems'
 import { fundSystem, runStrike, runSystems } from './systems'
 import { MISSILES } from '../data/missiles'
 import { applyBuildMissiles, applyFundMissiles } from './missiles'
+import { applySpace, describeSpace } from './space'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -171,6 +172,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     }
     case 'strike':
       return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Fire ${o.count ?? 1} ${MISSILES[o.kind ?? 'hypersonic'].name.toLowerCase()}${(o.count ?? 1) === 1 ? '' : 's'} at ${region(o.target)}`
+    case 'space':
+      return describeSpace(o.action)
     case 'fundMissiles':
       return 'Raise the missile program'
     case 'buildMissiles':
@@ -227,6 +230,7 @@ const PHASES: Order['type'][][] = [
   ['train'],
   ['fundAgency', 'fundSystem'],
   ['fundMissiles', 'buildMissiles'],
+  ['space'],
   ['operation', 'domestic', 'strike'],
 ]
 
@@ -629,6 +633,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'fundSystem':
       fundSystem(s, o.nationId, o.system, o.levels ?? 1)
+      break
+    case 'space':
+      applySpace(s, n, o.action)
       break
     case 'fundMissiles':
       applyFundMissiles(s, n)

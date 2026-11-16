@@ -1,3 +1,4 @@
+import { BODIES, MISSIONS } from '../data/space'
 import { SOCIAL, SOCIAL_RULES } from '../data/society'
 import { describeOrder } from '../engine/resolveTurn'
 import { orderCost } from '../engine/orders'
@@ -43,6 +44,16 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
       const before = game.nations[o.nationId]?.social?.[o.policy]?.level ?? 0
       if (o.level >= before) return null
       return asks(`${before - o.level > 1 ? 'Cut' : 'Reduce'} ${SOCIAL[o.policy].name.toLowerCase()}?`, `People will lose it: stability falls by ${(before - o.level) * SOCIAL_RULES.cutStability} at once, and the benefit fades over a few months. Raising it again costs influence again.`, 'Cut it', true)
+    }
+    case 'space': {
+      const a = o.action
+      if (a.kind === 'claim') return asks(`Claim ${BODIES[a.body].name}?`, 'Only you may build there from now on, and rivals will not forget it.', 'Claim it')
+      if (a.kind === 'launch') {
+        const spec = MISSIONS[a.mission]
+        const risk = spec.crew > 0 ? ` ${spec.crew} astronauts will fly it, and a failure can kill them.` : ' A failure loses the payload and the rocket.'
+        if (a.mode === 'outsource' || spec.crew > 0 || spec.payload >= 300) return asks(`${a.mode === 'house' ? 'Fly' : 'Hire a company for'} the ${spec.name.toLowerCase()}?`, `It takes months and cannot be called back.${risk}`, a.mode === 'house' ? 'Fly it' : 'Hire them', spec.crew > 0)
+      }
+      return null
     }
     case 'repealLaw':
       return null

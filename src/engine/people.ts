@@ -4,6 +4,7 @@ import { BANKING } from '../data/banking'
 import { tierOf } from './empire'
 import { projectPower, scaleBonus } from './industry'
 import { societyEffects } from './society'
+import { spaceEffects } from './spaceEffects'
 import { clamp } from './helpers'
 import type { GameState, MapRegion, Nation, NationId, People, RegionState, SkillKey, Spending, WorldMap } from './types'
 import { SKILL_KEYS } from './types'
@@ -21,6 +22,8 @@ export interface PeopleBasis {
   occupiedShare: number
   systemLevels: number
   activeProjects: number
+  /** Engineers the space agency draws away, as a share of the workforce. Absent without one. */
+  extraEngineers?: number
 }
 
 export interface Demand {
@@ -34,7 +37,7 @@ export interface Demand {
 export function demandOf(n: Pick<Nation, 'spending'>, b: PeopleBasis): Demand {
   const w = Math.max(0.05, b.workforce)
   return {
-    engineers: DEMAND.engineersBase + DEMAND.engineersPerFactory * Math.sqrt(b.factories / w) + DEMAND.engineersPerSystem * b.systemLevels + DEMAND.engineersPerProject * b.activeProjects,
+    engineers: DEMAND.engineersBase + DEMAND.engineersPerFactory * Math.sqrt(b.factories / w) + DEMAND.engineersPerSystem * b.systemLevels + DEMAND.engineersPerProject * b.activeProjects + (b.extraEngineers ?? 0),
     scientists: DEMAND.scientistsBase + DEMAND.scientistsPerUniversity * Math.sqrt(b.universities / w),
     doctors: DEMAND.doctorsBase + DEMAND.doctorsPerHealth * (n.spending?.health ?? 2) + DEMAND.doctorsPerHospital * Math.sqrt(b.hospitals / w),
     skilled: DEMAND.skilledBase,
@@ -100,7 +103,7 @@ export function healthTarget(n: Nation, b: PeopleBasis, doctorCoverage: number):
   for (const t of n.techs) med += MEDICINE[t]?.health ?? 0
   const program = (n.research2?.medicine ?? 0) * PROGRAM_RULES.health
   const centre = scaleBonus(0.05, projectPower(n, 'medCentre'))
-  return clamp(PEOPLE.healthBase + PEOPLE.healthPerLevel * sp.health + hospitals + PEOPLE.healthPerHousing * sp.housing + med + program + centre + 0.2 * b.development + societyEffects(n).social.health, 0, 0.98)
+  return clamp(PEOPLE.healthBase + PEOPLE.healthPerLevel * sp.health + hospitals + PEOPLE.healthPerHousing * sp.housing + med + program + centre + 0.2 * b.development + societyEffects(n).social.health + spaceEffects(n).health, 0, 0.98)
 }
 
 /**

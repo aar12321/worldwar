@@ -11,6 +11,7 @@ import { cityDevelopCost } from './cities'
 import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { validateOrder } from './orders'
+import { spaceAdvice } from './space'
 import { monthsToElection } from './politics'
 import { ACADEMY, PROJECT_LEVELS, PROJECTS, programCost } from '../data/projects'
 import { TIERS } from '../data/empire'
@@ -29,7 +30,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
-  | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
+  | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
   | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' }
   | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
@@ -450,6 +451,9 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   if (enemies.length >= maxWars(s, nationId)) {
     add('soon', 5, { id: 'maxwars', title: `You are fighting ${enemies.length} wars`, detail: 'That is the most a country can fight at once. Each one bills you monthly.', action: 'See your wars', target: { desk: 'military', tab: 'wars' } })
   }
+
+  // The space program: samples waiting, worlds to claim, outposts running dry.
+  if (n.space) for (const a of spaceAdvice(s, n, econ.workforce)) add(a.urgency, a.bonus, { id: a.id, title: a.title, detail: a.detail, action: a.action, target: a.target })
 
   out.sort((a, b) => b.weight - a.weight || (a.id < b.id ? -1 : 1))
   return out.slice(0, limit)

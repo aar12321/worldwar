@@ -1,5 +1,6 @@
 import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
 import type { SystemId } from '../data/systems'
+import type { SpaceAction, SpaceState, SpaceWorld } from '../data/space'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
@@ -345,6 +346,8 @@ export interface Nation {
   stateOwned: SectorId[]
   seizedUntil: number
   projects: Partial<Record<ProjectId, ProjectState>>
+  /** The space agency: talent, rockets, flights, labs, outposts. Absent until the first space order, so a nation that never uses it is unchanged. */
+  space?: SpaceState
   /** Cruise, tactical and ballistic missiles in store (hypersonic ones are `military.units.missile`). */
   arsenal?: Partial<Record<MissileType, number>>
   /** The missile program's level, 0 to 3. */
@@ -583,6 +586,8 @@ export type Order =
   | { type: 'fundMissiles'; nationId: NationId }
   /** Builds missiles of a kind from the program: money and steel (and oil) each. */
   | { type: 'buildMissiles'; nationId: NationId; kind: Exclude<MissileType, 'hypersonic'>; count: number }
+  /** Anything the space program does: hire, develop and build rockets, launch missions, run the labs, claim and build on other worlds. Applies at once. */
+  | { type: 'space'; nationId: NationId; action: SpaceAction }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId; /** How many levels to buy at once. One if left out. */ levels?: number }
   | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
   | { type: 'buyShares'; nationId: NationId; company: string; shares: number }
@@ -794,6 +799,8 @@ export interface GameState {
   history?: HistoryPoint[]
   /** How much buying (positive) or selling (negative) has pushed each world price lately. It fades every month. */
   marketPressure?: Partial<Record<TradeResource, number>>
+  /** Who holds each world beyond Earth, and how many flights the world has flown. Absent until someone starts a space program. */
+  space?: SpaceWorld
   /** Live mode only: the day of the month, from 0. `turn` is still the month. */
   day?: number
   /** Live mode only: armies marching, fighting or coming home. */
