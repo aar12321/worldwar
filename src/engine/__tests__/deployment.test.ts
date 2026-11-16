@@ -25,6 +25,7 @@ import { threatWatch } from '../threats'
 import type { GameState, MapRegion, Order, WorldMap } from '../types'
 import { canAttackRegion, forecastAttack, resolveAttack } from '../warfare'
 import { lineMap, setMilitary, startState } from './fixtures'
+import { withOldWarScore } from './oldWarScore'
 
 const setPost = (_s: GameState, id: string, order: Partial<Extract<Order, { type: 'setDeployment' }>>): Order => ({ type: 'setDeployment', nationId: id, coastal: 0, subs: 0, air: 0, border: {}, ...order })
 const post = (s: GameState, map: WorldMap, o: Order) => {
@@ -890,7 +891,8 @@ function hash(text: string): string {
 }
 
 describe('a game where nobody stations forces plays as it always did', () => {
-  it('twelve months of bots on the real world, with the posture orders taken out, hash to what they did before this feature (bar the border memory)', () => {
+  it('twelve months of bots on the real world, with the posture orders taken out, hash to what they did before this feature (bar the border memory)', () => withOldWarScore(() => {
+    // The war score model (docs/WARSCORE_STATUS.md) adds fields of its own; with the old tally this hash is unchanged.
     const { map } = getWorld()
     let s = createInitialState(map, { playerRegionId: 'poland', seed: 7, difficulty: 'normal', goal: 'classic', victoryShare: 2 })
     for (let i = 0; i < 12 && s.outcome === 'playing'; i++) {
@@ -906,7 +908,7 @@ describe('a game where nobody stations forces plays as it always did', () => {
     // Re-pinned when the AI got its strategic layer (docs/STRATEGY.md): the bots decide differently on purpose, so the old hash no longer applies.
     // Re-pinned again for the combat tuning (docs/WAR_STATUS.md; the old hash 'bc68beaeedca7' returns with those numbers put back, see turnGolden.test.ts).
     expect(hash(JSON.stringify(s))).toBe('103075820c12de')
-  }, 300_000)
+  }), 300_000)
 })
 
 describe('edges and limits', () => {
