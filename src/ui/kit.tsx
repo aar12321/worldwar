@@ -4,16 +4,17 @@ import type { ReactNode } from 'react'
 export function StatTile({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'good' | 'warn' | 'bad' }) {
   const color = tone === 'bad' ? 'text-[#ff8a84]' : tone === 'warn' ? 'text-[#ffd60a]' : tone === 'good' ? 'text-[#6eeb8a]' : ''
   return (
-    <div className="rounded-xl bg-white/6 px-3 py-2 min-w-0">
-      <div className="label truncate">{label}</div>
-      <div className={`text-[18px] font-semibold tabular-nums leading-tight ${color}`}>{value}</div>
-      {sub !== undefined && <div className="text-[12px] text-white/60 truncate">{sub}</div>}
+    <div className="stat-tile rounded-xl bg-white/6 px-3 py-2 min-w-0">
+      <div className="stat-label label truncate">{label}</div>
+      <div className={`stat-value text-[18px] font-semibold tabular-nums leading-tight ${color}`}>{value}</div>
+      {sub !== undefined && <div className="stat-sub text-[12px] text-white/60 truncate">{sub}</div>}
     </div>
   )
 }
 
-export function Tiles({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 span-all">{children}</div>
+/** A grid of stat tiles. `compact` folds each tile into a label-and-value row on phones, so a page of figures does not push its content off the screen. */
+export function Tiles({ children, compact = false }: { children: ReactNode; compact?: boolean }) {
+  return <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 span-all ${compact ? 'tiles-compact' : ''}`}>{children}</div>
 }
 
 /** A thin progress bar. `value` is 0 to 1. */

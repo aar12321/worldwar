@@ -188,7 +188,7 @@ function SatellitesCard() {
 
 function RocketsSection() {
   const view = usePlayerView()!
-  const { player, game } = view
+  const { player } = view
   const sp = player.space
   const [q, setQ] = useState('')
   const shown = ROCKET_IDS.filter((id) => `${ROCKETS[id].name} ${ROCKETS[id].blurb}`.toLowerCase().includes(q.trim().toLowerCase()))
@@ -198,7 +198,7 @@ function RocketsSection() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search rockets" aria-label="Search rockets" className="field w-full px-3 py-2 text-[14px]" />
       </div>
       <div className="span-all text-[13px] text-white/70">
-        Each class has to be <b>developed</b> once (it takes months and engineers, and two later levels make it more reliable), and then every launch uses up a rocket that is <b>built</b>. Rockets are not reused unless your discoveries say so. The launch site has {padSlots(player)} places; building a rocket and building a flight both use one.
+        Each class has to be <b>developed</b> once (it takes months and engineers, and two later levels make it more reliable), and then every launch uses up a rocket that is <b>built</b>. Rockets are not reused unless your discoveries say so. The launch site has {padSlots(player)} place{padSlots(player) === 1 ? '' : 's'}{sp?.padBuild ? ` (more when the pad now being built is done)` : ''}; building a rocket and building a flight both use one.
       </div>
       {shown.map((id) => {
         const spec = ROCKETS[id]
@@ -208,8 +208,7 @@ function RocketsSection() {
         const have = sp?.hangar[id] ?? 0
         const building = (sp?.builds ?? []).filter((b) => b.rocket === id)
         const launch = spec.reliability + ROCKET_RULES.perLevel * Math.max(0, level - 1) + discoveryBonus(sp).reliability + expBonus(sp?.exp ?? 0)
-        const devProblem = spaceProblem(game, player, { kind: 'develop', rocket: id }, view.econ.workforce)
-        return (
+              return (
           <div key={id} className={`inset-card p-3.5 space-y-2 ${level > 0 ? 'ring-1 ring-[#30d158]/25' : ''}`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -247,9 +246,9 @@ function RocketsSection() {
               ) : (
                 <OrderButton
                   order={spaceOrder(player, { kind: 'develop', rocket: id })}
-                  label={level === 0 ? 'Develop' : `Improve to level ${nextL}`}
-                  cost={`${rocketDevCost(id, nextL)} over ${rocketDevMonths(id, nextL)} mo`}
-                  tone={level === 0 ? 'btn-primary' : ''}
+                  label={developing ? 'Being developed' : level === 0 ? 'Develop' : `Improve to level ${nextL}`}
+                  cost={developing ? undefined : `${rocketDevCost(id, nextL)} over ${rocketDevMonths(id, nextL)} mo`}
+                  tone={level === 0 && !developing ? 'btn-primary' : ''}
                 />
               )}
               <OrderButton
@@ -258,7 +257,6 @@ function RocketsSection() {
                 cost={`${Math.round(rocketBuildCost(id, sp, player))} money, ${spec.steel} steel, ${spec.months} mo`}
               />
             </div>
-            {level === 0 && devProblem && <p className="text-[12px] text-[#ff8a84]">{devProblem}</p>}
           </div>
         )
       })}
