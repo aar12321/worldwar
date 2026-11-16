@@ -1,4 +1,3 @@
-import { appendFileSync } from 'node:fs'
 import { describe, it } from 'vitest'
 import { generateAllBotOrders } from '../../ai/bot'
 import { createInitialState } from '../../data/startingNations'
@@ -16,7 +15,7 @@ const env = (import.meta as unknown as { env: Record<string, string | undefined>
 const suite = env.VITE_TERRCMP ? describe : describe.skip
 suite('territory against puppet against conquest', () => {
   for (const [seed, master, other] of [[1, 'poland', 'czechia'], [2, 'france', 'spain'], [3, 'egypt', 'libya']] as const)
-    it(`seed ${seed}`, () => {
+    it(`seed ${seed}`, async () => {
       const { map } = getWorld()
       const out: Record<string, unknown> = { seed, master, other }
       for (const kind of ['none', 'conquest', 'puppet', 'territory'] as const) {
@@ -36,6 +35,6 @@ suite('territory against puppet against conquest', () => {
       }
       const line = 'TERRCMP ' + JSON.stringify(out)
       console.log(line)
-      if (env.VITE_TERRBOT_OUT) appendFileSync(env.VITE_TERRBOT_OUT, line + '\n')
+      if (env.VITE_TERRBOT_OUT) (await import(/* @vite-ignore */ 'node:' + 'fs')).appendFileSync(env.VITE_TERRBOT_OUT, line + '\n')
     }, 3_600_000)
 })

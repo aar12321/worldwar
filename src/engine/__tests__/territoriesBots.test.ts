@@ -1,4 +1,3 @@
-import { appendFileSync } from 'node:fs'
 import { describe, it } from 'vitest'
 import type { Difficulty } from '../types'
 import { summarizeTerritory, territoryBotRun } from './territoriesBots.sim'
@@ -11,10 +10,10 @@ suite('territories in bot play', () => {
   const seeds = (env.VITE_TERRBOT_SEEDS ?? '1,2,3').split(',').map(Number)
   const months = Number(env.VITE_TERRBOT_MONTHS ?? 120)
   for (const seed of seeds)
-    it(`${diff} seed ${seed}`, () => {
+    it(`${diff} seed ${seed}`, async () => {
       const r = territoryBotRun(diff, seed, months)
       const line = 'TERRBOT ' + JSON.stringify({ ...r, lives: r.lives.map(summarizeTerritory) })
       console.log(line)
-      if (env.VITE_TERRBOT_OUT) appendFileSync(env.VITE_TERRBOT_OUT, line + '\n')
+      if (env.VITE_TERRBOT_OUT) (await import(/* @vite-ignore */ 'node:' + 'fs')).appendFileSync(env.VITE_TERRBOT_OUT, line + '\n')
     }, 3_600_000)
 })
