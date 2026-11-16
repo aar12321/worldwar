@@ -1,4 +1,5 @@
 import { AIR_UNITS, BORDER, GROUND_UNITS, NAVAL_UNITS, STATION } from '../data/deployment'
+import { PRESENCE } from '../data/presence'
 import { addLog, clamp, emptyUnits, forceUnits, pairKey, totalUnits } from './helpers'
 import type { BorderRecord, Deployment, GameState, MissileType, NationId, Order, RegionId, UnitCounts, UnitType, Via, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -60,6 +61,15 @@ export function freeUnits(s: Pick<GameState, 'nations' | 'armies'>, id: NationId
   const out = { ...n.military.units }
   for (const k of UNIT_TYPES) if (share[k] > 0) out[k] = Math.max(0, out[k] - force[k] * share[k])
   return out
+}
+
+/**
+ * How readiness bends a combat number: one for a force that never set an alert (and with `PRESENCE.on` off), more for a force on high
+ * alert, less for one standing down. It scales what a post adds, never the units themselves.
+ */
+export function readyFactor(d: Deployment | undefined): number {
+  if (!PRESENCE.on || !d || d.ready === undefined) return 1
+  return clamp(1 + (d.ready - PRESENCE.readyBase) * PRESENCE.readyEffect, PRESENCE.readyMin, PRESENCE.readyMax)
 }
 
 /** The units on station, by kind. */
@@ -166,9 +176,10 @@ export function defenseWeights(s: GameState, defender: NationId, attacker: Natio
   const total = groundPosted(d)
   const on = bySea ? 0 : Math.min(total, borderShare(d, attacker))
   const out = {} as Share
+  const rf = readyFactor(d)
   for (const k of UNIT_TYPES) {
-    if (GROUND_UNITS.includes(k)) out[k] = 1 - total + on * (1 + STATION.postBonus) + (total - on) * STATION.elsewhere
-    else if (posted[k] > 0) out[k] = 1 - posted[k] + posted[k] * (bySea ? 1 + STATION.seaPostBonus : 1)
+    if (GROUND_UNITS.includes(k)) out[k] = 1 - total + on * (1 + STATION.postBonus * rf) + (total - on) * STATION.elsewhere
+    else if (posted[k] > 0) out[k] = 1 - posted[k] + posted[k] * (bySea ? 1 + STATION.seaPostBonus * rf : 1)
     else out[k] = 1
   }
   return out
@@ -206,7 +217,7 @@ export function interception(s: GameState, defender: NationId, via: Via, landing
   const patrol = c.coastal * w.coastal + c.subs * w.subs + c.air * w.air
   if (patrol < STATION.minPatrol) return { share: 0, patrol }
   const landed = Math.max(0.5, totalUnits(landing) - landing.missile)
-  return { share: Math.min(STATION.interceptMax, (STATION.interceptPerRatio * patrol) / landed), patrol }
+  return { share: Math.min(STATION.interceptMax, (STATION.interceptPerRatio * patrol * readyFactor(s.nations[defender].military.deployment)) / landed), patrol }
 }
 
 /** The share of a missile salvo the victim's air patrols shoot down. */
@@ -230,7 +241,9 @@ export function surpriseBonus(s: GameState, map: WorldMap, defender: NationId, a
   if (!s.nations[defender]?.military.deployment) return 0
   const age = s.turn - (s.warStarted[pairKey(attacker, defender)] ?? -99)
   if (age > STATION.surpriseMonths) return 0
-  return STATION.surpriseMax * (1 - borderCover(s, map, defender, attacker))
+  // A force on high alert is hard to surprise, one standing down is easy.
+  const alert = clamp(2 - readyFactor(s.nations[defender].military.deployment), 0.6, 1.4)
+  return STATION.surpriseMax * (1 - borderCover(s, map, defender, attacker)) * alert
 }
 
 // ---- Orders ----
@@ -267,7 +280,12 @@ export function applyDeployment(s: GameState, map: WorldMap, o: SetDeployment) {
     border[x] = share2(o.border[x])
     fronts[x] = front.get(x) ?? 1
   }
+  const old = n.military.deployment
   n.military.deployment = { coastal: share2(o.coastal), subs: share2(o.subs), air: share2(o.air), border, changed: s.turn, fronts }
+  // The alert, readiness and exercise outlast a change of posts.
+  if (old?.alert) n.military.deployment.alert = old.alert
+  if (old?.ready !== undefined) n.military.deployment.ready = old.ready
+  if (old?.exerciseUntil !== undefined) n.military.deployment.exerciseUntil = old.exerciseUntil
   if (n.isPlayer) addLog(s, 'info', `Forces on station: ${describePosture(s, o.nationId)}.`, [o.nationId])
 }
 

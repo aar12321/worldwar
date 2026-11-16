@@ -326,6 +326,36 @@ export interface Deployment {
   changed: number
   /** How many of the nation's countries lie along each border it garrisons, as of the last month's upkeep. Spares the map a search every time. */
   fronts?: Record<NationId, number>
+  /** Alert level (see `data/presence.ts`). Absent means normal. */
+  alert?: 'relaxed' | 'normal' | 'high'
+  /** Readiness from 0 to 100: moves toward the alert's target a few points a month. Absent means the base. */
+  ready?: number
+  /** The last month an exercise at home keeps readiness up. */
+  exerciseUntil?: number
+}
+
+/** What a nation's forces on station have done so far (see `engine/presence.ts`). Absent until they do something. */
+export interface PresenceRecord {
+  /** Provocations turned back, landings met by patrols, talks that eased a border. */
+  deterred: number
+  /** Money of trade protected, blockades and sanctions pressed on others (summed in capital). */
+  trade: number
+  blockaded: number
+  /** Months a rival's forces were learned of through patrols; rivals whose fleets or air patrols were sighted. */
+  intel: number
+  detected: number
+  sorties: number
+  incidents: number
+  shows: number
+  /** Month of the last show of force at each nation, and of the last exercise. */
+  showAt?: Record<NationId, number>
+  exerciseAt?: number
+  /** Month a rival's forces were last learned of through patrols, so the news does not repeat itself. */
+  seenAt?: Record<NationId, number>
+  /** Border tension with each rival as of last month, kept for the player so the desk can say what is changing. */
+  tension?: Record<NationId, number>
+  /** Money and oil spent on alert levels and shows (negative when relaxed saved some). */
+  spent: number
 }
 
 /** What a pair of neighbors remember about their border: incidents, and who has closed it. Absent until something happens. */
@@ -700,6 +730,10 @@ export type Order =
   | { type: 'setDeployment'; nationId: NationId; coastal: number; subs: number; air: number; border: Record<NationId, number> }
   /** Closes or reopens the border with a neighboring nation. */
   | { type: 'setBorder'; nationId: NationId; neighbor: NationId; closed: boolean }
+  /** Sets the alert level of the forces on station. */
+  | { type: 'setAlert'; nationId: NationId; alert: 'relaxed' | 'normal' | 'high' }
+  /** Shows force to a neighbor (kind naval, air or ground) or holds an exercise at home (kind exercise, no target). */
+  | { type: 'showOfForce'; nationId: NationId; kind: 'naval' | 'air' | 'ground' | 'exercise'; target?: NationId }
   | { type: 'buyShares'; nationId: NationId; company: string; shares: number }
   | { type: 'sellShares'; nationId: NationId; company: string; shares: number }
   | { type: 'setDirective'; nationId: NationId; company: string; directive: Directive }
@@ -943,6 +977,8 @@ export interface GameState {
   space?: SpaceWorld
   /** What neighbors remember about their borders, by sorted "a|b" key: incidents and closures. Absent until something happens. */
   borders?: Record<string, BorderRecord>
+  /** What each nation's forces on station have done: trade protected, intelligence gained, incidents. Absent until something is recorded. */
+  presence?: Record<NationId, PresenceRecord>
   /** Live mode only: the day of the month, from 0. `turn` is still the month. */
   day?: number
   /** Live mode only: armies marching, fighting or coming home. */

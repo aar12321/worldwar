@@ -38,6 +38,7 @@ import { clockMonth, isLive } from './calendar'
 import { recallProblem } from './armies'
 import { STATION } from '../data/deployment'
 import { freeUnits, validateDeployment } from './deployment'
+import { showCost, validateSetAlert, validateShow } from './presence'
 import { unitsProblem } from './deploy'
 import { validateSetBorder } from './borders'
 import { annexFactor, governCost, governProblem, lockedByMaster } from './puppets'
@@ -223,6 +224,9 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     }
     case 'setBorder':
       c.pp = o.closed ? STATION.closeCost : 0
+      break
+    case 'showOfForce':
+      c.capital = showCost(s, o)
       break
     case 'fundMissiles': {
       const k = fundMissilesCost(s.nations[o.nationId])
@@ -667,6 +671,10 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return validateDeployment(s, map, o, pending)
     case 'setBorder':
       return validateSetBorder(s, map, o)
+    case 'setAlert':
+      return validateSetAlert(s, o)
+    case 'showOfForce':
+      return validateShow(s, map, o, pending)
     case 'fundMissiles':
       return fundMissilesProblem(n)
     case 'buildMissiles':

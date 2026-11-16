@@ -18,7 +18,7 @@ import { recentlyProposed } from '../engine/diplomacy'
 import { computeEconomy, type EconomyReport } from '../engine/economy'
 import { atWar, clamp, hasCasusBelli, hasPact, isAllied, pairKey, partnerIndex } from '../engine/helpers'
 import { homePower, militaryPower } from '../engine/militaryStats'
-import { deploymentOrder } from './deployment'
+import { alertOrder, deploymentOrder } from './deployment'
 import { validateOrder } from '../engine/orders'
 import { clockMonth } from '../engine/calendar'
 import { createRng, type Rng } from '../engine/rng'
@@ -248,6 +248,8 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
   // post a token garrison and patrol; they also leave the posture alone once set.
   const posture = deploymentOrder(s, map, nationId, diff.skill as 0 | 1 | 2)
   if (posture) tryAdd(posture)
+  const alert = alertOrder(s, map, nationId, diff.skill as 0 | 1 | 2)
+  if (alert) tryAdd(alert)
 
   const reserve = 15
   let budget = Math.max(0, n.resources.capital - reserve)

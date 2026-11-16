@@ -17,6 +17,7 @@ import { applyBuildWarhead, fireNuke, launchNuke, runNuclear } from './nuclear'
 import { runCoalitions } from './coalition'
 import { applySpace, describeSpace, runSpaceWorld } from './space'
 import { applyDeployment, runDeployment } from './deployment'
+import { applySetAlert, applyShow, runPresence } from './presence'
 import { applySetBorder } from './borders'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
@@ -198,6 +199,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return 'Post forces on station'
     case 'setBorder':
       return `${o.closed ? 'Close' : 'Reopen'} the border with ${nation(o.neighbor)}`
+    case 'setAlert':
+      return `Set the alert level to ${o.alert}`
+    case 'showOfForce':
+      return o.kind === 'exercise' ? 'Hold an exercise' : `Show ${o.kind} force to ${nation(o.target ?? '')}`
     case 'fundMissiles':
       return 'Raise the missile program'
     case 'buildMissiles':
@@ -275,7 +280,7 @@ function safeDescribe(s: GameState, map: WorldMap, o: Order): string {
 const PHASES: Order['type'][][] = [
   ['eventChoice'],
   ['respond'],
-  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder', 'governPuppet'],
+  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder', 'setAlert', 'showOfForce', 'governPuppet'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
   ['factionFound', 'factionJoin', 'factionInvite'],
   ['factionLeave'],
@@ -405,6 +410,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runPolitics(s, map, rng)
   runEpidemics(s, map, nationNeighborMap(s, map), doctors)
   runDeployment(s, map)
+  runPresence(s, map, gross)
   runJustification(s, map, rng)
   runCrises(s, map, rng)
   runStocks(s, map, rng)
@@ -723,6 +729,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'setBorder':
       applySetBorder(s, o)
+      break
+    case 'setAlert':
+      applySetAlert(s, o)
+      break
+    case 'showOfForce':
+      applyShow(s, o)
       break
     case 'fundMissiles':
       applyFundMissiles(s, n)

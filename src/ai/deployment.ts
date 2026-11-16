@@ -1,6 +1,8 @@
 import { PUPPET } from '../data/puppets'
 import { AIR_UNITS, GROUND_UNITS, NAVAL_UNITS } from '../data/deployment'
-import { heatNow, landBorders } from '../engine/deployment'
+import { PRESENCE } from '../data/presence'
+import { alertOf } from '../engine/presence'
+import { borderCover, garrisonDivisions, heatNow, landBorders, patrolCover } from '../engine/deployment'
 import { neighborsOf, recordOf } from '../engine/borders'
 import { atWar, clamp, forceUnits, hasCasusBelli, hasPact, isAllied, puppetsOf, regionsOf, totalUnits } from '../engine/helpers'
 import type { GameState, NationId, Order, WorldMap } from '../engine/types'
@@ -25,6 +27,8 @@ export function borderThreat(s: GameState, id: NationId, x: NationId): number {
   if (hasCasusBelli(s, x, id)) t += 1
   t += heatNow(s, recordOf(s, id, x)) / 25
   t += 0.6 * clamp(totalUnits(forceUnits(s, x)) / mine, 0, 2)
+  // Troops massed across the border worry it: it matches a build-up (so build-ups feed on each other).
+  if (PRESENCE.on) t += PRESENCE.mirror * clamp(garrisonDivisions(s, x, id) / mine, 0, 1.5)
   if (isAllied(s, id, x) || s.nations[x]?.overlord === id || s.nations[id]?.overlord === x) t *= 0.1
   else if (hasPact(s, id, x)) t *= 0.4
   return t
@@ -106,3 +110,58 @@ export function deploymentOrder(s: GameState, map: WorldMap, id: NationId, skill
   return { type: 'setDeployment', nationId: id, ...want }
 }
 
+
+/**
+ * How a nation reads a neighbor's posture when it weighs a war: a border that is well guarded, or a coast that is well patrolled,
+ * takes some of the shine off the target (more on Medium and Hard); an unguarded border invites an aggressive nation to probe it.
+ * One when presence is off. A multiplier for the odds the nation sees.
+ */
+export function postureRead(s: GameState, map: WorldMap, id: NationId, target: NationId, skill: 0 | 1 | 2, aggression: number): number {
+  if (!PRESENCE.on) return 1
+  const land = (landBorders(s, map, id).get(target) ?? 0) > 0
+  if (land) {
+    const cover = borderCover(s, map, target, id)
+    let f = 1 - PRESENCE.deter[skill] * cover
+    if (skill >= 1 && aggression > 0.5 && cover < 0.15) f *= 1 + PRESENCE.probe
+    return f
+  }
+  const c = patrolCover(s, target)
+  return 1 - PRESENCE.deter[skill] * 0.5 * clamp((c.coastal + c.subs) / 4, 0, 1)
+}
+
+/** The alert order a government in this position would give: high at war or under threat, relaxed when nobody is a worry (Hard only), else normal. Null on Easy and when nothing needs changing. */
+export function alertOrder(s: GameState, map: WorldMap, id: NationId, skill: 0 | 1 | 2): Order | null {
+  const d = s.nations[id]?.military.deployment
+  if (!PRESENCE.on || !d || skill === 0) return null
+  let threat = s.wars.some((k) => k.split('|').includes(id))
+  let worry = threat
+  if (!threat) {
+    for (const nb of neighborsOf(s, map, id)) {
+      const hot = hasCasusBelli(s, nb.id, id) || heatNow(s, recordOf(s, id, nb.id)) > 10
+      if (hot) threat = true
+      if (hot || (!isAllied(s, id, nb.id) && !hasPact(s, id, nb.id) && borderThreat(s, id, nb.id) > 0.9)) worry = true
+    }
+  }
+  const want = threat ? 'high' : skill === 2 && !worry ? 'relaxed' : 'normal'
+  return want === alertOf(d) ? null : { type: 'setAlert', nationId: id, alert: want }
+}
+
+/** The three presets of the Theatres desk: the planner's posture, leaning to guarding, to balance, or to a big reserve. */
+export function presetPosture(s: GameState, map: WorldMap, id: NationId, preset: 'defensive' | 'balanced' | 'forward'): Posture {
+  const scale = (p: Posture, ground: number, groundCap: number, sea: number, air: number): Posture => {
+    const border: Record<NationId, number> = {}
+    let total = 0
+    for (const [x, v] of Object.entries(p.border)) {
+      border[x] = round05(v * ground)
+      total += border[x]
+    }
+    if (total > groundCap) for (const x of Object.keys(border)) border[x] = round05((border[x] * groundCap) / total)
+    for (const x of Object.keys(border)) if (border[x] < 0.05) delete border[x]
+    const coastal = round05(Math.min(1, p.coastal * sea))
+    const subs = round05(Math.min(1 - coastal, p.subs * sea))
+    return { coastal, subs, air: round05(Math.min(1, p.air * air)), border }
+  }
+  if (preset === 'balanced') return plannedPosture(s, map, id, 1)
+  if (preset === 'defensive') return scale(plannedPosture(s, map, id, 2), 1.6, 0.6, 1.4, 1.4)
+  return scale(plannedPosture(s, map, id, 1), 0.5, 0.2, 0.5, 0.6)
+}

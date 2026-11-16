@@ -6,6 +6,7 @@ import { clockMonth } from '../engine/calendar'
 import type { EconomyReport } from '../engine/economy'
 import { lineMax } from '../engine/economy'
 import { atWar, canUseUnit, hasCasusBelli, hasPact, isAllied, pairKey, totalUnits } from '../engine/helpers'
+import { postureRead } from './deployment'
 import type { Rng } from '../engine/rng'
 import type { GameState, NationId, RegionId, UnitCounts, UnitType, WorldMap } from '../engine/types'
 import { MISSILE_TYPES } from '../data/missiles'
@@ -242,6 +243,7 @@ export function chooseWarTarget(sight: Sight, strat: Strategy, mistake: string |
     if (strat.posture === 'opportunist' && distracted < 0.15 && t.warWeariness < 12 && !isGrudge && ratio < diff.warDeclarePowerRatio * 1.4) continue
     // Do not march off against a small neighbor while a big one waits, or while already fighting a big war.
     if ((threatBehind || busy > myPower * 0.5) && ratio < diff.warDeclarePowerRatio * 2.2) continue
+    ratio *= postureRead(s, map, id, target, diff.skill as 0 | 1 | 2, n.aggression)
     const pick = { id: target, ratio, justified }
     if (!best || ratio > best.ratio || (ratio === best.ratio && target < best.id)) best = pick
     if (justified && (!bestJust || ratio > bestJust.ratio)) bestJust = pick

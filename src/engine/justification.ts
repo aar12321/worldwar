@@ -1,6 +1,7 @@
 import { JUSTIFY } from '../data/war'
 import { BORDER, STATION } from '../data/deployment'
 import { incidentFactor, borderPressure, pressureBound, recordIncident, sharesLandBorder } from './borders'
+import { noteDeterred } from './presence'
 import { borderCover, garrisonDivisions, watchesWaters } from './deployment'
 import { addOpinion, nationNeighbors, opinionOf } from '../ai/opinion'
 import type { Rng } from './rng'
@@ -52,6 +53,7 @@ export function runJustification(s: GameState, map: WorldMap, rng: Rng) {
       // A garrison that fully guards its border turns a provocation back before it becomes an incident.
       const cover = land ? borderCover(s, map, victim, culprit) : 0
       if (cover > 0 && rng.chance(cover * STATION.provocationStop)) {
+        noteDeterred(s, victim)
         addLog(s, 'war', `${nm(s, victim)}'s border garrison turned back a provocation from ${nm(s, culprit)}.`, [victim, culprit])
         continue
       }
