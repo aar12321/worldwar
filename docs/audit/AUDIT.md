@@ -21,7 +21,7 @@ This page is the short current record. The detail for each area is in the status
 - **Nuclear strikes**: the world's answer ignores the attacker's own war limit (it cannot then start another war) while the declarers keep theirs. Rule stated in code and tested.
 - **Space**: every mine type now pays back in between about eight and fourteen years (helium-3 and water mines, and the Mars and Europa mines, did not); claims nobody settles lapse after five years; discoveries stack to a ceiling; a home firm's return was cut so outsourcing is never a bargain.
 - **Deployment**: checked, no abuse found (a posture moves once a calendar month, posted forces cost the same and cannot attack); tests added.
-- **Clean-up**: unused simulation fields and the stale status documents; this page.
+- **Clean-up**: the test-only fingerprint helper left the protocol module, the stale status documents and this page were rewritten.
 
 ## How the checks are run
 
