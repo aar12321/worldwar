@@ -76,6 +76,7 @@ export function nukeSite(s: GameState, map: WorldMap, nationId: NationId, target
 
 export function nukeProblem(s: GameState, map: WorldMap, o: Nuke, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
+  if (trucePair(s, o.nationId, s.regions[o.target]?.owner ?? '') !== null) return 'A missile ceasefire holds with them'
   const access = nuclearAccess(s, o.nationId)
   if (access) return access
   const r = s.regions[o.target]
@@ -83,7 +84,6 @@ export function nukeProblem(s: GameState, map: WorldMap, o: Nuke, pending: Order
   if (r.owner === o.nationId || !atWar(s, o.nationId, r.owner)) return 'You can only strike a country you are at war with'
   if (s.nations[r.owner]?.overlord === o.nationId) return 'They are your puppet'
   if (pending.some((p) => p.type === 'nuke' && p.nationId === o.nationId)) return 'One warhead at a time'
-  if (trucePair(s, o.nationId, r.owner) !== null) return 'A missile ceasefire holds with them'
   if (warheadsOf(n) < 1) return 'You have no warhead. Build one first.'
   const last = n.nuclear?.last
   if (last !== undefined && s.turn - last < NUCLEAR.cooldown) return `The launch crews need ${NUCLEAR.cooldown - (s.turn - last)} more months`

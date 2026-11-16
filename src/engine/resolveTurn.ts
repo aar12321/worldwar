@@ -306,7 +306,7 @@ const PHASES: Order['type'][][] = [
   ['fundAgency', 'fundSystem'],
   ['fundMissiles', 'buildMissiles', 'buildWarhead', 'startAircraftDev', 'pauseAircraftDev'],
   ['space'],
-  ['operation', 'domestic', 'strike', 'nuke'],
+  ['operation', 'domestic', 'strike', 'raid', 'nuke'],
 ]
 
 /**
