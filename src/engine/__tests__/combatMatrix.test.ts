@@ -100,6 +100,29 @@ describe('size, defender advantage and stance', () => {
     expect(a.yourLosses).toBeGreaterThan(g.yourLosses)
   })
 
+  it('each stance suits a kind of army, and none is dominated: Siege for guns and foot, Blitz for tanks and planes, Assault for the mix', () => {
+    const play = (terrain: 'plains' | 'mountain', army: Record<string, number>, stance: 'assault' | 'blitz' | 'siege') => {
+      const map = lineMap(4, { 1: terrain })
+      const s = startState(map)
+      s.wars.push('r0|r1')
+      setMilitary(s, 'r0', army)
+      setMilitary(s, 'r1', { infantry: 30, armor: 6, artillery: 3 })
+      return forecastPlan(s, map, 'r0', { target: 'r1', stance, commit: 'allin' }, 256, false)!
+    }
+    const guns = { infantry: 28, artillery: 10 }
+    expect(play('plains', guns, 'siege').winChance).toBeGreaterThan(play('plains', guns, 'blitz').winChance)
+    const tanks = { infantry: 10, armor: 18, air: 4, fighter: 3 }
+    expect(play('mountain', tanks, 'blitz').winChance).toBeGreaterThan(play('mountain', tanks, 'siege').winChance)
+    // For an army that is a bit of everything the three are close in the chance to win, and trade lives for speed: Siege loses the fewest and
+    // pushes the line slowest, Blitz the opposite. (Before the tuning Siege won more, lost fewer AND was nearly as fast: Assault was never worth choosing.)
+    const mixed = { infantry: 15.6, armor: 6, artillery: 3.6, fighter: 2.4, air: 2.4 }
+    const [a, b, g] = [play('plains', mixed, 'assault'), play('plains', mixed, 'blitz'), play('plains', mixed, 'siege')]
+    expect(Math.abs(g.winChance - a.winChance)).toBeLessThan(0.1)
+    expect(g.yourLosses).toBeLessThan(a.yourLosses * 0.95)
+    expect(g.lineDamage).toBeLessThan(a.lineDamage * 0.95)
+    expect(b.lineDamage).toBeGreaterThan(a.lineDamage * 1.1)
+  })
+
   it('losses are shared out by hit points: a division of tanks soaks up as much as three of infantry', () => {
     const mixed = units({ infantry: 3, armor: 1 })
     expect(hitPoints(mixed)).toBeCloseTo(3 + UNIT_SPECS.armor.toughness)

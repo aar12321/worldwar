@@ -63,7 +63,9 @@ export const STANCES: Record<Stance, StanceSpec> = {
   blitz: {
     name: 'Blitz',
     advance: 1.4,
-    ownLosses: 1.3,
+    // Was 1.3, and Siege's was 0.7 with +15% / +25% boosts: Siege won more fights than Assault AND lost fewer lives, so Assault was a dominated choice
+    // (docs/WAR_STATUS.md). Now the trade is real: Siege loses 7% fewer and wins a little more often, but pushes the line a quarter slower; Blitz loses 15% more and pushes it half as far again.
+    ownLosses: 1.15,
     cost: 8,
     boost: { armor: 1.3, air: 1.3, fighter: 1.15 },
     siegeTurns: 0,
@@ -71,10 +73,10 @@ export const STANCES: Record<Stance, StanceSpec> = {
   },
   siege: {
     name: 'Siege',
-    advance: 0.7,
-    ownLosses: 0.7,
+    advance: 0.65,
+    ownLosses: 0.93,
     cost: 0,
-    boost: { infantry: 1.15, naval: 1.15, artillery: 1.25 },
+    boost: { infantry: 1.04, naval: 1.04, artillery: 1.1 },
     siegeTurns: 2,
     blurb: 'Infantry and warships grind it out. Slow, cheap in lives, and their factories stop for 2 months.',
   },

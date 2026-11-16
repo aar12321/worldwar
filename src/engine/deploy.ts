@@ -146,7 +146,9 @@ export function worthOf(units: Partial<UnitCounts>): number {
 /** The units that share `f` of every free kind sends, in whole divisions (tenths when less than one is free). */
 export function shareOfPool(pool: UnitCounts, f: number): UnitCounts {
   const out = { ...pool }
-  for (const k of SENDABLE) out[k] = f >= 1 ? (pool[k] >= 1 ? Math.floor(pool[k] + 1e-9) : tenth(pool[k])) : tenth(pool[k] * f)
+  // Whole divisions when a kind has one or more free, tenths below that: a stepper moves in ones, so the quick buttons land on its steps.
+  const part = (v: number) => (v >= 1 ? Math.min(Math.floor(v + 1e-9), Math.round(v * f + 1e-9)) : tenth(v * f))
+  for (const k of SENDABLE) out[k] = f >= 1 ? (pool[k] >= 1 ? Math.floor(pool[k] + 1e-9) : tenth(pool[k])) : part(pool[k])
   out.missile = 0
   return out
 }
