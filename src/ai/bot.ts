@@ -818,5 +818,14 @@ function sellSurplus(
 export function generateAllBotOrders(s: GameState, map: WorldMap, includePlayer = false): Order[] {
   const ctx = buildTurnContext(s, map)
   const ids = shuffle(Object.keys(s.nations).sort(), createRng(s.seed, s.turn * 7919 + 17))
-  return ids.flatMap((id) => generateBotOrders(s, map, id, includePlayer, ctx))
+  const all = ids.flatMap((id) => generateBotOrders(s, map, id, includePlayer, ctx))
+  // The world's quiet after a bomb is judged at planning time, when no warhead has landed yet, so several rivals planning in the same month
+  // could each fire one. Only the first launch of the month goes out.
+  let launched = false
+  return all.filter((o) => {
+    if (o.type !== 'nuke') return true
+    if (launched) return false
+    launched = true
+    return true
+  })
 }
