@@ -7,9 +7,21 @@ import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { PRESENCE } from '../../data/presence'
+import { RELATIONS } from '../../data/relations'
 import { withOldCombat } from './oldCombat'
 import { withOldMissiles } from './oldMissiles'
 import { withOldWarScore } from './oldWarScore'
+
+/** Runs `fn` with the relationship layer (rivals tending friendships, the opinion lines it adds: docs/RELATIONS_STATUS.md) switched off. */
+function withoutRelations<T>(fn: () => T): T {
+  const on = RELATIONS.on
+  RELATIONS.on = false
+  try {
+    return fn()
+  } finally {
+    RELATIONS.on = on
+  }
+}
 
 /** Runs `fn` with what forces on station do in the world (docs/MILITARY_STATUS.md) switched off. */
 function withoutPresence<T>(fn: () => T): T {
@@ -70,6 +82,9 @@ function withoutPresence<T>(fn: () => T): T {
  * (the new `occupied` and `warLedger` fields), a joint army credits its members. Checked before pinning: with the old tally put back (withOldWarScore, the test
  * 'the war score model is the only thing that moved the current pins') the previous pins (115b6530ffb6b2, 12f18d5b0a2e88, 197cfe617d07ae) return exactly, and every
  * earlier layer's test now runs under the old tally too, so its proof is unchanged.
+ * Re-pinned (the Normal and Hard bot worlds; the small war did not move) for relationships (docs/RELATIONS_STATUS.md): Medium and Hard rivals open embassies, visit friends,
+ * send aid, build programs and ask the player for help, and opinions gain a 'same system of government' line. Checked before pinning: with `RELATIONS.on` switched off
+ * (`withoutRelations`, the last test of this file, and wrapped round every layer test above it) the previous pins (6b42de15579c5 and 196fdf3f5c5b29) return exactly.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -131,7 +146,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('6b42de15579c5')
+    expect(hash(JSON.stringify(s))).toBe('adef6947e39d3')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -141,7 +156,7 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
     // All of presence, the missile war and the combat tuning on; the layers below show what each added.
-    expect(hash(JSON.stringify(s))).toBe('196fdf3f5c5b29')
+    expect(hash(JSON.stringify(s))).toBe('16982d2a7f37bd')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
@@ -151,36 +166,36 @@ describe('turn mode resolves exactly as pinned', () => {
   })
 
   it('layer 1, the combat tuning alone: presence and the missile war switched off, the pins from before them return', () => {
-    withOldWarScore(() => withoutPresence(() => withOldMissiles(() => {
+    withoutRelations(() => withOldWarScore(() => withoutPresence(() => withOldMissiles(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('7d9d1f55d2a94')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('5e24dace6d64b')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('1c2e3ffb6159fd')
       expect(hash(JSON.stringify(log))).toBe('17e9fe7b927733')
-    })))
+    }))))
   }, 400_000)
 
   it('layer 2, presence added: the missile war switched off, the pins from before the missile war return', () => {
-    withOldWarScore(() => withOldMissiles(() => {
+    withoutRelations(() => withOldWarScore(() => withOldMissiles(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('115b6530ffb6b2')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1780819090232c')
       expect(hash(JSON.stringify(smallWar().state))).toBe('16f99cdbf99edf')
-    }))
+    })))
   }, 400_000)
 
   it('layer 3, the missile war added: presence switched off, the pins from before presence return', () => {
-    withOldWarScore(() => withoutPresence(() => {
+    withoutRelations(() => withOldWarScore(() => withoutPresence(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('7d9d1f55d2a94')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('2bbdc71bb6ad1')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('d190f76c21120')
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
-    }))
+    })))
   }, 400_000)
 
   it('the combat tuning is the only thing that moved them: with the old numbers put back the old hashes return', () => {
     // Fortune of the day off, every division as tough as every other, robots at 1.6, Siege and Blitz as they were (see oldCombat.ts).
-    withOldWarScore(() => withoutPresence(() => withOldCombat(() => withOldMissiles(() => {
+    withoutRelations(() => withOldWarScore(() => withoutPresence(() => withOldCombat(() => withOldMissiles(() => {
       const normal = botWorld(7, 'normal', 'poland', 12).s
       expect(hash(JSON.stringify(normal))).toBe('1b61219982f9c1')
       const hard = botWorld(5, 'hard', 'china', 30).s
@@ -188,15 +203,25 @@ describe('turn mode resolves exactly as pinned', () => {
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('14c280eef9180f')
       expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
-    }))))
+    })))))
   }, 400_000)
 
   it('the war score model is the only thing that moved the current pins: with the old tally put back the previous hashes return', () => {
-    withOldWarScore(() => {
+    withoutRelations(() => withOldWarScore(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('115b6530ffb6b2')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('12f18d5b0a2e88')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('197cfe617d07ae')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    }))
+  }, 400_000)
+
+  it('relationships are the only thing that moved the current pins: with the layer switched off the previous hashes return', () => {
+    withoutRelations(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('6b42de15579c5')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('196fdf3f5c5b29')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
     })
   }, 400_000)
