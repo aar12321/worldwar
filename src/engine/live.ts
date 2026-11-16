@@ -9,6 +9,7 @@ import { runMonth } from './resolveTurn'
 import { createRng } from './rng'
 import { interception } from './deployment'
 import { strikeHits } from './systems'
+import { answerStrike } from './missileDoctrine'
 import { detonate, nukeCalledOff } from './nuclear'
 import { jointDay } from './coalition'
 import type { Army, ArmyOutcome, AttackOrder, BattleReport, GameState, MissileFlight, NationId, NukeFlight, Order, RegionId, TrainingJob, Via, WorldMap } from './types'
@@ -196,7 +197,8 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
       const owner = s.regions[f.target]?.owner
       const hits = !!s.nations[f.nationId]?.alive && !!owner && owner !== f.nationId && !!s.nations[owner]?.alive && atWar(s, f.nationId, owner)
       if (hits) {
-        strikeHits(s, map, f.nationId, f.target, f.count, f.kind ?? 'hypersonic')
+        const report = strikeHits(s, map, f.nationId, f.target, f.count, f.kind ?? 'hypersonic', { aim: f.aim, scrambled: f.scrambled, auto: f.auto, origin: f.from })
+        answerStrike(s, map, report)
         fought = true
         events.push({ kind: 'missile', flight: { ...f }, landed: true })
       } else {

@@ -23,6 +23,8 @@ import { FACTION_ORDERS, factionOrderCost, factionProblem, isFactionOrder, sameF
 import { spaceCost, spaceProblem } from './space'
 import { pauseAircraftDevProblem, startAircraftDevCost, startAircraftDevProblem } from './aircraft'
 import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
+import { MW } from '../data/missileWar'
+import { defenseCost, defenseProblem, doctrineProblem, raidCost, raidProblem, reconProblem, scrambleProblem, truceProblem } from './missileWar'
 import { buildWarheadCost, buildWarheadProblem, nukeProblem } from './nuclear'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
@@ -43,10 +45,10 @@ import { validateSetBorder } from './borders'
 import { annexFactor, governCost, governProblem, lockedByMaster } from './puppets'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'operation', 'domestic', 'strike', 'nuke', 'eventChoice', ...FACTION_ORDERS])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'operation', 'domestic', 'strike', 'raid', 'nuke', 'eventChoice', ...FACTION_ORDERS])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
-const LIVE_NOW = new Set<Order['type']>(['strike', 'nuke', 'respond', 'propose'])
+const LIVE_NOW = new Set<Order['type']>(['strike', 'raid', 'nuke', 'respond', 'propose'])
 
 /**
  * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, an answer to an offer
@@ -67,6 +69,10 @@ export function undoable(s: Pick<GameState, 'settings'>, o: Order): boolean {
   switch (o.type) {
     case 'nuke':
     case 'strike':
+    case 'raid':
+    case 'scramble':
+    case 'recon':
+    case 'missileTruce':
       return false
     case 'attack':
       return isLive(s)
@@ -245,6 +251,18 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     }
     case 'startAircraftDev':
       c.tp = startAircraftDevCost(o).tp
+      break
+    case 'missileDefense':
+      c.capital = defenseCost(s, o).capital
+      break
+    case 'raid':
+      c.capital = raidCost().capital
+      break
+    case 'recon':
+      c.capital = MW.reconMoney
+      break
+    case 'scramble':
+      c.capital = MW.scrambleMoney
       break
     case 'strike': {
       const k = strikeCost(o)
@@ -671,6 +689,18 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return fundMissilesProblem(n)
     case 'buildMissiles':
       return buildMissilesProblem(s, o, pending)
+    case 'missileDefense':
+      return defenseProblem(s, o)
+    case 'setDoctrine':
+      return doctrineProblem(o)
+    case 'scramble':
+      return !isLive(s) ? 'Scrambling answers a salvo in the air: only in a live game' : scrambleProblem(s, o)
+    case 'raid':
+      return raidProblem(s, map, o, pending)
+    case 'recon':
+      return reconProblem(s, o)
+    case 'missileTruce':
+      return truceProblem(s, o)
     case 'startAircraftDev':
       return startAircraftDevProblem(s, n, o, pending)
     case 'pauseAircraftDev':

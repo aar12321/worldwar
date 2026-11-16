@@ -13,15 +13,15 @@ describe('missile words', () => {
   })
 
   it('says what each kind does from its numbers', () => {
-    expect(effectText('cruise')).toBe('Cuts the Defense Line by 0.25 each (up to 4 in a salvo), stops its factories for 1 month.')
-    expect(effectText('tactical')).toMatch(/Destroys 0.6% of their army each \(up to 12%\)/)
-    expect(effectText('tactical')).not.toMatch(/Defense Line/)
+    expect(effectText('cruise')).toBe('Cuts the Defense Line by 0.25 each (up to 4 in a salvo), kills 0.1% of the people each (up to 1.2%), stops its factories for 1 month.')
+    expect(effectText('tactical')).toMatch(/destroys 0.6% of their army each \(up to 12%\)/)
+    expect(effectText('tactical')).toMatch(/Defense Line by 0.12/)
     expect(effectText('ballistic')).toMatch(/destroys a building for every 3/)
     expect(effectText('ballistic')).toMatch(/kills 0.4% of the people each \(up to 5%\)/)
     expect(effectText('ballistic')).toMatch(/\. The world will not forgive it\.$/)
     expect(effectText('cruise')).not.toMatch(/forgive/)
-    expect(landedEffect('tactical')).toBe('destroyed part of the army')
-    expect(landedEffect('cruise')).toBe('cut the Defense Line, stopped the factories')
+    expect(landedEffect('tactical')).toBe('cut the Defense Line, destroyed part of the army, killed civilians')
+    expect(landedEffect('cruise')).toBe('cut the Defense Line, killed civilians, stopped the factories')
   })
 
   it('shows what share a shield lets through, harsher on cruise missiles than ballistic ones', () => {

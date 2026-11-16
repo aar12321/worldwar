@@ -1,6 +1,7 @@
 import { nationNeighbors, addOpinion } from '../ai/opinion'
 import { AREA_NAMES, areaOf } from '../data/areas'
 import { CRISIS, HEADLINES, OUTCOMES, type CrisisAction } from '../data/crises'
+import { MW } from '../data/missileWar'
 import { JUSTIFY } from '../data/war'
 import { declareWar } from './diplomacy'
 import { addInfamy, addLog, atWar, enemiesOf, grantJustification, hasPact, isAllied, maxWars, newId, regionsOf } from './helpers'
@@ -18,7 +19,7 @@ export function worldTension(s: GameState): number {
   const gone = all.length - alive
   const infamy = Object.values(s.infamy).reduce((sum, v) => sum + v, 0)
   // Measured against how many nations are left, so a crowded world is not always tense.
-  const raw = (infamy / alive) * 10 + (s.wars.length / alive) * 50 + s.crises.length * 5 + (gone / Math.max(1, all.length)) * 20 + (s.shock ?? 0)
+  const raw = (infamy / alive) * 10 + (s.wars.length / alive) * 50 + s.crises.length * 5 + (gone / Math.max(1, all.length)) * 20 + (s.shock ?? 0) + (s.missileTension ?? 0) * MW.worldShare
   return Math.round(Math.max(0, Math.min(100, raw)))
 }
 

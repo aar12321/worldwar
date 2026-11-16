@@ -1,5 +1,6 @@
 import { addOpinion } from '../ai/opinion'
 import { difficultyOf } from '../data/difficulty'
+import { MW } from '../data/missileWar'
 import { NUCLEAR } from '../data/nuclear'
 import { blocsOf } from './blocs'
 import { interceptFactor } from './combat'
@@ -9,6 +10,7 @@ import { addInfamy, addLog, alliesOf, atWar, clamp, distanceKm, enemiesOf, grant
 import { militaryPower } from './militaryStats'
 import { aircraftEffects, pastDefenses } from './aircraft'
 import { recentAttackers, type AirDefense } from './missiles'
+import { trucePair } from './missileWar'
 import type { Rng } from './rng'
 import type { GameState, NationId, Nation, NukeFlight, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
@@ -81,6 +83,7 @@ export function nukeProblem(s: GameState, map: WorldMap, o: Nuke, pending: Order
   if (r.owner === o.nationId || !atWar(s, o.nationId, r.owner)) return 'You can only strike a country you are at war with'
   if (s.nations[r.owner]?.overlord === o.nationId) return 'They are your puppet'
   if (pending.some((p) => p.type === 'nuke' && p.nationId === o.nationId)) return 'One warhead at a time'
+  if (trucePair(s, o.nationId, r.owner) !== null) return 'A missile ceasefire holds with them'
   if (warheadsOf(n) < 1) return 'You have no warhead. Build one first.'
   const last = n.nuclear?.last
   if (last !== undefined && s.turn - last < NUCLEAR.cooldown) return `The launch crews need ${NUCLEAR.cooldown - (s.turn - last)} more months`
@@ -226,6 +229,7 @@ export function worldReacts(s: GameState, map: WorldMap, rng: Rng, attacker: Nat
   }
   addOpinion(s, victim, attacker, 'Destroyed us with a nuclear weapon', NUCLEAR.victimOpinion, NUCLEAR.victimDecay)
   s.shock = (s.shock ?? 0) + NUCLEAR.tension
+  if (MW.enabled) s.missileTension = Math.min(100, (s.missileTension ?? 0) + MW.nukeTension)
   s.nukeLast = s.turn
   // Trade is cut off by everyone who is not the attacker's friend.
   const friends = new Set<NationId>([attacker, ...alliesOf(s, attacker)])

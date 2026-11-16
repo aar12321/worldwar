@@ -37,9 +37,9 @@ const fire = (kind: MissileType, count: number, target = 'r1'): Order => ({ type
 const ok = (s: GameState, o: Order) => expect(applyOrderNow(s, map, o).error, JSON.stringify(o)).toBeNull()
 
 describe('the missile program', () => {
-  it('four kinds, three program levels, each level unlocking a kind and a monthly capacity', () => {
-    expect(MISSILE_TYPES).toHaveLength(4)
-    expect(PROGRAM_MISSILES).toEqual(['cruise', 'tactical', 'ballistic'])
+  it('five kinds, three program levels, each level unlocking a kind and a monthly capacity', () => {
+    expect(MISSILE_TYPES).toHaveLength(5)
+    expect(PROGRAM_MISSILES).toEqual(['cruise', 'tactical', 'ballistic', 'decoy'])
     expect(MISSILE_PROGRAM.maxLevel).toBe(3)
     expect(MISSILE_PROGRAM.capacity).toEqual([0, 5, 10, 18])
     for (const k of PROGRAM_MISSILES) expect(MISSILES[k].level).toBeGreaterThanOrEqual(1)
@@ -215,19 +215,22 @@ describe('what each kind does', () => {
     }
   }
 
-  it('cruise missiles wear down the line and stop factories, and nothing else', () => {
+  it('cruise missiles wear down the line, stop factories and kill a few civilians, and break no buildings or armies', () => {
     const r = hit('cruise', 8)
     expect(r.line).toBeCloseTo(2, 5)
     expect(r.s.regions.r1.sabotaged).toBe(1)
     expect(r.army).toBe(0)
-    expect(r.pop).toBe(0)
+    expect(r.pop).toBeGreaterThan(0.005)
+    expect(r.pop).toBeLessThan(0.02)
     expect(r.buildings).toBe(0)
   })
 
-  it('tactical missiles kill a slice of the army and leave the line alone', () => {
+  it('tactical missiles kill a slice of the army, nick the line and spare the civilians most', () => {
     const r = hit('tactical', 10)
     expect(r.army).toBeCloseTo(0.06, 5)
-    expect(r.line).toBe(0)
+    expect(r.line).toBeCloseTo(1.2, 5)
+    expect(r.pop).toBeGreaterThan(0)
+    expect(r.pop).toBeLessThan(hit('cruise', 10).pop)
     expect(r.s.regions.r1.sabotaged).toBe(0)
   })
 
@@ -243,7 +246,7 @@ describe('what each kind does', () => {
     })
     expect(r.line).toBeCloseTo(6, 5)
     expect(r.buildings).toBe(2)
-    expect(r.pop).toBeCloseTo(0.024, 5)
+    expect(r.pop).toBeGreaterThanOrEqual(0.024)
     expect(r.s.infamy.r0).toBeGreaterThanOrEqual(MISSILES.ballistic.infamy)
     expect(r.s.opinions['r1>r0']?.some((m) => m.value <= MISSILES.ballistic.opinion)).toBe(true)
   })
@@ -251,7 +254,9 @@ describe('what each kind does', () => {
   it('a salvo has a ceiling however many are fired at once, and a line never falls below half a point', () => {
     expect(hit('cruise', 100).line).toBeCloseTo(MISSILES.cruise.lineMax, 5)
     expect(hit('tactical', 100).army).toBeCloseTo(MISSILES.tactical.armyMax, 5)
-    expect(hit('ballistic', 100).pop).toBeCloseTo(MISSILES.ballistic.peopleMax, 5)
+    // The ceiling is on the salvo; a city-heavy target adds its urban share on top.
+    expect(hit('ballistic', 100).pop).toBeGreaterThanOrEqual(MISSILES.ballistic.peopleMax)
+    expect(hit('ballistic', 100).pop).toBeLessThanOrEqual(MISSILES.ballistic.peopleMax * (1 + MISSILES.ballistic.urban) + 1e-9)
     const low = hit('hypersonic', 100, (s) => {
       s.regions.r1.line = 3
     })

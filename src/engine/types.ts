@@ -54,7 +54,7 @@ export type SocialId =
   | 'childBenefit' | 'parentalLeave' | 'foodAid' | 'transit'
   | 'policing' | 'courts' | 'integration' | 'festivals' | 'broadcasting' | 'surveillance'
 /** The kinds of missile. Hypersonic ones are the military's `missile` stock; the rest are the nation's `arsenal`. */
-export type MissileType = 'cruise' | 'tactical' | 'hypersonic' | 'ballistic'
+export type MissileType = 'cruise' | 'tactical' | 'hypersonic' | 'ballistic' | 'decoy'
 export type CampaignId = 'celebration' | 'vaccination' | 'literacy' | 'jobFair' | 'unityTour' | 'foodBank' | 'babyBonus'
 /** 1 Nation, 2 Regional power, 3 Great power, 4 Superpower, 5 Hegemon. */
 export type Tier = 1 | 2 | 3 | 4 | 5
@@ -421,6 +421,8 @@ export interface Nation {
   arsenal?: Partial<Record<MissileType, number>>
   /** The missile program's level, 0 to 3. */
   missileProgram?: number
+  /** The missile war: interceptor stock, radar, batteries, doctrine, launchers and the ledger. Absent until a nation does something in it. */
+  missileWar?: MissileWarState
   /** Missiles built so far in the month `turn`, against the program's capacity. */
   missileBuilt?: { turn: number; count: number }
   /** The last month each nation struck this one with missiles, so it can answer. */
@@ -679,7 +681,19 @@ export type Order =
   | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
   | { type: 'fundSystem'; nationId: NationId; system: SystemId; levels?: number }
-  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital'; /** Missiles to fire in the salvo. */ count?: number; /** Which kind. Hypersonic if left out. */ kind?: MissileType }
+  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital'; /** `site` aims at the launch site (counterforce): less harm to people and line, but it destroys missiles in store and shuts the launchers. */ aim?: StrikeAim; /** Missiles to fire in the salvo. */ count?: number; /** Which kind. Hypersonic if left out. */ kind?: MissileType }
+  /** Raises the missile war's defences: radar level, interceptor stock, an air-defence battery in a country, a mobile-launcher level. Applies at once. */
+  | { type: 'missileDefense'; nationId: NationId; item: DefenseItem; count?: number; regionId?: RegionId }
+  /** Sets the retaliation doctrine. */
+  | { type: 'setDoctrine'; nationId: NationId; doctrine: Doctrine }
+  /** Live: scrambles your fighters against one specific salvo that is in the air. */
+  | { type: 'scramble'; nationId: NationId; flightId: string }
+  /** A bomber raid on a country of an enemy, with escorts. `site` hunts launchers and missile stores. */
+  | { type: 'raid'; nationId: NationId; target: RegionId; aim?: StrikeAim; /** Share of the strike aircraft to send (0.1 to 1). */ share?: number }
+  /** A recon sortie: shows where the enemy's launchers are for a few months, so mobile launchers cannot hide. */
+  | { type: 'recon'; nationId: NationId; target: NationId }
+  /** Offers a missile ceasefire to an AI rival, or ends one (`lift`). */
+  | { type: 'missileTruce'; nationId: NationId; target: NationId; lift?: boolean }
   /** Raises the missile program one level. */
   | { type: 'fundMissiles'; nationId: NationId }
   /** Builds missiles of a kind from the program: money and steel (and oil) each. */
@@ -951,6 +965,12 @@ export interface GameState {
   launches?: PlannedLaunch[]
   /** Live mode only: hypersonic salvos in the air. */
   flights?: MissileFlight[]
+  /** The world's missile-war tension, 0 to 100: strikes raise it, quiet months and ceasefires lower it. Absent in a quiet world. */
+  missileTension?: number
+  /** The last salvos and raids with what stopped them and what they did, newest last. Capped. */
+  salvos?: SalvoReport[]
+  /** Missile ceasefires: sorted "a|b" key to the last turn it holds. */
+  truces?: Record<string, number>
   /** Live mode only: nuclear warheads in the air. They fly for days, and the target's owner can see them coming. */
   nukes?: NukeFlight[]
   /** World tension added by a nuclear strike. It fades every month and is added to the world's tension. */
@@ -1049,7 +1069,86 @@ export interface PlannedLaunch {
   order: AttackOrder
 }
 
-/** Live mode: a salvo of hypersonic missiles on its way. */
+export type StrikeAim = 'country' | 'site'
+export type DefenseItem = 'radar' | 'interceptors' | 'battery' | 'mobile'
+/** How a nation answers a strike: hold fire, answer after being hit, or launch on warning (live: the moment radar sees a salvo, with a risk of false alarms). */
+export type Doctrine = 'hold' | 'retaliate' | 'warning'
+
+/** What a nation has done and suffered in the missile war. */
+export interface MissileLedger {
+  fired: number
+  hits: number
+  shotDown: number
+  /** Millions of civilians killed by this nation's strikes and lost to strikes on it. */
+  killed: number
+  lost: number
+  lineDealt: number
+  lineTaken: number
+  sitesHit: number
+  stockDestroyed: number
+  interceptorsSpent: number
+  aircraftLost: number
+}
+
+export interface MissileWarState {
+  /** Interceptor rounds in store. Absent means the full store the shield and batteries allow. */
+  interceptors?: number
+  radar?: number
+  /** Air-defence batteries by country. */
+  batteries?: Record<RegionId, number>
+  doctrine?: Doctrine
+  /** Mobile-launcher level: launchers that are hard to find and kill. */
+  mobile?: number
+  /** Launch sites shut by a strike: country to the last turn it is down. */
+  down?: Record<RegionId, number>
+  /** Enemies whose launchers a recon sortie found: nation to the last turn it is known. */
+  seen?: Record<NationId, number>
+  /** The last month this nation flew a raid. */
+  lastRaid?: number
+  ledger?: MissileLedger
+}
+
+/** One salvo (or raid) and everything that happened to it, for the war panel and the globe. */
+export interface SalvoReport {
+  id: string
+  turn: number
+  day?: number
+  from: NationId
+  to: NationId
+  region: RegionId
+  weapon: 'missile' | 'raid'
+  kind?: MissileType
+  aim: StrikeAim
+  fired: number
+  /** Missiles (or aircraft) that got through. */
+  hit: number
+  /** Stopped by each defence, as a share of the salvo. */
+  shield: number
+  batteries: number
+  patrol: number
+  fighters: number
+  interceptorsUsed: number
+  /** Share of the shield's strength left because the rounds ran short, 1 if they did not. */
+  coverage: number
+  /** Millions killed, line points lost, and the rest. */
+  dead: number
+  line: number
+  factories: boolean
+  buildings: number
+  army: number
+  stock: number
+  site: boolean
+  aircraftLost: number
+  scrambled?: boolean
+  auto?: boolean
+  /** The country it left from. */
+  origin?: RegionId
+  /** The country's name and what the salvo did, in words (the news line). */
+  place: string
+  news: string
+}
+
+/** Live mode: a salvo of missiles on its way. */
 export interface MissileFlight {
   id: string
   nationId: NationId
@@ -1063,6 +1162,11 @@ export interface MissileFlight {
   lands: number
   /** Who held the target when it was fired. */
   foe?: NationId
+  aim?: StrikeAim
+  /** The defender scrambled its fighters against this salvo. */
+  scrambled?: boolean
+  /** Fired by a retaliation doctrine, not by an order. */
+  auto?: boolean
 }
 
 // ---- Factions: countries that pool money, materials and soldiers and vote on war together ----
