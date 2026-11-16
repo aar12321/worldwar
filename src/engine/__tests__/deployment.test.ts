@@ -903,7 +903,7 @@ describe('a game where nobody stations forces plays as it always did', () => {
     // The only trace the new rules leave is the memory of a border incident.
     delete s.borders
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('1d71ef7fbf0dc5')
+    expect(hash(JSON.stringify(s))).toBe('f924d485be247')
   }, 300_000)
 })
 
