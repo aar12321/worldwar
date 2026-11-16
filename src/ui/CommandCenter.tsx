@@ -221,7 +221,7 @@ export function CommandCenter({
                     {r.target === target && <span className="ml-1.5 text-[11px] text-white/55">(this one)</span>}
                   </div>
                   <div className="text-[12px] text-white/70">
-                    {r.ownerName} · {STANCES[r.stance].name} · lose ~{formatDivisions(r.yourLosses)}, they lose ~{formatDivisions(r.theirLosses)}
+                    {r.ownerName !== r.name ? `${r.ownerName} · ` : ''}{STANCES[r.stance].name} · lose ~{formatDivisions(r.yourLosses)}, they lose ~{formatDivisions(r.theirLosses)}
                   </div>
                   <div className="text-[12px] text-[#6eeb8a]">{r.gains.join(' · ')}</div>
                   {r.risks.length > 0 && <div className="text-[12px] text-[#ffd60a]">{r.risks.join(' · ')}</div>}
@@ -247,20 +247,32 @@ export function CommandCenter({
               <h4 className="text-[14px] font-semibold">Auto-command</h4>
               <p className="text-[12px] text-white/65">Every month it plans your attacks within the limits below and puts them in the order tray, in green, for you to look over and cancel before the month ends.</p>
             </div>
-            <button role="switch" aria-checked={auto.on} className={`btn px-3 py-1.5 text-[13px] ${auto.on ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setAuto({ on: !auto.on })} disabled={live} title={live ? 'Auto-command plans a month at a time: it is for turn games' : undefined}>
-              {auto.on ? 'On' : 'Off'}
+            <button role="switch" aria-checked={auto.on} className={`btn px-3.5 py-1.5 text-[13px] shrink-0 ${auto.on ? 'btn-primary' : 'border border-white/25'}`} onClick={() => setAuto({ on: !auto.on })} disabled={live} title={live ? 'Auto-command plans a month at a time: it is for turn games' : undefined}>
+              {auto.on ? 'On' : 'Turn on'}
             </button>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <NumberStepper label="Most attacks a month" value={auto.maxAttacks} onChange={(v) => setAuto({ maxAttacks: v })} min={1} max={9} slider={false} />
-            <NumberStepper label="Keep at home" value={Math.round(auto.reserve * 100)} onChange={(v) => setAuto({ reserve: v / 100 })} min={0} max={90} step={5} unit="% of the reserve" slider={false} />
-            <NumberStepper label="Only if the chance to win is at least" value={Math.round(auto.minWin * 100)} onChange={(v) => setAuto({ minWin: v / 100 })} min={30} max={95} step={5} unit="%" slider={false} />
-            <div role="radiogroup" aria-label="Auto-command goal" className="flex flex-wrap gap-1.5 items-start">
-              {OBJECTIVE_KEYS.map((o) => (
-                <button key={o} role="radio" aria-checked={auto.objective === o} className={`btn px-2.5 py-1.5 text-[12px] ${auto.objective === o ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setAuto({ objective: o })}>
-                  {OBJECTIVES[o].name}
-                </button>
-              ))}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <div className="label">Most attacks a month</div>
+              <NumberStepper label="Most attacks a month" value={auto.maxAttacks} onChange={(v) => setAuto({ maxAttacks: v })} min={1} max={9} slider={false} />
+            </div>
+            <div className="space-y-1">
+              <div className="label">Keep at home</div>
+              <NumberStepper label="Share of the reserve kept at home" value={Math.round(auto.reserve * 100)} onChange={(v) => setAuto({ reserve: v / 100 })} min={0} max={90} step={5} unit="% of the reserve" slider={false} />
+            </div>
+            <div className="space-y-1">
+              <div className="label">Only if the chance to win is at least</div>
+              <NumberStepper label="Least chance to win" value={Math.round(auto.minWin * 100)} onChange={(v) => setAuto({ minWin: v / 100 })} min={30} max={95} step={5} unit="%" slider={false} />
+            </div>
+            <div className="space-y-1">
+              <div className="label">Goal</div>
+              <div role="radiogroup" aria-label="Auto-command goal" className="flex flex-wrap gap-1.5 items-start">
+                {OBJECTIVE_KEYS.map((o) => (
+                  <button key={o} role="radio" aria-checked={auto.objective === o} className={`btn px-2.5 py-1.5 text-[12px] ${auto.objective === o ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setAuto({ objective: o })}>
+                    {OBJECTIVES[o].name}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">

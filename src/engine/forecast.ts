@@ -332,7 +332,7 @@ function steady(text: string): number {
 export function roughOdds(s: GameState, nationId: NationId, target: RegionId, exact: number): RoughOdds {
   const intel = intelQuality(s, nationId, target)
   const half = intel === 'spies' ? 0.1 : intel === 'front' ? 0.17 : 0.27
-  const off = (steady(`${nationId}|${target}|${s.turn}|${s.seed}`) - 0.5) * half
+  const off = (steady(`${nationId}|${target}|${s.turn}|${s.seed}`) - 0.5) * half * 0.6
   const centre = Math.round(Math.min(1, Math.max(0, exact + off)) * 20) / 20
   const low = Math.max(0, Math.min(centre - half, exact - 0.02))
   const high = Math.min(1, Math.max(centre + half, exact + 0.02))

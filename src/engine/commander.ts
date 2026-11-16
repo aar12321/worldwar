@@ -67,7 +67,7 @@ const keepOf = (o: PlanOptions) => Math.max(0, Math.min(0.9, o.keepHome ?? (o.ob
 /** How good a forecast is for an objective. Higher is better. A little weight on the power ratio gives a slope to climb while no force wins yet. */
 function score(f: Forecast, o: Objective, sentWorth: number): number {
   const ratio = Math.min(2, f.attackerPower / Math.max(0.1, f.defenderPower))
-  const size = 0.03 * sentWorth
+  const size = (o === 'win' || o === 'defend' ? 0.06 : 0.03) * sentWorth
   const lost = worthOf(f.yourLossByUnit)
   switch (o) {
     case 'losses':
@@ -130,7 +130,7 @@ function search(s: GameState, map: WorldMap, id: NationId, target: RegionId, sta
       stale = 0
     } else if (++stale >= 4) break
     // Good enough: a sure win ends the climb for objectives that are about winning.
-    if (o.objective !== 'fast' && pick.r.f.winChance >= 0.995 && o.objective !== 'losses') break
+    if (o.objective !== 'fast' && pick.r.f.winChance >= 0.97 && o.objective !== 'losses') break
   }
   if (!best) return null
   // Prune: take a step of any kind back out when the score does not drop (cheaper, same result), then try swapping a step between kinds.
@@ -364,7 +364,7 @@ export function advise(s: GameState, map: WorldMap, id: NationId, plan: AttackPl
   const pct = (v: number) => `${Math.round(v * 100)}%`
   out.push({
     tone: f.winChance >= 0.7 ? 'good' : f.winChance >= 0.4 ? 'warn' : 'bad',
-    text: `${name} against ${foe.name}: ${pct(f.winChance)} to win with ${formatDivisions(sent)} divisions${f.winChance < 0.4 ? '. Not yet.' : f.winChance >= 0.7 ? '. A good attack.' : '. A coin toss: improve it first.'}`,
+    text: `${name}${foe.name !== name ? ` (${foe.name})` : ''}: ${pct(f.winChance)} to win with ${formatDivisions(sent)} divisions${f.winChance < 0.4 ? '. Not yet.' : f.winChance >= 0.7 ? '. A good attack.' : '. A coin toss: improve it first.'}`,
   })
   // What to do first: missiles soften the line.
   const stock = nation.military.units.missile
