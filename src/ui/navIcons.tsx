@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, Frame, MilitaryIcon, NewsIcon, ResearchIcon, SettingsIcon } from './icons'
+import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, FactionIcon, Frame, MilitaryIcon, NewsIcon, ResearchIcon, SettingsIcon } from './icons'
 
 /** Small glyphs for the navigation chrome and for desks that have no icon of their own yet. */
 export function SearchIcon({ size = 18 }: { size?: number }) {
@@ -112,7 +112,7 @@ const ICONS: Record<string, () => ReactNode> = {
   news: () => <NewsIcon />,
   settings: () => <SettingsIcon />,
   flag: () => <FlagIcon />,
-  faction: () => <FlagIcon />,
+  faction: () => <FactionIcon />,
   space: () => <RocketIcon />,
   aircraft: () => <PlaneIcon />,
   map: () => <MapIcon />,

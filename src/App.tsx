@@ -132,7 +132,7 @@ function ShakeLayer({ children }: { children: React.ReactNode }) {
     el.classList.add('shake')
   }, [shakeKey, strength, reduced])
   return (
-    <div ref={ref} className="absolute inset-0">
+    <div ref={ref} className="absolute inset-0 isolate">
       {children}
     </div>
   )

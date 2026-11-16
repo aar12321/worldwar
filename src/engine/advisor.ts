@@ -6,13 +6,19 @@ import { TECHS } from '../data/techTree'
 import { BUILDING_SPECS, UNIT_SPECS, buildingCost, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from './arms'
 import { incomingArmies } from './armies'
-import { absDate, clockOf } from './calendar'
+import { absDate, clockOf, isLive } from './calendar'
+import { COALITION } from '../data/coalition'
+import { NUCLEAR } from '../data/nuclear'
+import { activePlans, strikeDate, strikeMonth, threatOf } from './coalition'
+import { nuclearThreats } from './nuclear'
 import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
 import { enemiesOf, hasPact, isAllied, maxWars, totalUnits } from './helpers'
+import { factionOf, votesWaiting } from './factions'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { fundMissilesCost, launchSite, missileStock, programLevel, recentAttackers } from './missiles'
 import { validateOrder } from './orders'
+import { spaceAdvice } from './space'
 import { monthsToElection } from './politics'
 import { ACADEMY, PROJECT_LEVELS, PROJECTS, programCost } from '../data/projects'
 import { TIERS } from '../data/empire'
@@ -23,6 +29,7 @@ import { activeLocal, localLevel, localProblem } from './works'
 import { electionNeed } from './people'
 import type { BuildingType, GameState, Milestone, NationId, Order, ProjectId, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
+import { threatWatch } from './threats'
 import { canAttackRegion, forecastAttack, garrisonStrength } from './warfare'
 import { netWarScore } from './warscore'
 
@@ -31,11 +38,12 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
-  | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
-  | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' }
-  | { desk: 'military'; tab: 'forces' | 'wars' | 'agencies' | 'systems' | 'armies' }
+  | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
+  | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' }
+  | { desk: 'military'; tab: 'forces' | 'deploy' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
+  | { desk: 'faction' }
   | { desk: 'warRoom'; region: RegionId }
   | { desk: 'map'; region: RegionId }
 
@@ -83,6 +91,15 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       action: 'See the armies',
       target: { desk: 'military', tab: 'armies' },
     })
+  }
+
+  // Active military: a rival that can reach you with nobody watching, and forces that have never been stationed.
+  const watch = threatWatch(s, map, nationId)
+  const danger = watch.find((x) => x.level === 'high')
+  if (danger) {
+    add('now', 95, { id: `watch-${danger.nation}-${danger.route}`, title: `${s.nations[danger.nation]?.name ?? 'A rival'} can reach you and the way in is not guarded`, detail: danger.text, action: 'Post forces', target: { desk: 'military', tab: 'deploy' } })
+  } else if (!n.military.deployment && myUnits >= 3 && (watch.length > 0 || enemies.length > 0)) {
+    add('idea', 36, { id: 'station-forces', title: 'Station your forces', detail: 'Nothing of yours is on patrol or guarding a border, so a rival that strikes first meets no garrison and no patrols. Post part of your fleet, air force and troops, and keep the rest in reserve to attack with.', action: 'Open Deployment', target: { desk: 'military', tab: 'deploy' } })
   }
 
   // Struck with missiles lately: answer in kind if you can, or build the means. The same goes for turn and live games.
@@ -309,6 +326,24 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
     })
   }
 
+  // Factions: votes waiting on you, invitations, and a faction army with no war to fight.
+  const waiting = votesWaiting(s, nationId, pending)
+  if (waiting.length > 0) {
+    const { faction, proposal } = waiting[0]
+    const left = Math.max(0, proposal.expires - s.turn) + 1
+    add('now', 40, {
+      id: 'faction-vote',
+      title: proposal.kind === 'war' ? `${faction.name} votes on war with ${s.nations[proposal.target!]?.name ?? 'a country'}` : `${faction.name} votes on a supply contract`,
+      detail: `${waiting.length > 1 ? `${waiting.length} votes need you. ` : ''}${s.nations[proposal.by]?.name ?? 'A member'} put it forward. It is decided when the month ends or earlier if the count is settled, and at the latest in ${left} month${left === 1 ? '' : 's'}.`,
+      action: 'Vote',
+      target: { desk: 'faction' },
+    })
+  }
+  const invite = (s.factions ?? []).find((f) => !factionOf(s, nationId) && f.invites.some((i) => i.nation === nationId && i.expires >= s.turn))
+  if (invite && !pending.some((o) => o.type === 'factionJoin')) {
+    add('soon', 25, { id: 'faction-invite', title: `${invite.name} invited you`, detail: 'Members pool money, materials and soldiers and vote on wars together. You can leave later and take back your share.', action: 'See the invitation', target: { desk: 'faction' } })
+  }
+
   // Quantum Codebreaking: where an enemy could strike next month, and how likely it is to work.
   const quantum = n.systems?.quantum ?? 0
   if (quantum > 0 && enemies.length > 0) {
@@ -331,6 +366,56 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
         action: 'See the country',
         target: { desk: 'map', region: top.region },
       })
+    }
+  }
+
+  // Nuclear missiles on their way to your countries, in a live game: the one warning that matters more than any other.
+  for (const f of s.nukes ?? []) {
+    if (s.regions[f.target]?.owner !== nationId || f.nationId === nationId) continue
+    add('now', 300 - Math.min(40, Math.max(0, f.lands - clockOf(s)) * 4), {
+      id: `incoming-nuke-${f.id}`,
+      title: `A nuclear missile from ${s.nations[f.nationId]?.name ?? 'an enemy'} is heading for ${name(f.target)}`,
+      detail: `It lands on ${absDate(Math.ceil(f.lands))}. An Interceptor Shield stops only a part of it. Peace before it lands calls it off: offer terms now, and bring what you can out of the country.`,
+      action: 'Offer peace',
+      target: { desk: 'diplomacy', nation: f.nationId },
+    })
+  }
+  // An enemy that holds the bomb.
+  const bombers = nuclearThreats(s, nationId)
+  if (bombers.length > 0) {
+    const who = s.nations[bombers[0]]?.name ?? 'An enemy'
+    add('soon', 80, {
+      id: 'enemy-bomb',
+      title: `${who} has a nuclear warhead and is at war with you`,
+      detail: `A desperate or provoked Hard rival may use it${isLive(s) ? `; you would get ${NUCLEAR.flightDays} days of warning` : ''}. A shield stops only a quarter of it. The surest defense is peace, or sparing it a reason.`,
+      action: 'See the war',
+      target: { desk: 'diplomacy', nation: bombers[0] },
+    })
+  }
+
+  // The world is watching a growing power: a joint strike being prepared, or rising alarm.
+  if (n.tier >= 2) {
+    const plan = activePlans(s, nationId)[0]
+    if (plan) {
+      const left = Math.max(0, strikeMonth(s, plan) - s.turn)
+      add(left <= 1 ? 'now' : 'soon', 95 - left * 10, {
+        id: 'coalition-plan',
+        title: `${plan.members.length} rivals plan to strike you together${left === 0 ? ' this month' : ` in ${left} month${left === 1 ? '' : 's'}`}`,
+        detail: `${plan.members.map((m) => s.nations[m]?.name ?? m).join(', ')} will attack ${name(plan.focus[0])} and your other weak borders on the same ${isLive(s) ? `day (${strikeDate(s, plan)})` : 'month'}. Strengthen those borders, offer pacts, or break their treaty before it comes.`,
+        action: 'See the world\'s reaction',
+        target: { desk: 'empire', tab: 'reaction' },
+      })
+    } else {
+      const threat = threatOf(s, map, nationId, { output: false })
+      if (threat.pressure >= COALITION.planFrom) {
+        add('soon', 25 + Math.round(threat.pressure * 20), {
+          id: 'coalition-alarm',
+          title: `The world is ${threat.level >= 3 ? 'uniting against you' : 'alarmed by your growth'}`,
+          detail: `Your threat is ${Math.round(threat.score)} of 100 (${threat.levelName.toLowerCase()}). Rivals are drawing together and may strike first. Pacts, aid and a better reputation calm them.`,
+          action: 'See the world\'s reaction',
+          target: { desk: 'empire', tab: 'reaction' },
+        })
+      }
     }
   }
 
@@ -493,6 +578,9 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   if (enemies.length >= maxWars(s, nationId)) {
     add('soon', 5, { id: 'maxwars', title: `You are fighting ${enemies.length} wars`, detail: 'That is the most a country can fight at once. Each one bills you monthly.', action: 'See your wars', target: { desk: 'military', tab: 'wars' } })
   }
+
+  // The space program: samples waiting, worlds to claim, outposts running dry.
+  if (n.space) for (const a of spaceAdvice(s, n, econ.workforce)) add(a.urgency, a.bonus, { id: a.id, title: a.title, detail: a.detail, action: a.action, target: a.target })
 
   out.sort((a, b) => b.weight - a.weight || (a.id < b.id ? -1 : 1))
   return out.slice(0, limit)

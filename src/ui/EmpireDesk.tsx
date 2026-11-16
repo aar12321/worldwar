@@ -1,3 +1,4 @@
+import { NUCLEAR } from '../data/nuclear'
 import { COUNCIL, EMPIRE_RULES, OCCUPATION, RESOLUTIONS, TIERS, tierSpec } from '../data/empire'
 import { projectedVote } from '../engine/council'
 import { capitalDistance, capitalsOf, empireCount, tierOf } from '../engine/empire'
@@ -12,6 +13,7 @@ import { Card, Line } from './economy/parts'
 import { DeskTabs, OrderButton, PanelShell, TabHost } from './panel'
 import { useState } from 'react'
 import { Spark } from './Charts'
+import { WorldReaction } from './WorldReaction'
 
 /** What a tier opens, one line each, for the table. */
 function unlocks(t: ReturnType<typeof tierSpec>): [string, string][] {
@@ -30,6 +32,8 @@ function unlocks(t: ReturnType<typeof tierSpec>): [string, string][] {
     ['Regional capitals', String(t.regionalCapitals)],
     ['World Bank loans', `up to ${t.loanMax}, ${t.loanMonths} months${t.loanPact ? ', with a pact' : ''}`],
     ['World Council', t.council ? `put resolutions (${t.council === 0.5 ? '1/2' : '2/3'} needed)` : 'no'],
+    ['Nuclear weapons', t.id >= NUCLEAR.tier ? 'yes (a program, in the War Room)' : 'no'],
+    ['Rivals band together', ['no', 'barely', 'a little', 'strongly', 'fiercely'][t.id - 1]],
   ]
 }
 
@@ -276,3 +280,14 @@ function World() {
 
 /** The tabs, named for the registry (src/ui/registry.ts). */
 export { Overview as EmpireOverview, Provinces as EmpireProvinces, World as EmpireWorld, Statistics as EmpireStatistics }
+
+/** The World reaction tab, named for the registry. */
+export function EmpireReaction() {
+  return (
+    <section className="econ-grid">
+      <div className="span-all">
+        <WorldReaction />
+      </div>
+    </section>
+  )
+}

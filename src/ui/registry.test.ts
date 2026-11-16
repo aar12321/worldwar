@@ -39,24 +39,24 @@ describe('the desk registry', () => {
   })
 
   it('names every tab of the Economy desk that the player had before', () => {
-    expect(findDesk('economy')?.tabs?.map((t) => t.id)).toEqual(['country', 'people', 'budget', 'bank', 'business', 'projects', 'market', 'stocks', 'government'])
+    expect(findDesk('economy')?.tabs?.map((t) => t.id)).toEqual(['country', 'people', 'budget', 'bank', 'business', 'projects', 'space', 'market', 'stocks', 'government'])
   })
 
   it('shows the rail desks in order, grouped, and keeps News and Settings out of it', () => {
     const ids = navDesks(turns).map((d) => d.id)
-    expect(ids).toEqual(['briefing', 'economy', 'empire', 'tech', 'military', 'diplomacy'])
+    expect(ids).toEqual(['briefing', 'economy', 'empire', 'tech', 'military', 'diplomacy', 'faction'])
     expect(groupedNav(turns).map((g) => [g.id, g.desks.length])).toEqual([
       ['home', 1],
       ['nation', 3],
-      ['world', 2],
+      ['world', 3],
     ])
   })
 })
 
 describe('tabs by kind of game', () => {
   it('shows the Armies tab only in a live game', () => {
-    expect(visibleTabs('military', turns).map((t) => t.id)).toEqual(['forces', 'wars', 'agencies', 'systems'])
-    expect(visibleTabs('military', live).map((t) => t.id)).toEqual(['forces', 'armies', 'wars', 'agencies', 'systems'])
+    expect(visibleTabs('military', turns).map((t) => t.id)).toEqual(['forces', 'deploy', 'wars', 'agencies', 'systems'])
+    expect(visibleTabs('military', live).map((t) => t.id)).toEqual(['forces', 'deploy', 'armies', 'wars', 'agencies', 'systems'])
   })
 
   it('writes a count on a tab that has one', () => {
@@ -69,6 +69,7 @@ describe('tabs by kind of game', () => {
     expect(findDesk('diplomacy')!.badge!(live)).toBe(1)
     expect(findDesk('briefing')!.badge!(live)).toBe(2)
     expect(findDesk('economy')!.badge).toBeUndefined()
+    expect(findDesk('faction')!.badge!({ ...live, factionDue: 2 })).toBe(2)
   })
 })
 
@@ -125,10 +126,10 @@ describe('keys', () => {
 
 describe('adding a desk or a tab in one place', () => {
   const faction: DeskDef = {
-    id: 'faction',
-    label: 'Faction',
+    id: 'bases',
+    label: 'Bases',
     icon: 'flag',
-    key: 'f',
+    key: 'z',
     group: 'world',
     order: 55,
     tabs: [{ id: 'members', label: 'Members', load: async () => ({ default: () => null }) }],
@@ -136,8 +137,8 @@ describe('adding a desk or a tab in one place', () => {
 
   it('adds a dropped-in desk in its place in the rail, with its key', () => {
     const reg = buildRegistry(DESKS, [{ desks: [faction] }])
-    expect(reg.map((d) => d.id).indexOf('faction')).toBe(reg.map((d) => d.id).indexOf('military') + 1)
-    expect(reg.find((d) => d.id === 'faction')!.tabs).toHaveLength(1)
+    expect(reg.map((d) => d.id).indexOf('bases')).toBe(reg.map((d) => d.id).indexOf('military') + 1)
+    expect(reg.find((d) => d.id === 'bases')!.tabs).toHaveLength(1)
   })
 
   it('adds a tab to a desk that exists, and ignores one for a desk that does not', () => {

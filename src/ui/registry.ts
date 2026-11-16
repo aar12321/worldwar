@@ -21,6 +21,8 @@ export interface RegCtx {
   offers: number
   /** Advisor items marked "now". */
   urgent: number
+  /** Faction votes and invitations waiting on you. */
+  factionDue: number
   /** Wars you are in. */
   wars: number
   /** Armies you have in the field (live games). */
@@ -113,6 +115,7 @@ export const DESKS: DeskDef[] = [
       economyTab('bank', 'Bank', 'Bank: rates, printing, bonds', lazyOf(() => import('./economy/BankTab'), 'BankTab'), ['interest', 'print', 'bonds', 'debt', 'loan', 'currency']),
       economyTab('business', 'Business', 'Business and state enterprises', lazyOf(() => import('./economy/BusinessTab'), 'BusinessTab'), ['sectors', 'grants', 'subsidy', 'enterprise']),
       economyTab('projects', 'Projects', 'Projects and public works', lazyOf(() => import('./economy/ProjectsTab'), 'ProjectsTab'), ['rail', 'power', 'build', 'national', 'public works']),
+      economyTab('space', 'Space', 'Space program: rockets, missions, labs, colonies', lazyOf(() => import('./economy/SpaceTab'), 'SpaceTab'), ['rocket', 'launch', 'mars', 'moon', 'satellite', 'colony', 'orbit']),
       economyTab('market', 'Market', 'Buy and sell food, oil, steel and goods', lazyOf(() => import('./economy/MarketTab'), 'MarketTab'), ['trade', 'oil', 'steel', 'food', 'goods', 'buy', 'sell']),
       economyTab('stocks', 'Stocks', 'The stock exchange and your companies', lazyOf(() => import('./economy/StocksTab'), 'StocksTab'), ['shares', 'dividend', 'company', 'exchange']),
       economyTab('government', 'Government', 'Government and laws', lazyOf(() => import('./economy/GovernmentTab'), 'GovernmentTab'), ['laws', 'democracy', 'monarchy', 'junta', 'election']),
@@ -134,6 +137,7 @@ export const DESKS: DeskDef[] = [
       { id: 'overview', label: 'Overview', hint: 'Tiers and what they open', keywords: ['tier', 'regional power', 'great power', 'superpower', 'hegemon'], load: lazyOf(() => import('./EmpireDesk'), 'EmpireOverview') },
       { id: 'provinces', label: 'Provinces', hint: 'Administration and capitals', keywords: ['occupation', 'capital', 'officials', 'settling'], load: lazyOf(() => import('./EmpireDesk'), 'EmpireProvinces') },
       { id: 'world', label: 'World', hint: 'World Council and reserve currency', keywords: ['council', 'resolution', 'vote', 'reserve currency'], load: lazyOf(() => import('./EmpireDesk'), 'EmpireWorld') },
+      { id: 'reaction', label: 'World reaction', hint: 'How the world and its coalitions answer your growth', keywords: ['coalition', 'nukes', 'nuclear', 'sanctions', 'superpower'], load: lazyOf(() => import('./EmpireDesk'), 'EmpireReaction') },
       { id: 'stats', label: 'Statistics', hint: 'How your empire has grown', keywords: ['history', 'charts', 'graph'], load: lazyOf(() => import('./EmpireDesk'), 'EmpireStatistics') },
     ],
   },
@@ -154,6 +158,7 @@ export const DESKS: DeskDef[] = [
     badge: (c) => c.wars || null,
     tabs: [
       { id: 'forces', label: 'Forces', hint: 'Forces and academy', keywords: ['infantry', 'tanks', 'train', 'weapons', 'drill', 'commander', 'aircraft', 'missiles', 'planes'], load: lazyOf(() => import('./MilitaryPanel'), 'MilitaryForces') },
+      { id: 'deploy', label: 'Deployment', hint: 'Deployment: patrols, screens, border garrisons', keywords: ['station', 'garrison', 'border', 'patrol', 'reserve', 'navy', 'screen'], load: lazyOf(() => import('./DeploymentTab'), 'DeploymentTab') },
       { id: 'armies', label: 'Armies', hint: 'Armies on the march (live games)', keywords: ['recall', 'march'], load: lazyOf(() => import('./ArmiesTab'), 'ArmiesTab'), visible: (c) => c.live, badge: (c) => c.armies || null },
       { id: 'wars', label: 'Wars', hint: 'Your wars, fronts and peace', key: 'w', keywords: ['peace', 'front', 'defense line', 'declare', 'attack'], load: lazyOf(() => import('./WarsPanel'), 'WarsTab'), badge: (c) => c.wars || null },
       { id: 'agencies', label: 'Agencies', hint: 'Intelligence and security services', keywords: ['spy', 'cia', 'fbi', 'sabotage', 'coup', 'rebels', 'intelligence'], load: lazyOf(() => import('./AgenciesTab'), 'AgenciesTab') },
@@ -162,6 +167,8 @@ export const DESKS: DeskDef[] = [
   },
 
   { id: 'diplomacy', label: 'Diplomacy', hint: 'Offers, treaties and every nation’s opinion of you', icon: 'diplomacy', key: 'd', group: 'world', order: 60, shell: 'custom', load: lazyOf(() => import('./Diplomacy'), 'DiplomacyPanel'), keywords: ['treaty', 'alliance', 'pact', 'peace', 'offers', 'sanctions', 'trade', 'nations'], badge: (c) => c.offers || null },
+
+  { id: 'faction', label: 'Faction', hint: 'Votes, the common pool and contracts of your faction', icon: 'faction', key: 'f', group: 'world', order: 65, shell: 'custom', load: lazyOf(() => import('./Faction'), 'FactionPanel'), keywords: ['alliance', 'bloc', 'vote', 'pool', 'contracts', 'members'], badge: (c) => c.factionDue || null },
 
   { id: 'log', label: 'News', hint: 'What has happened lately', icon: 'news', key: 'n', aliases: ['l'], group: 'home', order: 90, nav: false, shell: 'custom', load: lazyOf(() => import('./SidePanels'), 'LogPanel'), keywords: ['log', 'dispatches', 'history', 'events'] },
   { id: 'settings', label: 'Settings', hint: 'Look and feel, controls, saves', icon: 'settings', key: '', group: 'home', order: 91, nav: false, shell: 'custom', load: lazyOf(() => import('./SidePanels'), 'SettingsPanel'), keywords: ['options', 'preferences', 'save', 'load', 'text size', 'contrast'], tabs: SETTINGS_TABS.map(([id, label]) => ({ id, label, hint: `Settings: ${label}` })) },

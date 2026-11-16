@@ -133,6 +133,15 @@ export function DiplomacyIcon() {
   )
 }
 
+export function FactionIcon() {
+  return (
+    <Frame>
+      <path d="M12 3.5l7 3v5.2c0 4.2-2.8 7.4-7 8.8-4.2-1.4-7-4.6-7-8.8V6.5z" />
+      <path d="M9 12.2l2.2 2.2L15.2 10" />
+    </Frame>
+  )
+}
+
 export function EmpireIcon() {
   return (
     <Frame>

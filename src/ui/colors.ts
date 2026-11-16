@@ -128,3 +128,9 @@ export const FRONT_COLORS_CB = { yours: '#0a84ff', enemy: '#d55e00', weak: '#f1e
 /** The map tables for the chosen palette. The globe and its legend both read through these. */
 export const relationColors = (palette: 'standard' | 'colorblind') => (palette === 'colorblind' ? RELATION_COLORS_CB : RELATION_COLORS)
 export const frontColors = (palette: 'standard' | 'colorblind') => (palette === 'colorblind' ? FRONT_COLORS_CB : FRONT_COLORS)
+
+/** Borders mode: the land itself is kept quiet so the lines on it read. */
+export const BORDER_COLORS = { yours: '#1c4a86', neighbor: '#3b4354', other: '#2b303a' }
+
+/** The color of a border's tension: calm green, through amber, to red. */
+export const tensionColor = (t: number) => (t >= 60 ? '#ff453a' : t >= 35 ? '#ffb340' : '#30d158')

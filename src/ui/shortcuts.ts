@@ -5,7 +5,7 @@ import { navDesks, allDesks, isVisible, type RegCtx } from './registry'
  * One key for each way of coloring the map, in the order the Map colors bar lists them.
  * 1, 2 and 3 already set the speed of a live game, so these start at 4 and work the same in both kinds of game.
  */
-export const MAP_MODE_KEYS: Record<MapMode, string> = { political: '4', relations: '5', fronts: '6' }
+export const MAP_MODE_KEYS: Record<MapMode, string> = { political: '4', relations: '5', fronts: '6', borders: '7' }
 
 /** The map coloring a key chooses, if it chooses one. */
 export const mapModeForKey = (key: string): MapMode | null => (Object.keys(MAP_MODE_KEYS) as MapMode[]).find((m) => MAP_MODE_KEYS[m] === key) ?? null
@@ -21,7 +21,7 @@ export interface ShortcutRow {
 }
 
 /** A context for listing keys when there is no game yet (the tests, the help sheet before a game starts). */
-export const NO_CTX: RegCtx = { game: null, live: false, tier: 1, offers: 0, urgent: 0, wars: 0, armies: 0 }
+export const NO_CTX: RegCtx = { game: null, live: false, tier: 1, offers: 0, urgent: 0, factionDue: 0, wars: 0, armies: 0 }
 
 const show = (k: string) => (k.length === 1 ? k.toUpperCase() : k)
 
