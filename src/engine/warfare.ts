@@ -1,3 +1,4 @@
+import { LIVE } from '../data/live'
 import { addOpinion, forgetNation } from '../ai/opinion'
 import { BANKING } from '../data/banking'
 import { COMBAT_MEDICINE, DEMAND, MEDICINE } from '../data/people'
@@ -360,13 +361,16 @@ export function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, t
   const reach: Reach = army ? { ok: true, bySea: army.bySea, via: army.via } : canAttackRegion(s, map, nationId, target)
   // Only the reserve can attack: what stands on station stays at its post.
   const free = army ? null : freeUnits(s, nationId)
+  const live = s.settings.mode === 'live'
   // A force chosen unit by unit: what was named, less what this month's earlier named attacks already spent.
   let picked: UnitCounts | null = null
   if (named && !army && free) {
     picked = cleanUnits(named)
     for (const k of SENDABLE) picked[k] = Math.min(picked[k], Math.max(0, free[k] - (attackerNation.military.sent?.[k] ?? 0)))
+    // A live army never takes the home guard (launchArmy): the forecast fights with the army that would really march.
+    if (live) for (const k of SENDABLE) picked[k] = Math.min(picked[k], free[k] * (1 - LIVE.homeGuard))
   }
-  const share = army ? army.share : picked ? shareOf(picked, free!) : commitShare(attackerNation, commit, custom)
+  const share = army ? army.share : picked ? shareOf(picked, free!) : live ? Math.min(commitShare(attackerNation, commit, custom), 1 - LIVE.homeGuard) : commitShare(attackerNation, commit, custom)
   if (army ? totalUnits(army.units) < 0.05 : !reach.ok || (picked ? totalUnits(picked) < 0.05 : share < 0.05) || totalUnits(free!) < 0.1) return null
 
   const spec = blitzSpec(attackerNation, stance)
