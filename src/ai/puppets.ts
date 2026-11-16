@@ -80,9 +80,9 @@ function neededForm(s: GameState, master: NationId, puppet: NationId): TributeFo
  * When a rival asks for a puppet at the peace table instead of land (see `peaceTerms`). Never Easy. Medium wants a decisive win
  * (war score 30) and keeps one puppet; Hard settles for a clear win (25) and keeps up to three. Whoever it is, the loser must be a
  * country that is worth ruling (its land is worth at least `minLand` in war score), neither side may be a puppet already, and a
- * master never holds more puppets (the loser's own included) than 1 + half its own countries, and never rules a country that earns more than twice what it does itself, so a small nation cannot snowball on tribute.
+ * master never holds more puppets (the loser's own included) than 1 + half its own countries, and never rules a country that earns more than 1.25 times what it does itself, so a small nation cannot snowball on tribute.
  */
-export const PUPPET_AI = { minNet: [99, 30, 25], maxPuppets: [0, 1, 3], minLand: 30, maxRichness: 2, countriesPerPuppet: 2 }
+export const PUPPET_AI = { minNet: [99, 30, 25], maxPuppets: [0, 1, 3], minLand: 30, maxRichness: 1.25, countriesPerPuppet: 2 }
 
 export function wantsPuppet(s: GameState, map: WorldMap, me: NationId, enemy: NationId, net: number, skill: 0 | 1 | 2): boolean {
   if (skill === 0 || net < PUPPET_AI.minNet[skill]) return false
