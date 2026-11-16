@@ -1,4 +1,4 @@
-import { PLAYER_COLOR, mapColor } from './mapColors'
+import { humanColor, mapColor } from './mapColors'
 import { OIL_DEPOSITS, STEEL_DEPOSITS } from './deposits'
 import { SECTOR_IDS, SECTORS } from './business'
 import { sectorCap } from '../engine/business'
@@ -7,26 +7,21 @@ import { startingCities } from '../engine/cities'
 import { CORPORATE_TAX, GOVERNMENTS } from './government'
 import { freshStatecraft, seedPeople } from '../engine/statecraft'
 import { startingWorldStats } from '../engine/bank'
+import { GENERAL_TRAITS as GENERAL_TRAIT_EFFECTS } from './projects'
 import { UNIT_SPECS, emptyTraining } from './unitTypes'
 import { ECON, buildingCap, computeEconomy, lineMax, regionWorkforce } from '../engine/economy'
 import { FIRST_EVENT_TURN } from '../engine/events'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
 import { newStocks } from '../engine/stocks'
+import { applyScenario } from '../engine/scenarios'
 import { BUILDING_TYPES, UNIT_TYPES } from '../engine/types'
 import type { Difficulty, GameSettings, GovernmentType, SectorId, GameState, General, GeneralTrait, Nation, Personality, RegionState, WorldMap } from '../engine/types'
 
 const GENERAL_FIRST = ['Viktor', 'Amara', 'Kenji', 'Ilse', 'Rafael', 'Noor', 'Dmitri', 'Saoirse', 'Tariq', 'Mei', 'Lucien', 'Zofia', 'Kwame', 'Elena', 'Hugo', 'Anika', 'Mateo', 'Yara', 'Bogdan', 'Ines']
 const GENERAL_LAST = ['Varga', 'Okafor', 'Takeda', 'Brandt', 'Montoya', 'Haddad', 'Volkov', 'Byrne', 'Rahman', 'Lin', 'Moreau', 'Nowak', 'Mensah', 'Petrova', 'Lindqvist', 'Sato', 'Reyes', 'Kader', 'Horvat', 'Silva']
-/** Names kept for older saves. A general's only effect is free training at home. */
-export const GENERAL_TRAITS: Record<GeneralTrait, { name: string; description: string }> = {
-  mountaineer: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-  logistician: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-  blitz: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-  air_marshal: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-  stalwart: { name: 'General', description: 'Drills your lowest-ranked unit type for free each month.' },
-}
-const TRAITS = Object.keys(GENERAL_TRAITS) as GeneralTrait[]
+/** The traits a new general may have, in the order their effects are listed (see GENERAL_TRAITS in projects.ts). */
+const TRAITS = Object.keys(GENERAL_TRAIT_EFFECTS) as GeneralTrait[]
 
 function nationColor(index: number): string {
   return mapColor(index)
@@ -40,6 +35,10 @@ export interface NewGameOptions {
   victoryShare?: number
   goal?: 'world' | 'classic'
   difficulty?: Difficulty
+  /** A game people play together online: decisions come to each player separately and never stop the month. Always on with two or more humans. */
+  online?: boolean
+  /** A scenario from `data/scenarios.ts`. Left out (or 'standard'), the world is exactly the Standard game. */
+  scenario?: string
   /** 'live': time flows and armies march. Turns, the default, is the game as it has always played. */
   mode?: 'turns' | 'live'
 }
@@ -96,6 +95,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     crises: [],
     dispatches: [],
     pendingEvent: null,
+    ...(opts.online || (opts.humans && new Set([opts.playerRegionId, ...opts.humans]).size > 1) ? { multiplayer: true, pendingEvents: {} } : {}),
     nextEventTurn: FIRST_EVENT_TURN,
     battles: [],
     log: [],
@@ -166,7 +166,7 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     const nation: Nation = {
       id,
       name: mr.name,
-      color: isPlayer ? PLAYER_COLOR : nationColor(index),
+      color: isPlayer ? humanColor(Math.max(0, state.humans.indexOf(id))) : nationColor(index),
       capital: id,
       originalCapital: id,
       isPlayer,
@@ -240,6 +240,8 @@ export function createInitialState(map: WorldMap, opts: NewGameOptions): GameSta
     state.launches = []
     state.flights = []
   }
+  // A scenario changes the finished world (wars, treaties, treasuries, troubles). Standard applies nothing.
+  if (opts.scenario) applyScenario(state, map, opts.scenario)
 
   return state
 }

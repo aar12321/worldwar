@@ -15,7 +15,7 @@ export function Saves() {
   const toast = useGame((s) => s.toast)
   const [, bump] = useState(0)
   const file = useRef<HTMLInputElement>(null)
-  if (online) return <p className="text-[13px] text-white/60">Online games are kept by the host, not on this device.</p>
+  if (online) return <p className="text-[13px] text-white/60">Online games are saved after every month on each player's device, in their own list under Play with friends. They are not part of these slots.</p>
 
   const download = () => {
     const text = exportSave()

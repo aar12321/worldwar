@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BANKING } from '../../data/banking'
+import { STOCKS } from '../../data/companies'
 import { EVENTS } from '../../data/events'
 import { PEOPLE } from '../../data/people'
 import { PROJECTS, programCost } from '../../data/projects'
@@ -287,11 +288,18 @@ describe('the central bank and money', () => {
     expect(s.nations[P].resources.capital - cash).toBeCloseTo(99)
   })
 
-  it('borrowing to buy shares earns nothing: dividends follow the world rate', () => {
+  it('a share never pays more than the cheapest bond costs, so the dividend rate follows the policy rate', () => {
     const s = base()
+    const n = s.nations[P]
     const bestBond = 0.003 * (0.5 + BANKING.neutralRate / BANKING.rateScale)
-    // The stock fee alone (1% each way) eats any small gap.
-    expect(dividendRate(s, 'payout') - bestBond).toBeLessThan(0.02 / 12)
+    expect(dividendRate(s, n, 'payout')).toBeCloseTo(bestBond)
+    expect(dividendRate(s, n, 'focus')).toBeLessThan(dividendRate(s, n, 'payout'))
+    expect(dividendRate(s, n, 'expand')).toBe(0)
+    // A nation that can set its own rate and raises it sees dearer bonds, and dividends rise with them, up to the company's own ceiling.
+    grow(s, 10)
+    s.nations[P].bank.rate = 12
+    expect(dividendRate(s, s.nations[P], 'payout')).toBeGreaterThan(bestBond)
+    expect(dividendRate(s, s.nations[P], 'payout')).toBeLessThanOrEqual(STOCKS.dividend.payout)
   })
 
   it("an AI's central bank raises the rate when prices run and cuts it when people are out of work", () => {
@@ -306,7 +314,9 @@ describe('industry and projects', () => {
   it('a project costs money each month, progresses with engineers, and finishes', () => {
     let s = base()
     ok(s, { type: 'startProject', nationId: P, project: 'rail' })
-    expect(applyOrderNow(s, map, { type: 'startProject', nationId: P, project: 'grid' }).error).toMatch(/1 project at once/)
+    // A Nation builds two at once; a third waits.
+    ok(s, { type: 'startProject', nationId: P, project: 'grid' })
+    expect(applyOrderNow(s, map, { type: 'startProject', nationId: P, project: 'waterNetwork' }).error).toMatch(/2 projects at once/)
     const cash = s.nations[P].resources.capital
     for (let i = 0; i < 14 && !s.nations[P].projects.rail?.done; i++) s = resolveTurn(s, map, [])
     expect(s.nations[P].projects.rail?.done).toBe(true)

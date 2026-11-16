@@ -2,6 +2,7 @@ import { lineMax } from '../../engine/economy'
 import type { GameState } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import type { MapMode } from '../../store'
+import { borderSignature } from './borderLayer'
 
 const { map } = getWorld()
 
@@ -16,5 +17,6 @@ export function paintSignature(game: GameState | null, mode: MapMode): string {
     // The color is the line against its maximum, and the maximum moves with barracks, cities, capitals and population.
     for (const id of map.order) out += `${Math.round(game.regions[id].line * 10)}/${Math.round(lineMax(game, map, id) * 10)},`
   }
+  if (mode === 'borders') out += `|${borderSignature(game)}`
   return out
 }

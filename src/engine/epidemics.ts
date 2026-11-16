@@ -1,6 +1,8 @@
 import { EPIDEMIC, MEDICINE } from '../data/people'
 import { addLog, clamp } from './helpers'
+import { projectPower, scaleBonus } from './industry'
 import { createRng } from './rng'
+import { societyEffects } from './society'
 import type { GameState, NationId, WorldMap } from './types'
 
 /** How fast a nation's epidemic eases each month. */
@@ -13,8 +15,10 @@ export function recoveryRate(s: GameState, id: NationId, doctorCoverage: number)
     EPIDEMIC.recoveryHealth * n.people.health +
     EPIDEMIC.recoveryDoctors * Math.min(1.5, doctorCoverage) +
     (n.programs?.quarantine ? EPIDEMIC.recoveryQuarantine : 0) +
-    (n.projects?.medCentre?.done ? EPIDEMIC.recoveryCentre : 0) +
-    vaccines
+    scaleBonus(EPIDEMIC.recoveryCentre, projectPower(n, 'medCentre')) +
+    vaccines +
+    // Clinics, clean water and vaccination drives help a sick country mend sooner.
+    societyEffects(n).social.epidemic * 0.25
   )
 }
 
@@ -23,7 +27,7 @@ export function outbreakChance(s: GameState, id: NationId): number {
   const n = s.nations[id]
   let risk = 0
   for (const t of n.techs) risk += MEDICINE[t]?.epidemicRisk ?? 0
-  return (EPIDEMIC.baseChance + EPIDEMIC.sickChance * Math.max(0, 0.6 - n.people.health)) * Math.max(0.2, 1 + risk)
+  return (EPIDEMIC.baseChance + EPIDEMIC.sickChance * Math.max(0, 0.6 - n.people.health)) * Math.max(0.2, 1 + risk) * (1 - societyEffects(n).social.epidemic)
 }
 
 /**
@@ -56,7 +60,7 @@ export function runEpidemics(s: GameState, map: WorldMap, neighbors: Map<NationI
       if (!sickBefore.has(other)) continue
       const guard = n.programs?.quarantine ? EPIDEMIC.quarantineSpread : 1
       const theirs = s.nations[other]?.programs?.quarantine ? EPIDEMIC.quarantineSpread : 1
-      chance += EPIDEMIC.spreadChance * (1 - p.health * 0.5) * guard * theirs
+      chance += EPIDEMIC.spreadChance * (1 - p.health * 0.5) * guard * theirs * (1 - societyEffects(n).social.epidemic)
     }
     if (rng.chance(Math.min(0.5, chance))) startEpidemic(s, id, EPIDEMIC.startSeverity)
   }

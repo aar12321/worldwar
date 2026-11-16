@@ -55,7 +55,7 @@ describe('the new units', () => {
 })
 
 describe('what each new weapon does and what stops it', () => {
-  it('drones take the first losses, so the soldiers behind them live', () => {
+  it('drones take more than their share of the losses, so the soldiers behind them live', () => {
     const att = side({ infantry: 6, drone: 6 })
     const def = side({ infantry: 8, armor: 2 })
     const out = resolveBattle({ attacker: att, defender: def, terrain: 'plains', coastal: false }, createRng(3, 1))
@@ -125,8 +125,8 @@ describe('what each new weapon does and what stops it', () => {
     }
     const open = make(0)
     const shielded = make(3)
-    const a = resolveAttack(open, map, 'r0', 'r1', createRng(1, 1))!.report
-    const b = resolveAttack(shielded, map, 'r0', 'r1', createRng(1, 1))!.report
+    const a = resolveAttack(open, map, 'r0', 'r1', createRng(1, 1), 'main', 'assault', 2)!.report
+    const b = resolveAttack(shielded, map, 'r0', 'r1', createRng(1, 1), 'main', 'assault', 2)!.report
     // The same fight, but the shield stops part of the salvo, so less of the line is gone.
     expect(a.lineAfter ?? 0).toBeLessThan(b.lineAfter ?? 0)
     expect(a.modifiers.some((m) => m.startsWith('Hypersonic batteries cut'))).toBe(true)

@@ -11,11 +11,13 @@ import { regionsOf } from '../../engine/helpers'
 import { BUILDING_TYPES } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { planBulk, type BulkTarget } from '../../engine/bulk'
 import { Pips } from '../bits'
 import { usePlayerView } from '../hooks'
 import { OrderButton } from '../panel'
+import { DataList } from '../DataList'
+import type { FilterSpec, SortSpec } from '../listUtils'
 import { Card } from './parts'
 
 /** Upgrade every country at once: one kind of building, every city, or a little of everything, with the exact cost shown first. */
@@ -97,37 +99,57 @@ function BulkUpgrade({ owned }: { owned: string[] }) {
   )
 }
 
+/** One row of the empire list. Memoized on plain values, so changing one country's governor does not redraw the other hundred. */
+const EmpireRow = memo(function EmpireRow({ id, name, detail, selected, isCapital, governor, playerId }: { id: string; name: string; detail: string; selected: boolean; isCapital: boolean; governor: Governor; playerId: string }) {
+  const setPicked = useGame((s) => s.setEconomyRegion)
+  const issueOrder = useGame((s) => s.issueOrder)
+  return (
+    <div className={`rounded-xl px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 ${selected ? 'bg-[#0a84ff]/18 border border-[#0a84ff]/50' : 'bg-white/5'}`}>
+      <button className="min-w-0 flex-1 text-left" data-row-primary onClick={() => setPicked(id)} aria-pressed={selected}>
+        <span className="block text-[15px] font-semibold truncate">
+          {name}
+          {isCapital && <span className="ml-1.5 text-[12px] text-white/60 font-normal">capital</span>}
+        </span>
+        <span className="block text-[12px] text-white/70">{detail}</span>
+      </button>
+      <select className="field px-2 py-1.5 text-[13px]" aria-label={`Governor of ${name}`} value={governor} onChange={(e) => issueOrder({ type: 'setGovernor', nationId: playerId, regionId: id, governor: e.target.value as Governor })}>
+        {(Object.keys(GOVERNOR_LABELS) as Governor[]).map((g) => (
+          <option key={g} value={g}>
+            {GOVERNOR_LABELS[g]}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+})
+
 /** Every country you hold, in one list: its trait, how settled it is, and a governor who develops it for you. */
 function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
   const view = usePlayerView()!
-  const setPicked = useGame((s) => s.setEconomyRegion)
-  const issueOrder = useGame((s) => s.issueOrder)
   const { game, player } = view
   const { map } = getWorld()
   const unsettled = owned.filter((id) => game.regions[id].integration < 1).length
-  const [sort, setSort] = useState<'name' | 'population' | 'settling' | 'rebels'>('population')
-  const [filter, setFilter] = useState<'all' | 'settling' | 'rebels' | 'nogov' | string>('all')
-  const [query, setQuery] = useState('')
   // A country's trait, to filter by.
-  const traits = [...new Set(owned.map((id) => traitOf(id, map.regions[id])))].sort()
-  const shownList = (() => {
-    const q = query.trim().toLowerCase()
-    const list = owned.filter((id) => {
-      const r = game.regions[id]
-      if (q && !map.regions[id].name.toLowerCase().includes(q)) return false
-      if (filter === 'settling') return r.integration < 1
-      if (filter === 'rebels') return r.rebels > 0
-      if (filter === 'nogov') return !r.governor || r.governor === 'off'
-      if (filter !== 'all') return traitOf(id, map.regions[id]) === filter
-      return true
-    })
-    return list.sort((a, b) => {
-      const ra = game.regions[a]
-      const rb = game.regions[b]
-      const v = sort === 'name' ? map.regions[a].name.localeCompare(map.regions[b].name) : sort === 'population' ? rb.population - ra.population : sort === 'settling' ? ra.integration - rb.integration : rb.rebels - ra.rebels
-      return v || (a < b ? -1 : 1)
-    })
-  })()
+  const traits = useMemo(() => [...new Set(owned.map((id) => traitOf(id, map.regions[id])))].sort(), [owned, map])
+  const filters = useMemo<FilterSpec<string>[]>(
+    () => [
+      { id: 'all', label: 'All countries', test: () => true },
+      { id: 'settling', label: 'Still settling', test: (id) => game.regions[id].integration < 1 },
+      { id: 'rebels', label: 'With rebels', test: (id) => game.regions[id].rebels > 0 },
+      { id: 'nogov', label: 'No governor', test: (id) => !game.regions[id].governor || game.regions[id].governor === 'off' },
+      ...traits.map((t) => ({ id: `trait:${t}`, label: TRAITS[t].name, test: (id: string) => traitOf(id, map.regions[id]) === t })),
+    ],
+    [game, traits, map],
+  )
+  const sorts = useMemo<SortSpec<string>[]>(
+    () => [
+      { id: 'population', label: 'Biggest first', value: (id) => game.regions[id].population, dir: 'desc' },
+      { id: 'name', label: 'A to Z', value: (id) => map.regions[id].name, dir: 'asc' },
+      { id: 'settling', label: 'Least settled first', value: (id) => game.regions[id].integration, dir: 'asc' },
+      { id: 'rebels', label: 'Most rebels first', value: (id) => game.regions[id].rebels, dir: 'desc' },
+    ],
+    [game, map],
+  )
   return (
     <div className="span-all inset-card p-3.5 space-y-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -138,61 +160,23 @@ function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
       </div>
       <BulkUpgrade owned={owned} />
       <GovernorForAll owned={owned} />
-      {owned.length > 6 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <input className="field px-3 py-1.5 text-[13px] flex-1 min-w-32" placeholder="Search your countries" aria-label="Search your countries" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <select className="field px-2 py-1.5 text-[13px]" aria-label="Show" value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="all">All countries</option>
-            <option value="settling">Still settling</option>
-            <option value="rebels">With rebels</option>
-            <option value="nogov">No governor</option>
-            {traits.map((t) => (
-              <option key={t} value={t}>
-                {TRAITS[t].name}
-              </option>
-            ))}
-          </select>
-          <select className="field px-2 py-1.5 text-[13px]" aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-            <option value="population">Biggest first</option>
-            <option value="name">A to Z</option>
-            <option value="settling">Least settled first</option>
-            <option value="rebels">Most rebels first</option>
-          </select>
-        </div>
-      )}
-      {shownList.length === 0 && <p className="text-[13px] text-white/60">No country matches.</p>}
-      <ul className="space-y-1.5">
-        {shownList.map((id) => {
+      <DataList
+        rows={owned}
+        rowKey={(id) => id}
+        searchText={(id) => map.regions[id].name}
+        searchLabel="Search your countries"
+        label="Your countries"
+        noun={['country', 'countries']}
+        filters={filters}
+        sorts={sorts}
+        initialSort="population"
+        pageSize={30}
+        renderRow={(id) => {
           const r = game.regions[id]
-          const tr = TRAITS[traitOf(id, map.regions[id])]
-          return (
-            <li key={id} className={`rounded-xl px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 ${id === regionId ? 'bg-[#0a84ff]/18 border border-[#0a84ff]/50' : 'bg-white/5'}`}>
-              <button className="min-w-0 flex-1 text-left" onClick={() => setPicked(id)} aria-pressed={id === regionId}>
-                <span className="block text-[15px] font-semibold truncate">
-                  {map.regions[id].name}
-                  {id === player.capital && <span className="ml-1.5 text-[12px] text-white/60 font-normal">capital</span>}
-                </span>
-                <span className="block text-[12px] text-white/70">
-                  {tr.name} · {r.integration < 1 ? `settling, ${Math.round(integrationFactor(r) * 100)}% output` : 'fully settled'}
-                  {r.rebels > 0 ? ' · rebels' : ''}
-                </span>
-              </button>
-              <select
-                className="field px-2 py-1.5 text-[13px]"
-                aria-label={`Governor of ${map.regions[id].name}`}
-                value={r.governor ?? 'off'}
-                onChange={(e) => issueOrder({ type: 'setGovernor', nationId: player.id, regionId: id, governor: e.target.value as Governor })}
-              >
-                {(Object.keys(GOVERNOR_LABELS) as Governor[]).map((g) => (
-                  <option key={g} value={g}>
-                    {GOVERNOR_LABELS[g]}
-                  </option>
-                ))}
-              </select>
-            </li>
-          )
-        })}
-      </ul>
+          const detail = `${TRAITS[traitOf(id, map.regions[id])].name} · ${r.integration < 1 ? `settling, ${Math.round(integrationFactor(r) * 100)}% output` : 'fully settled'}${r.rebels > 0 ? ' · rebels' : ''}`
+          return <EmpireRow id={id} name={map.regions[id].name} detail={detail} selected={id === regionId} isCapital={id === player.capital} governor={(r.governor ?? 'off') as Governor} playerId={player.id} />
+        }}
+      />
     </div>
   )
 }

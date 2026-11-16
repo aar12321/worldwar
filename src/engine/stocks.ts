@@ -3,6 +3,7 @@ import { NO_EFFECTS, type PolicyEffects } from '../data/government'
 import { SECTOR_IDS, SECTORS } from '../data/business'
 import { traitOf, type TraitId } from '../data/traits'
 import { WAR } from '../data/war'
+import { dividendRate } from './bank'
 import { worldTension } from './crises'
 import { addLog, clamp, hasTech } from './helpers'
 import type { Rng } from './rng'
@@ -167,7 +168,8 @@ export function describeDirective(s: GameState, company: string, directive: Dire
   const info = s.stocks.meta[company]
   if (!info) return ''
   const strength = strengthOf(share)
-  if (directive === 'payout') return `Pays ${(STOCKS.dividend.payout * 100).toFixed(1)}% of the value of your shares each month.`
+  const holder = s.nations[homeOwner(s, company) ?? '']
+  if (directive === 'payout') return `Pays ${((holder ? dividendRate(s, holder, 'payout') : STOCKS.dividend.payout) * 100).toFixed(2)}% of the value of your shares each month, never more than your cheapest bonds cost.`
   if (directive === 'expand') return `${SECTORS[info.sector].name} grows ${(EXPAND_GROWTH * Math.max(strength, 0.5) * 100).toFixed(1)}% a month faster. No dividends.`
   const f = SPECIALTY[info.sector]
   const bits: string[] = []
@@ -195,7 +197,7 @@ export function portfolio(s: GameState, nationId: NationId): { value: number; di
   for (const [company, shares] of Object.entries(s.stocks.held[nationId] ?? {})) {
     if (shares <= 0 || s.stocks.price[company] === undefined) continue
     const v = shares * s.stocks.price[company]
-    const dividend = v * STOCKS.dividend[activeDirective(s, nationId, company)]
+    const dividend = v * dividendRate(s, s.nations[nationId], activeDirective(s, nationId, company))
     value += v
     dividends += dividend
     lines.push({ company, shares, value: v, dividend })

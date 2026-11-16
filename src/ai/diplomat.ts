@@ -1,4 +1,7 @@
+import { COALITION } from '../data/coalition'
 import { PERSONALITIES } from '../data/personalities'
+import { difficultyOf } from '../data/difficulty'
+import { alarmBetween, leadersOf, type ThreatReport } from '../engine/coalition'
 import { generalPeaceTies, loanPayment } from '../engine/diplomacy'
 import { computeEconomy, militaryPower, type EconomyReport } from '../engine/economy'
 import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey } from '../engine/helpers'
@@ -56,7 +59,7 @@ export interface Verdict {
 const withOpinion = (reason: string, op: number) => (Math.abs(op) >= 20 ? `${reason} (opinion ${op > 0 ? '+' : ''}${op})` : reason)
 
 /** A bot's answer to a proposal, with the reason a human diplomat would give. */
-export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p: Proposal, rng: Rng, prices?: MarketPrices): Verdict {
+export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p: Proposal, rng: Rng, prices?: MarketPrices, leaders?: ThreatReport[]): Verdict {
   const me = s.nations[botId]
   const persona = PERSONALITIES[me.personality ?? 'honorable']
   const myNeighbors = nationNeighbors(s, map, botId)
@@ -119,10 +122,13 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       for (const e of enemiesOf(s, p.from)) if (!myEnemies.has(e) && perceivedPower(s, map, botId, e) > myP * 0.6) dragged += 18
       dragged = Math.min(40, dragged)
       const allies = alliesOf(s, botId).length
-      const score = -28 + op * 0.7 + shared * 28 + (threat ? 22 : 0) + Math.min(15, ratio * 8) + (persona.loyalty - 1) * 20 - dragged - Math.max(0, allies - 1) * 12 + noise
+      // A leader the world fears draws its rivals together: two nations that both border it, or fight it, stand together.
+      const alarm = difficultyOf(s.settings.difficulty).coalitions ? alarmBetween(s, map, botId, p.from, leaders) : null
+      const score = -28 + op * 0.7 + shared * 28 + (threat ? 22 : 0) + (alarm ? COALITION.allyBonus * Math.min(1, alarm.pressure) : 0) + Math.min(15, ratio * 8) + (persona.loyalty - 1) * 20 - dragged - Math.max(0, allies - 1) * 12 + noise
       if (score > 0) {
         if (shared > 0) return verdict(true, 'a common enemy unites us')
         if (threat) return verdict(true, `together we can stand against ${s.nations[threat].name}`)
+        if (alarm) return verdict(true, `together we can stand against ${s.nations[alarm.leader].name}`)
         return verdict(true, 'our friendship is strong')
       }
       if (op < -10) return verdict(false, 'we do not trust you')
@@ -132,6 +138,13 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
     }
     case 'trade': {
       if (atWar(s, botId, p.from)) return verdict(false, 'we do not trade with enemies')
+      if (p.terms.joinWars) {
+        // Fighting beside someone is a matter of trust, and it must not set us against our own friends.
+        if (!isAllied(s, botId, p.from) && op < 20) return verdict(false, 'we will not fight your wars on a promise')
+        const foes = enemiesOf(s, p.from).filter((e) => e !== botId)
+        if (foes.some((e) => isAllied(s, botId, e) || hasPact(s, botId, e))) return verdict(false, 'we are bound by treaty to one of your enemies')
+        if (bundleEmpty(p.terms.give) && bundleEmpty(p.terms.receive)) return verdict(true, 'we stand with our friends')
+      }
       const px = prices ?? marketPrices(s)
       const econ = computeEconomy(s, map, botId)
       const { give, receive, months } = p.terms
@@ -147,7 +160,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
         if (borders && ratio > 2.2 && op > -40) return verdict(true, 'we cannot refuse so mighty a neighbor')
         return verdict(false, 'we pay no tribute')
       }
-      let threshold = 1.05 - op * 0.004 - (persona.dealAppetite - 1) * 0.25 - (isAllied(s, botId, p.from) ? 0.05 : 0)
+      let threshold = 1.05 - op * 0.004 - (persona.dealAppetite - 1) * 0.25 - (isAllied(s, botId, p.from) ? 0.05 : 0) - Math.min(0.1, (p.terms.collateral ?? 0) / 1000)
       if (months > 0 && op < 0) threshold += 0.1
       const fairness = got / Math.max(0.01, paid)
       if (fairness >= threshold + noise / 150) return verdict(true, fairness > 1.25 ? 'an excellent bargain' : 'a fair exchange')
@@ -186,6 +199,8 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
         enemiesOf(s, botId).length * 14 -
         opEnemy * 0.25 +
         (myNeighbors.has(enemy) ? 5 : -5) +
+        // Rivals rally to a war against a leader the world fears.
+        (difficultyOf(s.settings.difficulty).coalitions ? (leaders ?? leadersOf(s, map, COALITION.allyFrom, { output: false }).map((l) => l.threat)).filter((l) => l.nation === enemy).reduce((sum, l) => sum + COALITION.armsBonus * Math.min(1, l.pressure), 0) : 0) +
         noise
       if (score > 0) return verdict(true, 'we stand with our allies')
       if (eP > myP * 1.2) return verdict(false, `${enemyName} is too strong for us`)

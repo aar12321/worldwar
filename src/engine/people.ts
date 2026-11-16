@@ -2,6 +2,9 @@ import { COVERAGE, DEMAND, FOCUSES, IMMIGRATION, MEDICINE, PEOPLE, SKILL_TARGETS
 import { PROGRAM_RULES } from '../data/projects'
 import { BANKING } from '../data/banking'
 import { tierOf } from './empire'
+import { projectPower, scaleBonus } from './industry'
+import { societyEffects } from './society'
+import { spaceEffects } from './spaceEffects'
 import { clamp } from './helpers'
 import type { GameState, MapRegion, Nation, NationId, People, RegionState, SkillKey, Spending, WorldMap } from './types'
 import { SKILL_KEYS } from './types'
@@ -19,6 +22,8 @@ export interface PeopleBasis {
   occupiedShare: number
   systemLevels: number
   activeProjects: number
+  /** Engineers the space agency draws away, as a share of the workforce. Absent without one. */
+  extraEngineers?: number
 }
 
 export interface Demand {
@@ -32,7 +37,7 @@ export interface Demand {
 export function demandOf(n: Pick<Nation, 'spending'>, b: PeopleBasis): Demand {
   const w = Math.max(0.05, b.workforce)
   return {
-    engineers: DEMAND.engineersBase + DEMAND.engineersPerFactory * Math.sqrt(b.factories / w) + DEMAND.engineersPerSystem * b.systemLevels + DEMAND.engineersPerProject * b.activeProjects,
+    engineers: DEMAND.engineersBase + DEMAND.engineersPerFactory * Math.sqrt(b.factories / w) + DEMAND.engineersPerSystem * b.systemLevels + DEMAND.engineersPerProject * b.activeProjects + (b.extraEngineers ?? 0),
     scientists: DEMAND.scientistsBase + DEMAND.scientistsPerUniversity * Math.sqrt(b.universities / w),
     doctors: DEMAND.doctorsBase + DEMAND.doctorsPerHealth * (n.spending?.health ?? 2) + DEMAND.doctorsPerHospital * Math.sqrt(b.hospitals / w),
     skilled: DEMAND.skilledBase,
@@ -97,8 +102,8 @@ export function healthTarget(n: Nation, b: PeopleBasis, doctorCoverage: number):
   let med = 0
   for (const t of n.techs) med += MEDICINE[t]?.health ?? 0
   const program = (n.research2?.medicine ?? 0) * PROGRAM_RULES.health
-  const centre = n.projects?.medCentre?.done ? 0.05 : 0
-  return clamp(PEOPLE.healthBase + PEOPLE.healthPerLevel * sp.health + hospitals + PEOPLE.healthPerHousing * sp.housing + med + program + centre + 0.2 * b.development, 0, 0.98)
+  const centre = scaleBonus(0.05, projectPower(n, 'medCentre'))
+  return clamp(PEOPLE.healthBase + PEOPLE.healthPerLevel * sp.health + hospitals + PEOPLE.healthPerHousing * sp.housing + med + program + centre + 0.2 * b.development + societyEffects(n).social.health + spaceEffects(n).health, 0, 0.98)
 }
 
 /**
@@ -108,7 +113,7 @@ export function healthTarget(n: Nation, b: PeopleBasis, doctorCoverage: number):
 export function schoolingTarget(n: Nation, development = 0.5): number {
   const stage = STAGES[n.programs?.stage ?? 'secondary']
   const level = clamp(Math.round(n.spending?.schools ?? 2), 0, 4)
-  return clamp(stage.cap * PEOPLE.schoolingByLevel[level] * (0.75 + 0.5 * development), 0, 0.98)
+  return clamp(stage.cap * PEOPLE.schoolingByLevel[level] * (0.75 + 0.5 * development) + societyEffects(n).social.schooling, 0, 0.98)
 }
 
 /** Unemployment the nation is heading toward. */
@@ -122,7 +127,8 @@ export function jobsTarget(n: Nation, b: PeopleBasis): number {
     PEOPLE.jobsPerUnrest * Math.max(0, 50 - n.stability) +
     PEOPLE.jobsPerRate * (rate - BANKING.neutralRate) -
     PEOPLE.jobsPerBuilding * clamp(perW - 1, -1, 3) -
-    retrain
+    retrain +
+    societyEffects(n).social.jobs
   return clamp(v, PEOPLE.jobsMin, PEOPLE.jobsMax)
 }
 
@@ -156,7 +162,7 @@ export function peopleStability(n: Nation): number {
 export function electionNeed(n: Nation, base: number): number {
   const sp = n.spending ?? STANDARD_SPENDING
   const u = n.people?.unemployment ?? 0.05
-  return base - (sp.pensions - 1) * PEOPLE.pensionElection - (sp.housing - 1) * PEOPLE.housingElection + Math.max(0, u - 0.08) * 100
+  return base - (sp.pensions - 1) * PEOPLE.pensionElection - (sp.housing - 1) * PEOPLE.housingElection + Math.max(0, u - 0.08) * 100 + societyEffects(n).social.election
 }
 
 export const lifeExpectancy = (health: number) => PEOPLE.lifeBase + PEOPLE.lifeSpan * health
@@ -172,7 +178,8 @@ export function populationGrowth(n: Nation): number {
     PEOPLE.growthHousing * sp.housing +
     med +
     (n.research2?.medicine ?? 0) * PROGRAM_RULES.growthPop +
-    (n.foodShortage ? PEOPLE.growthHunger : 0)
+    (n.foodShortage ? PEOPLE.growthHunger : 0) +
+    societyEffects(n).social.births
   )
 }
 
@@ -203,7 +210,7 @@ export function runPeople(s: GameState, n: Nation, b: PeopleBasis) {
   p.skills = normalize(next)
   // Specialization grows in the chosen field, up to what the tier allows; a science park doubles the pace.
   if ((n.programs?.focus ?? 'balanced') !== 'balanced') {
-    const months = PEOPLE.specializationMonths / (n.projects?.sciencePark?.done ? 2 : 1)
+    const months = PEOPLE.specializationMonths / (1 + projectPower(n, 'sciencePark'))
     p.specialization = Math.min(tierOf(n).specializationCap, p.specialization + 1 / months)
   } else p.specialization = 0
   const d = demandOf(n, b)

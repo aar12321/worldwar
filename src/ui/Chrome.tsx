@@ -1,60 +1,17 @@
 import { dayDate, isLive } from '../engine/calendar'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { ReactNode } from 'react'
 import { turnDate } from '../engine/helpers'
 import { describeOrder } from '../engine/resolveTurn'
-import { controlled, countriesTaken, populationShare } from '../engine/victory'
+import { controlled, countriesTaken, goalSentence, populationShare } from '../engine/victory'
 import { getWorld } from '../map/world'
-import { useGame, type Panel, type ReportDelta } from '../store'
+import { useGame, type ReportDelta } from '../store'
 import { AdviceList } from './Briefing'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
-import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, MilitaryIcon, ResearchIcon } from './icons'
 import { Modal } from './Modal'
 import { Spark } from './Charts'
 
-const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
-  { panel: 'briefing', label: 'Briefing', key: 'B', icon: <BriefingIcon /> },
-  { panel: 'economy', label: 'Economy', key: 'E', icon: <EconomyIcon /> },
-  { panel: 'military', label: 'Military', key: 'M', icon: <MilitaryIcon /> },
-  { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <DiplomacyIcon /> },
-  { panel: 'empire', label: 'Empire', key: 'I', icon: <EmpireIcon /> },
-  { panel: 'tech', label: 'Research', key: 'R', icon: <ResearchIcon /> },
-]
-
-export function NavRail() {
-  const panel = useGame((s) => s.panel)
-  const setPanel = useGame((s) => s.setPanel)
-  const offers = useGame((s) => {
-    if (!s.game) return 0
-    const unanswered = s.game.proposals.filter((p) => p.to === s.game!.playerId && !s.orders.some((o) => o.type === 'respond' && o.proposalId === p.id))
-    return unanswered.length
-  })
-  const urgent = useAdvice().filter((a) => a.urgency === 'now').length
-  const badge = (p: Panel) => (p === 'diplomacy' ? offers : p === 'briefing' ? urgent : 0)
-  return (
-    <nav className="nav-dock" aria-label="Desks">
-      <div className="surface max-h-full overflow-y-auto scroll-thin rounded-[22px] p-1.5 flex flex-col gap-0.5">
-        {NAV.map((n) => (
-          <button
-            key={n.panel}
-            onClick={() => setPanel(n.panel)}
-            aria-pressed={panel === n.panel}
-            className={`nav-btn relative w-[72px] h-[56px] rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-colors ${panel === n.panel ? 'bg-white/16 text-white' : 'text-white/75 hover:text-white hover:bg-white/8'}`}
-            title={n.key ? `${n.label} (${n.key})` : n.label}
-          >
-            {n.icon}
-            <span className="text-[12px] font-medium tracking-tight">{n.label}</span>
-            {badge(n.panel) > 0 && (
-              <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full bg-[#ff453a] text-[11px] font-semibold text-white flex items-center justify-center" aria-label={`${badge(n.panel)} need you`}>
-                {badge(n.panel)}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-    </nav>
-  )
-}
+/** The desk rail (and the phone's bottom bar). It lives in Nav.tsx and is built from the registry in registry.ts. */
+export { NavRail } from './Nav'
 
 export function OrdersTray() {
   const view = usePlayerView()
@@ -67,10 +24,10 @@ export function OrdersTray() {
   const { game, orders } = view
   const { map } = getWorld()
   return (
-    <div className="orders-tray absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
+    <motion.div className="orders-tray absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]" role="region" aria-label="Orders" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
       <div className="surface rounded-full px-3 py-1.5 flex items-center gap-2 overflow-x-auto scroll-thin">
         {undoCount > 0 && (
-          <button className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-semibold bg-[#0a84ff]/25 text-[#9fd0ff] hover:bg-[#0a84ff]/40" onClick={undo} title={`Undo: ${undoLabel} (Ctrl+Z)`} aria-label={`Undo ${undoLabel}`}>
+          <button className="tray-chip whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-semibold bg-[#0a84ff]/25 text-[#9fd0ff] hover:bg-[#0a84ff]/40" onClick={undo} title={`Undo: ${undoLabel} (Ctrl+Z)`} aria-label={`Undo ${undoLabel}`}>
             ↶ Undo
           </button>
         )}
@@ -82,16 +39,18 @@ export function OrdersTray() {
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.14 }}
               onClick={() => removeOrder(i)}
-              className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-medium hover:line-through bg-white/10 text-white/90"
+              className="tray-chip whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-medium hover:line-through bg-white/10 text-white/90"
               title="Click to cancel"
+              aria-label={`Cancel order: ${describeOrder(game, map, o)}`}
             >
               {describeOrder(game, map, o)}
             </motion.button>
           ))}
         </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -99,18 +58,34 @@ export function Toasts() {
   const toasts = useGame((s) => s.toasts)
   const dismiss = useGame((s) => s.dismissToast)
   return (
-    <div className="toast-region" aria-live="polite">
+    <div className="toast-region" aria-live="polite" aria-atomic="false">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.div
             key={t.id}
-            initial={{ x: 40, opacity: 0 }}
+            layout="position"
+            initial={{ x: 32, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 40, opacity: 0 }}
+            exit={{ x: 32, opacity: 0, transition: { duration: 0.12 } }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             role={t.tone === 'error' ? 'alert' : 'status'}
-            className={`pointer-events-auto surface rounded-2xl pl-4 pr-1.5 py-2.5 text-[14px] max-w-sm flex items-start gap-2 ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
+            className={`toast pointer-events-auto surface rounded-2xl pl-4 pr-1.5 py-2.5 text-[14px] max-w-sm flex items-start gap-2 ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
           >
+            <span className="toast-mark" aria-hidden>
+              {t.tone === 'error' ? '!' : t.tone === 'success' ? '\u2713' : 'i'}
+            </span>
             <span className="flex-1 min-w-0 py-0.5">{t.text}</span>
+            {t.action && (
+              <button
+                className="shrink-0 btn btn-quiet toast-action"
+                onClick={() => {
+                  t.action?.run()
+                  dismiss(t.id)
+                }}
+              >
+                {t.action.label}
+              </button>
+            )}
             <button className="shrink-0 w-8 h-8 rounded-full text-white/60 hover:text-white hover:bg-white/10 text-[18px] leading-none" aria-label="Dismiss" onClick={() => dismiss(t.id)}>
               ×
             </button>
@@ -222,7 +197,9 @@ export function GameOver() {
   const fxBusy = useGame((s) => s.fxQueue.length > 0)
   const quit = useGame((s) => s.quitToMenu)
   const abandon = useGame((s) => s.abandonGame)
-  const online = useGame((s) => !!s.online)
+  const rematch = useGame((s) => s.rematchOnline)
+  const room = useGame((s) => s.online)
+  const online = !!room
   if (!game || game.outcome === 'playing' || fxBusy) return null
   const win = game.outcome === 'victory'
   // Who won. Single-player saves from before this was recorded have no winner, so the player is it.
@@ -231,14 +208,29 @@ export function GameOver() {
   const p = youWon || !win ? game.nations[game.playerId] : champion
   const taken = countriesTaken(game, p.id)
   const when = isLive(game) ? dayDate(game.turn, game.day ?? 0) : turnDate(game.turn)
+  // In a room, the winner is a person: say who.
+  const players = (room?.lobby?.players ?? []).filter((x) => x.nationId)
+  const winnerName = win ? players.find((x) => x.nationId === champion.id)?.name : undefined
+  const classic = game.settings.goal === 'classic'
   const reason = win
-    ? `${p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${when}.`
+    ? classic
+      ? `${winnerName ? `${winnerName} (${p.name})` : p.name} was first to ${goalSentence(game)}, as of ${when}.`
+      : `${winnerName ? `${winnerName} (${p.name})` : p.name} holds the whole world: ${controlled(game, p.id)} countries, as of ${when}.`
     : game.humans.length > 1 || online
       ? `Every player's nation has fallen, as of ${when}.`
-      : `${p.name} fell ${isLive(game) ? 'on' : 'in'} ${when}. The nation is gone, so the game is lost.`
+      : p.alive && game.scenario
+        ? `Time ran out, as of ${when}: you did not manage to ${goalSentence(game)} in time.`
+        : `${p.name} fell ${isLive(game) ? 'on' : 'in'} ${when}. The nation is gone, so the game is lost.`
+  const standings = players
+    .map((x) => {
+      const n = game.nations[x.nationId as string]
+      const last = (game.history ?? []).filter((h) => h.nation === x.nationId).at(-1)
+      return { name: x.name, nation: n, countries: controlled(game, x.nationId as string), people: populationShare(game, x.nationId as string), power: last?.power ?? 0, out: !n?.alive || game.eliminated.includes(x.nationId as string), won: game.winner === x.nationId }
+    })
+    .sort((a, b) => Number(b.won) - Number(a.won) || Number(a.out) - Number(b.out) || b.countries - a.countries)
   return (
     <Modal
-      title={youWon ? 'You won' : win ? `${champion.name} won` : game.humans.length > 1 || online ? 'Every nation has fallen' : 'Your nation has fallen'}
+      title={youWon ? 'You won' : win ? `${winnerName ?? champion.name} won` : game.humans.length > 1 || online ? 'Every nation has fallen' : p.alive && game.scenario ? 'Out of time' : 'Your nation has fallen'}
       kicker={youWon ? 'Victory' : win ? 'Game over' : 'Defeat'}
       tone={youWon ? '#30d158' : '#ff453a'}
       footer={
@@ -251,28 +243,63 @@ export function GameOver() {
               New game
             </button>
           )}
+          {online && room?.host && (
+            <button className="btn btn-primary px-5 py-2.5 text-[15px]" data-autofocus onClick={rematch} title="Everyone goes back to the lobby, with a new world">
+              Rematch
+            </button>
+          )}
         </>
       }
     >
       <p className="text-[16px] text-white/85">{reason}</p>
-      <dl className="mt-6 grid grid-cols-3 gap-3 text-center">
-        <div className="inset-card py-3">
-          <dt className="label">Countries taken</dt>
-          <dd className="text-[26px] font-semibold">{taken}</dd>
+      {standings.length > 1 ? (
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full text-[14px] border-separate border-spacing-y-1" aria-label="Final standings">
+            <thead>
+              <tr className="text-left text-[12px] text-white/60">
+                <th className="font-medium pb-1">Player</th>
+                <th className="font-medium pb-1 px-3 text-right whitespace-nowrap">Countries</th>
+                <th className="font-medium pb-1 px-3 text-right whitespace-nowrap">World's people</th>
+                <th className="font-medium pb-1 px-3 text-right whitespace-nowrap">Strength</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((r) => (
+                <tr key={r.name + r.nation?.id} className="bg-white/6">
+                  <td className="rounded-l-lg px-3 py-2">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-middle" style={{ background: r.nation?.color }} />
+                    <span className="font-semibold">{r.name}</span> <span className="text-white/65">· {r.nation?.name}</span>
+                    {r.won && <span className="ml-2 text-[12px] font-semibold text-[#6eeb8a]">Winner</span>}
+                    {r.out && <span className="ml-2 text-[12px] text-[#ff8a84]">Out</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.countries}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{(r.people * 100).toFixed(1)}%</td>
+                  <td className="rounded-r-lg px-3 py-2 text-right tabular-nums">{fmt(r.power, 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="inset-card py-3">
-          <dt className="label">World population</dt>
-          <dd className="text-[26px] font-semibold">{(populationShare(game, p.id) * 100).toFixed(1)}%</dd>
-        </div>
-        <div className="inset-card py-3">
-          <dt className="label">Nations left</dt>
-          <dd className="text-[26px] font-semibold">{Object.values(game.nations).filter((n) => n.alive).length}</dd>
-        </div>
-      </dl>
+      ) : (
+        <dl className="mt-6 grid grid-cols-3 gap-3 text-center">
+          <div className="inset-card py-3">
+            <dt className="label">Countries taken</dt>
+            <dd className="text-[26px] font-semibold">{taken}</dd>
+          </div>
+          <div className="inset-card py-3">
+            <dt className="label">World population</dt>
+            <dd className="text-[26px] font-semibold">{(populationShare(game, p.id) * 100).toFixed(1)}%</dd>
+          </div>
+          <div className="inset-card py-3">
+            <dt className="label">Nations left</dt>
+            <dd className="text-[26px] font-semibold">{Object.values(game.nations).filter((n) => n.alive).length}</dd>
+          </div>
+        </dl>
+      )}
       {(game.history ?? []).filter((h) => h.nation === game.playerId).length >= 2 && (
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <Spark label="Countries over the game" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.countries)} color="#0a84ff" />
-          <Spark label="Military strength" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.power)} color="#ff9f0a" />
+          <Spark label="Your countries over the game" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.countries)} color="#0a84ff" />
+          <Spark label="Your military strength" values={(game.history ?? []).filter((h) => h.nation === game.playerId).map((h) => h.power)} color="#ff9f0a" />
         </div>
       )}
     </Modal>

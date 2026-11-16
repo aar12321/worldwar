@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { generateAllBotOrders } from './ai/bot'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
-import type { AdviceTarget } from './engine/advisor'
+import type { AdviceTarget, PeopleSection } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
+import { factionNews } from './engine/factions'
 import { maxAttacks, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
 import { markMonth, statsOf } from './engine/monthMark'
@@ -14,14 +15,16 @@ import type { Commit, Stance } from './data/war'
 import { applyOrderNow, describeOrder, resolveTurn } from './engine/resolveTurn'
 import type { BattleReport, Dispatch, GameState, MonthMark, MonthStats, NationId, Order, Programs, RegionId, Spending } from './engine/types'
 import { getWorld } from './map/world'
-import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type Lobby, type RoomSettings } from './net/protocol'
+import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type Lobby, type OpenSeat, type RoomSettings } from './net/protocol'
+import { loadOnlineSave, writeOnlineSave } from './net/saves'
 import { OnlineSession } from './net/session'
-import { openTransport } from './net/transport'
+import { openTransport, type TransportStatus } from './net/transport'
 import { globeBridge, useFx } from './ui/globeBridge'
 import { battleLine, scenesFor } from './ui/battleText'
 import { presentLiveStep } from './ui/livePresent'
 import { speak } from './ui/plain'
 import type { PendingConfirm } from './ui/confirmRules'
+import { applyPrefs, defaultPrefs, migrateSettingsUi, motionReduced, sanitizePrefs, systemReducesMotion, type UiPrefs } from './ui/prefs'
 
 const SAVE_KEY = 'worlds-of-others-save-v4'
 const ORDERS_KEY = 'worlds-of-others-orders-v4'
@@ -31,13 +34,17 @@ export const SLOT_COUNT = 3
 /** Everything a crashed game may have left behind. */
 export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
-/** The five desks, plus News and Settings which open from the top bar. */
-export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
-export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
-export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
-export type MilitaryTab = 'forces' | 'wars' | 'agencies' | 'systems' | 'armies'
+/**
+ * The desks, plus News and Settings which open from the top bar. Any id in the desk registry (src/ui/registry.ts) is a panel too,
+ * so a new desk needs no change here.
+ */
+export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'faction' | 'empire' | 'log' | 'settings' | (string & {})
+export type EmpireTab = 'overview' | 'provinces' | 'world' | 'reaction' | 'stats' | 'puppets'
+export type { PeopleSection }
+export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'space' | 'market' | 'stocks' | 'government'
+export type MilitaryTab = 'forces' | 'deploy' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
-export type MapMode = 'political' | 'relations' | 'fronts'
+export type MapMode = 'political' | 'relations' | 'fronts' | 'borders'
 
 export interface PolicyPatch {
   taxRate?: number
@@ -64,12 +71,16 @@ export interface Settings {
   liveReport: 'note' | 'pause'
   /** Live games: how fast time runs. */
   liveSpeed: 1 | 2 | 4
+  /** How the interface looks and behaves for this person: text size, contrast, density, pins, recents. */
+  ui: UiPrefs
 }
 
 export interface Toast {
   id: number
   text: string
   tone: 'info' | 'error' | 'success'
+  /** A button on the toast, such as Undo. */
+  action?: { label: string; run: () => void }
 }
 
 export interface ReportDelta {
@@ -111,6 +122,10 @@ export interface OnlineView {
   error: string | null
   /** True until the room answers. */
   connecting: boolean
+  /** Whether the line to the room is up. While it is down this screen is not sending or hearing anything. */
+  connection: TransportStatus
+  /** Joining a game under way: the seats this player may take. Null when there is nothing to choose. */
+  seats: OpenSeat[] | null
 }
 
 const ONLINE_KEY = 'worlds-of-others-online'
@@ -153,7 +168,7 @@ function saveIdentity(id: { clientId: ClientId | null; name: string; code: strin
   }
 }
 
-interface GameStore {
+export interface GameStore {
   online: OnlineView | null
   /** The last room this device was in, so it can be rejoined. */
   lastRoom: string | null
@@ -163,6 +178,18 @@ interface GameStore {
   updateOnlineSettings(settings: RoomSettings): void
   startOnline(): Promise<void>
   leaveOnline(): void
+  /** Opens a saved room again from this device, as the player of `seat`. The others join with the code and take their seats back. */
+  resumeOnline(name: string, code: string, seat: NationId): Promise<void>
+  takeOnlineSeat(nationId: NationId): void
+  /** Host only. */
+  kickOnlinePlayer(clientId: ClientId): void
+  /** Host only: back to the lobby with the same players, for another game. */
+  rematchOnline(): void
+  /** Online: the player put the waiting decision off until later (this month), or asked for it back. */
+  eventDismissedTurn: number | null
+  dismissEvent(turn: number | null): void
+  /** Online: opens the decision again, taking back the answer already given. */
+  reopenEvent(): void
   sendChat(text: string): void
   markChatRead(): void
   /** Online: send the plan, and say whether the player is done. */
@@ -174,6 +201,8 @@ interface GameStore {
   selectedRegion: RegionId | null
   panel: Panel
   economyTab: EconomyTab
+  peopleSection: PeopleSection
+  setPeopleSection(section: PeopleSection): void
   /** Country shown in the Economy desk's upgrade list. Null means the capital. */
   economyRegion: RegionId | null
   militaryTab: MilitaryTab
@@ -197,6 +226,8 @@ interface GameStore {
   helpOpen: boolean
   /** Country whose War Room is open, if any. */
   warRoom: RegionId | null
+  /** The aircraft development screen (Military, Forces) is open. */
+  aircraftOpen: boolean
   settings: Settings
   toasts: Toast[]
   hasSave: boolean
@@ -213,6 +244,21 @@ interface GameStore {
   saveFailed: boolean
   paletteOpen: boolean
   setPalette(open: boolean): void
+  /** The tab each registry desk other than Economy, Military and Empire is on. */
+  deskTabs: Record<string, string>
+  /** Opens a desk on one of its tabs (any registered desk or tab), remembering it. */
+  openTab(desk: string, tab?: string): void
+  /** Changes the tab of the open desk without opening anything. */
+  setDeskTab(desk: string, tab: string): void
+  /** Which tab of the help window is showing. */
+  helpTab: 'guide' | 'keys'
+  setHelpTab(tab: 'guide' | 'keys'): void
+  /** A setting the jump window asked to show: the Settings desk scrolls to it and flashes it once. */
+  settingsFocus: string | null
+  /** Changes how the interface looks and behaves; saved with the settings. */
+  updatePrefs(patch: Partial<UiPrefs>): void
+  /** Puts every look-and-feel choice back to its default (pins and recents stay). */
+  resetPrefs(): void
   /** Save slots, on this device. Each keeps a whole game and the month's waiting orders. */
   saveSlot(slot: number): boolean
   loadSlot(slot: number): boolean
@@ -243,6 +289,8 @@ interface GameStore {
   /** Follows an advisor button to the desk, tab, country or window it points at. */
   goTo(target: AdviceTarget): void
   openDiplomacy(nationId: NationId | null, opts?: { peace?: boolean }): void
+  /** Opens the Faction desk. */
+  openFaction(): void
   issueOrder(order: Order): boolean
   /** Issues several orders at once, one save and one summary. Returns how many went through. */
   issueBatch(orders: Order[]): { done: number; failed: number }
@@ -253,6 +301,7 @@ interface GameStore {
   setPrograms(programs: Partial<Programs>, rate?: number): void
   attack(target: RegionId, commit?: Commit, stance?: Stance, missiles?: number, share?: number): boolean
   openWarRoom(target: RegionId | null): void
+  setAircraftOpen(open: boolean): void
   endTurn(): void
   /** Live games: start or stop the clock. */
   play(): void
@@ -273,7 +322,7 @@ interface GameStore {
   dismissSummary(): void
   setHelp(open: boolean): void
   updateSettings(patch: Partial<Settings>): void
-  toast(text: string, tone?: Toast['tone'], ms?: number): void
+  toast(text: string, tone?: Toast['tone'], ms?: number, action?: Toast['action']): void
   dismissToast(id: number): void
   persist(): void
 }
@@ -288,14 +337,17 @@ const defaultSettings: Settings = {
   pauseOnBattles: false,
   liveReport: 'note',
   liveSpeed: 1,
+  ui: defaultPrefs(),
 }
 
 /** Keeps a stored setting only if it has a value the game understands. */
 function sanitizeSettings(raw: Partial<Settings>): Settings {
   const merged = { ...defaultSettings, ...raw }
+  // Settings saved before the look-and-feel preferences existed keep their old motion choice.
+  const ui = migrateSettingsUi(raw)
   const oneOf = <T,>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? (value as T) : fallback)
   return {
-    reducedMotion: typeof merged.reducedMotion === 'boolean' ? merged.reducedMotion : defaultSettings.reducedMotion,
+    reducedMotion: motionReduced(ui.motion, systemReducesMotion()),
     fxSpeed: oneOf(merged.fxSpeed, [1, 2], 1),
     battleScenes: oneOf(merged.battleScenes, ['all', 'mine', 'off'], 'all'),
     seenHelp: merged.seenHelp === true,
@@ -304,6 +356,7 @@ function sanitizeSettings(raw: Partial<Settings>): Settings {
     pauseOnBattles: merged.pauseOnBattles === true,
     liveReport: oneOf(merged.liveReport, ['note', 'pause'], 'note'),
     liveSpeed: oneOf(merged.liveSpeed, [1, 2, 4], 1),
+    ui,
   }
 }
 
@@ -461,13 +514,23 @@ function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'cancelDeal') return typeof order.dealId === 'string'
   if (order.type === 'leaveAlliance' || order.type === 'breakPact') return typeof order.target === 'string'
   if (order.type === 'buildCase' || order.type === 'annexPuppet') return typeof order.target === 'string'
+  if (order.type === 'governPuppet') return typeof order.target === 'string' && !!order.patch && typeof order.patch === 'object' && !Array.isArray(order.patch)
   if (order.type === 'strike') return typeof order.target === 'string' && (order.weapon === 'missile' || order.weapon === 'orbital') && (order.count === undefined || Number.isInteger(order.count))
+  if (order.type === 'nuke') return typeof order.target === 'string'
   if (order.type === 'buyShares' || order.type === 'sellShares') return typeof order.company === 'string' && Number.isFinite(order.shares)
   if (order.type === 'setDirective') return typeof order.company === 'string' && ['payout', 'expand', 'focus'].includes(order.directive)
   if (order.type === 'operation') return typeof order.target === 'string' && typeof order.op === 'string'
   if (order.type === 'domestic') return typeof order.op === 'string'
   if (order.type === 'fundAgency') return order.agency === 'foreign' || order.agency === 'domestic'
   if (order.type === 'crisisAction') return typeof order.crisisId === 'string' && ['aid', 'mediate', 'support'].includes(order.action)
+  if (order.type === 'eventChoice') return Number.isInteger(order.index)
+  if (order.type === 'factionFound') return typeof order.name === 'string'
+  if (order.type === 'factionJoin') return typeof order.factionId === 'string'
+  if (order.type === 'factionInvite') return typeof order.target === 'string'
+  if (order.type === 'factionLeave') return true
+  if (order.type === 'factionContribute' || order.type === 'factionWithdraw') return !!order.gift && typeof order.gift === 'object'
+  if (order.type === 'factionPropose') return !!order.proposal && (order.proposal.kind === 'war' ? typeof order.proposal.target === 'string' : order.proposal.kind === 'contract' && !!order.proposal.terms)
+  if (order.type === 'factionVote') return typeof order.proposalId === 'string' && (order.vote === 'yes' || order.vote === 'no')
   return false
 }
 
@@ -527,12 +590,12 @@ export type Hold = 'online' | 'over' | 'event' | 'battle' | 'report' | 'planning
  * The reason is the one the player sees, in the order the windows are drawn: the end of the game when no battle is playing, then
  * the jump-to box and a question being asked, then help, a battle, the report, a decision, and last the War Room.
  */
-export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'> & Partial<Pick<GameStore, 'paletteOpen' | 'confirm'>>): Hold | null {
+export function liveHold(st: Pick<GameStore, 'game' | 'fxQueue' | 'summary' | 'warRoom' | 'helpOpen' | 'online'> & Partial<Pick<GameStore, 'paletteOpen' | 'confirm' | 'aircraftOpen'>>): Hold | null {
   if (st.online) return 'online'
   if (!st.game) return 'over'
   const battle = st.fxQueue.length > 0
   if (st.game.outcome !== 'playing' && !battle) return 'over'
-  if (st.paletteOpen || st.confirm) return 'planning'
+  if (st.paletteOpen || st.confirm || st.aircraftOpen) return 'planning'
   if (st.helpOpen) return 'help'
   if (battle) return 'battle'
   if (st.summary) return 'report'
@@ -585,6 +648,8 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
     .sort((a, b) => Number(b.defender.nationId === player && b.attacker.nationId !== 'rebels') - Number(a.defender.nationId === player && a.attacker.nationId !== 'rebels'))
   const fx = scenesFor(settings.battleScenes, player, mine)
   for (const b of mine) if (b.captured) flashCapture(b.regionId, b.defender.nationId === player, next.nations[player]?.color ?? '#fff')
+  // A faction vote that needs you, an invitation, a contract that began or ended: said once, whether the report is on or not.
+  for (const text of factionNews(before === next ? null : before, next, player).slice(0, 3)) toast(text, 'info', 7000)
   // With the report off, the turn's big moments still get a line.
   if (!settings.monthlyReport) {
     const mineNews = next.dispatches.filter((d) => d.to === player || d.from === player)
@@ -592,6 +657,13 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
     if (!fx.length) for (const b of mine) if (b.captured) toast(battleLine(b, next, player).text, b.defender.nationId === player ? 'error' : 'success', 6000)
   }
   return { fxQueue: fx, fxTotal: fx.length, summary: settings.monthlyReport ? buildReport(statsOf(before, player), next, player, mine.map((b) => battleLine(b, next, player))) : null }
+}
+
+/** Keeps this room on this device, so if every player closes their tab one of them can open it again. */
+function persistOnline() {
+  const lobby = session?.lobby
+  if (!lobby || !base) return
+  void writeOnlineSave(lobby, base).catch(() => undefined)
 }
 
 /** The host resolved a month. Show it the way a single-player turn is shown. */
@@ -602,7 +674,11 @@ function receiveMonth(prev: GameState | null, next: GameState) {
   base = next
   immediate = []
   const shown = presentMonth(prev ?? next, next, player)
-  useGame.setState({ game: next, orders: [], ...shown, warRoom: null })
+  // Offers other players sent this month wait in the inbox; say so, since nobody is looking at the Diplomacy desk.
+  const offers = next.proposals.filter((p) => p.to === player).length - (prev?.proposals.filter((p) => p.to === player).length ?? 0)
+  if (offers > 0) st.toast(offers === 1 ? 'You have a new offer waiting in Diplomacy.' : `You have ${offers} new offers waiting in Diplomacy.`, 'info', 6000)
+  useGame.setState({ game: next, orders: [], undoStack: [], eventDismissedTurn: null, ...shown, warRoom: null, aircraftOpen: false })
+  persistOnline()
   if (!wasOut && next.eliminated.includes(player) && next.outcome === 'playing') st.toast('Your nation has fallen. You can keep watching the game.', 'error', 9000)
 }
 
@@ -620,12 +696,12 @@ const ROOM_ERRORS = {
 }
 
 /** Opens the connection and wires the session to the store. */
-async function connect(name: string, code: string, role: 'create' | 'join', settings?: RoomSettings, rejoin = false) {
+async function connect(name: string, code: string, role: 'create' | 'join' | 'resume', settings?: RoomSettings, rejoin = false, resume?: { lobby: Lobby; game: GameState; seat: NationId }) {
   leaveSession()
   const stored = loadIdentity()
   const id = { clientId: rejoin && stored.code === code && stored.clientId ? stored.clientId : tabClientId() }
   const clean = name.trim().slice(0, 20) || 'Player'
-  useGame.setState({ online: { status: 'lobby', code, clientId: id.clientId, name: clean, kind: 'browser', host: role === 'create', lobby: null, ready: [], deadline: null, peers: [], chat: [], unread: 0, error: null, connecting: true } })
+  useGame.setState({ online: { status: 'lobby', code, clientId: id.clientId, name: clean, kind: 'browser', host: role !== 'join', lobby: null, ready: [], deadline: null, peers: [], chat: [], unread: 0, error: null, connecting: true, connection: 'connected', seats: null } })
   let transport
   try {
     transport = await openTransport(code, id.clientId)
@@ -648,8 +724,22 @@ async function connect(name: string, code: string, role: 'create' | 'join', sett
         if (base && base.turn === state.turn) return
         base = state
         immediate = []
-        useGame.setState({ game: state, orders: [], selectedRegion: state.playerId, panel: 'briefing', economyTab: 'country', economyRegion: null, militaryTab: 'forces', mapMode: 'political', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, helpOpen: false })
-        patch({ status: 'playing', connecting: false })
+        useGame.setState({ game: state, orders: [], undoStack: [], eventDismissedTurn: null, selectedRegion: state.playerId, panel: 'briefing', economyTab: 'country', economyRegion: null, militaryTab: 'forces', mapMode: 'political', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, helpOpen: false })
+        patch({ status: 'playing', connecting: false, seats: null })
+        persistOnline()
+      },
+      onConnection: (connection) => patch({ connection }),
+      onSeats: (seats) => patch({ seats, connecting: false }),
+      onKicked: () => {
+        leaveSession()
+        useGame.setState({ online: null, game: null, orders: [], undoStack: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: hasStoredSave() })
+        useGame.getState().toast('The host removed you from the game.', 'error', 9000)
+      },
+      onRematch: () => {
+        base = null
+        immediate = []
+        useGame.setState({ game: null, orders: [], undoStack: [], eventDismissedTurn: null, selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false })
+        patch({ status: 'lobby', ready: [], deadline: null })
       },
       onState: receiveMonth,
       onReady: (ready, remaining) => patch({ ready, deadline: remaining === null ? null : Date.now() + remaining }),
@@ -667,12 +757,19 @@ async function connect(name: string, code: string, role: 'create' | 'join', sett
   patch({ kind: transport.kind })
   useGame.setState({ lastRoom: code })
   if (role === 'create' && settings) s.createRoom(code, settings)
-  else {
+  else if (role === 'resume' && resume) {
+    const err = s.resumeRoom(resume.lobby, resume.game, resume.seat)
+    if (err) {
+      leaveSession()
+      useGame.setState({ online: null })
+      useGame.getState().toast(err, 'error', 7000)
+    }
+  } else {
     s.joinRoom()
-    // The host answers with the lobby. No answer means no such room.
+    // The host answers with the lobby, or with the free seats of a game under way. No answer means no such room.
     setTimeout(() => {
       const st = useGame.getState()
-      if (session === s && st.online && !st.online.lobby) {
+      if (session === s && st.online && !st.online.lobby && !st.online.seats) {
         leaveSession()
         useGame.setState({ online: null })
         st.toast(ROOM_ERRORS.noRoom, 'error', 9000)
@@ -687,7 +784,7 @@ function enterGame(game: GameState, orders: Order[] | undefined): boolean {
   withMonth(game)
   const kept = (orders ?? []).filter((o): o is Order => keptOrder(o, game.playerId))
   save(game, kept, true)
-  useGame.setState({ running: false, undoStack: [], confirm: null, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: kept, selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: true })
+  useGame.setState({ running: false, undoStack: [], confirm: null, selectedArmy: null, recentBattles: [], liveNote: null, game, orders: kept, selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: true })
   useGame.getState().toast('Game loaded.', 'success', 2500)
   return true
 }
@@ -698,6 +795,7 @@ export const useGame = create<GameStore>((set, get) => ({
   selectedRegion: null,
   panel: 'none',
   economyTab: 'country',
+  peopleSection: 'overview',
   economyRegion: null,
   militaryTab: 'forces',
   empireTab: 'overview',
@@ -710,6 +808,7 @@ export const useGame = create<GameStore>((set, get) => ({
   summary: null,
   helpOpen: false,
   warRoom: null,
+  aircraftOpen: false,
   settings: loadSettings(),
   toasts: [],
   hasSave: hasStoredSave(),
@@ -721,8 +820,12 @@ export const useGame = create<GameStore>((set, get) => ({
   saveFailed: false,
   confirm: null,
   paletteOpen: false,
+  deskTabs: {},
+  helpTab: 'guide',
+  settingsFocus: null,
   undoStack: [],
   online: null,
+  eventDismissedTurn: null,
   lastRoom: loadIdentity().code,
 
   newGame(opts) {
@@ -749,6 +852,7 @@ export const useGame = create<GameStore>((set, get) => ({
       fxTotal: 0,
       summary: null,
       warRoom: null,
+      aircraftOpen: false,
       hasSave: true,
       helpOpen: false,
     })
@@ -759,7 +863,7 @@ export const useGame = create<GameStore>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return
       const game = withMonth(normalizeGame(JSON.parse(raw) as GameState, getWorld().map))
-      set({ running: false, undoStack: [], selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null })
+      set({ running: false, undoStack: [], selectedArmy: null, recentBattles: [], liveNote: null, game, orders: loadOrders(game.playerId), selectedRegion: game.playerId, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false })
     } catch {
       get().toast('Save file is corrupted.', 'error')
     }
@@ -772,7 +876,7 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     const { game, orders } = get()
     if (game) save(game, orders, true)
-    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
+    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: hasStoredSave() })
   },
 
   abandonGame() {
@@ -781,7 +885,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return
     }
     save(null)
-    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: false })
+    set({ running: false, selectedArmy: null, liveNote: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: false })
   },
 
   setPalette(open) {
@@ -841,6 +945,8 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   undo() {
+    // Online, an order is already on its way to the host, and the others are playing the same month: nothing can be taken back.
+    if (session) return
     const { undoStack, game } = get()
     const last = undoStack[undoStack.length - 1]
     if (!last || !game) return
@@ -859,6 +965,10 @@ export const useGame = create<GameStore>((set, get) => ({
 
   setEconomyTab(tab) {
     set({ economyTab: tab })
+  },
+
+  setPeopleSection(section) {
+    set({ peopleSection: section })
   },
 
   setEconomyRegion(id) {
@@ -902,6 +1012,7 @@ export const useGame = create<GameStore>((set, get) => ({
     switch (target.desk) {
       case 'economy':
         get().openEconomy(target.tab, target.region)
+        if (target.section) set({ peopleSection: target.section })
         break
       case 'military':
         get().openMilitary(target.tab)
@@ -914,6 +1025,9 @@ export const useGame = create<GameStore>((set, get) => ({
         break
       case 'diplomacy':
         get().openDiplomacy(target.nation ?? null)
+        break
+      case 'faction':
+        get().openFaction()
         break
       case 'warRoom':
         set({ selectedRegion: target.region, warRoom: target.region })
@@ -930,6 +1044,10 @@ export const useGame = create<GameStore>((set, get) => ({
 
   openDiplomacy(nationId, opts) {
     set({ panel: 'diplomacy', diploFocus: nationId, diploPeace: !!opts?.peace })
+  },
+
+  openFaction() {
+    set({ panel: 'faction', diploFocus: null })
   },
 
   issueOrder(order) {
@@ -950,7 +1068,7 @@ export const useGame = create<GameStore>((set, get) => ({
         get().toast(result.error, 'error')
         return false
       }
-      set({ game: next, undoStack: [...get().undoStack, { game, label: describeOrder(game, map, order) }].slice(-UNDO_LIMIT) })
+      set({ game: next, undoStack: playing ? [] : [...get().undoStack, { game, label: describeOrder(game, map, order) }].slice(-UNDO_LIMIT) })
       // An offer a rival answered on the spot (live games) says how it went.
       for (const d of next.dispatches.slice(seen)) if (d.to === game.playerId || d.from === game.playerId) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
       if (playing) {
@@ -961,6 +1079,12 @@ export const useGame = create<GameStore>((set, get) => ({
     }
     let rest = orders
     if (order.type === 'respond') rest = orders.filter((o) => !(o.type === 'respond' && o.proposalId === order.proposalId))
+    // A player can change their mind about a decision until the month ends.
+    else if (order.type === 'eventChoice') rest = orders.filter((o) => o.type !== 'eventChoice')
+    // The rules of a puppet can be changed until the month ends: the last order for it counts.
+    else if (order.type === 'governPuppet') rest = orders.filter((o) => !(o.type === 'governPuppet' && o.target === order.target))
+    // A vote can be changed until the month ends: the last one counts.
+    else if (order.type === 'factionVote') rest = orders.filter((o) => !(o.type === 'factionVote' && o.proposalId === order.proposalId))
     const err = validateOrder(game, map, order, rest)
     if (err) {
       get().toast(err, 'error')
@@ -1058,6 +1182,10 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ warRoom: target })
   },
 
+  setAircraftOpen(open) {
+    set({ aircraftOpen: open })
+  },
+
   attack(target, commit = 'main', stance = 'assault', missiles, share) {
     const { game, settings, online } = get()
     if (!game) return false
@@ -1070,7 +1198,7 @@ export const useGame = create<GameStore>((set, get) => ({
       }
       const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}) })
       if (ok) {
-        set({ warRoom: null })
+        set({ warRoom: null, aircraftOpen: false })
         get().toast(`Attack on ${map.regions[target].name} planned. It plays out when the month ends.`, 'info', 4500)
       }
       return ok
@@ -1080,7 +1208,7 @@ export const useGame = create<GameStore>((set, get) => ({
     // In a live game the army sets out and fights when it arrives.
     if (result.army) {
       const a = result.army
-      set({ warRoom: null, game: next })
+      set({ warRoom: null, aircraftOpen: false, game: next })
       save(next)
       get().toast(`An army left for ${map.regions[target].name}. It arrives ${absDate(a.end)}.`, 'info', 5000)
       return true
@@ -1089,9 +1217,10 @@ export const useGame = create<GameStore>((set, get) => ({
       get().toast(result.error ?? 'The attack could not be made', 'error')
       return false
     }
-    set({ warRoom: null })
+    set({ warRoom: null, aircraftOpen: false })
     const queue = settings.battleScenes === 'off' ? [] : [result.battle]
     if (result.battle.captured) flashCapture(target, false, next.nations[game.playerId].color)
+    if (result.battle.intercept) get().toast(`Their patrols met your landing at sea and sank ${result.battle.intercept.sunk.toFixed(1)} divisions of it.`, 'error', 5000)
     set({ game: next, fxQueue: [...get().fxQueue, ...queue], fxTotal: get().fxQueue.length + queue.length })
     if (!queue.length) {
       const name = map.regions[target].name
@@ -1167,6 +1296,7 @@ export const useGame = create<GameStore>((set, get) => ({
       // The month's diplomacy still gets a line while the clock runs: wars declared on you, offers, answers.
       const news = step.state.dispatches.filter((d) => d.to === game.playerId || d.from === game.playerId)
       for (const d of news.slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
+      for (const text of factionNews(game, step.state, game.playerId).slice(0, 3)) st.toast(text, 'info', 7000)
       const failed = step.state.log.filter((e) => e.turn === game.turn && e.text.startsWith('Order failed') && e.nations.includes(game.playerId))
       if (failed.length) st.toast(failed.length === 1 ? failed[0].text : `${failed.length} orders failed at the month's end. See the report.`, 'error', 7000)
       save(patch.game!, [])
@@ -1226,9 +1356,41 @@ export const useGame = create<GameStore>((set, get) => ({
     if (err) get().toast(err, 'error')
   },
 
+  async resumeOnline(name, raw, seat) {
+    const code = normalizeCode(raw)
+    const saved = await loadOnlineSave(code)
+    if (!saved) {
+      get().toast('That saved game could not be opened. It may have been cleared from this device.', 'error', 7000)
+      return
+    }
+    await connect(name, code, 'resume', undefined, false, { ...saved, seat })
+  },
+
+  takeOnlineSeat(nationId) {
+    session?.takeSeat(nationId)
+  },
+
+  kickOnlinePlayer(clientId) {
+    session?.kick(clientId)
+  },
+
+  rematchOnline() {
+    session?.rematch()
+  },
+
+  dismissEvent(turn) {
+    set({ eventDismissedTurn: turn })
+  },
+
+  reopenEvent() {
+    const orders = get().orders.filter((o) => o.type !== 'eventChoice')
+    set({ orders, eventDismissedTurn: null })
+    writeOrders(orders)
+  },
+
   leaveOnline() {
     leaveSession()
-    set({ online: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, hasSave: hasStoredSave() })
+    set({ online: null, undoStack: [], eventDismissedTurn: null, game: null, orders: [], selectedRegion: null, panel: 'none', fxQueue: [], fxTotal: 0, summary: null, warRoom: null, aircraftOpen: false, hasSave: hasStoredSave() })
   },
 
   sendChat(text) {
@@ -1250,6 +1412,11 @@ export const useGame = create<GameStore>((set, get) => ({
   chooseEventOption(index) {
     const { game } = get()
     if (!game) return
+    // Online, the answer travels with this player's plan, and nobody else waits for it.
+    if (game.multiplayer) {
+      if (session && get().issueOrder({ type: 'eventChoice', nationId: game.playerId, index })) get().toast('Your decision goes in with your plan.', 'success', 3000)
+      return
+    }
     const next = applyEventChoice(game, getWorld().map, index)
     save(next)
     set({ game: next })
@@ -1267,6 +1434,40 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ summary: null })
   },
 
+  openTab(desk, tab) {
+    if (desk === 'economy') get().openEconomy((tab ?? get().economyTab) as EconomyTab)
+    else if (desk === 'military') get().openMilitary((tab ?? get().militaryTab) as MilitaryTab)
+    else if (desk === 'empire') get().openEmpire(tab as EmpireTab | undefined)
+    else if (desk === 'diplomacy') get().openDiplomacy(null)
+    else set((st) => ({ panel: desk, deskTabs: tab ? { ...st.deskTabs, [desk]: tab } : st.deskTabs, diploFocus: null }))
+  },
+
+  setDeskTab(desk, tab) {
+    if (desk === 'economy') get().setEconomyTab(tab as EconomyTab)
+    else if (desk === 'military') get().setMilitaryTab(tab as MilitaryTab)
+    else if (desk === 'empire') get().setEmpireTab(tab as EmpireTab)
+    else set((st) => ({ deskTabs: { ...st.deskTabs, [desk]: tab } }))
+  },
+
+  setHelpTab(tab) {
+    set({ helpTab: tab })
+  },
+
+  updatePrefs(patch) {
+    const ui = sanitizePrefs({ ...get().settings.ui, ...patch })
+    // The old "reduce motion" switch stays what the rest of the game reads; the preference decides it.
+    const reducedMotion = motionReduced(ui.motion, systemReducesMotion())
+    get().updateSettings({ ui, reducedMotion })
+    applyPrefs(ui)
+  },
+
+  resetPrefs() {
+    const keep = get().settings.ui
+    const fresh = { ...defaultPrefs(), pinned: keep.pinned, recents: keep.recents }
+    get().updatePrefs(fresh)
+    get().toast('Look and feel put back to the defaults', 'success', 2500)
+  },
+
   setHelp(open) {
     set({ helpOpen: open })
     if (!open && !get().settings.seenHelp) get().updateSettings({ seenHelp: true })
@@ -1282,11 +1483,11 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ settings })
   },
 
-  toast(text, tone = 'info', ms = 3500) {
+  toast(text, tone = 'info', ms = 3500, action) {
     const id = toastId++
     const shown = tone === 'error' ? speak(text) : text
-    const life = tone === 'error' ? Math.max(ms, 8000) : ms
-    set((st) => ({ toasts: [...st.toasts.slice(-3), { id, text: shown, tone }] }))
+    const life = tone === 'error' ? Math.max(ms, 8000) : action ? Math.max(ms, 6000) : ms
+    set((st) => ({ toasts: [...st.toasts.slice(-3), { id, text: shown, tone, action }] }))
     setTimeout(() => get().dismissToast(id), life)
   },
 
@@ -1304,6 +1505,9 @@ export const useGame = create<GameStore>((set, get) => ({
 useGame.subscribe((st) => {
   if (st.game) markSettled(st.game)
 })
+
+// Text size, contrast, density and the rest are on the page before the first screen is drawn.
+applyPrefs(useGame.getState().settings.ui)
 
 // A handle for browser tests, in development only.
 if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __store: typeof useGame }).__store = useGame

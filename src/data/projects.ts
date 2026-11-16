@@ -1,4 +1,5 @@
 import type { ProjectId, ResearchTrack, SectorId, Tier } from '../engine/types'
+import type { SocialEffect } from './society'
 
 export interface ProjectSpec {
   name: string
@@ -10,6 +11,15 @@ export interface ProjectSpec {
   /** Total money, paid month by month while it is built. */
   cost: number
   coastal?: boolean
+  /**
+   * What the project does, in the same terms as laws and social programs, for one unit of its worth (level 1 is 1, then 1.6 and 2).
+   * The first seven projects have their effects written into the economy and leave this out.
+   */
+  effects?: SocialEffect
+  /** Power for factories, added to the grid. */
+  power?: number
+  /** Goodwill every other nation feels toward the builder when it is finished. */
+  opinion?: number
 }
 
 export const PROJECTS: Record<ProjectId, ProjectSpec> = {
@@ -20,9 +30,29 @@ export const PROJECTS: Record<ProjectId, ProjectSpec> = {
   medCentre: { name: 'Medical research centre', blurb: 'A great teaching hospital and its labs.', effect: 'Health +0.05, faster recovery from epidemics, unlocks the last medicine research.', tier: 2, months: 12, cost: 480 },
   digitalGov: { name: 'Digital government', blurb: 'Every service online, every record in one place.', effect: 'Administration capacity +4, taxes +3%.', tier: 3, months: 10, cost: 600 },
   spaceComplex: { name: 'Space launch complex', blurb: 'A spaceport and its factories.', effect: 'Orbital Network costs 30% less, orbital strikes recharge 3 months sooner, research +5%.', tier: 3, months: 16, cost: 900 },
+  waterNetwork: { name: 'Clean water network', blurb: 'Pipes, treatment works and wells in every town.', effect: 'Health up, epidemics weaker.', tier: 1, months: 8, cost: 260, effects: { health: 0.03, epidemic: 0.2, births: 0.00005 } },
+  stadium: { name: 'National stadium', blurb: 'A great arena. The whole country has somewhere to cheer.', effect: 'Calm, less war weariness, a little influence.', tier: 1, months: 6, cost: 220, effects: { stability: 1.5, weariness: -0.1, influence: 0.15 } },
+  broadband: { name: 'National broadband', blurb: 'Fibre to every village, and a cheap connection for every home.', effect: 'Output and research up.', tier: 1, months: 8, cost: 300, effects: { output: 0.02, research: 0.04 } },
+  grainReserve: { name: 'Strategic grain reserve', blurb: 'Silos full against a bad harvest.', effect: 'Shortages hurt much less; people waste less food.', tier: 1, months: 6, cost: 200, effects: { famine: 0.4, foodUse: -0.04 } },
+  openUniversity: { name: 'Open university', blurb: 'Lectures for anyone, by post, radio and screen.', effect: 'Schooling and research up.', tier: 2, months: 10, cost: 420, effects: { schooling: 0.03, research: 0.05 } },
+  expo: { name: 'World Expo', blurb: 'The world comes to see what you have built.', effect: 'Influence, trade and growth up. Every nation thinks better of you.', tier: 3, months: 8, cost: 650, effects: { influence: 0.4, trade: 0.08, growth: 0.05 }, opinion: 6 },
+  aiLab: { name: 'National AI lab', blurb: 'The best minds and the biggest machines in one place.', effect: 'Research and output up.', tier: 3, months: 12, cost: 800, effects: { research: 0.1, output: 0.015 } },
+  fusion: { name: 'Fusion power plant', blurb: 'Clean power without end.', effect: 'Power for big industry, factories and output up, upkeep down.', tier: 3, months: 18, cost: 1100, effects: { output: 0.02, factory: 0.05, upkeep: -0.05 }, power: 40 },
+  plannedCity: { name: 'Planned capital city', blurb: 'A new seat of government, built from nothing, for a very large state.', effect: 'Officials run more countries; calm and output up.', tier: 4, months: 20, cost: 1400, effects: { admin: 5, stability: 2, output: 0.02 } },
+  marsMission: { name: 'Mars mission', blurb: 'The first people on another world. Everyone watches.', effect: 'Influence, research and calm up.', tier: 5, months: 24, cost: 2500, effects: { influence: 0.6, research: 0.12, stability: 3 } },
 }
 
 export const PROJECT_IDS = Object.keys(PROJECTS) as ProjectId[]
+
+/** Projects can be built up to three times over. Each level costs and takes more, and each is worth more, but not in proportion. */
+export const PROJECT_LEVELS = {
+  max: 3,
+  /** Price and time of building level 1, 2 and 3, as multiples of the project's own. */
+  cost: [0, 1, 1.6, 2.4],
+  months: [0, 1, 1.2, 1.4],
+  /** What the levels built so far are worth, as multiples of level 1. */
+  power: [0, 1, 1.6, 2],
+}
 
 export const PROJECT_RULES = {
   /** A finished project costs this share of its price each month to keep up. */

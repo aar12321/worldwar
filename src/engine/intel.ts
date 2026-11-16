@@ -1,4 +1,5 @@
-import { atWar, isAllied } from './helpers'
+import { garrisonDivisions, patrolCover, reserveDivisions } from './deployment'
+import { atWar, forceUnits, isAllied, totalUnits } from './helpers'
 import { militaryPower } from './militaryStats'
 import type { GameState, NationId } from './types'
 
@@ -39,3 +40,55 @@ export function powerView(game: GameState, viewer: NationId, target: NationId, a
 
 /** "120" with intel, "~120" without. */
 export const showPower = (v: PowerView): string => (v.exact ? v.value.toFixed(0) : `~${v.value.toFixed(0)}`)
+
+/** What a nation has on station, as the viewer knows it. Divisions: exact with intelligence, otherwise rounded guesses that hold for a year. */
+export interface DeploymentView {
+  exact: boolean
+  /** The nation has set a posture at all. */
+  posted: boolean
+  coastal: number
+  subs: number
+  air: number
+  /** Ground troops on all borders. */
+  ground: number
+  reserve: number
+  /** Divisions of garrison on the border with each neighbor. Without intelligence only the border facing the viewer is shown. */
+  border: Record<string, number>
+}
+
+/** A number of divisions as a guess: off by up to a third, rounded to a half division when small and a whole one when not. */
+export function guessDivisions(game: GameState, viewer: NationId, target: NationId, what: string, actual: number): number {
+  if (actual < 0.25) return 0
+  const g = actual * (0.7 + 0.6 * steady(`${viewer}|${target}|${what}|${Math.floor(game.turn / 12)}`))
+  return g < 3 ? Math.max(0.5, Math.round(g * 2) / 2) : Math.round(g)
+}
+
+export function deploymentView(game: GameState, viewer: NationId, target: NationId): DeploymentView {
+  const t = game.nations[target]
+  const empty: DeploymentView = { exact: true, posted: false, coastal: 0, subs: 0, air: 0, ground: 0, reserve: t ? totalUnits(forceUnits(game, target)) : 0, border: {} }
+  const d = t?.military.deployment
+  if (!t || !d) return { ...empty, exact: hasIntel(game, viewer, target) }
+  const cover = patrolCover(game, target)
+  const exact = hasIntel(game, viewer, target)
+  const ground = Object.keys(d.border).reduce((sum, x) => sum + garrisonDivisions(game, target, x), 0)
+  const reserve = reserveDivisions(game, target)
+  if (exact) {
+    const border: Record<string, number> = {}
+    for (const x of Object.keys(d.border).sort()) border[x] = garrisonDivisions(game, target, x)
+    return { exact, posted: true, coastal: cover.coastal, subs: cover.subs, air: cover.air, ground, reserve, border }
+  }
+  const facing = garrisonDivisions(game, target, viewer)
+  return {
+    exact,
+    posted: true,
+    coastal: guessDivisions(game, viewer, target, 'coastal', cover.coastal),
+    subs: guessDivisions(game, viewer, target, 'subs', cover.subs),
+    air: guessDivisions(game, viewer, target, 'air', cover.air),
+    ground: guessDivisions(game, viewer, target, 'ground', ground),
+    reserve: guessDivisions(game, viewer, target, 'reserve', reserve),
+    border: facing > 0 ? { [viewer]: guessDivisions(game, viewer, target, 'facing', facing) } : {},
+  }
+}
+
+/** "3.5" with intelligence, "~3.5" without. */
+export const showDivisions = (v: number, exact: boolean): string => `${exact ? '' : '~'}${Math.abs(v - Math.round(v)) < 0.05 ? Math.round(v) : v.toFixed(1)}`

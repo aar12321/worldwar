@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingCost, trainingRank, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from '../engine/arms'
 import { enemiesOf, formatDivisions, maxWars } from '../engine/helpers'
@@ -9,15 +9,14 @@ import { useGame } from '../store'
 import { Pips } from './bits'
 import { fmt, usePlayerView } from './hooks'
 import { UnitIcon } from './icons'
-import { OrderButton, PanelShell, Tabs } from './panel'
-import { AgenciesTab } from './AgenciesTab'
-import { ArmiesTab } from './ArmiesTab'
-import { isLive } from '../engine/calendar'
+import { DeskTabs, OrderButton, PanelShell, TabHost } from './panel'
+import { NumberStepper, Term } from './widgets'
 import { ACADEMY, GENERAL_TRAITS } from '../data/projects'
 import { tierOf } from '../engine/empire'
 import { academyCost } from '../engine/industry'
-import { SystemsTab } from './SystemsTab'
-import { WarsTab } from './WarsPanel'
+import { AIRCRAFT_IDS, AIRCRAFT_NODES } from '../data/aircraft'
+import { activeDevs, devSlots, finishedDevs } from '../engine/aircraft'
+import { Bar } from './kit'
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`
 
@@ -75,16 +74,11 @@ function UnitCard({ line }: { line: UnitStatLine }) {
         </span>
       </div>
 
-      <div className="flex items-center gap-1.5 text-[13px]" role="group" aria-label={`How many ${line.name} to train at once`}>
-        <span className="text-white/65">Train</span>
-        {[1, 5, 10].map((n) => (
-          <button key={n} className={`btn px-2.5 py-1 text-[13px] ${batch === n ? 'btn-primary' : 'btn-quiet'}`} aria-pressed={batch === n} onClick={() => setBatch(n)}>
-            {n}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <NumberStepper label={`${line.name} to train at once`} value={batch} onChange={setBatch} min={1} max={25} quick={[1, 5, 10]} slider={false} />
         {batch > 1 && (
           <button
-            className="btn btn-primary px-3 py-1 text-[13px] ml-auto"
+            className="btn btn-primary px-3 py-1 text-[13px]"
             title={`Queue ${batch} ${line.name} until the queue is full or you run out of money, soldiers or steel`}
             onClick={() => {
               const order = { type: 'queueTrain' as const, nationId: player.id, unit: line.unit }
@@ -138,6 +132,46 @@ function UnitCard({ line }: { line: UnitStatLine }) {
   )
 }
 
+/** The way into aircraft development: what is in hand and how far along, with the big Develop button. */
+function AircraftCard() {
+  const view = usePlayerView()!
+  const setOpen = useGame((s) => s.setAircraftOpen)
+  const { player, econ } = view
+  const active = activeDevs(player)
+  const done = finishedDevs(player).length
+  const slots = devSlots(player)
+  return (
+    <section className="inset-card p-3.5 space-y-2.5" aria-label="Aircraft development">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[16px] font-semibold">Aircraft development</div>
+          <div className="text-[13px] text-white/70">
+            Better fighters and bombers: radar, missile hunters, stealth, range, payload and drone wingmen. {done} of {AIRCRAFT_IDS.length} developed · {active.length} of {slots} in hand{econ.aircraftBill > 0 ? ` · ${fmt(econ.aircraftBill, 1)} money a month` : ''}.
+          </div>
+        </div>
+        <button className="btn btn-primary px-5 py-2.5 text-[15px] shrink-0" onClick={() => setOpen(true)}>
+          Develop
+        </button>
+      </div>
+      {active.map((id) => {
+        const p = player.aircraft![id]!
+        const node = AIRCRAFT_NODES[id]
+        return (
+          <div key={id} className="space-y-1">
+            <div className="flex justify-between text-[13px]">
+              <span>{node.name}</span>
+              <span className="text-white/70 tabular-nums">
+                {p.progress.toFixed(1)} of {node.months} months
+              </span>
+            </div>
+            <Bar value={p.progress / node.months} color="#6cb4ff" label={`${node.name} progress`} />
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
 function Forces() {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
@@ -149,7 +183,7 @@ function Forces() {
     <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
         <Total label="Strength" value={sheet.totalPower.toFixed(0)} />
-        <Total label="Divisions" value={formatDivisions(sheet.totalUnits)} sub={sheet.inField > 0.05 ? `${formatDivisions(sheet.totalUnits - sheet.inField)} at home · ${formatDivisions(sheet.inField)} in the field` : undefined} />
+        <Total label={<Term word="Division">Divisions</Term>} value={formatDivisions(sheet.totalUnits)} sub={[sheet.inField > 0.05 ? `${formatDivisions(sheet.totalUnits - sheet.inField)} at home · ${formatDivisions(sheet.inField)} in the field` : '', player.military.deployment ? `${formatDivisions(sheet.onStation)} on station · ${formatDivisions(sheet.reserve)} reserve` : ''].filter(Boolean).join(' · ') || undefined} />
         <Total label="Upkeep a month" value={`-${fmt(sheet.upkeep, 1)}`} />
         <Total label="Food a month" value={`-${fmt(sheet.foodUse, 1)}`} />
       </div>
@@ -177,6 +211,8 @@ function Forces() {
           </div>
         ))}
       </section>
+
+      <AircraftCard />
 
       <section className="unit-grid">
         {sheet.units.map((line) => (
@@ -227,33 +263,23 @@ function Forces() {
   )
 }
 
-const MILITARY_TABS = [
-  ['forces', 'Forces'],
-  ['wars', 'Wars'],
-] as const
-
-/** The Military desk: build the force, and run the wars it fights. */
+/** The Military desk: build the force, and run the wars it fights. Its tabs are listed in the registry (src/ui/registry.ts). */
 export function MilitaryPanel() {
   const view = usePlayerView()
-  const tab = useGame((s) => s.militaryTab)
-  const setTab = useGame((s) => s.setMilitaryTab)
   if (!view) return null
   const { game, player } = view
   const wars = enemiesOf(game, player.id).length
   return (
-    <PanelShell
-      title="Military"
-      kicker={`One force for the whole nation · ${wars} of ${maxWars(game, player.id)} wars`}
-      panel="military"
-      wide
-      tabs={<Tabs value={tab} onChange={setTab} options={isLive(game) ? ([MILITARY_TABS[0], ['armies', (game.armies?.filter((a) => a.nationId === player.id).length ?? 0) > 0 ? `Armies (${game.armies?.filter((a) => a.nationId === player.id).length})` : 'Armies'], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const) : ([MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const)} />}
-    >
-      {tab === 'forces' ? <Forces /> : tab === 'wars' ? <WarsTab /> : tab === 'systems' ? <SystemsTab /> : tab === 'armies' && isLive(game) ? <ArmiesTab /> : <AgenciesTab />}
+    <PanelShell title="Military" kicker={`One force for the whole nation · ${wars} of ${maxWars(game, player.id)} wars`} panel="military" wide tabs={<DeskTabs desk="military" />}>
+      <TabHost desk="military" />
     </PanelShell>
   )
 }
 
-function Total({ label, value, sub }: { label: string; value: string; sub?: string }) {
+/** The Forces tab, named for the registry. */
+export { Forces as MilitaryForces }
+
+function Total({ label, value, sub }: { label: ReactNode; value: string; sub?: string }) {
   return (
     <div className="inset-card py-2.5">
       <div className="label">{label}</div>

@@ -1,8 +1,9 @@
 import { BANKING } from '../data/banking'
+import { STOCKS } from '../data/companies'
 import { TREASURY } from '../data/business'
 import { tierOf } from './empire'
 import { addLog, clamp, enemiesOf, newId, sanctionersOf } from './helpers'
-import type { Bank, Bond, GameState, Nation, NationId, WorldStats } from './types'
+import type { Bank, Bond, Directive, GameState, Nation, NationId, WorldStats } from './types'
 
 export const startingBank = (rate = BANKING.neutralRate): Bank => ({ rate, inflation: BANKING.targetInflation, currency: 1, printed: 0, fund: 0, warBonds: 0, warBondStability: 0 })
 
@@ -237,11 +238,16 @@ export function updateWorldStats(s: GameState, gross: Map<NationId, number>, liv
   }
 }
 
-/** Dividends on shares follow the world interest rate, so borrowing to buy shares earns nothing. */
-export function dividendRate(s: Pick<GameState, 'worldStats'>, directive: 'payout' | 'expand' | 'focus'): number {
-  if (directive === 'expand') return 0
-  const base = (s.worldStats?.rate ?? BANKING.neutralRate) / 1200 + BANKING.dividendPremium
-  return directive === 'payout' ? base : base / 3
+/**
+ * Monthly dividend on the value of a nation's shares. A share never pays more than the cheapest a nation could borrow at (a top
+ * credit rating at its own policy rate), so borrowing with bonds to buy shares cannot earn a profit on the gap. The company's
+ * instruction sets the most it may pay: nothing for "expand", a third as much for "specialize".
+ */
+export function dividendRate(s: GameState, n: Nation, directive: Directive): number {
+  const ceiling = STOCKS.dividend[directive]
+  if (ceiling <= 0) return 0
+  const cheapest = newBondRate(s, n, TREASURY.ratings[0].rate)
+  return Math.min(ceiling, cheapest * (ceiling / STOCKS.dividend.payout))
 }
 
 export type { Bond }

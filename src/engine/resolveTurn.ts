@@ -9,6 +9,15 @@ import { GOVERNOR_LABELS, governorOrders } from './governors'
 import { buyShares, runStocks, sellShares, setDirective } from './stocks'
 import { SYSTEM_SPECS } from '../data/systems'
 import { fundSystem, runStrike, runSystems } from './systems'
+import { MISSILES } from '../data/missiles'
+import { AIRCRAFT_NODES } from '../data/aircraft'
+import { applyPauseAircraftDev, applyStartAircraftDev } from './aircraft'
+import { applyBuildMissiles, applyFundMissiles } from './missiles'
+import { applyBuildWarhead, fireNuke, launchNuke, runNuclear } from './nuclear'
+import { runCoalitions } from './coalition'
+import { applySpace, describeSpace, runSpaceWorld } from './space'
+import { applyDeployment, runDeployment } from './deployment'
+import { applySetBorder } from './borders'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion } from '../ai/opinion'
@@ -23,17 +32,23 @@ import { PROJECTS, RESEARCH_PROGRAMS, programCost } from '../data/projects'
 import { issueBond, moveFund, newBondRate, printMoney, repayBonds } from './bank'
 import { runResolution } from './council'
 import { setStateOwned, startProject } from './industry'
+import { LOCAL, isLocalProject } from '../data/localProjects'
+import { applyRush, startLocal } from './works'
 import { cleanSpending } from './people'
 import { recordHistory, runWorld, spendingFromBudget } from './statecraft'
 import { runEpidemics } from './epidemics'
 import { updateTiers } from './empire'
 import { nationNeighborMap } from './helpers'
-import { EVENT_GAP_TURNS, scheduleEvent } from './events'
+import { EVENT_BY_ID } from '../data/events'
+import { CAMPAIGNS, LEVEL_NAMES, SOCIAL } from '../data/society'
+import { applyCampaign, applySocial } from './society'
+import { eventGap, resolveEvent, scheduleEvent, scheduleHumanEvents, settleUnanswered } from './events'
 import { addLog, forceUnits, reach, regionsOf } from './helpers'
 import { clockOf, isLive } from './calendar'
 import { launchArmy, launchStrike, turnBack } from './armies'
 import { answerCrisis, runCrises } from './crises'
 import { runJustification } from './justification'
+import { describeGift, executeFactionOrder, factionOf, isFactionOrder, resolveFactionVotes, runFactionCampaigns, runFactionMonth } from './factions'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
 import { runPolitics } from './politics'
@@ -43,6 +58,10 @@ import { tickTraining, trainMonths } from './training'
 import { UNIT_TYPES, type Army, type AttackOrder, type BattleReport, type GameState, type Order, type TrainingJob, type WorldMap } from './types'
 import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
+import { applyGovern, describePatch } from './puppets'
+
+/** A project's name, whether it is a nation's or a country's. */
+const projectName = (id: string) => (isLocalProject(id) ? LOCAL[id].name : PROJECTS[id as keyof typeof PROJECTS].name)
 
 export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
   const region = (id: string) => map.regions[id]?.name ?? id
@@ -69,9 +88,11 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'setStateOwned':
       return `${o.mode === 'buy' ? 'Buy' : o.mode === 'seize' ? 'Seize' : 'Sell'} the ${SECTORS[o.sector].name.toLowerCase()} business`
     case 'startProject':
-      return `Start the ${PROJECTS[o.project].name.toLowerCase()}`
+      return `Start the ${projectName(o.project).toLowerCase()}${o.regionId ? ` in ${region(o.regionId)}` : ''}`
     case 'pauseProject':
-      return `${o.paused ? 'Pause' : 'Resume'} the ${PROJECTS[o.project].name.toLowerCase()}`
+      return `${o.paused ? 'Pause' : 'Resume'} the ${projectName(o.project).toLowerCase()}${o.regionId ? ` in ${region(o.regionId)}` : ''}`
+    case 'rushProject':
+      return `Rush the ${projectName(o.project).toLowerCase()}${o.regionId ? ` in ${region(o.regionId)}` : ''}`
     case 'moveCapital':
       return `Move the capital to ${region(o.regionId)}`
     case 'setRegionalCapital':
@@ -141,6 +162,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Build a case against ${nation(o.target)}`
     case 'annexPuppet':
       return `Annex ${nation(o.target)}`
+    case 'governPuppet':
+      return `Rule ${nation(o.target)}: ${describePatch(s, o)}`
     case 'operation':
       return `${FOREIGN_OPS[o.op].name}: ${nation(o.target)}`
     case 'domestic':
@@ -158,7 +181,25 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return a ? `Recall the army marching on ${region(a.target)}` : 'Recall an army'
     }
     case 'strike':
-      return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Fire ${o.count ?? 1} missile${(o.count ?? 1) === 1 ? '' : 's'} at ${region(o.target)}`
+      return o.weapon === 'orbital' ? `Orbital strike on ${region(o.target)}` : `Fire ${o.count ?? 1} ${MISSILES[o.kind ?? 'hypersonic'].name.toLowerCase()}${(o.count ?? 1) === 1 ? '' : 's'} at ${region(o.target)}`
+    case 'buildWarhead':
+      return 'Build a nuclear warhead'
+    case 'nuke':
+      return `Launch a nuclear missile at ${region(o.target)}`
+    case 'space':
+      return describeSpace(o.action)
+    case 'setDeployment':
+      return 'Post forces on station'
+    case 'setBorder':
+      return `${o.closed ? 'Close' : 'Reopen'} the border with ${nation(o.neighbor)}`
+    case 'fundMissiles':
+      return 'Raise the missile program'
+    case 'buildMissiles':
+      return `Build ${o.count} ${MISSILES[o.kind].name.toLowerCase()}${o.count === 1 ? '' : 's'}`
+    case 'startAircraftDev':
+      return `Develop ${AIRCRAFT_NODES[o.node]?.name.toLowerCase() ?? 'aircraft'}`
+    case 'pauseAircraftDev':
+      return `${o.paused ? 'Pause' : 'Resume'} developing ${AIRCRAFT_NODES[o.node]?.name.toLowerCase() ?? 'aircraft'}`
     case 'setGovernor':
       return `Governor of ${region(o.regionId)}: ${GOVERNOR_LABELS[o.governor]}`
     case 'fundAgency':
@@ -184,23 +225,67 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Enact ${LAW_SPECS[o.law].name}`
     case 'repealLaw':
       return `Repeal ${LAW_SPECS[o.law].name}`
+    case 'setSocial':
+      return `${SOCIAL[o.policy]?.name ?? 'Program'}: ${LEVEL_NAMES[o.level] ?? o.level}`
+    case 'campaign':
+      return `Run a ${CAMPAIGNS[o.campaign]?.name.toLowerCase() ?? 'campaign'}`
     case 'suppressRebels':
       return `Suppress rebels in ${region(o.regionId)}`
+    case 'eventChoice': {
+      const ev = s.pendingEvents?.[o.nationId]
+      const def = ev ? EVENT_BY_ID[ev.eventId] : null
+      return def ? `Decide: ${def.title} (${def.options[o.index]?.label ?? 'option'})` : 'Answer a decision'
+    }
+    case 'factionFound':
+      return `Found the faction ${o.name}`
+    case 'factionJoin':
+      return `Join ${s.factions?.find((f) => f.id === o.factionId)?.name ?? 'a faction'}`
+    case 'factionInvite':
+      return `Invite ${nation(o.target)} to the faction`
+    case 'factionLeave':
+      return `Leave ${factionOf(s, o.nationId)?.name ?? 'the faction'}`
+    case 'factionContribute':
+      return `Put ${describeGift(o.gift)} into the pool`
+    case 'factionWithdraw':
+      return `Take ${describeGift(o.gift)} out of the pool`
+    case 'factionPropose':
+      return o.proposal.kind === 'war' ? `Propose war on ${nation(o.proposal.target)} to the faction` : 'Propose a supply contract to the faction'
+    case 'factionVote': {
+      const p = factionOf(s, o.nationId)?.proposals.find((x) => x.id === o.proposalId)
+      return `Vote ${o.vote} on ${p ? (p.kind === 'war' ? `war on ${nation(p.target!)}` : 'a contract') : 'a proposal'}`
+    }
+  }
+}
+
+/** `describeOrder` for the log, which a malformed order must not be able to break. */
+function safeDescribe(s: GameState, map: WorldMap, o: Order): string {
+  try {
+    return describeOrder(s, map, o)
+  } catch {
+    return 'an order'
   }
 }
 
 const PHASES: Order['type'][][] = [
+  ['eventChoice'],
   ['respond'],
-  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setGovernor', 'setDirective', 'moveCapital'],
+  ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder', 'governPuppet'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
+  ['factionFound', 'factionJoin', 'factionInvite'],
+  ['factionLeave'],
+  ['factionContribute', 'factionWithdraw'],
+  ['factionPropose'],
+  ['factionVote'],
   ['declareWar', 'buildCase', 'annexPuppet', 'crisisAction', 'propose', 'resolution'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy', 'sellShares', 'buyShares'],
   ['issueBonds', 'repayDebt', 'printMoney', 'wealthFund', 'setStateOwned', 'fundSector', 'invest', 'developCity', 'setCityFocus', 'imposeSanctions', 'liftSanctions', 'releasePuppet'],
-  ['research', 'researchProgram', 'build', 'startProject', 'pauseProject', 'setRegionalCapital', 'fundAcademy', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
+  ['research', 'researchProgram', 'build', 'startProject', 'pauseProject', 'rushProject', 'setRegionalCapital', 'fundAcademy', 'queueTrain', 'upgradeWeapons', 'suppressRebels', 'assignGeneral'],
   ['train'],
   ['fundAgency', 'fundSystem'],
-  ['operation', 'domestic', 'strike'],
+  ['fundMissiles', 'buildMissiles', 'buildWarhead', 'startAircraftDev', 'pauseAircraftDev'],
+  ['space'],
+  ['operation', 'domestic', 'strike', 'nuke'],
 ]
 
 /**
@@ -240,7 +325,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
       if (!phase.includes(o.type)) continue
       const err = validateOrder(s, map, o)
       if (err) {
-        if (s.nations[o.nationId].isPlayer) addLog(s, 'info', `Order failed: ${describeOrder(s, map, o)} (${err}).`, [o.nationId])
+        if (s.nations[o.nationId].isPlayer) addLog(s, 'info', `Order failed: ${safeDescribe(s, map, o)} (${err}).`, [o.nationId])
         continue
       }
       const n = s.nations[o.nationId]
@@ -249,9 +334,21 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
       n.resources.pp -= cost.pp
       n.militaryPool -= cost.manpower
       n.resources.steel -= cost.steel
-      executeOrder(s, map, o, rng)
+      // A plan sent over the network is not trusted: one with nonsense in it costs its sender the order, not everyone the month.
+      if (s.humans?.includes(o.nationId)) {
+        try {
+          executeOrder(s, map, o, rng)
+        } catch (e) {
+          addLog(s, 'info', `Order failed: ${safeDescribe(s, map, o)} (it makes no sense: ${e instanceof Error ? e.message : 'unknown error'}).`, [o.nationId])
+        }
+      } else executeOrder(s, map, o, rng)
     }
   }
+
+  // Factions: votes that have settled are carried out, so a joint war is on before the month's attacks.
+  resolveFactionVotes(s, map, rng)
+  // Online, a decision nobody answered is made by the nation's ministers, so no month ever waits on one.
+  settleUnanswered(s, map)
 
   const trained = tickTraining(s)
   drillWithCommanders(s)
@@ -267,6 +364,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
     if (validateOrder(s, map, o)) continue
     resolveAttack(s, map, o.nationId, o.target, rng, o.commit, o.stance, o.missiles, undefined, o.share)
   }
+  // The pooled armies of factions at war attack as one.
+  runFactionCampaigns(s, map, rng)
   resolveRebels(s, map, rng)
   // Armies that fought this turn are back at their posts for the next one.
   for (const n of Object.values(s.nations)) n.military.exposed = 0
@@ -292,13 +391,18 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
     workforce.set(id, e.workforce)
     doctors.set(id, e.coverage.doctors)
   }
-  applyDeals(s)
+  applyDeals(s, map, rng)
+  runFactionMonth(s)
   runPolitics(s, map, rng)
   runEpidemics(s, map, nationNeighborMap(s, map), doctors)
+  runDeployment(s, map)
   runJustification(s, map, rng)
   runCrises(s, map, rng)
   runStocks(s, map, rng)
   runSystems(s)
+  runNuclear(s)
+  runCoalitions(s, map, rng)
+  runSpaceWorld(s)
   runWorld(s, gross, workforce)
   updateTiers(s)
   recordHistory(s, gross, net)
@@ -307,11 +411,15 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   // A live clock reads the 1st of the new month from here on, so the news below carries the right date.
   if (isLive(s)) s.day = 0
   expireDiplomacy(s)
-  // Surprise decisions are for single-player games. Online, everyone plans the same month, with no interruptions.
-  const player = s.nations[s.humans[0] ?? s.playerId]
-  if (s.humans.length === 1 && player?.alive && s.turn >= s.nextEventTurn) {
-    s.pendingEvent = scheduleEvent(s, map, player.id, rng)
-    s.nextEventTurn = s.turn + EVENT_GAP_TURNS
+  // Surprise decisions. A one-player game stops for its player. Online, each human gets their own and the month never waits.
+  if (s.multiplayer) {
+    if (s.turn >= s.nextEventTurn) scheduleHumanEvents(s, map, rng)
+  } else {
+    const player = s.nations[s.humans[0] ?? s.playerId]
+    if (s.humans.length === 1 && player?.alive && s.turn >= s.nextEventTurn) {
+      s.pendingEvent = scheduleEvent(s, map, player.id, rng)
+      s.nextEventTurn = s.turn + eventGap(s, player.id)
+    }
   }
   s.worldGross = worldGross(s, map)
   s.outcome = checkOutcome(s, map)
@@ -350,6 +458,9 @@ export function applyOrderNow(s: GameState, map: WorldMap, o: Order, pending: Or
 function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typeof createRng>) {
   const n = s.nations[o.nationId]
   switch (o.type) {
+    case 'eventChoice':
+      resolveEvent(s, map, o.index, o.nationId, false)
+      break
     case 'respond':
       respond(s, map, o.nationId, o.proposalId, o.accept, rng)
       break
@@ -391,14 +502,22 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       setStateOwned(s, n, o.sector, o.mode)
       break
     case 'startProject':
-      startProject(n, o.project)
-      if (n.isPlayer) addLog(s, 'economy', `Work began on the ${PROJECTS[o.project].name.toLowerCase()}. It takes about ${PROJECTS[o.project].months} months.`, [o.nationId])
+      if (isLocalProject(o.project)) {
+        startLocal(s, n, o.project, o.regionId!)
+        if (n.isPlayer) addLog(s, 'economy', `Work began on a ${LOCAL[o.project].name.toLowerCase()} in ${map.regions[o.regionId!].name}.`, [o.nationId])
+      } else {
+        startProject(n, o.project)
+        if (n.isPlayer) addLog(s, 'economy', `Work began on the ${PROJECTS[o.project].name.toLowerCase()}. It takes about ${PROJECTS[o.project].months} months.`, [o.nationId])
+      }
       break
     case 'pauseProject': {
-      const p = n.projects[o.project]
+      const p = isLocalProject(o.project) ? s.regions[o.regionId!]?.works?.[o.project] : n.projects[o.project]
       if (p) p.paused = o.paused
       break
     }
+    case 'rushProject':
+      applyRush(s, n, o.project, o.regionId, computeEconomy(s, map, o.nationId).coverage.engineers)
+      break
     case 'moveCapital':
       n.regionalCapitals = (n.regionalCapitals ?? []).filter((id) => id !== o.regionId)
       n.capital = o.regionId
@@ -483,6 +602,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       n.laws.push(o.law)
       addLog(s, 'info', `${n.name} enacted ${LAW_SPECS[o.law].name}.`, [o.nationId])
       break
+    case 'setSocial':
+      applySocial(s, n, o.policy, o.level)
+      break
+    case 'campaign':
+      applyCampaign(s, n, o.campaign)
+      break
     case 'repealLaw':
       n.laws = n.laws.filter((l) => l !== o.law)
       if (o.law === 'conscription_act') n.draftRate = Math.min(n.draftRate, DRAFT_LIMITS.max)
@@ -493,6 +618,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'annexPuppet':
       annexPuppet(s, map, o.nationId, o.target)
+      break
+    case 'governPuppet':
+      applyGovern(s, map, o)
       break
     case 'crisisAction':
       answerCrisis(s, o.nationId, o.crisisId, o.action)
@@ -579,6 +707,35 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'fundSystem':
       fundSystem(s, o.nationId, o.system, o.levels ?? 1)
       break
+    case 'space':
+      applySpace(s, n, o.action)
+      break
+    case 'setDeployment':
+      applyDeployment(s, map, o)
+      break
+    case 'setBorder':
+      applySetBorder(s, o)
+      break
+    case 'fundMissiles':
+      applyFundMissiles(s, n)
+      break
+    case 'buildMissiles':
+      applyBuildMissiles(s, n, o)
+      break
+    case 'buildWarhead':
+      applyBuildWarhead(s, n)
+      break
+    case 'nuke':
+      // A live warhead flies for days before it lands. In a turn game it falls at once.
+      if (isLive(s)) launchNuke(s, map, o, clockOf(s))
+      else fireNuke(s, map, o, rng)
+      break
+    case 'startAircraftDev':
+      applyStartAircraftDev(s, n, o)
+      break
+    case 'pauseAircraftDev':
+      applyPauseAircraftDev(n, o)
+      break
     case 'strike':
       // Live missiles fly for a day before they land. Everything else lands at once.
       if (isLive(s) && o.weapon === 'missile') launchStrike(s, map, o, clockOf(s))
@@ -599,6 +756,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       sellShares(s, o.nationId, o.company, o.shares)
       break
     default:
+      if (isFactionOrder(o)) executeFactionOrder(s, map, o, rng)
       break
   }
 }

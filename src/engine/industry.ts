@@ -1,21 +1,73 @@
-import { ACADEMY, ARMS_EXPORTS, ENTERPRISE, INDUSTRY, INDUSTRY_SKILLS, PROGRAM_RULES, PROJECT_IDS, PROJECT_RULES, PROJECTS, WORKS, programCost } from '../data/projects'
+import { ACADEMY, ARMS_EXPORTS, ENTERPRISE, INDUSTRY, INDUSTRY_SKILLS, PROGRAM_RULES, PROJECT_IDS, PROJECT_LEVELS, PROJECT_RULES, PROJECTS, WORKS, programCost } from '../data/projects'
 import { SECTORS } from '../data/business'
 import { addOpinion } from '../ai/opinion'
 import { tierGate, tierOf } from './empire'
 import { addInfamy, addLog, alliesOf, clamp, sanctionersOf } from './helpers'
-import type { GameState, Nation, NationId, ProjectId, ResearchTrack, SectorId, WorldMap } from './types'
+import type { GameState, Nation, NationId, ProjectId, ResearchTrack, SectorId, Tier, WorldMap } from './types'
 
 // ---- National projects ----
 
-export const activeProjects = (n: Pick<Nation, 'projects'>) => PROJECT_IDS.filter((id) => n.projects?.[id] && !n.projects[id]!.done)
-export const doneProject = (n: Pick<Nation, 'projects'> | undefined, id: ProjectId) => !!n?.projects?.[id]?.done
+/** Levels of a project finished and working: 0 when none. An upgrade under way does not take the earlier levels away. */
+export const projectLevel = (n: Pick<Nation, 'projects'> | undefined, id: ProjectId): number => {
+  const p = n?.projects?.[id]
+  return !p ? 0 : (p.level ?? (p.done ? 1 : 0))
+}
+/** A project built at least once. */
+export const doneProject = (n: Pick<Nation, 'projects'> | undefined, id: ProjectId) => projectLevel(n, id) >= 1
+/** What a project's levels are worth right now, as a multiple of level 1: 0 if not built, 1, 1.6 or 2. */
+export const projectPower = (n: Pick<Nation, 'projects'> | undefined, id: ProjectId) => PROJECT_LEVELS.power[projectLevel(n, id)]
+/** A bonus of `base` at level 1, scaled for more levels. Exactly `base` at level 1 and 0 when not built. */
+export const scaleBonus = (base: number, power: number) => (power === 1 ? base : base * power)
+/** A multiplier of `factor` at level 1 (1.25, or 0.75 for a discount), scaled around 1 for more levels. Exactly `factor` at level 1 and 1 when not built. */
+export const scaleFactor = (factor: number, power: number) => (power === 1 ? factor : power === 0 ? 1 : 1 + (factor - 1) * power)
 
-/** Why a nation cannot start this project, or null. */
+/** How fast projects advance, in months of work each month: the engineers set the pace, and public works speed it up or slow it. */
+export const projectSpeed = (n: Pick<Nation, 'spending'>, engineerCoverage: number) => clamp(Math.min(1.1, engineerCoverage), 0.4, 1.1) * (1 + PROJECT_RULES.worksSpeed * ((n.spending?.works ?? 2) - 2))
+
+/** Power the finished projects add for factories (a fusion plant), beyond the grid, scaled by level. */
+export function projectPowerSupply(n: Pick<Nation, 'projects'>): number {
+  let total = 0
+  for (const id of PROJECT_IDS) {
+    const spec = PROJECTS[id]
+    if (spec.power) total += spec.power * projectPower(n, id)
+  }
+  return total
+}
+
+/** On finishing a project the world may notice: a World Expo makes every nation think better of its host. */
+export function onProjectFinished(s: GameState, n: Nation, id: ProjectId) {
+  const spec = PROJECTS[id]
+  if (!spec?.opinion) return
+  for (const other of Object.values(s.nations)) if (other.alive && other.id !== n.id && !other.isPlayer) addOpinion(s, other.id, n.id, spec.name, spec.opinion, 0.4)
+}
+
+/** Projects with work under way: first builds and upgrades. */
+export const activeProjects = (n: Pick<Nation, 'projects'>) => PROJECT_IDS.filter((id) => n.projects?.[id] && !n.projects[id]!.done)
+
+/** The level a project is building (or would build next). */
+export const nextLevel = (n: Pick<Nation, 'projects'>, id: ProjectId) => projectLevel(n, id) + 1
+export const levelCost = (id: ProjectId, level: number) => Math.round(PROJECTS[id].cost * PROJECT_LEVELS.cost[level])
+export const levelMonths = (id: ProjectId, level: number) => Math.round(PROJECTS[id].months * PROJECT_LEVELS.months[level])
+/** Everything put into a project up to a level, which its upkeep is a share of. */
+export const investedIn = (id: ProjectId, level: number) => {
+  let total = 0
+  for (let l = 1; l <= level; l++) total += levelCost(id, l)
+  return total
+}
+/** Money a month while the next level is built. */
+export const monthlyCost = (id: ProjectId, level: number) => levelCost(id, level) / levelMonths(id, level)
+/** The empire size an upgrade needs: the project's own tier, and for the third level at least a Regional power. */
+const levelTier = (id: ProjectId, level: number): Tier => (level >= 3 ? (Math.max(2, PROJECTS[id].tier) as Tier) : PROJECTS[id].tier)
+
+/** Why a nation cannot start (or upgrade) this project, or null. */
 export function projectProblem(s: GameState, map: WorldMap, n: Nation, id: ProjectId): string | null {
   const spec = PROJECTS[id]
   if (!spec) return 'Unknown project'
-  if (n.projects?.[id]) return n.projects[id]!.done ? 'Already built' : 'Already under way'
-  const gate = tierGate(s, n.id, spec.tier)
+  const have = n.projects?.[id]
+  if (have && !have.done) return 'Already under way'
+  const level = nextLevel(n, id)
+  if (level > PROJECT_LEVELS.max) return 'Already built to its highest level'
+  const gate = tierGate(s, n.id, levelTier(id, level))
   if (gate) return gate
   if (spec.coastal && !Object.values(s.regions).some((r) => r.owner === n.id && map.regions[r.id]?.coastal)) return 'Needs a coastline'
   const slots = tierOf(n).projectSlots
@@ -23,19 +75,30 @@ export function projectProblem(s: GameState, map: WorldMap, n: Nation, id: Proje
   return null
 }
 
+/** Begins a project, or the next level of a finished one. */
 export function startProject(n: Nation, id: ProjectId) {
+  const have = n.projects?.[id]
+  if (have?.done) {
+    // The levels already built keep working while the next is under way.
+    have.level = projectLevel(n, id)
+    have.done = false
+    have.progress = 0
+    delete have.paused
+    return
+  }
   ;(n.projects ??= {})[id] = { progress: 0, done: false }
 }
 
-/** Money projects cost this month: those being built (unless paused) and the upkeep of those finished. */
+/** Money projects cost this month: those being built (unless paused) and the upkeep of every level already built. */
 export function projectBill(n: Nation): { building: number; upkeep: number } {
   let building = 0
   let upkeep = 0
   for (const id of PROJECT_IDS) {
     const p = n.projects?.[id]
     if (!p) continue
-    if (p.done) upkeep += PROJECTS[id].cost * PROJECT_RULES.maintenance
-    else if (!p.paused) building += PROJECTS[id].cost / PROJECTS[id].months
+    const built = projectLevel(n, id)
+    if (built > 0) upkeep += investedIn(id, built) * PROJECT_RULES.maintenance
+    if (!p.done && !p.paused) building += monthlyCost(id, built + 1)
   }
   return { building, upkeep }
 }
@@ -47,19 +110,23 @@ export function projectBill(n: Nation): { building: number; upkeep: number } {
  */
 export function runProjects(s: GameState, n: Nation, engineerCoverage: number): number {
   let refund = 0
-  const speed = clamp(Math.min(1.1, engineerCoverage), 0.4, 1.1) * (1 + PROJECT_RULES.worksSpeed * ((n.spending?.works ?? 2) - 2))
+  const speed = projectSpeed(n, engineerCoverage)
   for (const id of PROJECT_IDS) {
     const p = n.projects?.[id]
     if (!p || p.done || p.paused) continue
-    const month = PROJECTS[id].cost / PROJECTS[id].months
+    const level = projectLevel(n, id) + 1
+    const months = levelMonths(id, level)
     if (n.resources.capital < 0) {
-      refund += month
+      refund += monthlyCost(id, level)
       continue
     }
-    p.progress = Math.min(PROJECTS[id].months, p.progress + speed)
-    if (p.progress >= PROJECTS[id].months - 1e-9) {
+    p.progress = Math.min(months, p.progress + speed)
+    if (p.progress >= months - 1e-9) {
       p.done = true
-      addLog(s, n.isPlayer ? 'economy' : 'news', `${n.name} finished its ${PROJECTS[id].name.toLowerCase()}.`, [n.id])
+      // Only a second or third level is written down: a single level is simply "done", as it has always been.
+      if (level >= 2) p.level = level
+      addLog(s, n.isPlayer ? 'economy' : 'news', `${n.name} finished ${level >= 2 ? `level ${level} of its` : 'its'} ${PROJECTS[id].name.toLowerCase()}.`, [n.id])
+      if (level === 1) onProjectFinished(s, n, id)
     }
   }
   return refund
@@ -129,10 +196,10 @@ export function industryCapMult(n: Pick<Nation, 'people'>, sector: SectorId): nu
 }
 
 /** Factories need power past a point: the energy sector, oil and the grid supply it. Returns the factory multiplier. */
-export function powerMult(n: Nation, factories: number, oilProduction: number): number {
+export function powerMult(n: Nation, factories: number, oilProduction: number, extraPower = 0): number {
   if (factories <= INDUSTRY.powerFree) return 1
   const demand = (factories - INDUSTRY.powerFree) * INDUSTRY.powerPerFactory
-  const supply = (n.sectors.energy ?? 0) * INDUSTRY.powerPerEnergy + oilProduction * INDUSTRY.powerPerOil + (n.projects?.grid?.done ? INDUSTRY.powerGrid : 0)
+  const supply = (n.sectors.energy ?? 0) * INDUSTRY.powerPerEnergy + oilProduction * INDUSTRY.powerPerOil + scaleBonus(INDUSTRY.powerGrid, projectPower(n, 'grid')) + projectPowerSupply(n) + extraPower
   return clamp(supply / Math.max(1e-6, demand), INDUSTRY.powerFloor, 1)
 }
 
