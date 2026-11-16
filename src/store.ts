@@ -8,7 +8,7 @@ import { maxAttacks, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
 import { markMonth, statsOf } from './engine/monthMark'
 import { markSettled } from './engine/economy'
-import { MONTH_END_ORDERS, isMonthEndOrder, validateOrder } from './engine/orders'
+import { MONTH_END_ORDERS, isMonthEndOrder, undoable, validateOrder } from './engine/orders'
 import { absDate, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
@@ -1068,7 +1068,10 @@ export const useGame = create<GameStore>((set, get) => ({
         get().toast(result.error, 'error')
         return false
       }
-      set({ game: next, undoStack: playing ? [] : [...get().undoStack, { game, label: describeOrder(game, map, order) }].slice(-UNDO_LIMIT) })
+      // An order that cannot be taken back also cuts off everything done before it: undoing an earlier step would carry it away too.
+      const takeBack = !playing && undoable(game, order)
+      set({ game: next, undoStack: takeBack ? [...get().undoStack, { game, label: describeOrder(game, map, order) }].slice(-UNDO_LIMIT) : [] })
+      if (!playing && !takeBack) get().toast(`${describeOrder(game, map, order)}: done. This cannot be taken back.`, 'info', 5000)
       // An offer a rival answered on the spot (live games) says how it went.
       for (const d of next.dispatches.slice(seen)) if (d.to === game.playerId || d.from === game.playerId) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
       if (playing) {
@@ -1120,7 +1123,7 @@ export const useGame = create<GameStore>((set, get) => ({
         firstError ||= result.error
       } else done++
     }
-    set({ game: next, undoStack: done > 0 ? [...get().undoStack, { game, label: `${done} orders` }].slice(-UNDO_LIMIT) : get().undoStack })
+    set({ game: next, undoStack: batch.some((o) => !undoable(game, o)) ? [] : done > 0 ? [...get().undoStack, { game, label: `${done} orders` }].slice(-UNDO_LIMIT) : get().undoStack })
     save(next)
     if (failed > 0) get().toast(`${done} done, ${failed} could not be made: ${firstError}`, 'error')
     return { done, failed }

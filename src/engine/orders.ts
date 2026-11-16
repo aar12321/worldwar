@@ -56,6 +56,27 @@ export function isMonthEndOrder(s: Pick<GameState, 'settings'>, type: Order['typ
   return MONTH_END_ORDERS.has(type)
 }
 
+/**
+ * Whether an order done at once can be taken back (Undo). Not when its result or its answer is shown the moment it is made, or the world has
+ * seen it: a missile salvo or warhead in the air, an orbital strike, an attack fought in a turn game (its battle report would be a free look
+ * at the dice), and, in a live game, an offer or answer a rival gave on the spot. Taking those back would let a player peek and try again.
+ * A live attack is only an army that has not yet marched; everything else is plain bookkeeping and can be undone.
+ */
+export function undoable(s: Pick<GameState, 'settings'>, o: Order): boolean {
+  switch (o.type) {
+    case 'nuke':
+    case 'strike':
+      return false
+    case 'attack':
+      return isLive(s)
+    case 'propose':
+    case 'respond':
+      return !isLive(s)
+    default:
+      return true
+  }
+}
+
 /** Influence to annex a puppet: more for a bigger one, half for a devoted one and half as much again for a restive one. */
 export function annexCost(s: GameState, target: string): number {
   const base = EMPIRE.annexCost * Math.max(1, Object.values(s.regions).filter((r) => r.owner === target).length)

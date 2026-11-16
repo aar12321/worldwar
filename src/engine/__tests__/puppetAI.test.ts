@@ -30,14 +30,14 @@ describe('bots make puppets at the peace table', () => {
     expect(peaceTerms(world(), map, 'r0', 'r4', 100, false, 0).puppet).toBeUndefined()
   })
 
-  it('Medium needs a decisive win (35), Hard a clear one (25)', () => {
+  it('Medium needs a decisive win (30), Hard a clear one (25)', () => {
     const s = world()
     expect(wantsPuppet(s, map, 'r0', 'r4', PUPPET_AI.minNet[1] - 1, 1)).toBe(false)
     expect(wantsPuppet(s, map, 'r0', 'r4', PUPPET_AI.minNet[1] + 20, 1)).toBe(true)
     expect(wantsPuppet(s, map, 'r0', 'r4', PUPPET_AI.minNet[2] - 1, 2)).toBe(false)
     const need = Math.ceil(puppetValue(s, map, 'r4') / 0.85)
     expect(wantsPuppet(s, map, 'r0', 'r4', Math.max(PUPPET_AI.minNet[2], need), 2)).toBe(true)
-    // Medium's 35 is out of Hard's reach when the price is higher: it also needs the war score to pay for the puppet.
+    // Medium's bar is out of Hard's reach when the price is higher: it also needs the war score to pay for the puppet.
     expect(wantsPuppet(s, map, 'r0', 'r4', 26, 1)).toBe(false)
   })
 
