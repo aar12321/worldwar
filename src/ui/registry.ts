@@ -161,6 +161,7 @@ export const DESKS: DeskDef[] = [
     tabs: [
       { id: 'forces', label: 'Forces', hint: 'Forces and academy', keywords: ['infantry', 'tanks', 'train', 'weapons', 'drill', 'commander', 'aircraft', 'missiles', 'planes'], load: lazyOf(() => import('./MilitaryPanel'), 'MilitaryForces') },
       { id: 'deploy', label: 'Deployment', hint: 'Deployment: patrols, screens, border garrisons', keywords: ['station', 'garrison', 'border', 'patrol', 'reserve', 'navy', 'screen'], load: lazyOf(() => import('./DeploymentTab'), 'DeploymentTab') },
+      { id: 'theatres', label: 'Theatres', hint: 'Theatres: where your forces stand, what is changing, what they achieve', keywords: ['theatre', 'theater', 'posture', 'alert', 'readiness', 'preset', 'strait', 'blockade', 'show of force', 'exercise', 'ledger', 'command'], load: lazyOf(() => import('./TheatresTab'), 'TheatresTab') },
       { id: 'armies', label: 'Armies', hint: 'Armies on the march (live games)', keywords: ['recall', 'march'], load: lazyOf(() => import('./ArmiesTab'), 'ArmiesTab'), visible: (c) => c.live, badge: (c) => c.armies || null },
       { id: 'wars', label: 'Wars', hint: 'Your wars, fronts and peace', key: 'w', keywords: ['peace', 'front', 'defense line', 'declare', 'attack'], load: lazyOf(() => import('./WarsPanel'), 'WarsTab'), badge: (c) => c.wars || null },
       { id: 'agencies', label: 'Agencies', hint: 'Intelligence and security services', keywords: ['spy', 'cia', 'fbi', 'sabotage', 'coup', 'rebels', 'intelligence'], load: lazyOf(() => import('./AgenciesTab'), 'AgenciesTab') },

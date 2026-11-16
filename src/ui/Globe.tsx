@@ -18,6 +18,9 @@ import { BORDER_COLORS, NEON, frontColors, mix, relationColors, tint, wash, with
 import { borderPaths, stationBadges, tensionBadges, type StationBadge } from './globe/borderLayer'
 import { neighborsOf } from '../engine/borders'
 import { globeBridge, useFx, type BattleOverlay } from './globeBridge'
+import { paintPresenceMarker, usePresenceLayer } from './globe/usePresence'
+import { usePresenceUi } from './globe/presenceUi'
+import type { PresenceMarker } from './globe/presenceLayer'
 
 const { map, features } = getWorld()
 const EMPTY_REGIONS = new Set<RegionId>()
@@ -89,6 +92,8 @@ interface Marker {
   pop?: string
   /** Forces on station, drawn as a small badge. */
   station?: StationBadge
+  /** The persistent military picture: a patrol, a strait, a front. Clickable. */
+  presence?: PresenceMarker
 }
 
 const GLYPHS: Record<StationBadge['glyph'], string> = {
@@ -112,6 +117,16 @@ function paintStation(b: StationBadge): HTMLElement {
   el.dataset.guess = b.guess ? '1' : '0'
   el.title = b.title
   el.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="rgba(255,255,255,0.9)" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">${GLYPHS[b.glyph]}</svg><span>${escapeHtml(b.text)}</span>`
+  // A click opens the unit card of what the badge shows: a garrison, a fleet, a submarine screen or an air patrol.
+  const [nation, kind, other] = b.key.split(':')
+  const card = kind === 'guard' ? { kind: 'garrison' as const, nation, other } : kind === 'ship' ? { kind: 'fleet' as const, nation } : kind === 'sub' ? { kind: 'sub' as const, nation } : kind === 'air' ? { kind: 'air' as const, nation } : null
+  if (card) {
+    el.dataset.card = '1'
+    el.addEventListener('click', (e) => {
+      e.stopPropagation()
+      usePresenceUi.getState().open(card)
+    })
+  }
   return el
 }
 
@@ -144,6 +159,7 @@ function paintBattle(b: BattleOverlay, reduced: boolean): HTMLElement {
 function paintMarker(d: object): HTMLElement {
   const m = d as Marker
   if (m.station) return paintStation(m.station)
+  if (m.presence) return paintPresenceMarker(m.presence)
   if (m.battle) return paintBattle(m.battle, useGame.getState().settings.reducedMotion)
   if (m.pop) {
     const el = document.createElement('div')
@@ -365,6 +381,8 @@ export function WorldGlobe() {
     stationsRef.current = { key, list: badges.map((b) => ({ key: `station:${b.key}`, lat: b.lat, lng: b.lng, title: b.title, yours: b.mine, station: b })) }
     return stationsRef.current.list
   }, [game, mapMode])
+  const presence = usePresenceLayer(ref, game, palette, reducedMotion)
+  const presenceMarkers = useMemo<Marker[]>(() => presence.markers.map((m) => ({ key: `presence:${m.key}`, lat: m.lat, lng: m.lng, title: m.title, yours: m.mine, presence: m })), [presence])
   const overlayPins = useRef(new Map<string, Marker>())
   const markers = useMemo<Marker[]>(() => {
     const kept = new Map<string, Marker>()
@@ -372,8 +390,9 @@ export function WorldGlobe() {
     for (const p of pops) kept.set(`pop:${p.id}`, overlayPins.current.get(`pop:${p.id}`) ?? { key: `pop:${p.id}`, lat: p.lat, lng: p.lng, title: p.text, yours: true, pop: p.text })
     overlayPins.current = kept
     const base = stationMarkers.length ? [...pins, ...stationMarkers] : pins
-    return kept.size ? [...base, ...kept.values()] : base
-  }, [pins, stationMarkers, battles, pops])
+    const withPresence = presenceMarkers.length ? [...base, ...presenceMarkers] : base
+    return kept.size ? [...withPresence, ...kept.values()] : withPresence
+  }, [pins, stationMarkers, presenceMarkers, battles, pops])
 
   const army = useArmyLayer(ref, reducedMotion)
   // The Borders map draws every border in the colors of its tension, over the army routes.
@@ -382,11 +401,15 @@ export function WorldGlobe() {
     return g && mapMode === 'borders' ? borderPaths(g, map, g.playerId) : []
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paintKey, mapMode])
-  const pathsData = useMemo(() => (borderLines.length ? [...(army.props.pathsData as object[]), ...borderLines] : army.props.pathsData), [army.props.pathsData, borderLines])
+  const pathsData = useMemo(() => {
+    const base = army.props.pathsData as object[]
+    if (!borderLines.length && !presence.paths.length) return army.props.pathsData
+    return [...base, ...presence.paths, ...borderLines]
+  }, [army.props.pathsData, borderLines, presence.paths])
   // Your launch site pulses purple while a flight of yours is under way.
   const launchSite = game?.nations[game.playerId]?.space?.missions.length ? game.nations[game.playerId].capital : ''
   const spaceRings = useMemo(() => (launchSite && map.regions[launchSite] ? [{ lat: map.regions[launchSite].lat, lng: map.regions[launchSite].lng, color: '#bf5af2', maxRadius: 3.2, repeat: 2200 }] : []), [launchSite])
-  const allRings = useMemo(() => (army.threatRings.length || spaceRings.length ? [...rings, ...army.threatRings, ...spaceRings] : rings), [rings, army.threatRings, spaceRings])
+  const allRings = useMemo(() => (army.threatRings.length || spaceRings.length || presence.rings.length ? [...rings, ...army.threatRings, ...spaceRings, ...presence.rings] : rings), [rings, army.threatRings, spaceRings, presence.rings])
 
   const ringColor = useCallback((r: object) => (t: number) => withAlpha((r as { color: string }).color, Math.max(0, 1 - t)), [])
 

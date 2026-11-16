@@ -31,6 +31,7 @@ import { electionNeed } from './people'
 import type { BuildingType, GameState, Milestone, NationId, Order, ProjectId, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 import { threatWatch } from './threats'
+import { recommendPreset, supplyOf, theatresOf } from './theatres'
 import { canAttackRegion, forecastAttack, garrisonStrength } from './warfare'
 import { netWarScore } from './warscore'
 
@@ -41,7 +42,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
   | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' | 'puppets' }
-  | { desk: 'military'; tab: 'forces' | 'deploy' | 'wars' | 'agencies' | 'systems' | 'armies' }
+  | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
   | { desk: 'faction' }
@@ -101,6 +102,16 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
     add('now', 95, { id: `watch-${danger.nation}-${danger.route}`, title: `${s.nations[danger.nation]?.name ?? 'A rival'} can reach you and the way in is not guarded`, detail: danger.text, action: 'Post forces', target: { desk: 'military', tab: 'deploy' } })
   } else if (!n.military.deployment && myUnits >= 3 && (watch.length > 0 || enemies.length > 0)) {
     add('idea', 36, { id: 'station-forces', title: 'Station your forces', detail: 'Nothing of yours is on patrol or guarding a border, so a rival that strikes first meets no garrison and no patrols. Post part of your fleet, air force and troops, and keep the rest in reserve to attack with.', action: 'Open Deployment', target: { desk: 'military', tab: 'deploy' } })
+  }
+
+  // Forces on station: a tense border thinly held, or posted forces with no fuel to stay up.
+  if (n.military.deployment && !danger) {
+    const thin = theatresOf(s, map, nationId).find((t) => t.kind === 'land' && !t.atWar && t.threat !== 'low' && t.cover < 0.3)
+    if (thin) {
+      const rec = recommendPreset(s, map, nationId)
+      add('soon', 58, { id: `thin-${thin.other}`, title: `${thin.name} is tense (${thin.tension}) and thinly held`, detail: `${rec.why} The Theatres desk has one-click presets and shows what is changing.`, action: 'Open Theatres', target: { desk: 'military', tab: 'theatres' } })
+    }
+    if (supplyOf(s, nationId).state === 'dry') add('now', 62, { id: 'supply-dry', title: 'Your forces on station are out of oil', detail: 'Patrols and garrisons burn oil every month. With none, their readiness falls. Buy oil or stand some of them down.', action: 'Open Theatres', target: { desk: 'military', tab: 'theatres' } })
   }
 
   // Struck with missiles lately: answer in kind if you can, or build the means. The same goes for turn and live games.

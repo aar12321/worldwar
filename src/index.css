@@ -1313,3 +1313,61 @@ select option:disabled {
     font-size: 11px;
   }
 }
+
+/* The persistent military picture on the globe: clickable badges for patrols, straits and fronts, and the card they open. */
+.presence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 4px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  background: var(--badge, #555);
+  color: #fff;
+  font-family: 'Inter Variable', Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+}
+.presence-badge[data-mine='1'] {
+  border-color: #fff;
+}
+.presence-badge[data-guess='1'] {
+  opacity: 0.75;
+  border-style: dashed;
+}
+.presence-badge[data-hot='1'] {
+  border-color: #ffd60a;
+  border-width: 2px;
+}
+.presence-badge:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.station-badge[data-card='1'] {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.presence-card {
+  position: fixed;
+  z-index: 40;
+  left: 120px;
+  bottom: 78px;
+  width: min(360px, calc(100vw - 140px));
+  max-height: 60vh;
+  overflow-y: auto;
+  background: rgba(20, 24, 31, 0.96);
+  backdrop-filter: blur(10px);
+}
+@media (max-width: 640px) {
+  .presence-card {
+    left: 16px;
+    width: calc(100vw - 32px);
+    bottom: 84px;
+  }
+}

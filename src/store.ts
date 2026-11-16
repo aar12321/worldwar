@@ -43,7 +43,7 @@ export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'dip
 export type EmpireTab = 'overview' | 'provinces' | 'world' | 'reaction' | 'stats' | 'puppets'
 export type { PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'space' | 'market' | 'stocks' | 'government'
-export type MilitaryTab = 'forces' | 'deploy' | 'wars' | 'agencies' | 'systems' | 'armies'
+export type MilitaryTab = 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts' | 'borders'
 

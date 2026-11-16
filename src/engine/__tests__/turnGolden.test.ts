@@ -6,7 +6,19 @@ import { applyEventChoice } from '../events'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
+import { PRESENCE } from '../../data/presence'
 import { withOldCombat } from './oldCombat'
+
+/** Runs `fn` with what forces on station do in the world (docs/MILITARY_STATUS.md) switched off. */
+function withoutPresence<T>(fn: () => T): T {
+  const on = PRESENCE.on
+  PRESENCE.on = false
+  try {
+    return fn()
+  } finally {
+    PRESENCE.on = on
+  }
+}
 
 /**
  * Pins exactly how turn-based months resolve, so a change that was not meant to alter the rules (a refactor, a cache) shows up here.
@@ -45,6 +57,9 @@ import { withOldCombat } from './oldCombat'
  * (COMBAT.luck), units that soak up damage in proportion to what they cost (UNIT_SPECS.toughness), robots at 1.8 attack, and Siege and Blitz
  * rebalanced. Checked before pinning: with those numbers put back (withOldCombat) the old hashes return exactly, in the last test of this file,
  * so the new unit orders, the forecast, the planner and the auto-command change nothing for a game that does not use them.
+ * Re-pinned (all three) for Presence (docs/MILITARY_STATUS.md): readiness and alert levels, patrol trade, straits, blockades, watch intelligence, incidents,
+ * shows of force, and rivals that read a posted border. Checked before pinning: with `PRESENCE.on` switched off (the last test of this file) the previous
+ * pins (7d9d1f55d2a94, 5e24dace6d64b, 1c2e3ffb6159fd) return exactly, so nothing else moved.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -106,7 +121,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('7d9d1f55d2a94')
+    expect(hash(JSON.stringify(s))).toBe('1f64596de9fe5')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -115,18 +130,18 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned again for the combat tuning (docs/WAR_STATUS.md): see 'the combat tuning is the only thing that moved them' below.
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
-    expect(hash(JSON.stringify(s))).toBe('5e24dace6d64b')
+    expect(hash(JSON.stringify(s))).toBe('1780819090232c')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('1c2e3ffb6159fd')
+    expect(hash(JSON.stringify(state))).toBe('16f99cdbf99edf')
     expect(hash(JSON.stringify(log))).toBe('17e9fe7b927733')
   })
 
   it('the combat tuning is the only thing that moved them: with the old numbers put back the old hashes return', () => {
     // Fortune of the day off, every division as tough as every other, robots at 1.6, Siege and Blitz as they were (see oldCombat.ts).
-    withOldCombat(() => {
+    withoutPresence(() => withOldCombat(() => {
       const normal = botWorld(7, 'normal', 'poland', 12).s
       expect(hash(JSON.stringify(normal))).toBe('1b61219982f9c1')
       const hard = botWorld(5, 'hard', 'china', 30).s
@@ -134,6 +149,14 @@ describe('turn mode resolves exactly as pinned', () => {
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('14c280eef9180f')
       expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
+    }))
+  }, 400_000)
+
+  it('presence is the only thing that moved them: switched off, the pins from before it return', () => {
+    withoutPresence(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('7d9d1f55d2a94')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('5e24dace6d64b')
+      expect(hash(JSON.stringify(smallWar().state))).toBe('1c2e3ffb6159fd')
     })
   }, 400_000)
 

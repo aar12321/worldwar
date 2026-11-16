@@ -28,6 +28,7 @@ import { Lobby } from './ui/Online'
 import { WarRoom } from './ui/WarRoom'
 
 // The globe (three.js, about 2 MB) and the big desks load in their own files, so the start screen appears at once.
+import { PresenceCard } from './ui/PresenceCard'
 const WorldGlobe = lazy(() => import('./ui/Globe').then((m) => ({ default: m.WorldGlobe })))
 const AircraftDev = lazy(() => import('./ui/AircraftDev').then((m) => ({ default: m.AircraftDev })))
 
@@ -191,6 +192,7 @@ export default function App() {
           <AnimatePresence>{panel !== 'none' && <DeskSlot key={panel} id={panel} />}</AnimatePresence>
           {panel === 'none' && <CountryPanel />}
           <ArmyCard />
+          <PresenceCard />
           {panel === 'none' && <ArmiesDock />}
           <OrdersTray />
           <WarRoom />
