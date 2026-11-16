@@ -1,11 +1,13 @@
 import { difficultyOf } from '../data/difficulty'
 import { FACTION } from '../data/factions'
 import { PERSONALITIES } from '../data/personalities'
-import { emptyStock, factionName, factionOf, poolPower, poolValue, warTargetProblem } from '../engine/factions'
+import { emptyStock, factionName, factionOf, poolPower, poolUnits, poolValue, warTargetProblem } from '../engine/factions'
 import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { createRng, type Rng } from '../engine/rng'
-import type { Faction, FactionGift, FactionProposal, GameState, NationId, Order, UnitType, WorldMap } from '../engine/types'
+import { marketPrices } from '../engine/trade'
+import { UNIT_SPECS } from '../data/unitTypes'
+import { UNIT_TYPES, type Faction, type FactionContractTerms, type FactionGift, type FactionProposal, type GameState, type Nation, type NationId, type Order, type PoolResource, type UnitType, type WorldMap } from '../engine/types'
 import { opinionOf } from './opinion'
 
 function hashString(str: string): number {
@@ -53,11 +55,40 @@ export function botWarVote(s: GameState, map: WorldMap, botId: NationId, f: Fact
   return null
 }
 
-/** How a rival votes on a supply contract: yes when it is a gift or a fair price, no when it drains the pool. */
+/** What a bundle of the pool's goods fetches on the world market today (money at face value). */
+function marketWorth(s: GameState, b: Partial<Record<PoolResource, number>>): number {
+  const px = marketPrices(s)
+  let v = 0
+  for (const r of Object.keys(b) as PoolResource[]) v += (b[r] ?? 0) * (r === 'money' ? 1 : px[r])
+  return v
+}
+
+/**
+ * A rival that holds more fuel or rations than it needs offers to sell them to the pool at the market price, while the pool's store runs low.
+ * Bounded: one contract per member at a time, a fifth of the member's spare stock a month, six months, and only when the pool holds four months of the pay.
+ */
+function contractIdea(s: GameState, me: Nation, f: Faction, rng: Rng): FactionContractTerms | null {
+  if (poolUnits(f) < 1 || f.contracts.some((c) => c.member === me.id) || f.proposals.some((p) => p.kind === 'contract' && p.by === me.id)) return null
+  if (!rng.chance(0.25)) return null
+  const px = marketPrices(s)
+  for (const r of ['oil', 'food'] as const) {
+    const need = UNIT_TYPES.reduce((a, k) => a + f.pool.units[k] * UNIT_SPECS[k][r], 0)
+    if (need < 0.5 || f.pool.stock[r] >= need * 3) continue
+    const spare = me.resources[r] - (r === 'oil' ? 40 : 60)
+    const amount = Math.floor(Math.min(spare * 0.2, need * 2, FACTION.maxContractAmount))
+    if (amount < 2) continue
+    const pay = Math.ceil(amount * px[r] * 10) / 10
+    if (f.pool.stock.money < pay * 4) continue
+    return { member: me.id, supply: { [r]: amount }, pay: { money: pay }, months: 6, start: 0, collateral: 0 }
+  }
+  return null
+}
+
+/** How a rival votes on a supply contract: yes when it is a gift or a fair price at the world market, no when it drains the pool or pays over the market. */
 export function botContractVote(s: GameState, map: WorldMap, botId: NationId, f: Faction, p: FactionProposal): 'yes' | 'no' | null {
   const t = p.terms!
-  const get = (Object.keys(t.pay) as (keyof typeof t.pay)[]).reduce((a, r) => a + (t.pay[r] ?? 0) * FACTION.price[r], 0) * t.months
-  const give = (Object.keys(t.supply) as (keyof typeof t.supply)[]).reduce((a, r) => a + (t.supply[r] ?? 0) * FACTION.price[r], 0) * t.months
+  const get = marketWorth(s, t.pay) * t.months
+  const give = marketWorth(s, t.supply) * t.months
   if (get <= 0) return 'yes'
   if (get > poolValue(f) * 0.3 && get > give * 1.05) return 'no'
   const op = opinionOf(s, map, botId, p.by, { coalition: false })
@@ -123,6 +154,12 @@ export function factionBotOrders(s: GameState, map: WorldMap, nationId: NationId
         if (tidy.stock?.money) tryAdd({ type: 'factionContribute', nationId, gift: { stock: { money: tidy.stock.money } } })
       }
     }
+  }
+
+  // A sale of fuel or rations to the pool: any member may put it forward (Easy rivals never get this far).
+  if (f.proposals.length < FACTION.maxOpen - 1 && me.resources.pp >= FACTION.contractInfluence + 2) {
+    const idea = contractIdea(s, me, f, rng)
+    if (idea) tryAdd({ type: 'factionPropose', nationId, proposal: { kind: 'contract', terms: idea } })
   }
 
   // Only the founder speaks for the faction: they bring friends in and put wars to the vote.

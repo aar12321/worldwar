@@ -350,6 +350,8 @@ export function factionProblem(s: GameState, map: WorldMap, o: FactionOrder, pen
         const left = n.resources[STORE[r] as 'oil'] - queued.reduce((a, q) => a + (q.gift.stock?.[r] ?? 0), 0)
         if (v > left + EPS) return `You do not have that much ${POOL_NAMES[r].toLowerCase()}`
       }
+      // Soldiers in the pool do not defend their own country: a member fighting a war the faction is not in keeps them home.
+      if (giftUnits(o.gift).length && enemiesOf(s, o.nationId).some((e) => !mine.wars.some((w) => w.target === e))) return 'You are at war on your own: keep your soldiers at home to defend your land'
       for (const [k, v] of giftUnits(o.gift)) {
         const left = n.military.units[k] - queued.reduce((a, q) => a + (q.gift.units?.[k] ?? 0), 0)
         if (v > left + EPS) return `You do not have that many ${UNIT_SPECS[k].name.toLowerCase()} at home`
@@ -528,6 +530,7 @@ export function executeFactionOrder(s: GameState, map: WorldMap, o: FactionOrder
         created: s.turn,
         expires: s.turn + FACTION.voteMonths,
         votes: { [o.nationId]: 'yes' },
+        ...(f.charter.vote === 'weighted' ? { weights: sharesOf(f) } : {}),
         ...(d.kind === 'war' ? { target: d.target } : { terms: d.terms }),
       }
       f.proposals.push(p)
@@ -624,7 +627,7 @@ export interface Tally {
 
 /** The count of a proposal, and what would happen to it at the end of the month. */
 export function tallyOf(s: GameState, f: Faction, p: FactionProposal): Tally {
-  const w = voteWeights(f)
+  const w = f.charter.vote === 'weighted' && p.weights ? p.weights : voteWeights(f)
   let yes = 0
   let no = 0
   let total = 0

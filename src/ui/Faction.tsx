@@ -364,7 +364,7 @@ function PoolTab({ game, f, me, orders }: { game: GameState; f: Faction; me: Nat
             ))}
             {poolUnits(f) < 0.005 && <span className="text-[13px] text-white/60">No soldiers in the pool yet.</span>}
           </div>
-          <p className="mt-2 text-[12.5px] text-white/65">The pool pays its army's upkeep, and buys its fuel and food on the market. Pooled soldiers do not defend their home country, and fight with the commander's training, weapons and technology.</p>
+          <p className="mt-2 text-[12.5px] text-white/65">The pool pays its army's upkeep, and buys its fuel and food on the market. Pooled soldiers never defend their home country (a nation fighting a war the faction is not in cannot pool soldiers), and fight with the commander's training, weapons and technology.</p>
         </div>
       </section>
       <section className="rounded-2xl border border-white/14 bg-white/5 p-4 space-y-3" aria-label="Put in or take out">

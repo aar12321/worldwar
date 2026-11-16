@@ -680,6 +680,9 @@ export function peaceTerms(s: GameState, map: WorldMap, me: NationId, enemy: Nat
   return { cede: [], reparations: 0 }
 }
 
+/** The most collateral a rival posts behind a standing supply contract. */
+const CONTRACT_COLLATERAL_MAX = 40
+
 /** Bots buy what they lack with what they have spare, and pay a little over market when desperate. */
 function planTrade(
   s: GameState,
@@ -719,7 +722,10 @@ function planTrade(
       .filter((x) => stockOf(n, x.r) - x.amount * Math.max(1, need.months) >= TRADE_RESERVE[x.r] + 5)
     if (!pay.length) continue
     const offer = pay[Math.floor(rng.next() * pay.length)]
-    if (proposeTo(partner, { kind: 'trade', terms: { give: { [offer.r]: offer.amount }, receive: { [need.r]: need.amount }, months: need.months } })) return true
+    // A standing supply from a friend is a live contract: Medium and Hard rivals back it with a small collateral (Easy never), so a breach costs the one who breaks it.
+    const pledge = need.months >= 3 && difficultyOf(s.settings.difficulty).coalitions && opinion(partner) >= 20 ? Math.min(CONTRACT_COLLATERAL_MAX, Math.floor(Math.max(0, n.resources.capital - 60) * 0.1)) : 0
+    const terms = { give: { [offer.r]: offer.amount }, receive: { [need.r]: need.amount }, months: need.months, ...(pledge >= 5 ? { collateral: pledge } : {}) }
+    if (proposeTo(partner, { kind: 'trade', terms })) return true
   }
   return false
 }

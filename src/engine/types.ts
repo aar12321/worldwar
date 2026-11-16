@@ -1086,6 +1086,8 @@ export interface FactionProposal {
   target?: NationId
   terms?: FactionContractTerms
   votes: Record<NationId, 'yes' | 'no'>
+  /** Weighted charters only: each member's weight on the day it was put forward, so money paid in afterwards cannot buy this vote. */
+  weights?: Record<NationId, number>
 }
 
 export interface FactionContract extends FactionContractTerms {
