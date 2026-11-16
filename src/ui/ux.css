@@ -1105,3 +1105,24 @@ body.resizing {
     min-width: 22px;
   }
 }
+
+/* The queued-orders tray sits right of centre on wide screens, so an open desk (up to ~600px) never hides under it. */
+@media (min-width: 901px) {
+  .orders-tray {
+    left: calc(50% + 130px) !important;
+    max-width: min(60vw, 820px) !important;
+  }
+}
+
+/* A live alert never cuts off the part that matters (who, where, how many days) on a phone: it wraps instead. */
+@media (max-width: 900px) {
+  .live-alert {
+    border-radius: 18px;
+    text-align: left;
+  }
+  .live-alert .truncate {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
