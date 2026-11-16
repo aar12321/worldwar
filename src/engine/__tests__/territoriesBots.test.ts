@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs'
 import { describe, it } from 'vitest'
 import type { Difficulty } from '../types'
 import { summarizeTerritory, territoryBotRun } from './territoriesBots.sim'
@@ -12,6 +13,8 @@ suite('territories in bot play', () => {
   for (const seed of seeds)
     it(`${diff} seed ${seed}`, () => {
       const r = territoryBotRun(diff, seed, months)
-      console.log('TERRBOT ' + JSON.stringify({ ...r, lives: r.lives.map(summarizeTerritory) }))
+      const line = 'TERRBOT ' + JSON.stringify({ ...r, lives: r.lives.map(summarizeTerritory) })
+      console.log(line)
+      if (env.VITE_TERRBOT_OUT) appendFileSync(env.VITE_TERRBOT_OUT, line + '\n')
     }, 3_600_000)
 })
