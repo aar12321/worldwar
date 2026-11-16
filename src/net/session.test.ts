@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { lineMap } from '../engine/__tests__/fixtures'
 import type { GameState, Order } from '../engine/types'
-import { decodeState, encodeState, fingerprint, newRoomCode, normalizeCode, validCode, type OpenSeat } from './protocol'
+import { fingerprint } from './fingerprint'
+import { decodeState, encodeState, newRoomCode, normalizeCode, validCode, type OpenSeat } from './protocol'
 import { HOST_TIMEOUT_MS, OnlineSession, PEER_TIMEOUT_MS, RESEND_MS, humanOrder } from './session'
 import { MemoryHub } from './transport'
 
