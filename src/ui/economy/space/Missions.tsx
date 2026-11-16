@@ -168,7 +168,7 @@ function MissionCard({ id, company, workforce }: { id: MissionId; company: strin
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div className="rounded-xl bg-white/5 p-2.5 space-y-1.5">
-            <div className="text-[13px] font-semibold">In-house</div>
+            <div className="flex items-baseline justify-between gap-2"><span className="text-[13px] font-semibold">In-house</span><span className="text-[15px] font-semibold tabular-nums">{money(house.payload + house.rocketCost)} money</span></div>
             <div className="text-[12px] text-white/70">
               Payload {money(house.payload)} over the build, plus a rocket ({house.rocketCost.toFixed(0)}, taken from your hangar)
             </div>
@@ -180,7 +180,7 @@ function MissionCard({ id, company, workforce }: { id: MissionId; company: strin
             <OrderButton order={spaceOrder(player, { kind: 'launch', mission: id, mode: 'house' })} label="Fly it ourselves" cost={`${money(house.monthly)}/mo`} tone="btn-primary" />
           </div>
           <div className="rounded-xl bg-white/5 p-2.5 space-y-1.5">
-            <div className="text-[13px] font-semibold">Hire a company</div>
+            <div className="flex items-baseline justify-between gap-2"><span className="text-[13px] font-semibold">Hire a company</span><span className="text-[15px] font-semibold tabular-nums">{money(out.price)} money</span></div>
             <div className="text-[12px] text-white/70">
               {money(out.price)} up front ({(out.price / Math.max(1, house.payload + house.rocketCost)).toFixed(1)}× the in-house cost). The rocket is theirs.
             </div>
