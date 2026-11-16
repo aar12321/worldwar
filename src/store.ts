@@ -1510,4 +1510,8 @@ useGame.subscribe((st) => {
 applyPrefs(useGame.getState().settings.ui)
 
 // A handle for browser tests, in development only.
-if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __store: typeof useGame }).__store = useGame
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  ;(window as unknown as { __store: typeof useGame }).__store = useGame
+  // Dev only, for browser checks: the online session (its true game is on the host).
+  ;(window as unknown as { __session: () => unknown }).__session = () => session
+}

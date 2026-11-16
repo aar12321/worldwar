@@ -61,7 +61,7 @@ function SpaceTiles() {
   const cap = talentCap(player, econ.workforce)
   const flying = sp?.missions.length ?? 0
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 span-all">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 span-all tiles-compact">
       <StatTile label="Staff" value={`${staffOf(sp)} of ${cap}`} sub={`${sp?.engineers ?? 0} engineers, ${sp?.astronauts ?? 0} astronauts`} tone={staffOf(sp) > cap ? 'bad' : undefined} />
       <StatTile label="Experience" value={Math.floor(sp?.exp ?? 0)} sub={`launches ${percent(expBonus(sp?.exp ?? 0))} safer`} />
       <StatTile label="Standing in space" value={Math.round(sp?.prestige ?? 0)} sub={`${flying} flight${flying === 1 ? '' : 's'} under way`} />

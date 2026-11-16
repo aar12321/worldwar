@@ -415,6 +415,7 @@ export function OnlinePeople() {
   const markRead = useGame((s) => s.markChatRead)
   const leave = useGame((s) => s.leaveOnline)
   const kick = useGame((s) => s.kickOnlinePlayer)
+  const askConfirm = useGame((s) => s.askConfirm)
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const log = useRef<HTMLUListElement>(null)
@@ -470,11 +471,11 @@ export function OnlinePeople() {
                     <span className="text-[12px] shrink-0 text-white/70">{out ? 'Out' : !here ? 'Away (AI plays)' : done ? 'Ready' : 'Planning'}</span>
                     {online.host && p.clientId !== online.clientId && (
                       <button
-                        className="text-[12px] shrink-0 text-white/55 underline underline-offset-2 hover:text-white/85"
+                        className="btn btn-quiet text-[12px] shrink-0 px-2.5 py-1"
                         aria-label={`Remove ${p.name}`}
-                        onClick={() => {
-                          if (window.confirm(`Remove ${p.name} from the game? Their nation is played by the AI, and the seat is free for someone else.`)) kick(p.clientId)
-                        }}
+                        onClick={() =>
+                          askConfirm({ title: `Remove ${p.name} from the game?`, text: 'Their nation is played by the AI, and the seat is free for someone else.', label: 'Remove', danger: true, run: () => kick(p.clientId) })
+                        }
                       >
                         Remove
                       </button>
@@ -507,9 +508,7 @@ export function OnlinePeople() {
           <div className="px-4 pb-3">
             <button
               className="btn btn-quiet"
-              onClick={() => {
-                if (window.confirm('Leave this game? Your nation is played by the AI until you come back with the same room code.')) leave()
-              }}
+              onClick={() => askConfirm({ title: 'Leave this game?', text: 'Your nation is played by the AI until you come back with the same room code.', label: 'Leave', danger: true, run: leave })}
             >
               Leave the game
             </button>

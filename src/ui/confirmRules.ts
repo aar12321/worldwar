@@ -1,4 +1,5 @@
 import { BODIES, MISSIONS } from '../data/space'
+import { quote } from '../engine/space'
 import { SOCIAL, SOCIAL_RULES } from '../data/society'
 import { describeOrder } from '../engine/resolveTurn'
 import { orderCost } from '../engine/orders'
@@ -98,7 +99,10 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
       if (a.kind === 'launch') {
         const spec = MISSIONS[a.mission]
         const risk = spec.crew > 0 ? ` ${spec.crew} astronauts will fly it, and a failure can kill them.` : ' A failure loses the payload and the rocket.'
-        if (a.mode === 'outsource' || spec.crew > 0 || spec.payload >= 300) return asks(`${a.mode === 'house' ? 'Fly' : 'Hire a company for'} the ${spec.name.toLowerCase()}?`, `It takes months and cannot be called back.${risk}`, a.mode === 'house' ? 'Fly it' : 'Hire them', spec.crew > 0)
+        const me = game.nations[o.nationId]
+        const odds = me ? quote(game, me, a.mission, a.mode, a.company).odds.total : null
+        const chance = odds === null ? '' : ` The odds of it all going well are ${Math.round(odds * 100)}%.`
+        if (a.mode === 'outsource' || spec.crew > 0 || spec.payload >= 300) return asks(`${a.mode === 'house' ? 'Fly' : 'Hire a company for'} the ${spec.name.toLowerCase()}?`, `It takes months and cannot be called back.${risk}${chance}`, a.mode === 'house' ? 'Fly it' : 'Hire them', spec.crew > 0)
       }
       return null
     }

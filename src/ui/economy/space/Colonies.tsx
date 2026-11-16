@@ -23,7 +23,7 @@ export function ColoniesSection() {
   const claimed = Object.entries(world.claims)
   return (
     <>
-      <Tiles>
+      <Tiles compact>
         <StatTile label="Mines bring in" value={y.income > 0 ? `+${money(y.income)}` : '0'} sub="money a month" />
         <StatTile label="Steel and oil" value={`${money(econ.steelProduction)} / ${money(econ.oilProduction)}`} sub="all sources, a month" />
         <StatTile label="Bases" value={BODY_IDS.filter((b) => sp?.bodies[b]?.outpost).length} sub="outposts, stations, colonies" />

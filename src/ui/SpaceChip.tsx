@@ -14,7 +14,9 @@ const flying = (s: { game: { playerId: string; nations: Record<string, { space?:
 export function SpaceChip() {
   const missions = useGame(flying)
   const open = useGame((s) => s.openEconomy)
-  if (!missions?.length) return null
+  // A desk covers the same news (the Missions bars), and the chip would sit on its title.
+  const deskOpen = useGame((s) => s.panel !== 'none')
+  if (!missions?.length || deskOpen) return null
   const soon = [...missions].sort((a, b) => a.left - b.left)[0]
   const spec = MISSIONS[soon.kind]
   return (
