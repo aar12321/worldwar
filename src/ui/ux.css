@@ -1174,3 +1174,15 @@ body.resizing {
   pointer-events: none;
   z-index: 2;
 }
+
+.battle-scene {
+  display: block;
+  width: 100%;
+  border-radius: 16px;
+  margin-bottom: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #10151d;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}

@@ -20,12 +20,6 @@ import type { FlightSpec } from './engine'
 const { map } = getWorld()
 const pointOf = (id: string | undefined) => (id ? map.regions[id] : undefined)
 
-/** Whether the overlay is drawing missile flights, so the globe's plain arcs and decal points step aside. */
-export function useFxDrawing(): boolean {
-  const setting = useFxPrefs((s) => s.quality)
-  return setting !== 'off'
-}
-
 function flightSpecs(game: GameState): FlightSpec[] {
   const out: FlightSpec[] = []
   const me = game.playerId

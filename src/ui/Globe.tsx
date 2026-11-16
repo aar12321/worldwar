@@ -21,7 +21,8 @@ import { neighborsOf } from '../engine/borders'
 import { globeBridge, useFx, type BattleOverlay } from './globeBridge'
 import { paintPresenceMarker, usePresenceLayer } from './globe/usePresence'
 import { usePresenceUi } from './globe/presenceUi'
-import { FxOverlay, useFxDrawing } from '../fx/FxOverlay'
+import { FxOverlay } from '../fx/FxOverlay'
+import { useFxDrawing } from '../fx/settings'
 import type { PresenceMarker } from './globe/presenceLayer'
 
 const { map, features } = getWorld()

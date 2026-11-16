@@ -56,3 +56,6 @@ export const useFxPrefs = create<FxPrefs>((set, get) => ({
     set({ autoTier })
   },
 }))
+
+/** Whether the overlay draws missile flights and marks, so the globe's plain arcs and decal points step aside while it does. */
+export const useFxDrawing = (): boolean => useFxPrefs((s) => s.quality !== 'off')
