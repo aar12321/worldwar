@@ -56,3 +56,43 @@ LIVE badge, room code, the shared clock (Play/Pause, 1x/2x/4x, "Ask: ..." for fr
 ## Measured
 
 See the end of this file (filled in from the real-relay run).
+
+### Real two-browser run (Supabase Realtime relay, reachable through the proxy)
+
+Two Chromium contexts (software GL), 1440x900 and 390x844, one room made as Live by default, a friend joining by code, nations Brazil and Germany, on the real relay (`kind: supabase`). Observed:
+
+| check | result |
+| --- | --- |
+| lobby shows "LIVE · 1× · host sets the clock" to the joiner, settings read-only | yes |
+| clock starts stopped; guest sees "Waiting for the host to start the clock" | yes |
+| 1x for 10 s | host day +5, guest within one day (4); 2x: +10 days in 10 s, both screens the same day; 4x: about 2 days per second |
+| guest presses Pause in a Host-only room | nothing paused; host toast "Bo asks to pause." |
+| host pauses | both frozen for 3+ s; guest shows "Host paused (Hana)"; full-state checksums equal |
+| orders on the relay: build (guest), declare war (both), attack (both), set deployment (both), missile strike (both) | all accepted; both screens show the same 2 armies and 2 salvos in the air; money spent by the guest shows on the host's copy |
+| 4x for 30 s of real time (about 60 game days, month ends, both armies and missiles landing) | checksums equal after pause; 1 battle report on each screen |
+| host tab "hidden" | guest shows "The host's tab is in the background: the clock may move in jumps." |
+| host closes the tab | guest became host after about the heartbeat timeout, clock still running at 4x, no stall |
+| saved room reopened on the guest's device after a reload, as Germany | opens paused at the saved day; a new browser took Brazil's seat from the "already playing" screen, got the game, same checksum; clock resumed on both |
+| rematch | everyone back in the lobby with "LIVE" mode kept |
+
+Round trip to the relay (measured by the heartbeat, shown in the panel): 109 to 136 ms.
+
+Traffic, host side, 4x speed, 30 s with fights (60 game days): 46 messages and 6.2 KB sent (1.5 messages/s, about 205 bytes/s, about 100 bytes per game day, including the 2.5 s heartbeats); the guest sent 6 messages (0.7 KB) and received 40 (5.3 KB). At 2x: 17 messages and 2.3 KB in 10 s. A full game snapshot is only sent to a joiner, a seat taker, a reconnecting or out-of-step screen: about 45 KB in two messages of at most 40 KB. Supabase Realtime is configured for 30 events per second per client; a live room uses about 2 per second at most, so four players are far inside it. The MemoryHub simulation (24 months, two humans, 4x, bursty host ticks) averaged under 3 stream messages per game day and none over 20 KB.
+
+Phone (390x844): the panel collapses to LIVE, a sync dot, Play/Pause, speed and a chat button; the longer status lines are hidden there (they are in the title of the dot).
+
+### Mutation checks
+
+Each of these one-line changes to the rules makes its guarding test fail (run, seen failing, reverted): one vote is enough to pause (3 failures), the host accepts an order for another nation, the checksum is never compared, a missing stream message is never noticed, the host's catch-up is capped at 250 ms like the solo loop (3 failures), guests may pause in host-only rooms (6 failures), a re-sent order is done twice, month-end orders are not run in the seeded order, the AI does not play an away player's nation.
+
+## Not done / not verified
+
+- Only one real network path was tried (this sandbox through its proxy to Supabase, both browsers on the same machine). Two computers on different networks, packet loss and jitter on a real mobile line are untested; the loss and reordering cases are covered with the in-memory hub only.
+- A really backgrounded Chrome tab (its timers throttled by the browser, intensive throttling after five minutes) was simulated (late ticks in tests, `document.hidden` set in the browser run), not observed.
+- The e2e run gave both nations money and missiles through the dev-only `window.__session` hook (identically on both screens) so a war and a strike were possible in the first game months; the game's own rules otherwise.
+- "Players vote" was tested in unit tests, not in the browser.
+- The host's fairness delay needs a measured round trip over 60 ms; it was in range on the relay but its effect was not measured.
+- A decision (event) default at the month end is covered by tests; the Event window's wording was not changed for live.
+- Cancelling a queued month-end order is not possible once sent (a later order of the same kind replaces it); the tray says so.
+- The host persists every 10 game days, at month ends, on pause and when its tab is hidden; a tab killed between saves loses up to ten days when the room is reopened from the save (a friend who takes over as host keeps the live game, nothing is lost).
+- Auto-command, undo and the turn-mode Ready flow are off in live rooms by design.
