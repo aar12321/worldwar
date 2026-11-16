@@ -1,8 +1,9 @@
+import { MISSILES } from '../data/missiles'
+import { launchSite, strikeKind } from './missiles'
 import { LIVE } from '../data/live'
 import { GENERAL_TRAITS } from '../data/projects'
 import { commanderTrait } from './generals'
 import { REACH } from '../data/war'
-import { FRONTIER } from '../data/systems'
 import { atWar, clamp, distanceKm, emptyUnits, newId, totalUnits } from './helpers'
 import { fireMissiles } from './systems'
 import { canAttackRegion, commitShare } from './warfare'
@@ -264,22 +265,13 @@ export function recallProblem(s: GameState, nationId: NationId, armyId: string):
   return null
 }
 
-/** Fires a salvo of hypersonic missiles. They leave now and land a day later. Mutates `s`. */
+/** Fires a salvo of missiles. They leave now and land after the days their kind takes to fly. Mutates `s`. */
 export function launchStrike(s: GameState, map: WorldMap, o: Strike, today: number): MissileFlight | null {
+  const kind = strikeKind(o)
+  const from = launchSite(s, map, o.nationId, o.target, kind)
   const fired = fireMissiles(s, o)
   if (fired < 1) return null
-  const t = map.regions[o.target]
-  let from: RegionId | null = null
-  let bestKm = Infinity
-  for (const r of Object.values(s.regions).sort((x, y) => (x.id < y.id ? -1 : 1))) {
-    if (r.owner !== o.nationId || r.buildings.factory <= 0 || !map.regions[r.id]) continue
-    const km = distanceKm(map.regions[r.id], t)
-    if (km <= FRONTIER.strikeKm && km < bestKm) {
-      from = r.id
-      bestKm = km
-    }
-  }
-  const flight: MissileFlight = { id: newId(s, 'f'), nationId: o.nationId, from: from ?? o.target, target: o.target, count: fired, launched: today, lands: today + LIVE.missileDays, foe: s.regions[o.target]?.owner }
+  const flight: MissileFlight = { id: newId(s, 'f'), nationId: o.nationId, from: from ?? o.target, target: o.target, count: fired, ...(kind !== 'hypersonic' ? { kind } : {}), launched: today, lands: today + MISSILES[kind].days, foe: s.regions[o.target]?.owner }
   ;(s.flights ??= []).push(flight)
   return flight
 }

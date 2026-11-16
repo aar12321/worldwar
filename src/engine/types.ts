@@ -50,6 +50,8 @@ export type SocialId =
   | 'minimumWage' | 'jobsGuarantee' | 'smallLoans' | 'workerRights'
   | 'childBenefit' | 'parentalLeave' | 'foodAid' | 'transit'
   | 'policing' | 'courts' | 'integration' | 'festivals' | 'broadcasting' | 'surveillance'
+/** The kinds of missile. Hypersonic ones are the military's `missile` stock; the rest are the nation's `arsenal`. */
+export type MissileType = 'cruise' | 'tactical' | 'hypersonic' | 'ballistic'
 export type CampaignId = 'celebration' | 'vaccination' | 'literacy' | 'jobFair' | 'unityTour' | 'foodBank' | 'babyBonus'
 /** 1 Nation, 2 Regional power, 3 Great power, 4 Superpower, 5 Hegemon. */
 export type Tier = 1 | 2 | 3 | 4 | 5
@@ -343,6 +345,14 @@ export interface Nation {
   stateOwned: SectorId[]
   seizedUntil: number
   projects: Partial<Record<ProjectId, ProjectState>>
+  /** Cruise, tactical and ballistic missiles in store (hypersonic ones are `military.units.missile`). */
+  arsenal?: Partial<Record<MissileType, number>>
+  /** The missile program's level, 0 to 3. */
+  missileProgram?: number
+  /** Missiles built so far in the month `turn`, against the program's capacity. */
+  missileBuilt?: { turn: number; count: number }
+  /** The last month each nation struck this one with missiles, so it can answer. */
+  struckBy?: Record<NationId, number>
   /** Social programs in force. Absent until the first one is set, so a nation that never uses them is unchanged. */
   social?: Partial<Record<SocialId, SocialState>>
   /** Campaigns running or cooling down. Absent until the first one is run. */
@@ -568,7 +578,11 @@ export type Order =
   | { type: 'operation'; nationId: NationId; op: ForeignOp; target: NationId }
   | { type: 'domestic'; nationId: NationId; op: DomesticOp; regionId?: RegionId }
   | { type: 'fundSystem'; nationId: NationId; system: SystemId; levels?: number }
-  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital'; /** Missiles to fire in a hypersonic strike. */ count?: number }
+  | { type: 'strike'; nationId: NationId; target: RegionId; weapon: 'missile' | 'orbital'; /** Missiles to fire in the salvo. */ count?: number; /** Which kind. Hypersonic if left out. */ kind?: MissileType }
+  /** Raises the missile program one level. */
+  | { type: 'fundMissiles'; nationId: NationId }
+  /** Builds missiles of a kind from the program: money and steel (and oil) each. */
+  | { type: 'buildMissiles'; nationId: NationId; kind: Exclude<MissileType, 'hypersonic'>; count: number }
   | { type: 'fundAgency'; nationId: NationId; agency: AgencyId; /** How many levels to buy at once. One if left out. */ levels?: number }
   | { type: 'setGovernor'; nationId: NationId; regionId: RegionId; governor: Governor }
   | { type: 'buyShares'; nationId: NationId; company: string; shares: number }
@@ -877,6 +891,8 @@ export interface MissileFlight {
   from: RegionId
   target: RegionId
   count: number
+  /** Which kind. Hypersonic if left out. */
+  kind?: MissileType
   launched: number
   /** Absolute day it lands. */
   lands: number

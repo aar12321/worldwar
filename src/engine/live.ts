@@ -162,7 +162,7 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
       const owner = s.regions[f.target]?.owner
       const hits = !!s.nations[f.nationId]?.alive && !!owner && owner !== f.nationId && !!s.nations[owner]?.alive && atWar(s, f.nationId, owner)
       if (hits) {
-        strikeHits(s, map, f.nationId, f.target, f.count)
+        strikeHits(s, map, f.nationId, f.target, f.count, f.kind ?? 'hypersonic')
         fought = true
         events.push({ kind: 'missile', flight: { ...f }, landed: true })
       } else {

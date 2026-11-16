@@ -19,6 +19,7 @@ import { nextWeaponLevel } from './arms'
 import { companyEffects, tradeValue, validateDirective, validateTrade } from './stocks'
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
+import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
 import { validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
@@ -174,6 +175,18 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'fundSystem':
       c.capital = fundSystemCost(s, o)
       break
+    case 'fundMissiles': {
+      const k = fundMissilesCost(s.nations[o.nationId])
+      c.capital = k.capital
+      c.tp = k.tp
+      break
+    }
+    case 'buildMissiles': {
+      const k = buildMissilesCost(o)
+      c.capital = k.capital
+      c.steel = k.steel
+      break
+    }
     case 'strike': {
       const k = strikeCost(o)
       c.capital = k.capital
@@ -549,6 +562,10 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return validateFundSystem(s, o, pending)
     case 'strike':
       return validateStrike(s, map, o, pending)
+    case 'fundMissiles':
+      return fundMissilesProblem(n)
+    case 'buildMissiles':
+      return buildMissilesProblem(s, o, pending)
     case 'buyShares':
     case 'sellShares':
       return validateTrade(s, o, pending)

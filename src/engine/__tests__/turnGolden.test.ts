@@ -15,7 +15,7 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * with the old slot counts put back, the old hashes matched, so everything else added then (project levels, projects in a country,
  * social programs, campaigns) changes nothing for a nation that does not use it.
  * The Hard-bot world was pinned again when Hard bots learned to use social programs, campaigns, the new projects and projects in
- * their countries: a deliberate change of what they decide. The Normal-bot world did not move.
+ * their countries: a deliberate change of what they decide. The Normal-bot world did not move. Pinned again when missiles became a program with several kinds, and struck rivals began to answer.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -83,12 +83,12 @@ describe('turn mode resolves exactly as pinned', () => {
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('a88eaedb47c33')
+    expect(hash(JSON.stringify(s))).toBe('23d77e0bf045b')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('3c4c8c04b6064')
+    expect(hash(JSON.stringify(state))).toBe('8fc104d2481e1')
     expect(hash(JSON.stringify(log))).toBe('1fcd1f01fd1956')
   })
 

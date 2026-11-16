@@ -1,3 +1,5 @@
+import { MISSILE_TYPES } from '../data/missiles'
+import { buildRoom, fundMissilesCost, missileStock, programLevel, recentAttackers } from '../engine/missiles'
 import { levelCost } from '../data/agencies'
 import { systemCost, type SystemId } from '../data/systems'
 import { companiesOf, directiveOf, stakeShare, strengthOf } from '../engine/stocks'
@@ -286,6 +288,23 @@ export function generateBotOrders(s: GameState, map: WorldMap, nationId: NationI
           if ((n.systems?.[system] ?? 0) >= (diff.skill === 2 ? 3 : 2)) continue
           if (money < systemCost(system, n.systems?.[system] ?? 0) + 150) continue
           if (tryAdd({ type: 'fundSystem', nationId, system })) return true
+        }
+      }
+      // Struck lately? A rival that can answer does, with what it has, at whoever hit it.
+      if (diff.skill >= 1) {
+        const attackers = recentAttackers(s, n)
+        if (attackers.length > 0) {
+          const kinds = MISSILE_TYPES.filter((k) => missileStock(n, k) >= 1).sort((a, b) => missileStock(n, b) - missileStock(n, a) || (a < b ? -1 : 1))
+          const targets = Object.values(s.regions).filter((r) => attackers.includes(r.owner)).sort((a, b) => b.line - a.line || (a.id < b.id ? -1 : 1))
+          for (const kind of kinds) for (const r of targets.slice(0, 6)) if (tryAdd({ type: 'strike', nationId, target: r.id, weapon: 'missile', kind, count: Math.min(6, missileStock(n, kind)) })) return true
+        }
+      }
+      // A Hard rival at war raises its missile program, and keeps its cheaper missiles stocked.
+      if (diff.skill === 2 && enemies.length > 0) {
+        if (programLevel(n) < 2 && money > fundMissilesCost(n).capital + 250 && tryAdd({ type: 'fundMissiles', nationId })) return true
+        if (programLevel(n) >= 1 && money > 250 && rng.chance(0.3)) {
+          const kind = programLevel(n) >= 2 && rng.chance(0.4) ? 'tactical' : 'cruise'
+          if (tryAdd({ type: 'buildMissiles', nationId, kind, count: Math.max(1, Math.min(3, buildRoom(n, s.turn))) })) return true
         }
       }
       // Hard rivals strike first with missiles and, once a year, from orbit.
