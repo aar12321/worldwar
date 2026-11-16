@@ -437,6 +437,11 @@ body.resizing {
 }
 .icon-close {
   flex: none;
+  aspect-ratio: 1;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .pin-btn.on {
   color: var(--warn);
