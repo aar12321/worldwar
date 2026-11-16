@@ -5,10 +5,11 @@ import { LIVE } from '../../data/live'
 import { armyAt, greatCircle, planTrip } from '../../engine/armies'
 import { clockOf } from '../../engine/calendar'
 import { atWar, formatDivisions, totalUnits } from '../../engine/helpers'
-import type { Army, MissileFlight } from '../../engine/types'
+import type { Army, MissileFlight, MissileType } from '../../engine/types'
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
 import { armyStatus } from '../armyText'
+import { MISSILE_ARC, flightDays } from '../missileText'
 import { liveClock } from '../liveClock'
 import { badge, glyphOf, type Glyph, type Variant } from './badges'
 
@@ -44,6 +45,10 @@ interface ArcDatum {
   startLng: number
   endLat: number
   endLng: number
+  /** What it is, so the arc is drawn in its kind's colors. */
+  kind: MissileType
+  /** Days in the air: a ballistic missile crawls across the globe, a hypersonic one is gone in a day. */
+  days: number
 }
 
 export interface ThreatRing {
@@ -66,7 +71,9 @@ const pathDashAnimateTime = (d: object) => (d as PathDatum).animate
 /** How high above the countries badges and routes ride, clear of the raised countries you can attack or have selected. */
 const ARMY_ALT = 0.05
 const pathStroke = () => 3.2
-const arcColor = () => ['rgba(255,214,10,0.95)', 'rgba(255,69,58,0.95)']
+const arcColor = (d: object) => MISSILE_ARC[(d as ArcDatum).kind]
+/** Ballistic missiles are drawn heavier than cruise missiles. */
+const arcStroke = (d: object) => ((d as ArcDatum).kind === 'ballistic' ? 0.8 : (d as ArcDatum).kind === 'cruise' ? 0.35 : 0.5)
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 
@@ -165,7 +172,7 @@ class LayerCache {
         continue
       }
       changed = true
-      next.set(f.id, { id: f.id, startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng })
+      next.set(f.id, { id: f.id, startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng, kind: f.kind ?? 'hypersonic', days: flightDays(f) })
     }
     if (next.size !== this.arcs.size) changed = true
     this.arcs = next
@@ -310,7 +317,8 @@ export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, 
     [threatKey],
   )
 
-  const flightMs = LIVE.msPerDay / speed
+  // Each arc's light crosses it once in the time its missile spends in the air, at the speed the clock runs.
+  const arcAnimateTime = useCallback((d: object) => (reduced ? 0 : (d as ArcDatum).days * (LIVE.msPerDay / speed)), [reduced, speed])
   return {
     threatRings,
     props: {
@@ -332,11 +340,12 @@ export function useArmyLayer(globe: MutableRefObject<GlobeMethods | undefined>, 
       pathTransitionDuration: 0,
       arcsData,
       arcColor,
-      arcStroke: 0.5,
+      arcStroke,
       arcAltitudeAutoScale: 0.4,
-      arcDashLength: 0.35,
-      arcDashGap: 1.6,
-      arcDashAnimateTime: reduced ? 0 : flightMs,
+      // One bright stretch a quarter of the arc long, always on the arc and crossing it once in the flight's days.
+      arcDashLength: 0.25,
+      arcDashGap: 0.75,
+      arcDashAnimateTime: arcAnimateTime,
     },
   }
 }

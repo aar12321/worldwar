@@ -1,8 +1,8 @@
 import { addOpinion } from '../ai/opinion'
-import { MISSILES, MISSILE_PROGRAM, PROGRAM_MISSILES } from '../data/missiles'
+import { MISSILES, MISSILE_PROGRAM, MISSILE_TYPES, PROGRAM_MISSILES } from '../data/missiles'
 import { interceptFactor } from './combat'
-import { addInfamy, addLog, atWar, clamp, distanceKm } from './helpers'
-import type { GameState, MissileType, Nation, NationId, Order, RegionId, WorldMap } from './types'
+import { addInfamy, addLog, atWar, canUseUnit, clamp, distanceKm } from './helpers'
+import type { GameState, MissileFlight, MissileType, Nation, NationId, Order, RegionId, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
 type Strike = Extract<Order, { type: 'strike' }>
@@ -31,6 +31,16 @@ export function takeMissiles(n: Nation, kind: MissileType, count: number): numbe
   if (kind === 'hypersonic') n.military.units.missile -= fired
   else (n.arsenal ??= {})[kind] = (n.arsenal[kind] ?? 0) - fired
   return fired
+}
+
+/** The kinds a nation can use now: some are in store, or it can make or train them. The War Room and the program list these. */
+export function missileKinds(n: Nation): MissileType[] {
+  return MISSILE_TYPES.filter((k) => missileStock(n, k) >= 1 || (k === 'hypersonic' ? canUseUnit(n, 'missile') : programLevel(n) >= MISSILES[k].level))
+}
+
+/** Missiles in the air (live games) that will land on a country this nation holds, fired by someone else. */
+export function incomingMissiles(s: Pick<GameState, 'flights' | 'regions'>, nationId: NationId): MissileFlight[] {
+  return (s.flights ?? []).filter((f) => f.nationId !== nationId && s.regions[f.target]?.owner === nationId)
 }
 
 /** The share of a salvo a shield lets through: the shield's own rating, made harsher or kinder by the kind of missile. */

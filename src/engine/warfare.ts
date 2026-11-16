@@ -331,8 +331,8 @@ function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, target: 
   }
   // An army fights with the units it carries, every missile included. Otherwise a share of the whole military goes.
   const attacker = army ? makeCombatant(attackerNation, { ...attackerNation.military, units: army.units }, null, attNotes, attPenalty, 1) : makeCombatant(attackerNation, attackerNation.military, null, attNotes, attPenalty, share)
-  // The player chooses how many missiles to fire. Left out, a share of them fire with the force sent.
-  if (!army && missiles !== undefined) attacker.units.missile = Math.min(Math.max(0, Math.floor(missiles)), Math.floor(attackerNation.military.units.missile + 1e-9))
+  // An attack fires only the missiles it names. Left out, none go: missiles are fired on purpose, as strikes or by name in an attack, never by a share of the stock.
+  if (!army) attacker.units.missile = Math.min(Math.max(0, Math.floor(missiles ?? 0)), Math.floor(attackerNation.military.units.missile + 1e-9))
   attacker.boost = spec.boost
   attacker.damageTaken = spec.ownLosses
   const garrison = emptyUnits()

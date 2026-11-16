@@ -16,6 +16,7 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * social programs, campaigns) changes nothing for a nation that does not use it.
  * The Hard-bot world was pinned again when Hard bots learned to use social programs, campaigns, the new projects and projects in
  * their countries: a deliberate change of what they decide. The Normal-bot world did not move. Pinned again when missiles became a program with several kinds, and struck rivals began to answer.
+ * The small-war scenario was pinned again when an attack stopped carrying a share of the missile stock by itself (the bug: mass-produced missiles all flew with the first attack). Its first attack now fires none of the 14 missiles, so 11 are left after the 3-missile strike instead of about 2. Checked: the strike's effect is identical (the target's line is 5.55 either way) and the second attack's line differs only by the changed random draws. The two bot-world pins did not move: no bot in them carried missiles into an attack.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -88,8 +89,8 @@ describe('turn mode resolves exactly as pinned', () => {
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('8fc104d2481e1')
-    expect(hash(JSON.stringify(log))).toBe('1fcd1f01fd1956')
+    expect(hash(JSON.stringify(state))).toBe('eb831d80c4765')
+    expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
   })
 
   it('a turn game carries none of the live fields', () => {
