@@ -2,7 +2,7 @@ import { LOCAL, LOCAL_FIELDS, LOCAL_IDS, NO_LOCAL, NEED_TEXT, SCALED_YIELDS, typ
 import { OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
 import { PROJECT_LEVELS, PROJECT_RULES, PROJECTS } from '../data/projects'
 import { tierGate, tierOf } from './empire'
-import { levelMonths, monthlyCost, projectLevel } from './industry'
+import { levelMonths, monthlyCost, projectLevel, projectSpeed } from './industry'
 import { addLog } from './helpers'
 import type { GameState, LocalProjectId, MapRegion, Nation, NationId, ProjectId, ProjectState, RegionId, RegionState, Tier, WorldMap } from './types'
 
@@ -213,12 +213,19 @@ export function rushProblem(s: GameState, n: Nation, id: ProjectId | LocalProjec
   return null
 }
 
-export function applyRush(s: GameState, n: Nation, id: ProjectId | LocalProjectId, regionId?: RegionId) {
+/**
+ * Months of work a rush buys: two at the usual pace, fewer while engineers are scarce. Extra crews cannot make engineers, so a rush
+ * is worth no more than the engineers can use (without this, a rush was cheaper per month of work the fewer engineers there were).
+ */
+export const rushGain = (n: Pick<Nation, 'spending'>, engineerCoverage = 1) => RUSH.months * Math.min(1, projectSpeed(n, engineerCoverage))
+
+export function applyRush(s: GameState, n: Nation, id: ProjectId | LocalProjectId, regionId?: RegionId, engineerCoverage = 1) {
   const p = stateOf(s, n, { id, regionId })
   if (!p) return
   const b = building(s, n, { id, regionId })
-  p.progress = Math.min(b.months, p.progress + RUSH.months)
+  const gain = rushGain(n, engineerCoverage)
+  p.progress = Math.min(b.months, p.progress + gain)
   p.rushed = s.turn
   const name = id in LOCAL ? LOCAL[id as LocalProjectId].name : PROJECTS[id as ProjectId].name
-  if (n.isPlayer) addLog(s, 'economy', `Extra crews rushed the ${name.toLowerCase()}: ${RUSH.months} months closer.`, [n.id])
+  if (n.isPlayer) addLog(s, 'economy', `Extra crews rushed the ${name.toLowerCase()}: ${Math.round(gain * 10) / 10} months closer.`, [n.id])
 }

@@ -214,6 +214,15 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
   }
 }
 
+/** `describeOrder` for the log, which a malformed order must not be able to break. */
+function safeDescribe(s: GameState, map: WorldMap, o: Order): string {
+  try {
+    return describeOrder(s, map, o)
+  } catch {
+    return 'an order'
+  }
+}
+
 const PHASES: Order['type'][][] = [
   ['eventChoice'],
   ['respond'],
@@ -267,7 +276,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
       if (!phase.includes(o.type)) continue
       const err = validateOrder(s, map, o)
       if (err) {
-        if (s.nations[o.nationId].isPlayer) addLog(s, 'info', `Order failed: ${describeOrder(s, map, o)} (${err}).`, [o.nationId])
+        if (s.nations[o.nationId].isPlayer) addLog(s, 'info', `Order failed: ${safeDescribe(s, map, o)} (${err}).`, [o.nationId])
         continue
       }
       const n = s.nations[o.nationId]
@@ -276,7 +285,14 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
       n.resources.pp -= cost.pp
       n.militaryPool -= cost.manpower
       n.resources.steel -= cost.steel
-      executeOrder(s, map, o, rng)
+      // A plan sent over the network is not trusted: one with nonsense in it costs its sender the order, not everyone the month.
+      if (s.humans?.includes(o.nationId)) {
+        try {
+          executeOrder(s, map, o, rng)
+        } catch {
+          addLog(s, 'info', `Order failed: ${safeDescribe(s, map, o)} (it makes no sense).`, [o.nationId])
+        }
+      } else executeOrder(s, map, o, rng)
     }
   }
 
@@ -442,7 +458,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     }
     case 'rushProject':
-      applyRush(s, n, o.project, o.regionId)
+      applyRush(s, n, o.project, o.regionId, computeEconomy(s, map, o.nationId).coverage.engineers)
       break
     case 'moveCapital':
       n.regionalCapitals = (n.regionalCapitals ?? []).filter((id) => id !== o.regionId)

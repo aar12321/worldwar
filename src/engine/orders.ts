@@ -263,14 +263,27 @@ export function programsProblem(s: GameState, n: Nation, p: Partial<Programs>, r
   return null
 }
 
-/** Returns a human readable reason the order is invalid, or null if it can be issued. */
+/**
+ * Returns a human readable reason the order is invalid, or null if it can be issued. An order with a missing or nonsense field (a
+ * damaged save, or a friend's plan online) is simply refused: it must never stop the month for everyone.
+ */
 export function validateOrder(s: GameState, map: WorldMap, o: Order, pending: Order[] = []): string | null {
+  try {
+    return validateOrderChecked(s, map, o, pending)
+  } catch {
+    return 'That order makes no sense'
+  }
+}
+
+function validateOrderChecked(s: GameState, map: WorldMap, o: Order, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
   if (!n?.alive) return 'Your nation has fallen.'
   const ruleError = checkRules(s, map, o, pending)
   if (ruleError) return ruleError
   const spent = committedCost(s, pending)
   const cost = orderCost(s, o)
+  // A price that is not a number (a missing field in a damaged plan) would poison the treasury.
+  if (![cost.capital, cost.pp, cost.tp, cost.manpower, cost.steel].every(Number.isFinite)) return 'That order makes no sense'
   if (cost.capital > 0 && n.resources.capital - spent.capital < cost.capital) return `Not enough money (costs ${cost.capital})`
   if (cost.pp > 0 && n.resources.pp - spent.pp < cost.pp) return `Not enough influence (costs ${cost.pp})`
   if (cost.tp > 0 && n.resources.tp - spent.tp < cost.tp) return `Not enough research (costs ${cost.tp})`
@@ -292,6 +305,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     }
     case 'setPolicy': {
       const maxDraft = n.laws.includes('conscription_act') ? DRAFT_LIMITS.maxWithConscription : DRAFT_LIMITS.max
+      if (!Number.isFinite(o.taxRate) || !Number.isFinite(o.draftRate)) return 'Tax and draft rates must be numbers'
       if (o.taxRate < TAX_LIMITS.min || o.taxRate > TAX_LIMITS.max) return 'Tax rate out of range'
       if (o.draftRate < DRAFT_LIMITS.min || o.draftRate > maxDraft + 1e-9) return 'Draft rate out of range'
       if (o.corporateTax !== undefined && (!Number.isFinite(o.corporateTax) || o.corporateTax < CORPORATE_TAX.min || o.corporateTax > CORPORATE_TAX.max + 1e-9)) return 'Business tax out of range'

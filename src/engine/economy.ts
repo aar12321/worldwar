@@ -27,7 +27,7 @@ import { accordTrade } from './council'
 import { adminReport, combineTraits, occupationFloor, settleSpeed, type AdminReport } from './empire'
 import { activeProjects, armsExportIncome, enterpriseIncome, industryCapMult, powerMult, programEffects, projectBill, projectPower, projectSpeed, runArmsExports, runProjects, scaleBonus, scaleFactor, worksEffects } from './industry'
 import { activeLocal, localBill, localEffects, runLocalProjects } from './works'
-import { societyBill, societyEffects, runSociety, type SocietySource } from './society'
+import { societyBill, societyEffects, runSociety, softCap, type SocietySource } from './society'
 import { coverageMult, coverageOf, demandOf, peopleStability, populationGrowth, runPeople, spendingBill, type Demand, type PeopleBasis } from './people'
 import { commanderTrait } from './generals'
 
@@ -416,7 +416,8 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'Conquered land', value: -(OCCUPATION[n.programs?.occupation ?? 'standard'].stability * occupied) },
     { label: 'Immigration', value: IMMIGRATION[n.programs?.immigration ?? 'normal'].stability },
     { label: 'Programs for the people', value: soc.stability },
-    { label: 'Projects in your countries', value: localStability },
+    // Projects in your countries (cultural centres) share the one ceiling on care with the programs, so a centre in every country cannot buy perfect calm.
+    { label: 'Projects in your countries', value: softCap(soc.rawStability + localStability) - soc.stability },
   ]
   const stabilityTarget = clamp(
     stabilityParts.reduce((sum, p) => sum + p.value, 0),

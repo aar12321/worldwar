@@ -81,10 +81,12 @@ export function strikeHitsKind(s: GameState, map: WorldMap, nationId: NationId, 
   const parts: string[] = []
   if (spec.line > 0) {
     const hit = Math.min(spec.lineMax, fired * spec.line) * through
-    region.line = Math.max(0.5, region.line - hit)
+    // A strike never leaves a line lower than half a point, and never heals one that a battle already wore below that.
+    region.line = Math.min(region.line, Math.max(0.5, region.line - hit))
     parts.push(`the Defense Line fell by ${hit.toFixed(1)}`)
   }
-  if (spec.factoryTurns > 0) {
+  // The factories stop only if enough of the salvo gets through the shield: one cruise missile shot down halts nothing.
+  if (spec.factoryTurns > 0 && fired * through >= (spec.factoryNeed ?? 0.5) - 1e-9) {
     region.sabotaged = Math.max(region.sabotaged, spec.factoryTurns)
     parts.push(`the factories stopped for ${spec.factoryTurns} month${spec.factoryTurns === 1 ? '' : 's'}`)
   }
@@ -135,6 +137,12 @@ export function buildRoom(n: Nation, turn: number): number {
   return Math.max(0, MISSILE_PROGRAM.capacity[programLevel(n)] - built)
 }
 
+/** Missiles of every program kind in store (hypersonic ones are the military's own units and have their own limits). */
+export const arsenalSize = (n: Nation): number => PROGRAM_MISSILES.reduce((sum, k) => sum + Math.floor((n.arsenal?.[k] ?? 0) + 1e-9), 0)
+
+/** The most missiles the program can keep in its stores: a few months of its own production, so a stockpile has a ceiling. */
+export const storageCap = (n: Pick<Nation, 'missileProgram'>): number => MISSILE_PROGRAM.capacity[programLevel(n)] * MISSILE_PROGRAM.storageMonths
+
 export function buildMissilesProblem(s: GameState, o: Build, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
   const spec = MISSILES[o.kind]
@@ -145,12 +153,16 @@ export function buildMissilesProblem(s: GameState, o: Build, pending: Order[]): 
   const room = buildRoom(n, s.turn) - queued
   if (o.count > room) return room <= 0 ? 'The program has built all it can this month' : `The program can build ${room} more this month`
   if (n.resources.oil < spec.oil * o.count) return `Not enough oil (needs ${spec.oil * o.count})`
+  const space = storageCap(n) - arsenalSize(n) - queued
+  if (o.count > space) return space <= 0 ? `The stores are full (${storageCap(n)} missiles). Fire some first.` : `The stores have room for ${space} more`
   return null
 }
 
 export const buildMissilesCost = (o: Build) => ({ capital: MISSILES[o.kind].money * o.count, steel: MISSILES[o.kind].steel * o.count })
 
 export function applyFundMissiles(s: GameState, n: Nation) {
+  // The money is taken with every order's price; the research is this order's own (the checks promise it, so it must be paid).
+  n.resources.tp -= fundMissilesCost(n).tp
   n.missileProgram = programLevel(n) + 1
   if (n.isPlayer) addLog(s, 'economy', `${n.name} raised its missile program to level ${n.missileProgram}.`, [n.id])
 }

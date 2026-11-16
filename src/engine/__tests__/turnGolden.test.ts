@@ -16,6 +16,11 @@ import { lineMap, setMilitary, startState } from './fixtures'
  * social programs, campaigns) changes nothing for a nation that does not use it.
  * The Hard-bot world was pinned again when Hard bots learned to use social programs, campaigns, the new projects and projects in
  * their countries: a deliberate change of what they decide. The Normal-bot world did not move. Pinned again when missiles became a program with several kinds, and struck rivals began to answer.
+ * The Hard-bot world was pinned once more by the balance audit (docs/BALANCE.md): raising the missile program had always checked its
+ * research price but never taken it, so a Hard bot that raised the program kept all its research; now it pays. Checked before pinning:
+ * with that one line put back the old hash returned, so the audit's other changes (the shared stability ceiling, rushes scaled by
+ * the engineers, cruise missiles needing a few to stop factories, the missile stores' ceiling, nonsense orders refused) move no
+ * bot game here. The Normal-bot world and the small war did not move.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -83,7 +88,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
     const { s, battles } = botWorld(5, 'hard', 'china', 30)
     expect(battles).toBeGreaterThan(0)
-    expect(hash(JSON.stringify(s))).toBe('23d77e0bf045b')
+    expect(hash(JSON.stringify(s))).toBe('23ccc32ae6c50')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {

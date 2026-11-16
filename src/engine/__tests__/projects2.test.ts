@@ -11,7 +11,7 @@ import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import { fundSystemCost } from '../systems'
 import { societyEffects } from '../society'
 import type { GameState, LocalProjectId, Order, ProjectId } from '../types'
-import { activeLocal, localBill, localCost, localEffects, localLevel, localMonthly, localProblem, localScale, RUSH, rushCost, rushProblem } from '../works'
+import { activeLocal, localBill, localCost, localEffects, localLevel, localMonthly, localProblem, localScale, RUSH, rushCost, rushGain, rushProblem } from '../works'
 import { giveRegions, lineMap, startState } from './fixtures'
 
 const map = lineMap(12, { 3: 'mountain', 4: 'forest' })
@@ -233,9 +233,11 @@ describe('rushing a project', () => {
     const monthly = PROJECTS.rail.cost / PROJECTS.rail.months
     expect(rushCost(s, s.nations[P], 'rail')).toBe(Math.round(RUSH.cost * monthly))
     const money = s.nations[P].resources.capital
+    // A rush buys two months at the usual pace, and fewer while engineers are scarce (see balance.test.ts).
+    const gain = rushGain(s.nations[P], computeEconomy(s, map, P).coverage.engineers)
     ok(s, { type: 'rushProject', nationId: P, project: 'rail' })
     expect(money - s.nations[P].resources.capital).toBe(Math.round(RUSH.cost * monthly))
-    expect(p.progress).toBe(RUSH.months)
+    expect(p.progress).toBeCloseTo(gain, 9)
     expect(validateOrder(s, map, { type: 'rushProject', nationId: P, project: 'rail' })).toMatch(/already rushed/i)
     // A month on, it can be rushed again.
     const next = resolveTurn(s, map, [])
@@ -468,8 +470,9 @@ describe('projects in a country', () => {
     ok(s, start('fortress', 'r0'))
     const cost = rushCost(s, s.nations[P], 'fortress', 'r0')
     expect(cost).toBe(Math.round(RUSH.cost * localMonthly('fortress', 1, s.regions.r0)))
+    const gain = rushGain(s.nations[P], computeEconomy(s, map, P).coverage.engineers)
     ok(s, { type: 'rushProject', nationId: P, project: 'fortress', regionId: 'r0' })
-    expect(s.regions.r0.works!.fortress!.progress).toBe(RUSH.months)
+    expect(s.regions.r0.works!.fortress!.progress).toBeCloseTo(gain, 9)
     expect(validateOrder(s, map, { type: 'rushProject', nationId: P, project: 'fortress', regionId: 'r1' })).toMatch(/not under way|do not hold/)
     ok(s, { type: 'pauseProject', nationId: P, project: 'fortress', regionId: 'r0', paused: true })
     expect(s.regions.r0.works!.fortress!.paused).toBe(true)

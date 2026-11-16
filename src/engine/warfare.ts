@@ -471,7 +471,7 @@ export function resolveAttack(
   }
   // Hypersonic batteries crack the Defense Line directly, win or lose, unless the shield stops them.
   const missileHits = attacker.units.missile * FRONTIER.missileLine * interceptFactor(defenderNation.systems?.shield ?? 0)
-  if (missileHits > 0 && lineAfter > 0) lineAfter = Math.max(outcome.winner === 'attacker' ? 0 : 0.5, lineAfter - missileHits)
+  if (missileHits > 0 && lineAfter > 0) lineAfter = Math.min(lineAfter, Math.max(outcome.winner === 'attacker' ? 0 : 0.5, lineAfter - missileHits))
   targetRegion.line = lineAfter
   targetRegion.attackedTurn = s.turn
 

@@ -23,6 +23,8 @@ export interface MissileSpec {
   lineMax: number
   /** Months the factories of the struck country stop. */
   factoryTurns: number
+  /** Missiles that must get through the shield to stop the factories (default one half: a single missile, even through a shield). Light ones need a few. */
+  factoryNeed?: number
   /** Share of the defender's army killed by each, at most this much in a salvo. */
   army: number
   armyMax: number
@@ -39,7 +41,7 @@ export interface MissileSpec {
 }
 
 export const MISSILES: Record<MissileType, MissileSpec> = {
-  cruise: { name: 'Cruise missile', blurb: 'Cheap and plentiful. It flies low and slow, wears down a Defense Line and cripples factories for a month, and a shield shoots many of them down.', role: 'Cheap harassment', level: 1, money: 6, steel: 1, oil: 0, km: 3500, days: 2, line: 0.25, lineMax: 4, factoryTurns: 1, army: 0, armyMax: 0, perBuilding: 0, people: 0, peopleMax: 0, intercept: 1.5, infamy: 0, opinion: 0 },
+  cruise: { name: 'Cruise missile', blurb: 'Cheap and plentiful. It flies low and slow, wears down a Defense Line and cripples factories for a month, and a shield shoots many of them down.', role: 'Cheap harassment', level: 1, money: 6, steel: 1, oil: 0, km: 3500, days: 2, line: 0.25, lineMax: 4, factoryTurns: 1, factoryNeed: 3, army: 0, armyMax: 0, perBuilding: 0, people: 0, peopleMax: 0, intercept: 1.5, infamy: 0, opinion: 0 },
   tactical: { name: 'Tactical missile', blurb: 'Aimed at the army, not the land. Each kills a slice of the defender\'s units wherever they stand, and does nothing to the Defense Line.', role: 'Kills armies', level: 2, money: 9, steel: 2, oil: 0, km: 2500, days: 1, line: 0, lineMax: 0, factoryTurns: 0, army: 0.006, armyMax: 0.12, perBuilding: 0, people: 0, peopleMax: 0, intercept: 1, infamy: 0, opinion: 0 },
   hypersonic: { name: 'Hypersonic missile', blurb: 'Fast and hard to stop. It cuts the Defense Line and stops factories for two months. It comes from technology and the training queue.', role: 'Cracks defenses', level: 0, money: 0, steel: 0, oil: 0, km: 6000, days: 1, line: 0.6, lineMax: 8, factoryTurns: 2, army: 0, armyMax: 0, perBuilding: 0, people: 0, peopleMax: 0, intercept: 1, infamy: 0, opinion: 0 },
   ballistic: { name: 'Ballistic missile', blurb: 'A heavy warhead from across a continent. It breaks the Defense Line, destroys buildings and kills people, and the world will not forgive it.', role: 'Strategic damage', level: 3, money: 30, steel: 5, oil: 3, km: 9000, days: 3, line: 1, lineMax: 12, factoryTurns: 3, army: 0, armyMax: 0, perBuilding: 3, people: 0.004, peopleMax: 0.05, intercept: 0.8, infamy: 3, opinion: -12 },
@@ -56,5 +58,7 @@ export const MISSILE_PROGRAM = {
   research: [10, 25, 50],
   /** Missiles the program can build in a month, at each level. */
   capacity: [0, 5, 10, 18],
+  /** Months of production the stores can hold: a nation can stockpile this many months of missiles, no more. */
+  storageMonths: 6,
   names: ['No program', 'Level 1: cruise missiles', 'Level 2: tactical missiles', 'Level 3: ballistic missiles'],
 }

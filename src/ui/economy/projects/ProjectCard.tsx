@@ -63,7 +63,7 @@ export function ProjectCard(p: ProjectCardProps) {
               {p.state?.paused ? 'Paused' : `${left.toFixed(0)} month${left.toFixed(0) === '1' ? '' : 's'} left`} · {signed(-p.monthly)} a month
             </span>
             <span className="flex gap-1.5">
-              <OrderButton order={p.rush} label="Rush" cost={`${p.rushPrice} money`} effect={`${p.rushMonths} months sooner`} />
+              <OrderButton order={p.rush} label="Rush" cost={`${p.rushPrice} money`} effect={`${Math.round(p.rushMonths * 10) / 10} months sooner`} />
               <OrderButton order={p.pause} label={p.state?.paused ? 'Resume' : 'Pause'} />
             </span>
           </div>

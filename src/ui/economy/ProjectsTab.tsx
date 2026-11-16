@@ -7,7 +7,7 @@ import { describeEffect } from '../../data/society'
 import { tierOf } from '../../engine/empire'
 import { activeProjects, investedIn, levelCost, levelMonths, monthlyCost, projectLevel, projectProblem } from '../../engine/industry'
 import type { LocalProjectId, ProjectId, RegionId } from '../../engine/types'
-import { activeLocal, localCost, localInvested, localLevel, localMonthly, localMonths, localProblem, localScale, RUSH, rushCost } from '../../engine/works'
+import { activeLocal, localCost, localInvested, localLevel, localMonthly, localMonths, localProblem, localScale, rushCost, rushGain } from '../../engine/works'
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
 import { signed, usePlayerView } from '../hooks'
@@ -95,7 +95,7 @@ function National() {
 
 function NationalCard({ id }: { id: ProjectId }) {
   const view = usePlayerView()!
-  const { game, player } = view
+  const { game, player, econ } = view
   const { map } = getWorld()
   const spec = PROJECTS[id]
   const state = player.projects[id]
@@ -122,7 +122,7 @@ function NationalCard({ id }: { id: ProjectId }) {
       pause={{ type: 'pauseProject', nationId: player.id, project: id, paused: !state?.paused }}
       rush={{ type: 'rushProject', nationId: player.id, project: id }}
       rushPrice={state && !state.done ? rushCost(game, player, id) : 0}
-      rushMonths={RUSH.months}
+      rushMonths={rushGain(player, econ.coverage.engineers)}
     />
   )
 }
@@ -206,7 +206,7 @@ function Countries() {
 
 function LocalCard({ id, regionId }: { id: LocalProjectId; regionId: RegionId }) {
   const view = usePlayerView()!
-  const { game, player } = view
+  const { game, player, econ } = view
   const { map } = getWorld()
   const spec = LOCAL[id]
   const r = game.regions[regionId]
@@ -235,7 +235,7 @@ function LocalCard({ id, regionId }: { id: LocalProjectId; regionId: RegionId })
       pause={{ type: 'pauseProject', nationId: player.id, project: id, paused: !state?.paused, regionId }}
       rush={{ type: 'rushProject', nationId: player.id, project: id, regionId }}
       rushPrice={building ? rushCost(game, player, id, regionId) : 0}
-      rushMonths={RUSH.months}
+      rushMonths={rushGain(player, econ.coverage.engineers)}
       where={spec.needs ? `Needs ${NEED_TEXT[spec.needs]}.` : undefined}
     />
   )
