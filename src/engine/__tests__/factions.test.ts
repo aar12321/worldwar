@@ -980,7 +980,9 @@ describe('edge cases the host and the desk meet', () => {
   it('a member who leaves in the middle of a war leaves its soldiers in the fight, and the command passes on', () => {
     const { s, f } = atWarTogether()
     s.turn += FACTION.lockMonths + 1
-    const lead = f.wars[0].lead
+    // r1 put soldiers in and commands the army.
+    f.wars[0].lead = 'r1'
+    const lead = 'r1'
     const soldiers = f.pool.units.infantry
     const m = s.nations[lead]
     const homeBefore = m.military.units.infantry
