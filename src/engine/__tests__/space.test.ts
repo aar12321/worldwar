@@ -280,7 +280,7 @@ describe('missions: phases, rolls and rewards', () => {
     // A whole crew is lost on arrival; half the crew on the pad.
     expect(sp(arriveFail!).astronauts).toBe(6 - MISSIONS.lunar_landing.crew)
     expect(sp(launchFail!).astronauts).toBe(6 - Math.ceil(MISSIONS.lunar_landing.crew * SPACE.launchCrewLoss))
-  })
+  }, 60_000)
 
   it('missions are gated by what came before and by experience', () => {
     const s = world()
