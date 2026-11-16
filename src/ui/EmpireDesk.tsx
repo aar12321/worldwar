@@ -4,21 +4,14 @@ import { capitalDistance, capitalsOf, empireCount, tierOf } from '../engine/empi
 import { computeEconomy } from '../engine/economy'
 import type { OccupationPolicy, ResolutionKind } from '../engine/types'
 import { getWorld } from '../map/world'
-import { useGame, type EmpireTab } from '../store'
+import { useGame } from '../store'
 import { usePlayerView } from './hooks'
 import { Bar, LevelPicker, Pending, StatTile, Tiles } from './kit'
 import { pct } from './format'
 import { Card, Line } from './economy/parts'
-import { OrderButton, PanelShell, Tabs } from './panel'
+import { DeskTabs, OrderButton, PanelShell, TabHost } from './panel'
 import { useState } from 'react'
 import { Spark } from './Charts'
-
-const TABS = [
-  ['overview', 'Overview'],
-  ['provinces', 'Provinces'],
-  ['world', 'World'],
-  ['stats', 'Statistics'],
-] as const satisfies readonly (readonly [EmpireTab, string])[]
 
 /** What a tier opens, one line each, for the table. */
 function unlocks(t: ReturnType<typeof tierSpec>): [string, string][] {
@@ -42,19 +35,12 @@ function unlocks(t: ReturnType<typeof tierSpec>): [string, string][] {
 
 export function EmpireDesk() {
   const view = usePlayerView()
-  const tab = useGame((s) => s.empireTab)
-  const setTab = useGame((s) => s.setEmpireTab)
   if (!view) return null
   const { game, player } = view
   const spec = tierOf(player)
   return (
-    <PanelShell title="Empire" kicker={`${spec.name} · ${empireCount(game, player.id)} ${empireCount(game, player.id) === 1 ? 'country' : 'countries'}`} panel="empire" wide tabs={<Tabs value={tab} onChange={setTab} options={TABS} />}>
-      <div>
-        {tab === 'overview' && <Overview />}
-        {tab === 'provinces' && <Provinces />}
-        {tab === 'world' && <World />}
-        {tab === 'stats' && <Statistics />}
-      </div>
+    <PanelShell title="Empire" kicker={`${spec.name} · ${empireCount(game, player.id)} ${empireCount(game, player.id) === 1 ? 'country' : 'countries'}`} panel="empire" wide tabs={<DeskTabs desk="empire" />}>
+      <TabHost desk="empire" />
     </PanelShell>
   )
 }
@@ -287,3 +273,6 @@ function World() {
     </section>
   )
 }
+
+/** The tabs, named for the registry (src/ui/registry.ts). */
+export { Overview as EmpireOverview, Provinces as EmpireProvinces, World as EmpireWorld, Statistics as EmpireStatistics }

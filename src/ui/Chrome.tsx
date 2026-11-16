@@ -1,60 +1,17 @@
 import { dayDate, isLive } from '../engine/calendar'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { ReactNode } from 'react'
 import { turnDate } from '../engine/helpers'
 import { describeOrder } from '../engine/resolveTurn'
 import { controlled, countriesTaken, goalSentence, populationShare } from '../engine/victory'
 import { getWorld } from '../map/world'
-import { useGame, type Panel, type ReportDelta } from '../store'
+import { useGame, type ReportDelta } from '../store'
 import { AdviceList } from './Briefing'
 import { fmt, signed, useAdvice, usePlayerView } from './hooks'
-import { BriefingIcon, DiplomacyIcon, EconomyIcon, EmpireIcon, MilitaryIcon, ResearchIcon } from './icons'
 import { Modal } from './Modal'
 import { Spark } from './Charts'
 
-const NAV: { panel: Panel; label: string; key: string; icon: ReactNode }[] = [
-  { panel: 'briefing', label: 'Briefing', key: 'B', icon: <BriefingIcon /> },
-  { panel: 'economy', label: 'Economy', key: 'E', icon: <EconomyIcon /> },
-  { panel: 'military', label: 'Military', key: 'M', icon: <MilitaryIcon /> },
-  { panel: 'diplomacy', label: 'Diplomacy', key: 'D', icon: <DiplomacyIcon /> },
-  { panel: 'empire', label: 'Empire', key: 'I', icon: <EmpireIcon /> },
-  { panel: 'tech', label: 'Research', key: 'R', icon: <ResearchIcon /> },
-]
-
-export function NavRail() {
-  const panel = useGame((s) => s.panel)
-  const setPanel = useGame((s) => s.setPanel)
-  const offers = useGame((s) => {
-    if (!s.game) return 0
-    const unanswered = s.game.proposals.filter((p) => p.to === s.game!.playerId && !s.orders.some((o) => o.type === 'respond' && o.proposalId === p.id))
-    return unanswered.length
-  })
-  const urgent = useAdvice().filter((a) => a.urgency === 'now').length
-  const badge = (p: Panel) => (p === 'diplomacy' ? offers : p === 'briefing' ? urgent : 0)
-  return (
-    <nav className="nav-dock" aria-label="Desks">
-      <div className="surface max-h-full overflow-y-auto scroll-thin rounded-[22px] p-1.5 flex flex-col gap-0.5">
-        {NAV.map((n) => (
-          <button
-            key={n.panel}
-            onClick={() => setPanel(n.panel)}
-            aria-pressed={panel === n.panel}
-            className={`nav-btn relative w-[72px] h-[56px] rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-colors ${panel === n.panel ? 'bg-white/16 text-white' : 'text-white/75 hover:text-white hover:bg-white/8'}`}
-            title={n.key ? `${n.label} (${n.key})` : n.label}
-          >
-            {n.icon}
-            <span className="text-[12px] font-medium tracking-tight">{n.label}</span>
-            {badge(n.panel) > 0 && (
-              <span className="absolute top-1 right-2 min-w-4 h-4 px-1 rounded-full bg-[#ff453a] text-[11px] font-semibold text-white flex items-center justify-center" aria-label={`${badge(n.panel)} need you`}>
-                {badge(n.panel)}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-    </nav>
-  )
-}
+/** The desk rail (and the phone's bottom bar). It lives in Nav.tsx and is built from the registry in registry.ts. */
+export { NavRail } from './Nav'
 
 export function OrdersTray() {
   const view = usePlayerView()
@@ -67,10 +24,10 @@ export function OrdersTray() {
   const { game, orders } = view
   const { map } = getWorld()
   return (
-    <div className="orders-tray absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]">
+    <motion.div className="orders-tray absolute bottom-4 left-1/2 -translate-x-1/2 z-30 max-w-[min(70vw,820px)]" role="region" aria-label="Orders" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}>
       <div className="surface rounded-full px-3 py-1.5 flex items-center gap-2 overflow-x-auto scroll-thin">
         {undoCount > 0 && (
-          <button className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-semibold bg-[#0a84ff]/25 text-[#9fd0ff] hover:bg-[#0a84ff]/40" onClick={undo} title={`Undo: ${undoLabel} (Ctrl+Z)`} aria-label={`Undo ${undoLabel}`}>
+          <button className="tray-chip whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-semibold bg-[#0a84ff]/25 text-[#9fd0ff] hover:bg-[#0a84ff]/40" onClick={undo} title={`Undo: ${undoLabel} (Ctrl+Z)`} aria-label={`Undo ${undoLabel}`}>
             ↶ Undo
           </button>
         )}
@@ -82,16 +39,18 @@ export function OrdersTray() {
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.14 }}
               onClick={() => removeOrder(i)}
-              className="whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-medium hover:line-through bg-white/10 text-white/90"
+              className="tray-chip whitespace-nowrap rounded-full px-3 py-1 text-[13px] font-medium hover:line-through bg-white/10 text-white/90"
               title="Click to cancel"
+              aria-label={`Cancel order: ${describeOrder(game, map, o)}`}
             >
               {describeOrder(game, map, o)}
             </motion.button>
           ))}
         </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -99,18 +58,34 @@ export function Toasts() {
   const toasts = useGame((s) => s.toasts)
   const dismiss = useGame((s) => s.dismissToast)
   return (
-    <div className="toast-region" aria-live="polite">
+    <div className="toast-region" aria-live="polite" aria-atomic="false">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.div
             key={t.id}
-            initial={{ x: 40, opacity: 0 }}
+            layout="position"
+            initial={{ x: 32, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 40, opacity: 0 }}
+            exit={{ x: 32, opacity: 0, transition: { duration: 0.12 } }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             role={t.tone === 'error' ? 'alert' : 'status'}
-            className={`pointer-events-auto surface rounded-2xl pl-4 pr-1.5 py-2.5 text-[14px] max-w-sm flex items-start gap-2 ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
+            className={`toast pointer-events-auto surface rounded-2xl pl-4 pr-1.5 py-2.5 text-[14px] max-w-sm flex items-start gap-2 ${t.tone === 'error' ? 'text-[#ff8a84]' : t.tone === 'success' ? 'text-[#6eeb8a]' : ''}`}
           >
+            <span className="toast-mark" aria-hidden>
+              {t.tone === 'error' ? '!' : t.tone === 'success' ? '\u2713' : 'i'}
+            </span>
             <span className="flex-1 min-w-0 py-0.5">{t.text}</span>
+            {t.action && (
+              <button
+                className="shrink-0 btn btn-quiet toast-action"
+                onClick={() => {
+                  t.action?.run()
+                  dismiss(t.id)
+                }}
+              >
+                {t.action.label}
+              </button>
+            )}
             <button className="shrink-0 w-8 h-8 rounded-full text-white/60 hover:text-white hover:bg-white/10 text-[18px] leading-none" aria-label="Dismiss" onClick={() => dismiss(t.id)}>
               ×
             </button>

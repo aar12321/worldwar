@@ -9,15 +9,11 @@ import { useGame } from '../store'
 import { Pips } from './bits'
 import { fmt, usePlayerView } from './hooks'
 import { UnitIcon } from './icons'
-import { OrderButton, PanelShell, Tabs } from './panel'
-import { AgenciesTab } from './AgenciesTab'
-import { ArmiesTab } from './ArmiesTab'
-import { isLive } from '../engine/calendar'
+import { DeskTabs, OrderButton, PanelShell, TabHost } from './panel'
+import { NumberStepper } from './widgets'
 import { ACADEMY, GENERAL_TRAITS } from '../data/projects'
 import { tierOf } from '../engine/empire'
 import { academyCost } from '../engine/industry'
-import { SystemsTab } from './SystemsTab'
-import { WarsTab } from './WarsPanel'
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`
 
@@ -75,16 +71,11 @@ function UnitCard({ line }: { line: UnitStatLine }) {
         </span>
       </div>
 
-      <div className="flex items-center gap-1.5 text-[13px]" role="group" aria-label={`How many ${line.name} to train at once`}>
-        <span className="text-white/65">Train</span>
-        {[1, 5, 10].map((n) => (
-          <button key={n} className={`btn px-2.5 py-1 text-[13px] ${batch === n ? 'btn-primary' : 'btn-quiet'}`} aria-pressed={batch === n} onClick={() => setBatch(n)}>
-            {n}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <NumberStepper label={`${line.name} to train at once`} value={batch} onChange={setBatch} min={1} max={25} quick={[1, 5, 10]} slider={false} />
         {batch > 1 && (
           <button
-            className="btn btn-primary px-3 py-1 text-[13px] ml-auto"
+            className="btn btn-primary px-3 py-1 text-[13px]"
             title={`Queue ${batch} ${line.name} until the queue is full or you run out of money, soldiers or steel`}
             onClick={() => {
               const order = { type: 'queueTrain' as const, nationId: player.id, unit: line.unit }
@@ -227,31 +218,21 @@ function Forces() {
   )
 }
 
-const MILITARY_TABS = [
-  ['forces', 'Forces'],
-  ['wars', 'Wars'],
-] as const
-
-/** The Military desk: build the force, and run the wars it fights. */
+/** The Military desk: build the force, and run the wars it fights. Its tabs are listed in the registry (src/ui/registry.ts). */
 export function MilitaryPanel() {
   const view = usePlayerView()
-  const tab = useGame((s) => s.militaryTab)
-  const setTab = useGame((s) => s.setMilitaryTab)
   if (!view) return null
   const { game, player } = view
   const wars = enemiesOf(game, player.id).length
   return (
-    <PanelShell
-      title="Military"
-      kicker={`One force for the whole nation · ${wars} of ${maxWars(game, player.id)} wars`}
-      panel="military"
-      wide
-      tabs={<Tabs value={tab} onChange={setTab} options={isLive(game) ? ([MILITARY_TABS[0], ['armies', (game.armies?.filter((a) => a.nationId === player.id).length ?? 0) > 0 ? `Armies (${game.armies?.filter((a) => a.nationId === player.id).length})` : 'Armies'], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const) : ([MILITARY_TABS[0], ['wars', wars > 0 ? `Wars (${wars})` : 'Wars'], ['agencies', 'Agencies'], ['systems', 'Systems']] as const)} />}
-    >
-      {tab === 'forces' ? <Forces /> : tab === 'wars' ? <WarsTab /> : tab === 'systems' ? <SystemsTab /> : tab === 'armies' && isLive(game) ? <ArmiesTab /> : <AgenciesTab />}
+    <PanelShell title="Military" kicker={`One force for the whole nation · ${wars} of ${maxWars(game, player.id)} wars`} panel="military" wide tabs={<DeskTabs desk="military" />}>
+      <TabHost desk="military" />
     </PanelShell>
   )
 }
+
+/** The Forces tab, named for the registry. */
+export { Forces as MilitaryForces }
 
 function Total({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (

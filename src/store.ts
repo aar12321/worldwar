@@ -23,6 +23,7 @@ import { battleLine, scenesFor } from './ui/battleText'
 import { presentLiveStep } from './ui/livePresent'
 import { speak } from './ui/plain'
 import type { PendingConfirm } from './ui/confirmRules'
+import { applyPrefs, defaultPrefs, migrateSettingsUi, motionReduced, sanitizePrefs, systemReducesMotion, type UiPrefs } from './ui/prefs'
 
 const SAVE_KEY = 'worlds-of-others-save-v4'
 const ORDERS_KEY = 'worlds-of-others-orders-v4'
@@ -32,8 +33,11 @@ export const SLOT_COUNT = 3
 /** Everything a crashed game may have left behind. */
 export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
 
-/** The five desks, plus News and Settings which open from the top bar. */
-export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings'
+/**
+ * The desks, plus News and Settings which open from the top bar. Any id in the desk registry (src/ui/registry.ts) is a panel too,
+ * so a new desk needs no change here.
+ */
+export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'empire' | 'log' | 'settings' | (string & {})
 export type EmpireTab = 'overview' | 'provinces' | 'world' | 'stats'
 export type { PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government'
@@ -66,12 +70,16 @@ export interface Settings {
   liveReport: 'note' | 'pause'
   /** Live games: how fast time runs. */
   liveSpeed: 1 | 2 | 4
+  /** How the interface looks and behaves for this person: text size, contrast, density, pins, recents. */
+  ui: UiPrefs
 }
 
 export interface Toast {
   id: number
   text: string
   tone: 'info' | 'error' | 'success'
+  /** A button on the toast, such as Undo. */
+  action?: { label: string; run: () => void }
 }
 
 export interface ReportDelta {
@@ -159,7 +167,7 @@ function saveIdentity(id: { clientId: ClientId | null; name: string; code: strin
   }
 }
 
-interface GameStore {
+export interface GameStore {
   online: OnlineView | null
   /** The last room this device was in, so it can be rejoined. */
   lastRoom: string | null
@@ -233,6 +241,21 @@ interface GameStore {
   saveFailed: boolean
   paletteOpen: boolean
   setPalette(open: boolean): void
+  /** The tab each registry desk other than Economy, Military and Empire is on. */
+  deskTabs: Record<string, string>
+  /** Opens a desk on one of its tabs (any registered desk or tab), remembering it. */
+  openTab(desk: string, tab?: string): void
+  /** Changes the tab of the open desk without opening anything. */
+  setDeskTab(desk: string, tab: string): void
+  /** Which tab of the help window is showing. */
+  helpTab: 'guide' | 'keys'
+  setHelpTab(tab: 'guide' | 'keys'): void
+  /** A setting the jump window asked to show: the Settings desk scrolls to it and flashes it once. */
+  settingsFocus: string | null
+  /** Changes how the interface looks and behaves; saved with the settings. */
+  updatePrefs(patch: Partial<UiPrefs>): void
+  /** Puts every look-and-feel choice back to its default (pins and recents stay). */
+  resetPrefs(): void
   /** Save slots, on this device. Each keeps a whole game and the month's waiting orders. */
   saveSlot(slot: number): boolean
   loadSlot(slot: number): boolean
@@ -293,7 +316,7 @@ interface GameStore {
   dismissSummary(): void
   setHelp(open: boolean): void
   updateSettings(patch: Partial<Settings>): void
-  toast(text: string, tone?: Toast['tone'], ms?: number): void
+  toast(text: string, tone?: Toast['tone'], ms?: number, action?: Toast['action']): void
   dismissToast(id: number): void
   persist(): void
 }
@@ -308,14 +331,17 @@ const defaultSettings: Settings = {
   pauseOnBattles: false,
   liveReport: 'note',
   liveSpeed: 1,
+  ui: defaultPrefs(),
 }
 
 /** Keeps a stored setting only if it has a value the game understands. */
 function sanitizeSettings(raw: Partial<Settings>): Settings {
   const merged = { ...defaultSettings, ...raw }
+  // Settings saved before the look-and-feel preferences existed keep their old motion choice.
+  const ui = migrateSettingsUi(raw)
   const oneOf = <T,>(value: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(value as T) ? (value as T) : fallback)
   return {
-    reducedMotion: typeof merged.reducedMotion === 'boolean' ? merged.reducedMotion : defaultSettings.reducedMotion,
+    reducedMotion: motionReduced(ui.motion, systemReducesMotion()),
     fxSpeed: oneOf(merged.fxSpeed, [1, 2], 1),
     battleScenes: oneOf(merged.battleScenes, ['all', 'mine', 'off'], 'all'),
     seenHelp: merged.seenHelp === true,
@@ -324,6 +350,7 @@ function sanitizeSettings(raw: Partial<Settings>): Settings {
     pauseOnBattles: merged.pauseOnBattles === true,
     liveReport: oneOf(merged.liveReport, ['note', 'pause'], 'note'),
     liveSpeed: oneOf(merged.liveSpeed, [1, 2, 4], 1),
+    ui,
   }
 }
 
@@ -775,6 +802,9 @@ export const useGame = create<GameStore>((set, get) => ({
   saveFailed: false,
   confirm: null,
   paletteOpen: false,
+  deskTabs: {},
+  helpTab: 'guide',
+  settingsFocus: null,
   undoStack: [],
   online: null,
   eventDismissedTurn: null,
@@ -1368,6 +1398,40 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ summary: null })
   },
 
+  openTab(desk, tab) {
+    if (desk === 'economy') get().openEconomy((tab ?? get().economyTab) as EconomyTab)
+    else if (desk === 'military') get().openMilitary((tab ?? get().militaryTab) as MilitaryTab)
+    else if (desk === 'empire') get().openEmpire(tab as EmpireTab | undefined)
+    else if (desk === 'diplomacy') get().openDiplomacy(null)
+    else set((st) => ({ panel: desk, deskTabs: tab ? { ...st.deskTabs, [desk]: tab } : st.deskTabs, diploFocus: null }))
+  },
+
+  setDeskTab(desk, tab) {
+    if (desk === 'economy') get().setEconomyTab(tab as EconomyTab)
+    else if (desk === 'military') get().setMilitaryTab(tab as MilitaryTab)
+    else if (desk === 'empire') get().setEmpireTab(tab as EmpireTab)
+    else set((st) => ({ deskTabs: { ...st.deskTabs, [desk]: tab } }))
+  },
+
+  setHelpTab(tab) {
+    set({ helpTab: tab })
+  },
+
+  updatePrefs(patch) {
+    const ui = sanitizePrefs({ ...get().settings.ui, ...patch })
+    // The old "reduce motion" switch stays what the rest of the game reads; the preference decides it.
+    const reducedMotion = motionReduced(ui.motion, systemReducesMotion())
+    get().updateSettings({ ui, reducedMotion })
+    applyPrefs(ui)
+  },
+
+  resetPrefs() {
+    const keep = get().settings.ui
+    const fresh = { ...defaultPrefs(), pinned: keep.pinned, recents: keep.recents }
+    get().updatePrefs(fresh)
+    get().toast('Look and feel put back to the defaults', 'success', 2500)
+  },
+
   setHelp(open) {
     set({ helpOpen: open })
     if (!open && !get().settings.seenHelp) get().updateSettings({ seenHelp: true })
@@ -1383,11 +1447,11 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ settings })
   },
 
-  toast(text, tone = 'info', ms = 3500) {
+  toast(text, tone = 'info', ms = 3500, action) {
     const id = toastId++
     const shown = tone === 'error' ? speak(text) : text
-    const life = tone === 'error' ? Math.max(ms, 8000) : ms
-    set((st) => ({ toasts: [...st.toasts.slice(-3), { id, text: shown, tone }] }))
+    const life = tone === 'error' ? Math.max(ms, 8000) : action ? Math.max(ms, 6000) : ms
+    set((st) => ({ toasts: [...st.toasts.slice(-3), { id, text: shown, tone, action }] }))
     setTimeout(() => get().dismissToast(id), life)
   },
 
@@ -1405,6 +1469,9 @@ export const useGame = create<GameStore>((set, get) => ({
 useGame.subscribe((st) => {
   if (st.game) markSettled(st.game)
 })
+
+// Text size, contrast, density and the rest are on the page before the first screen is drawn.
+applyPrefs(useGame.getState().settings.ui)
 
 // A handle for browser tests, in development only.
 if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __store: typeof useGame }).__store = useGame

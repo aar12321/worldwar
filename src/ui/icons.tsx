@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { UnitType } from '../engine/types'
 
-function Frame({ size = 20, children, title }: { size?: number; children: ReactNode; title?: string }) {
+export function Frame({ size = 20, children, title }: { size?: number; children: ReactNode; title?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" role={title ? 'img' : undefined} aria-label={title} aria-hidden={title ? undefined : true}>
       {children}
