@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Order } from '../engine/types'
+import { daysInMonth } from '../engine/calendar'
+import { humanOrder } from './liveRoom'
+import { monthOrdersOf, stepRoomDay } from './liveRoom'
+import { liveFingerprint } from './fingerprint'
 import { gameOf, liveRoom, same } from './liveHarness'
 
 const build = (nation: string, region = nation): Order => ({ type: 'build', nationId: nation, regionId: region, building: 'farm' })
@@ -44,8 +48,9 @@ describe('live rooms: orders', () => {
   it('an order is done once when it is sent twice', async () => {
     const room = await liveRoom(2)
     const [host, guest] = room.seats
-    const sent = guest.s.sendCommand(build('r1'))
-    guest.s.transport.send({ t: 'cmd', from: 'b', cid: sent.cid, order: build('r1') })
+    const train: Order = { type: 'train', nationId: 'r1', unit: 'infantry' }
+    const sent = guest.s.sendCommand(train)
+    guest.s.transport.send({ t: 'cmd', from: 'b', cid: sent.cid, order: train })
     await room.run(400)
     expect(host.orders).toHaveLength(1)
     expect(same(room)).toBe(true)
@@ -81,5 +86,34 @@ describe('live rooms: orders', () => {
     expect(gameOf(host).liveOrders).toEqual({})
     expect(gameOf(host).nations.r1.taxRate).toBeCloseTo(0.25)
     expect(same(room)).toBe(true)
+  })
+
+  it('the month-end orders of all players run in the seeded order, not the order they came in', async () => {
+    const room = await liveRoom(3)
+    const g = structuredClone(gameOf(room.seats[0]))
+    const order = (n: string): Order => ({ type: 'setPolicy', nationId: n, taxRate: 0.2, draftRate: 0.02 })
+    g.liveOrders = { r2: [order('r2')], r0: [order('r0')], r1: [order('r1')] }
+    const seen = new Set<string>()
+    for (let turn = 1; turn < 30; turn++) {
+      g.turn = turn
+      const ids = monthOrdersOf(g).map((o) => o.nationId)
+      expect(ids).toEqual(humanOrder(g.seed, turn, ['r0', 'r1', 'r2']))
+      seen.add(ids.join())
+    }
+    expect(seen.size).toBeGreaterThan(2)
+  })
+
+  it('a nation whose player is away is played by the AI at the month end, and one whose player is here is not', async () => {
+    const room = await liveRoom(2)
+    const g = structuredClone(gameOf(room.seats[0]))
+    g.day = daysInMonth(g.turn) - 1
+    const away = { ...structuredClone(g), liveAi: ['r1'] }
+    const here = structuredClone(g)
+    const a = stepRoomDay(away, room.map).state
+    const b = stepRoomDay(here, room.map).state
+    expect(a.turn).toBe(2)
+    expect(liveFingerprint(a)).not.toBe(liveFingerprint(b))
+    // The AI did something with r1's money that an idle player did not.
+    expect(JSON.stringify(a.nations.r1)).not.toBe(JSON.stringify(b.nations.r1))
   })
 })
