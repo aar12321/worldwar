@@ -2,6 +2,7 @@ import { botAcceptsInvite, botAdmits } from '../ai/factions'
 import { addOpinion } from '../ai/opinion'
 import { difficultyOf } from '../data/difficulty'
 import { DEFAULT_CHARTER, FACTION, FACTION_WORDS, POOL_NAMES } from '../data/factions'
+import { BLOC } from '../data/blocs'
 import { COSTS, UNIT_SPECS } from '../data/unitTypes'
 import { JUSTIFY, REACH } from '../data/war'
 import { declareWar } from './diplomacy'
@@ -373,6 +374,7 @@ export function factionProblem(s: GameState, map: WorldMap, o: FactionOrder, pen
     }
     case 'factionContribute': {
       if (!mine) return 'You are not in a faction'
+      if (BLOC.on) return 'Blocs have no common pool: pledge your own divisions to an operation instead'
       const bad = badGift(o.gift)
       if (bad) return bad
       const queued = pending.filter((p): p is Extract<Order, { type: 'factionContribute' }> => p.type === 'factionContribute' && p.nationId === o.nationId)
@@ -392,6 +394,7 @@ export function factionProblem(s: GameState, map: WorldMap, o: FactionOrder, pen
     }
     case 'factionWithdraw': {
       if (!mine) return 'You are not in a faction'
+      if (BLOC.on) return 'Blocs have no common pool: what was in it has been shared back to the members'
       const bad = badGift(o.gift)
       if (bad) return bad
       const wait = lockLeft(s, mine, o.nationId)
@@ -411,6 +414,7 @@ export function factionProblem(s: GameState, map: WorldMap, o: FactionOrder, pen
     }
     case 'factionPropose': {
       if (!mine) return 'You are not in a faction'
+      if (BLOC.on) return 'Blocs do not vote: the leader calls the bloc to arms, and members answer with one click'
       const p = o.proposal
       if (!p || (p.kind !== 'war' && p.kind !== 'contract')) return 'Unknown proposal'
       if (mine.proposals.length + pending.filter((q) => q.type === 'factionPropose' && factionOf(s, q.nationId)?.id === mine.id).length >= FACTION.maxOpen) return `The faction can vote on ${FACTION.maxOpen} things at a time`
@@ -613,6 +617,8 @@ function found(s: GameState, founder: NationId, name: string, charter?: Partial<
     invites: [],
     wars: [],
     history: [],
+    // The bloc layer (docs/BLOC_STATUS.md) begins with the faction, so every screen of an online game holds the same state.
+    ...(BLOC.on ? { bloc: { xp: 0, roles: {}, done: 0, failed: 0, calls: [], ops: [], record: {} } } : {}),
   }
   ;(s.factions ??= []).push(f)
   say(s, f, `${nm(s, founder)} founded ${f.name}.`)

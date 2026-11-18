@@ -4,6 +4,7 @@ import { createInitialState, type NewGameOptions } from './data/startingNations'
 import type { AdviceTarget, PeopleSection } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
 import { factionNews } from './engine/factions'
+import { blocNews } from './engine/bloc'
 import { commandLevel, DEFAULT_AUTO, planMonth, type AutoSettings } from './engine/commander'
 import { maxAttacks, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
@@ -577,6 +578,14 @@ export function keptOrder(item: unknown, playerId: string): item is Order {
   if (order.type === 'factionContribute' || order.type === 'factionWithdraw') return !!order.gift && typeof order.gift === 'object'
   if (order.type === 'factionPropose') return !!order.proposal && (order.proposal.kind === 'war' ? typeof order.proposal.target === 'string' : order.proposal.kind === 'contract' && !!order.proposal.terms)
   if (order.type === 'factionVote') return typeof order.proposalId === 'string' && (order.vote === 'yes' || order.vote === 'no')
+  if (order.type === 'blocRole') return order.role === null || typeof order.role === 'string'
+  if (order.type === 'blocGoal') return typeof order.goal === 'string'
+  if (order.type === 'blocCall') return typeof order.target === 'string'
+  if (order.type === 'blocAnswer') return typeof order.callId === 'string' && typeof order.join === 'boolean'
+  if (order.type === 'blocPlan') return typeof order.target === 'string' && Number.isInteger(order.when)
+  if (order.type === 'blocCommit') return typeof order.opId === 'string' && !!order.units && typeof order.units === 'object'
+  if (order.type === 'blocCancel') return typeof order.opId === 'string'
+  if (order.type === 'blocChat') return typeof order.text === 'string'
   return false
 }
 
@@ -696,6 +705,7 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
   for (const b of mine) if (b.captured) flashCapture(b.regionId, b.defender.nationId === player, next.nations[player]?.color ?? '#fff')
   // A faction vote that needs you, an invitation, a contract that began or ended: said once, whether the report is on or not.
   for (const text of factionNews(before === next ? null : before, next, player).slice(0, 3)) toast(text, 'info', 7000)
+  for (const text of blocNews(before === next ? null : before, next, player).slice(0, 3)) toast(text, 'info', 7000)
   // With the report off, the turn's big moments still get a line.
   if (!settings.monthlyReport) {
     const mineNews = next.dispatches.filter((d) => d.to === player || d.from === player)
@@ -775,6 +785,7 @@ function liveDay(prev: GameState, step: LiveStep) {
     game.monthStart = markMonth(game, player, presented.mine.filter((b) => b.attacker.nationId !== 'rebels').map(lineOf))
     for (const d of game.dispatches.filter((x) => x.to === player || x.from === player).slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
     for (const text of factionNews(prev, game, player).slice(0, 3)) st.toast(text, 'info', 7000)
+    for (const text of blocNews(prev, game, player).slice(0, 3)) st.toast(text, 'info', 7000)
     const failed = game.log.filter((e) => e.turn === prev.turn && e.text.startsWith('Order failed') && e.nations.includes(player))
     if (failed.length) st.toast(failed.length === 1 ? failed[0].text : `${failed.length} orders failed at the month's end. See the report.`, 'error', 7000)
     patch.orders = waitingOf(game)
@@ -1303,6 +1314,10 @@ export const useGame = create<GameStore>((set, get) => ({
     else if (order.type === 'governPuppet') rest = orders.filter((o) => !(o.type === 'governPuppet' && o.target === order.target))
     // A vote can be changed until the month ends: the last one counts.
     else if (order.type === 'factionVote') rest = orders.filter((o) => !(o.type === 'factionVote' && o.proposalId === order.proposalId))
+    // Bloc pledges, answers and roles can be changed until the month ends: the last one counts.
+    else if (order.type === 'blocCommit') rest = orders.filter((o) => !(o.type === 'blocCommit' && o.opId === order.opId))
+    else if (order.type === 'blocAnswer') rest = orders.filter((o) => !(o.type === 'blocAnswer' && o.callId === order.callId))
+    else if (order.type === 'blocRole' || order.type === 'blocGoal') rest = orders.filter((o) => o.type !== order.type)
     const err = validateOrder(game, map, order, rest)
     if (err) {
       get().toast(err, 'error')
@@ -1576,6 +1591,7 @@ export const useGame = create<GameStore>((set, get) => ({
       const news = step.state.dispatches.filter((d) => d.to === game.playerId || d.from === game.playerId)
       for (const d of news.slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
       for (const text of factionNews(game, step.state, game.playerId).slice(0, 3)) st.toast(text, 'info', 7000)
+      for (const text of blocNews(game, step.state, game.playerId).slice(0, 3)) st.toast(text, 'info', 7000)
       const failed = step.state.log.filter((e) => e.turn === game.turn && e.text.startsWith('Order failed') && e.nations.includes(game.playerId))
       if (failed.length) st.toast(failed.length === 1 ? failed[0].text : `${failed.length} orders failed at the month's end. See the report.`, 'error', 7000)
       save(patch.game!, [])

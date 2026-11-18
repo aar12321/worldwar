@@ -52,6 +52,7 @@ import { clockOf, isLive } from './calendar'
 import { launchArmy, launchStrike, turnBack } from './armies'
 import { answerCrisis, runCrises } from './crises'
 import { runJustification } from './justification'
+import { describeBlocOrder, executeBlocOrder, isBlocOrder, runBlocMonth, runBlocOpsTurn } from './bloc'
 import { describeGift, executeFactionOrder, factionOf, isFactionOrder, resolveFactionVotes, runFactionCampaigns, runFactionMonth } from './factions'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
@@ -296,6 +297,15 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       const p = factionOf(s, o.nationId)?.proposals.find((x) => x.id === o.proposalId)
       return `Vote ${o.vote} on ${p ? (p.kind === 'war' ? `war on ${nation(p.target!)}` : 'a contract') : 'a proposal'}`
     }
+    case 'blocRole':
+    case 'blocGoal':
+    case 'blocCall':
+    case 'blocAnswer':
+    case 'blocPlan':
+    case 'blocCommit':
+    case 'blocCancel':
+    case 'blocChat':
+      return describeBlocOrder(s, map, o)
   }
 }
 
@@ -318,7 +328,13 @@ const PHASES: Order['type'][][] = [
   ['factionContribute', 'factionWithdraw'],
   ['factionPropose'],
   ['factionVote'],
+  ['blocRole', 'blocGoal', 'blocChat', 'blocCancel'],
   ['declareWar', 'buildCase', 'annexPuppet', 'annexTerritory', 'forceTrade', 'crisisAction', 'propose', 'resolution'],
+  // A leader can declare war and call the bloc to arms in the same month; members answer and plan and pledge after.
+  ['blocCall'],
+  ['blocAnswer'],
+  ['blocPlan'],
+  ['blocCommit'],
   ['relate'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy', 'sellShares', 'buyShares'],
@@ -413,6 +429,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   }
   // The pooled armies of factions at war attack as one.
   runFactionCampaigns(s, map, rng)
+  // Bloc operations whose D-Day is this month: the members' pledged divisions fight as one force (turn games; a live game marches them).
+  runBlocOpsTurn(s, map)
   resolveRebels(s, map, rng)
   fadeWarScore(s)
   // Armies that fought this turn are back at their posts for the next one.
@@ -444,6 +462,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   }
   applyDeals(s, map, rng)
   runFactionMonth(s)
+  runBlocMonth(s, map)
   runRelations(s, map, rng)
   runPolitics(s, map, rng)
   runTerritoryMonth(s, map)
@@ -852,6 +871,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     default:
       if (isFactionOrder(o)) executeFactionOrder(s, map, o, rng)
+      else if (isBlocOrder(o)) executeBlocOrder(s, map, o, rng)
       break
   }
 }

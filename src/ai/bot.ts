@@ -38,6 +38,8 @@ import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from 
 import { coalitionActive, opinionOf } from './opinion'
 import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
 import { factionBotOrders } from './factions'
+import { blocBotOrders } from './blocs'
+import { BLOC } from '../data/blocs'
 import { territoryOrders, wantsTerritory } from './territories'
 
 export const BOT = {
@@ -651,7 +653,11 @@ function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer:
   }
 
   // Factions: a rival joins, votes, pays in and (for a leader) puts wars to the vote. Its own random stream, so nothing else in the month moves.
-  if (s.factions?.length || diff.skill >= 1) factionBotOrders(s, map, nationId, tryAdd)
+  // With blocs on (docs/BLOC_STATUS.md) it plays the bloc instead: roles, calls to arms, operations. Also its own random stream.
+  if (s.factions?.length || diff.skill >= 1) {
+    if (BLOC.on) blocBotOrders(s, map, nationId, tryAdd)
+    else factionBotOrders(s, map, nationId, tryAdd)
+  }
   // Relationships: a rival tends its friendships, and strikes beside its war-plan partners. Its own random stream.
   const planStrike = relationBotOrders(s, map, nationId, tryAdd)
 
