@@ -1018,7 +1018,13 @@ export class OnlineSession {
         if (this.isHost) this.handleClockRequest(msg.from, msg.req)
         return
       case 'pong':
-        if (msg.to === this.clientId) this.rtt = this.rtt === null ? this.now() - msg.ts : this.rtt * 0.7 + (this.now() - msg.ts) * 0.3
+        if (msg.to === this.clientId) {
+          const sample = this.now() - msg.ts
+          // A heartbeat that sat in a dead line and went out when it came back measures the outage, not the line: it would show
+          // "ping 6800 ms" for half a minute after a short drop.
+          if (sample > PING_MS) return
+          this.rtt = this.rtt === null ? sample : this.rtt * 0.7 + sample * 0.3
+        }
         return
     }
   }

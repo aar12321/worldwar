@@ -24,7 +24,7 @@ export function clockLine(clock: ClockView | null, online: Pick<OnlineView, 'hos
 export function syncLine(live: LiveStatus | null, connection: OnlineView['connection'], host: boolean): { text: string; tone: 'ok' | 'warn' | 'bad' } {
   if (connection !== 'connected') return { text: 'Reconnecting…', tone: 'bad' }
   if (!live) return { text: 'Connecting…', tone: 'warn' }
-  if (live.hostAway) return { text: 'The host is away. Someone takes over in a moment.', tone: 'bad' }
+  if (live.hostAway) return { text: 'Cannot hear the host. If your connection is fine, someone takes over soon.', tone: 'bad' }
   if (!live.inSync) return { text: 'Catching up with the host…', tone: 'warn' }
   if (live.hostHidden) return { text: 'The host’s tab is in the background: the clock may move in jumps.', tone: 'warn' }
   const ping = live.rttMs === null ? '' : host ? ` · slowest friend ${live.rttMs} ms` : ` · ping ${live.rttMs} ms`

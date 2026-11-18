@@ -158,6 +158,20 @@ describe('live rooms: the host goes away', () => {
     expect(guest.s.liveStatus().inSync).toBe(true)
   })
 
+  it('a heartbeat answered only after a dropped line came back does not show as the ping', async () => {
+    const room = await liveRoom(2)
+    const [, guest] = room.seats
+    start(room)
+    await room.run(6000)
+    expect(guest.s.liveStatus().rttMs).not.toBeNull()
+    const before = guest.s.liveStatus().rttMs!
+    // The answer to a heartbeat sent 7 s ago, held in the line while it was down.
+    const relay = room.hub.join('relay')
+    relay.send({ t: 'pong', from: 'host', to: 'b', ts: room.clock.t - 7000 })
+    await settle()
+    expect(guest.s.liveStatus().rttMs).toBe(before)
+  })
+
   it('in a room of two, a host that vanished without a word is replaced once its silence has gone on long enough', async () => {
     const room = await liveRoom(2)
     const [host, guest] = room.seats
