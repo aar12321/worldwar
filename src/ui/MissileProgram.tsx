@@ -8,6 +8,7 @@ import { CountPicker } from './MissileSection'
 import { MISSILE_SWATCH, PROGRAM_KINDS, buildCostText, clampCount, effectText } from './missileText'
 import { NextSteps } from './MissileWar'
 import { OrderButton } from './panel'
+import { useGame } from '../store'
 
 /** One kind the program builds: what is in store, what one costs, and buttons to build one or a chosen number. */
 function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> }) {
@@ -59,6 +60,19 @@ function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> }) {
   )
 }
 
+/** The way to the full program: facilities, talent, development and test launches live in their own tab. */
+function ProgramLink() {
+  const openMilitary = useGame((s) => s.openMilitary)
+  return (
+    <div className="rounded-xl border border-[#0a84ff]/40 bg-[#0a84ff]/10 p-2.5 flex flex-wrap items-center justify-between gap-2">
+      <span className="text-[13px] text-white/85">Facilities, talent, the chief designer, the development tree and test launches are in the Missile Program tab.</span>
+      <button className="btn btn-primary px-3 py-1.5 text-[13px]" onClick={() => openMilitary('program')}>
+        Open the Missile Program
+      </button>
+    </div>
+  )
+}
+
 /**
  * The missile program, in the Military desk. A level is a team of engineers and test ranges, so raising it costs money and
  * research, opens the next kind of missile and widens how many the program can turn out in a month.
@@ -89,6 +103,7 @@ export function MissileProgramCard() {
         </div>
       </div>
       <Pips value={level} max={max} />
+      <ProgramLink />
       <NextSteps limit={4} />
       <p className="text-[13px] text-white/80">
         A level is a team of engineers and test ranges, and the talent for them is the expensive part. Raising the program costs money and research once. It opens the next kind of missile and lets the factories turn out more of them each month. Then every missile costs money and steel (a ballistic one also burns oil), paid when you build it. Hypersonic missiles are different: they come from technology and the training queue, not from here.

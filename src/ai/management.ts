@@ -15,6 +15,7 @@ import { LOCAL } from '../data/localProjects'
 import { SOCIAL } from '../data/society'
 import { socialLevel } from '../engine/society'
 import { manageSpace } from './space'
+import { manageMissileProgram } from './missileProgram'
 import { activeLocal, localLevel } from '../engine/works'
 import type { ProjectId, SocialId } from '../engine/types'
 
@@ -243,6 +244,8 @@ function manageStatecraft(s: GameState, nationId: NationId, econ: EconomyReport,
 
   // A space program: modest for a Medium rival, serious for a Hard one, always inside what the country can spare.
   spent += manageSpace(s, nationId, econ, skill, tryAdd, budget - spent)
+  // A missile program: a small team for a Medium rival with a missile charter, a growing one for a Hard rival (src/ai/missileProgram.ts).
+  spent += manageMissileProgram(s, nationId, econ, skill, tryAdd, budget - spent)
   return spent
 }
 

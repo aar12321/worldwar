@@ -4,6 +4,7 @@ import { createInitialState, type NewGameOptions } from './data/startingNations'
 import type { AdviceTarget, PeopleSection } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
 import { factionNews } from './engine/factions'
+import { programNews } from './engine/missileProgram'
 import { commandLevel, DEFAULT_AUTO, planMonth, type AutoSettings } from './engine/commander'
 import { maxAttacks, turnDate } from './engine/helpers'
 import { normalizeGame } from './engine/migrate'
@@ -44,7 +45,7 @@ export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'dip
 export type EmpireTab = 'overview' | 'provinces' | 'world' | 'reaction' | 'stats' | 'puppets' | 'territories'
 export type { PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'space' | 'market' | 'stocks' | 'government'
-export type MilitaryTab = 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' | 'missiles'
+export type MilitaryTab = 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' | 'missiles' | 'program'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts' | 'borders'
 
@@ -696,6 +697,8 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
   for (const b of mine) if (b.captured) flashCapture(b.regionId, b.defender.nationId === player, next.nations[player]?.color ?? '#fff')
   // A faction vote that needs you, an invitation, a contract that began or ended: said once, whether the report is on or not.
   for (const text of factionNews(before === next ? null : before, next, player).slice(0, 3)) toast(text, 'info', 7000)
+  // The missile program's month: what opened, what is ready to test, how the tests went.
+  for (const n of programNews(before === next ? null : before, next, player)) toast(n.text, n.tone, 6500)
   // With the report off, the turn's big moments still get a line.
   if (!settings.monthlyReport) {
     const mineNews = next.dispatches.filter((d) => d.to === player || d.from === player)

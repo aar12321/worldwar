@@ -98,7 +98,7 @@ function StepRow({ step }: { step: Step }) {
               const foes = enemiesOf(view.game, view.player.id)
               const target = step.target ?? Object.values(view.game.regions).find((r) => foes.includes(r.owner))?.id ?? null
               openWarRoom(target)
-            } else openMilitary(step.go === 'deploy' ? 'deploy' : step.go === 'war' ? 'wars' : 'systems')
+            } else openMilitary(step.go === 'deploy' ? 'deploy' : step.go === 'war' ? 'wars' : step.go === 'program' ? 'program' : 'systems')
           }}
         >
           {step.go === 'warroom' ? 'Open the War Room' : step.go === 'deploy' ? 'Open Deployment' : 'Open the program'}
