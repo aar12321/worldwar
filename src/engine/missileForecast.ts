@@ -2,7 +2,8 @@ import { MW } from '../data/missileWar'
 import { MISSILES } from '../data/missiles'
 import { clamp } from './helpers'
 import { launchSite } from './missiles'
-import { harmOf, launchersSeen, mobileLevel, raidPlan, salvoDefense, type RaidPlan, type SalvoDefense } from './missileWar'
+import { harmBoost } from './programEffects'
+import { harmOf, launchersSeen, mobileCover, raidPlan, salvoDefense, type RaidPlan, type SalvoDefense } from './missileWar'
 import type { GameState, MissileType, NationId, RegionId, StrikeAim, WorldMap } from './types'
 
 /** What a salvo is likely to do, before it is fired: the chance each missile gets through and what that does. Pure: nothing is changed. */
@@ -34,7 +35,7 @@ export function strikeForecast(s: GameState, map: WorldMap, nationId: NationId, 
   const victim = s.nations[region?.owner]
   if (!region || !victim || count < 1) return null
   const defense = salvoDefense(s, nationId, victim.id, target, kind, count, scrambled)
-  const h = harmOf(kind, count, defense.through, aim, region, mobileLevel(victim), launchersSeen(s, s.nations[nationId], victim.id))
+  const h = harmOf(kind, count, defense.through, aim, region, mobileCover(victim), launchersSeen(s, s.nations[nationId], victim.id), harmBoost(s.nations[nationId], victim))
   const dead = region.population * h.lossPct
   const chance = defense.through
   const parts = [`${Math.round(chance * 100)}% get through`]
@@ -62,7 +63,7 @@ export function raidForecast(s: GameState, map: WorldMap, nationId: NationId, ta
   const plan = raidPlan(s, map, { nationId, target, share })
   const victim = s.nations[region.owner]
   const kind: MissileType = aim === 'site' ? 'tactical' : 'cruise'
-  const h = harmOf(kind, plan.survivors * MW.raid.perBomber, 1, aim, region, mobileLevel(victim), launchersSeen(s, s.nations[nationId], victim.id))
+  const h = harmOf(kind, plan.survivors * MW.raid.perBomber, 1, aim, region, mobileCover(victim), launchersSeen(s, s.nations[nationId], victim.id))
   const lost = plan.sent * plan.loss + plan.escorts * plan.loss * 0.5
   const dead = region.population * h.lossPct
   const text = `${plan.sent.toFixed(1)} bomber divisions + ${plan.escorts.toFixed(1)} escorts: ${Math.round((1 - plan.loss) * 100)}% get through, ~${lost.toFixed(2)} lost${plan.flak > 0.3 ? ' (batteries)' : ''}${h.line > 0.05 ? `, line -${h.line.toFixed(1)}` : ''}${aim === 'site' ? `, ${Math.round(h.stock * 100)}% of the store` : ''}${dead >= 0.05 ? `, ${dead.toFixed(1)}M dead` : ''}`

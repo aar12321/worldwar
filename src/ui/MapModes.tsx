@@ -1,5 +1,5 @@
 import { useGame, type MapMode } from '../store'
-import { frontColors, relationColors, tensionColor } from './colors'
+import { BLOC_COLORS, frontColors, relationColors, tensionColor } from './colors'
 import { MAP_MODE_KEYS } from './shortcuts'
 
 const MODES: { id: MapMode; label: string; hint: string }[] = [
@@ -7,6 +7,7 @@ const MODES: { id: MapMode; label: string; hint: string }[] = [
   { id: 'relations', label: 'Relations', hint: 'Who is with you and who is against you.' },
   { id: 'fronts', label: 'Fronts', hint: 'How much Defense Line is left in your countries and your enemies\'.' },
   { id: 'borders', label: 'Borders', hint: 'Every border colored by its tension, thicker where it is well guarded, with the forces on station and the sea chokepoints.' },
+  { id: 'blocs', label: 'Blocs', hint: 'Every alliance bloc in its own color: yours in blue, blocs at war with yours in red, the rest in their own colors.' },
 ]
 
 const legendFor = (mode: MapMode, palette: 'standard' | 'colorblind'): { color: string; label: string }[] => {
@@ -32,6 +33,13 @@ const legendFor = (mode: MapMode, palette: 'standard' | 'colorblind'): { color: 
       { color: tensionColor(40), label: 'Tense' },
       { color: tensionColor(70), label: 'Disputed' },
       { color: '#9ad1ff', label: 'Sea chokepoint' },
+    ]
+  if (mode === 'blocs')
+    return [
+      { color: BLOC_COLORS.yours, label: 'Your bloc' },
+      { color: BLOC_COLORS.enemy, label: 'At war with your bloc' },
+      { color: BLOC_COLORS.others[0], label: 'Other blocs' },
+      { color: BLOC_COLORS.none, label: 'No bloc' },
     ]
   return []
 }

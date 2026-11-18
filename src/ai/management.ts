@@ -15,6 +15,7 @@ import { LOCAL } from '../data/localProjects'
 import { SOCIAL } from '../data/society'
 import { socialLevel } from '../engine/society'
 import { manageSpace } from './space'
+import { manageMissileProgram } from './missileProgram'
 import { activeLocal, localLevel } from '../engine/works'
 import type { ProjectId, SocialId } from '../engine/types'
 
@@ -114,6 +115,8 @@ export function manageCountry(
   }
 
   spent += manageStatecraft(s, nationId, econ, skill, rng, tryAdd, budget - spent)
+  // A missile program: a small team for a Medium rival, a growing one for a Hard rival (src/ai/missileProgram.ts). Its own random stream.
+  spent += manageMissileProgram(s, nationId, econ, skill, tryAdd, budget - spent)
   if (skill < 2) return spent
 
   // The strongest tier borrows to keep up, repays when rich, invests in friends, and sanctions rivals.

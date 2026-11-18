@@ -8,7 +8,9 @@ import { lineMax } from './economy'
 import { cleanMark } from './monthMark'
 import { POOL_RESOURCES, UNIT_TYPES } from './types'
 import { EVENT_GAP_TURNS, FIRST_EVENT_TURN } from './events'
-import type { GameState, WorldMap } from './types'
+import { cleanCivics } from './civics'
+import type { Faction, GameState, WorldMap } from './types'
+import { migrateBlocs } from './bloc'
 
 /** Checks a loaded save and fills a few fields, so a damaged or slightly older game can still load. */
 export function normalizeGame(game: GameState, map: WorldMap): GameState {
@@ -45,6 +47,12 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     n.autoBuy ??= ['food', 'oil', 'goods']
     n.military.attacksThisTurn ??= 0
     n.military.exposed ??= 0
+    // The government desk: repaired if damaged, dropped if it cannot be read. Saves from before it simply have none.
+    if (n.civics !== undefined) {
+      const desk = cleanCivics(n.civics)
+      if (desk) n.civics = desk
+      else delete n.civics
+    }
   }
   for (const r of Object.values(game.regions)) {
     r.cities ??= startingCities(map.regions[r.id])
@@ -104,6 +112,8 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   // Statecraft: spending levels from the old budget, bonds from old debt, people, the bank, tiers.
   for (const r of Object.values(game.regions)) r.buildings.hospital ??= 0
   ensureStatecraft(game, map)
+  // Factions from before blocs: the common pool is shared back to its members and each becomes a bloc (docs/BLOC_STATUS.md).
+  migrateBlocs(game)
   return game
 }
 
@@ -133,10 +143,28 @@ function cleanFactions(game: GameState) {
     f.contracts = (Array.isArray(f.contracts) ? f.contracts : []).filter((c) => !!c && f.members.includes(c.member))
     f.invites = Array.isArray(f.invites) ? f.invites : []
     f.wars = (Array.isArray(f.wars) ? f.wars : []).filter((w) => !!w && !!game.nations[w.target] && f.members.includes(w.lead))
-    f.history = Array.isArray(f.history) ? f.history.slice(-40) : []
+    f.history = Array.isArray(f.history) ? f.history.filter((h) => !!h && typeof h.text === 'string').slice(-60) : []
+    if (f.bloc !== undefined) cleanBloc(game, f)
   }
   game.factions = list.filter((f) => f.members.length > 0)
   if (game.factions.length === 0) delete game.factions
+}
+
+/** A bloc's layer in a save: kept whole or reset to a fresh one, never left half there. */
+function cleanBloc(game: GameState, f: Faction) {
+  const b = f.bloc
+  const finite = (x: unknown) => typeof x === 'number' && Number.isFinite(x)
+  if (!b || typeof b !== 'object' || !finite(b.xp) || !Array.isArray(b.ops) || !Array.isArray(b.calls) || !b.roles || typeof b.roles !== 'object') {
+    f.bloc = { xp: 0, roles: {}, done: 0, failed: 0, calls: [], ops: [], record: {} }
+    return
+  }
+  b.done = finite(b.done) ? b.done : 0
+  b.failed = finite(b.failed) ? b.failed : 0
+  b.record = b.record && typeof b.record === 'object' ? b.record : {}
+  for (const m of Object.keys(b.roles)) if (!f.members.includes(m)) delete b.roles[m]
+  b.calls = b.calls.filter((c) => !!c && typeof c.id === 'string' && !!game.nations[c.target] && finite(c.expires) && !!c.answers)
+  b.ops = b.ops.filter((o) => !!o && typeof o.id === 'string' && !!game.regions[o.target] && finite(o.dday) && !!o.pledges && typeof o.pledges === 'object' && ['planned', 'marching', 'done', 'cancelled'].includes(o.status))
+  if (b.goal && (typeof b.goal.kind !== 'string' || !finite(b.goal.until) || !Array.isArray(b.goal.members))) delete b.goal
 }
 
 /** A live save: keeps the day in range and drops anything that no longer points at a real nation, country or number. Turn saves are left alone. */
@@ -166,7 +194,9 @@ function cleanLive(game: GameState, map: WorldMap) {
       !!a.units &&
       UNIT_TYPES.every((k) => finite(a.units[k]) && a.units[k] >= 0) &&
       // A joint army whose faction or war is gone is dropped: its soldiers were the pool's copies, so nothing is lost with it.
-      (a.faction === undefined || (!!a.faction && typeof a.faction.id === 'string' && !!a.faction.base && UNIT_TYPES.every((k) => finite(a.faction!.base[k]) && a.faction!.base[k] >= 0) && !!game.factions?.some((f) => f.id === a.faction!.id && f.wars.some((w) => w.id === a.faction!.war)))),
+      (a.faction === undefined || (!!a.faction && typeof a.faction.id === 'string' && !!a.faction.base && UNIT_TYPES.every((k) => finite(a.faction!.base[k]) && a.faction!.base[k] >= 0) && !!game.factions?.some((f) => f.id === a.faction!.id && f.wars.some((w) => w.id === a.faction!.war)))) &&
+      // A bloc operation's army must say who sent what, or nobody could have its divisions back.
+      (a.op === undefined || (!!a.op && typeof a.op.id === 'string' && finite(a.op.bonus) && !!a.op.from && typeof a.op.from === 'object' && Object.values(a.op.from).every((u) => !!u && UNIT_TYPES.every((k) => finite(u[k]) && u[k] >= 0)))),
   )
   for (const a of game.armies) {
     a.commit = ['probe', 'main', 'allin'].includes(a.commit) ? a.commit : 'main'

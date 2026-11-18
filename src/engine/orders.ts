@@ -20,9 +20,12 @@ import { companyEffects, tradeValue, validateDirective, validateTrade } from './
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
 import { FACTION_ORDERS, factionOrderCost, factionProblem, isFactionOrder, sameFaction } from './factions'
+import { BLOC_ORDERS, blocOrderCost, blocProblem, isBlocOrder } from './bloc'
 import { spaceCost, spaceProblem } from './space'
+import { civicsCost, civicsProblem } from './civics'
 import { pauseAircraftDevProblem, startAircraftDevCost, startAircraftDevProblem } from './aircraft'
 import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
+import { programCost as missileProgramCost, programProblem as missileProgramProblem } from './missileProgram'
 import { MW } from '../data/missileWar'
 import { defenseCost, defenseProblem, doctrineProblem, raidCost, raidProblem, reconProblem, scrambleProblem, truceProblem } from './missileWar'
 import { buildWarheadCost, buildWarheadProblem, nukeProblem } from './nuclear'
@@ -49,10 +52,10 @@ import { annexTerritoryCost, commandProblem, forceTradeProblem, ownOrderProblem 
 import { TERRITORY } from '../data/territories'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'forceTrade', 'releaseTerritory', 'annexTerritory', 'operation', 'domestic', 'strike', 'raid', 'nuke', 'eventChoice', ...FACTION_ORDERS])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'forceTrade', 'releaseTerritory', 'annexTerritory', 'operation', 'domestic', 'strike', 'raid', 'nuke', 'eventChoice', ...FACTION_ORDERS, ...BLOC_ORDERS])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
-const LIVE_NOW = new Set<Order['type']>(['strike', 'raid', 'nuke', 'respond', 'propose'])
+const LIVE_NOW = new Set<Order['type']>(['strike', 'raid', 'nuke', 'respond', 'propose', ...BLOC_ORDERS])
 
 /**
  * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, an answer to an offer
@@ -85,6 +88,9 @@ export function undoable(s: Pick<GameState, 'settings'>, o: Order): boolean {
       return isLive(s)
     case 'propose':
     case 'respond':
+    // A call to arms and its answer are war: rivals of Mutual Defence join on the spot in a live game.
+    case 'blocCall':
+    case 'blocAnswer':
       return !isLive(s)
     default:
       return true
@@ -232,6 +238,12 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'fundSystem':
       c.capital = fundSystemCost(s, o)
       break
+    case 'civics': {
+      const k = s.nations[o.nationId] ? civicsCost(s, s.nations[o.nationId], o.action) : c
+      c.capital = k.capital
+      c.pp = k.pp
+      break
+    }
     case 'space': {
       const k = s.nations[o.nationId] ? spaceCost(s, s.nations[o.nationId], o.action) : c
       c.capital = k.capital
@@ -253,7 +265,7 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     }
     case 'buildMissiles': {
-      const k = buildMissilesCost(o)
+      const k = buildMissilesCost(o, s.nations[o.nationId])
       c.capital = k.capital
       c.steel = k.steel
       break
@@ -268,6 +280,13 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'startAircraftDev':
       c.tp = startAircraftDevCost(o).tp
       break
+    case 'missileProgram': {
+      const k = missileProgramCost(s, s.nations[o.nationId], o.action)
+      c.capital = k.capital
+      c.tp = k.tp
+      c.steel = k.steel
+      break
+    }
     case 'missileDefense':
       c.capital = defenseCost(s, o).capital
       break
@@ -327,6 +346,10 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.steel = k.steel
       break
     }
+    case 'blocPlan':
+    case 'blocCall':
+      c.pp = blocOrderCost(o).pp
+      break
     default:
       break
   }
@@ -412,6 +435,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
   const own = ownOrderProblem(s, o)
   if (own) return own
   if (isFactionOrder(o)) return factionProblem(s, map, o, pending)
+  if (isBlocOrder(o)) return blocProblem(s, map, o, pending)
   switch (o.type) {
     case 'relate':
       return relationProblem(s, map, o, pending)
@@ -728,6 +752,10 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return buildWarheadProblem(s, o, pending)
     case 'nuke':
       return nukeProblem(s, map, o, pending)
+    case 'missileProgram':
+      return missileProgramProblem(s, n, o.action, nationWorkforce(s, map, o.nationId), pending)
+    case 'civics':
+      return civicsProblem(s, n, o.action)
     case 'space':
       return spaceProblem(s, n, o.action, nationWorkforce(s, map, o.nationId), pending.filter((p): p is Extract<Order, { type: 'space' }> => p.type === 'space' && p.nationId === o.nationId).map((p) => p.action))
     case 'setDeployment':

@@ -3,7 +3,7 @@ import { MISSILES } from '../data/missiles'
 import { FRONTIER } from '../data/systems'
 import { AIMS } from '../data/missileWar'
 import { strikeForecast } from '../engine/missileForecast'
-import { launchSite, missileKinds, missileStock, missilesFree } from '../engine/missiles'
+import { launchSite, missileKinds, missileStock, missilesFree, reachKm } from '../engine/missiles'
 import { strikeCost } from '../engine/systems'
 import type { GameState, MissileType, Nation, Order, RegionId, StrikeAim } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -85,7 +85,7 @@ function KindRow({ game, player, target, orders, live, kind }: { game: GameState
         </div>
       </div>
       <p className="text-[12px] text-white/70">
-        Reaches {spec.km} km from a country with a factory · {flightText(kind, live)}
+        Reaches {reachKm(player, kind)} km from a country with a factory · {flightText(kind, live)}
         {site ? ` · leaves from ${map.regions[site].name}` : ' · out of range of this country'}
       </p>
       <p className={`text-[12px] ${shield.through < 1 ? 'text-[#ffd60a]' : 'text-white/65'}`} data-shield={shield.through < 1 ? 'yes' : 'no'}>
@@ -122,7 +122,7 @@ function KindRow({ game, player, target, orders, live, kind }: { game: GameState
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[13px] text-white/70">{kind === 'hypersonic' ? 'None in stock. Train them under Forces.' : 'None in stock. Build them in the missile program.'}</span>
-          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openMilitary(kind === 'hypersonic' ? 'forces' : 'systems')}>
+          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openMilitary(kind === 'hypersonic' ? 'forces' : 'program')}>
             {kind === 'hypersonic' ? 'Open Forces' : 'Open the program'}
           </button>
         </div>
@@ -153,7 +153,7 @@ export function MissileSection({ game, player, target, orders, live }: { game: G
       {kinds.length === 0 && (
         <div className="inset-card p-3 flex flex-wrap items-center justify-between gap-2">
           <span className="text-[13px] text-white/75">You have no missiles. Raise the missile program, or research Hypersonic Missiles.</span>
-          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openMilitary('systems')}>
+          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openMilitary('program')}>
             Open the program
           </button>
         </div>

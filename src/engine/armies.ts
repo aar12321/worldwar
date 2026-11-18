@@ -1,4 +1,5 @@
 import { MISSILES } from '../data/missiles'
+import { opArmyHome } from './blocCombat'
 import { airReach } from './aircraft'
 import { launchSite, strikeKind } from './missiles'
 import { LIVE } from '../data/live'
@@ -172,6 +173,7 @@ export function holdsHome(s: GameState, a: Army): boolean {
   const owner = s.regions[a.home]?.owner
   if (!owner) return false
   if (a.faction) return owner === a.nationId || !!s.factions?.find((f) => f.id === a.faction!.id)?.members.includes(owner)
+  if (a.op) return owner === a.nationId || !!a.op.from[owner]
   return owner === a.nationId
 }
 
@@ -237,6 +239,8 @@ export function bringHome(s: GameState, a: Army) {
   const n = s.nations[a.nationId]
   // A joint army's soldiers are the pool's: only its losses are settled.
   if (a.faction) settleFactionArmy(s, a)
+  // A bloc operation's divisions go back to the members who sent them.
+  else if (a.op) opArmyHome(s, a)
   else if (n?.alive) for (const k of UNIT_TYPES) n.military.units[k] += a.units[k]
   s.armies = (s.armies ?? []).filter((x) => x.id !== a.id)
 }
@@ -310,6 +314,7 @@ export function recallProblem(s: GameState, nationId: NationId, armyId: string):
   const a = s.armies?.find((x) => x.id === armyId)
   if (!a || a.nationId !== nationId) return 'That army is not yours'
   if (a.faction) return 'The joint army answers to its faction, not to one member'
+  if (a.op) return 'A bloc operation answers to the bloc, not to one member'
   if (a.phase !== 'outbound') return a.phase === 'fighting' ? 'It is fighting now' : 'It is already on its way home'
   return null
 }

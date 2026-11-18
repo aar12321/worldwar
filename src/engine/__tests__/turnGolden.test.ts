@@ -8,18 +8,57 @@ import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { PRESENCE } from '../../data/presence'
 import { RELATIONS } from '../../data/relations'
+import { MPROG } from '../../data/missileProgram'
+import { CIVICS } from '../../data/civics'
+import { BLOC } from '../../data/blocs'
 import { withOldCombat } from './oldCombat'
 import { withOldMissiles } from './oldMissiles'
 import { withOldWarScore } from './oldWarScore'
 
-/** Runs `fn` with the relationship layer (rivals tending friendships, the opinion lines it adds: docs/RELATIONS_STATUS.md) switched off. */
+/** Runs `fn` with the government desk (cabinet, civil service, reforms, the bots that use them: docs/GOVERNMENT_STATUS.md) switched off. */
+function withoutCivics<T>(fn: () => T): T {
+  const on = CIVICS.on
+  CIVICS.on = false
+  try {
+    return fn()
+  } finally {
+    CIVICS.on = on
+  }
+}
+
+/**
+ * Runs `fn` with the relationship layer (rivals tending friendships, the opinion lines it adds: docs/RELATIONS_STATUS.md) switched off,
+ * and every layer added after it (the government desk) too, so each older layer's proof keeps running against its own world.
+ */
 function withoutRelations<T>(fn: () => T): T {
   const on = RELATIONS.on
   RELATIONS.on = false
   try {
-    return fn()
+    return withoutBlocs(() => withoutCivics(fn))
   } finally {
     RELATIONS.on = on
+  }
+}
+
+/** Runs `fn` with the missile program as an organisation (docs/MISSILE_PROGRAM_STATUS.md) switched off: no bot uses it, every effect is zero. */
+function withoutProgram<T>(fn: () => T): T {
+  const on = MPROG.on
+  MPROG.on = false
+  try {
+    return fn()
+  } finally {
+    MPROG.on = on
+  }
+}
+
+/** Runs `fn` with the bloc layer (docs/BLOC_STATUS.md: objectives, roles, calls to arms, operations, rivals playing blocs) switched off: factions play as before. */
+function withoutBlocs<T>(fn: () => T): T {
+  const on = BLOC.on
+  BLOC.on = false
+  try {
+    return fn()
+  } finally {
+    BLOC.on = on
   }
 }
 
@@ -85,6 +124,18 @@ function withoutPresence<T>(fn: () => T): T {
  * Re-pinned (the Normal and Hard bot worlds; the small war did not move) for relationships (docs/RELATIONS_STATUS.md): Medium and Hard rivals open embassies, visit friends,
  * send aid, build programs and ask the player for help, and opinions gain a 'same system of government' line. Checked before pinning: with `RELATIONS.on` switched off
  * (`withoutRelations`, the last test of this file, and wrapped round every layer test above it) the previous pins (6b42de15579c5 and 196fdf3f5c5b29) return exactly.
+ * Re-pinned (the Hard-bot world only; the Normal-bot world and the small war did not move) for the missile program as an organisation
+ * (docs/MISSILE_PROGRAM_STATUS.md): Hard rivals build facilities, hire staff, develop and test. Checked before pinning: with `MPROG.on`
+ * switched off (`withoutProgram`, 'the missile program is the only thing that moved ...', and wrapped round every layer test above it)
+ * the previous pins (1f72167c03ee2, 1719b377e4ad6a, 6be372c0f58e4) return exactly.
+ * Re-pinned (all three state hashes; the small war's log did not move) for the government desk (docs/GOVERNMENT_STATUS.md): Medium and Hard rivals appoint
+ * ministers, size the civil service and pass reforms, and every human nation carries a neutral desk. Checked before pinning: with `CIVICS.on` switched off
+ * (`withoutCivics`, 'the government desk is the only thing ...' below; `withoutRelations` now switches it off too, so every older layer keeps its proof) the
+ * previous pins (1f72167c03ee2, 1719b377e4ad6a, 6be372c0f58e4) return exactly, and the small war with the human's unused desk taken out hashes to its old pin.
+ * Re-pinned (the Normal and Hard bot worlds; the small war did not move) for blocs (docs/BLOC_STATUS.md): factions became alliance blocs with
+ * objectives, roles, calls to arms and joint operations, and Medium and Hard rivals play them instead of pooling and voting. Checked before
+ * pinning: with `BLOC.on` switched off (`withoutBlocs`, 'blocs are the only thing that moved ...', also wrapped round every earlier layer
+ * test) the previous pins (1f72167c03ee2 and 1719b377e4ad6a) return exactly.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -146,7 +197,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('1f72167c03ee2')
+    expect(hash(JSON.stringify(s))).toBe('10cf7a356e2bea')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -156,46 +207,48 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
     // All of presence, the missile war and the combat tuning on; the layers below show what each added.
-    expect(hash(JSON.stringify(s))).toBe('1719b377e4ad6a')
+    // Re-pinned for the missile program (Hard rivals build, hire, develop and test): with it switched off '1719b377e4ad6a' returns (see below).
+    // Missile program + government desk + blocs together (each proven alone below).
+    expect(hash(JSON.stringify(s))).toBe('11d73d1672f834')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
+    expect(hash(JSON.stringify(state))).toBe('d077c31c237c4')
     expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
   })
 
   it('layer 1, the combat tuning alone: presence and the missile war switched off, the pins from before them return', () => {
-    withoutRelations(() => withOldWarScore(() => withoutPresence(() => withOldMissiles(() => {
+    withoutProgram(() => withoutRelations(() => withOldWarScore(() => withoutPresence(() => withOldMissiles(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('7d9d1f55d2a94')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('5e24dace6d64b')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('1c2e3ffb6159fd')
       expect(hash(JSON.stringify(log))).toBe('17e9fe7b927733')
-    }))))
+    })))))
   }, 400_000)
 
   it('layer 2, presence added: the missile war switched off, the pins from before the missile war return', () => {
-    withoutRelations(() => withOldWarScore(() => withOldMissiles(() => {
+    withoutProgram(() => withoutRelations(() => withOldWarScore(() => withOldMissiles(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('115b6530ffb6b2')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1780819090232c')
       expect(hash(JSON.stringify(smallWar().state))).toBe('16f99cdbf99edf')
-    })))
+    }))))
   }, 400_000)
 
   it('layer 3, the missile war added: presence switched off, the pins from before presence return', () => {
-    withoutRelations(() => withOldWarScore(() => withoutPresence(() => {
+    withoutProgram(() => withoutRelations(() => withOldWarScore(() => withoutPresence(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('7d9d1f55d2a94')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('2bbdc71bb6ad1')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('d190f76c21120')
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
-    })))
+    }))))
   }, 400_000)
 
   it('the combat tuning is the only thing that moved them: with the old numbers put back the old hashes return', () => {
     // Fortune of the day off, every division as tough as every other, robots at 1.6, Siege and Blitz as they were (see oldCombat.ts).
-    withoutRelations(() => withOldWarScore(() => withoutPresence(() => withOldCombat(() => withOldMissiles(() => {
+    withoutProgram(() => withoutRelations(() => withOldWarScore(() => withoutPresence(() => withOldCombat(() => withOldMissiles(() => {
       const normal = botWorld(7, 'normal', 'poland', 12).s
       expect(hash(JSON.stringify(normal))).toBe('1b61219982f9c1')
       const hard = botWorld(5, 'hard', 'china', 30).s
@@ -203,28 +256,75 @@ describe('turn mode resolves exactly as pinned', () => {
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('14c280eef9180f')
       expect(hash(JSON.stringify(log))).toBe('165393dceefdcd')
-    })))))
+    }))))))
   }, 400_000)
 
   it('the war score model is the only thing that moved the current pins: with the old tally put back the previous hashes return', () => {
-    withoutRelations(() => withOldWarScore(() => {
+    withoutProgram(() => withoutRelations(() => withOldWarScore(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('115b6530ffb6b2')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('12f18d5b0a2e88')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('197cfe617d07ae')
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
-    }))
+    })))
   }, 400_000)
 
   it('relationships are the only thing that moved the current pins: with the layer switched off the previous hashes return', () => {
-    withoutRelations(() => {
+    withoutProgram(() => withoutRelations(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('6b42de15579c5')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('196fdf3f5c5b29')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    }))
+  }, 400_000)
+
+  it('blocs are the only thing that moved the current pins: with the bloc layer switched off the missile-program + desk pins return', () => {
+    withoutBlocs(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('48f1aff68a4fa')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('8831350af922a')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('d077c31c237c4')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
     })
   }, 400_000)
+
+  it('the missile program is the only other thing that moved the current pins: with it switched off the government-desk pins return', () => {
+    withoutBlocs(() => withoutProgram(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('48f1aff68a4fa')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('144ef130064a5b')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('d077c31c237c4')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    }))
+  }, 400_000)
+
+  it('the government desk is the only other thing that moved the current pins: with it switched off the missile-program pins return', () => {
+    withoutBlocs(() => withoutCivics(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('1f72167c03ee2')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('6899ffe1eaea4')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    }))
+  }, 400_000)
+
+  it('with both the missile program and the government desk switched off the pins from before either return', () => {
+    withoutBlocs(() => withoutCivics(() => withoutProgram(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('1f72167c03ee2')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1719b377e4ad6a')
+      expect(hash(JSON.stringify(smallWar().state))).toBe('6be372c0f58e4')
+    })))
+  })
+
+  it('the desk alone, unused, adds only its own field: the small war with the human desk taken out hashes to its previous pin', () => {
+    // r0 is the human: it is given a neutral desk at each month end and never acts on it, and no bot in the small war looks at its desk
+    // (they are Normal bots, but three months is less than their schedule needs), so removing that one field gives the old state exactly.
+    const { state } = smallWar()
+    expect(state.nations.r0.civics?.cabinet).toEqual({})
+    for (const n of Object.values(state.nations)) delete n.civics
+    expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
+  })
 
   it('a turn game carries none of the live fields', () => {
     const { state } = smallWar()

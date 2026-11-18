@@ -34,10 +34,13 @@ import { MAX_REPARATIONS, regionValue } from '../engine/warscore'
 import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
 import { lockedByMaster } from '../engine/puppets'
 import { liberationChoice, managePuppets, wantsPuppet } from './puppets'
+import { manageCivics } from './civics'
 import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
 import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
 import { factionBotOrders } from './factions'
+import { blocBotOrders } from './blocs'
+import { BLOC } from '../data/blocs'
 import { territoryOrders, wantsTerritory } from './territories'
 
 export const BOT = {
@@ -275,6 +278,8 @@ function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer:
 
   // Cities, laws, business, bonds and investment, for bots that run their whole country.
   if (diff.skill >= 1 && owned.length && rng.chance(0.6)) budget -= manageCountry(s, nationId, econ, diff.skill as 1 | 2, rng, tryAdd, budget, myNeighbors)
+  // The government desk (src/ai/civics.ts): ministers, the civil service and reforms, on a fixed schedule with no random draws.
+  if (owned.length) manageCivics(s, nationId, econ, diff.skill, tryAdd)
 
   const agenda: Record<Agenda, () => boolean> = {
     /** Medium and Hard run their agencies: grow them, calm their own streets, and strike at enemies from the shadows. */
@@ -651,7 +656,11 @@ function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer:
   }
 
   // Factions: a rival joins, votes, pays in and (for a leader) puts wars to the vote. Its own random stream, so nothing else in the month moves.
-  if (s.factions?.length || diff.skill >= 1) factionBotOrders(s, map, nationId, tryAdd)
+  // With blocs on (docs/BLOC_STATUS.md) it plays the bloc instead: roles, calls to arms, operations. Also its own random stream.
+  if (s.factions?.length || diff.skill >= 1) {
+    if (BLOC.on) blocBotOrders(s, map, nationId, tryAdd)
+    else factionBotOrders(s, map, nationId, tryAdd)
+  }
   // Relationships: a rival tends its friendships, and strikes beside its war-plan partners. Its own random stream.
   const planStrike = relationBotOrders(s, map, nationId, tryAdd)
 

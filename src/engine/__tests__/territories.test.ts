@@ -407,7 +407,8 @@ describe('the faction: always in it, never out', () => {
   it('goes with the master when the faction fights: it is able to join a faction war, and is not a target of its own faction', () => {
     const s = held()
     const f = factionOf(s, 'r0')!
-    expect(validateOrder(s, map, { type: 'factionPropose', nationId: 'r0', proposal: { kind: 'war', target: 'r1' } })).toMatch(/in the faction/)
+    // A bloc never plans an operation on its own territory (the old faction vote refused it the same way: 'in the faction').
+    expect(validateOrder(s, map, { type: 'blocPlan', nationId: 'r0', target: 'r1', when: 1 })).toMatch(/A member holds it/)
     expect(f.members).toContain('r1')
   })
 })

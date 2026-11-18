@@ -1,6 +1,7 @@
 import { BODIES, BODY_IDS, type BodyId, COMPANIES, DOMESTIC, LABS, MINES, MINE_LEVELS, MISSIONS, NODES, OUTPOST, PAD, ROCKETS, ROCKET_IDS, ROCKET_RULES, SAMPLE_NAMES, SPACE, type CompanySpec, type Mission, type MissionId, type MissionSpec, type RocketId, type SampleKind, type SpaceAction, type SpaceState, type SpaceWorld } from '../data/space'
 import { addToSector } from './business'
 import { addLog, clamp, enemiesOf, hasTech } from './helpers'
+import { programStaff } from './programEffects'
 import { createRng } from './rng'
 import { discoveryBonus, expBonus, industryOf, industryProgress, mineCostFor, mineMonthsFor, orbitalLevel, outpostCostFor, rocketBuildCost, rocketDevCost, rocketDevMonths, spaceBill, spaceComplexLevel } from './spaceEffects'
 import { SAT_RULES } from '../data/space'
@@ -31,7 +32,8 @@ export const spaceLocked = (n: Nation): string | null => (hasTech(n, SPACE.tech)
 export function talentCap(n: Nation, workforce: number): number {
   const sk = n.people?.skills
   const mix = sk ? sk.engineers * 0.65 + sk.scientists * 0.35 : 0.02
-  return Math.max(2, Math.floor(workforce * mix * SPACE.talentPerWork * (1 + discoveryBonus(n.space).talent)))
+  // The missile program draws on the same people: two of its hires take one place here.
+  return Math.max(2, Math.floor(workforce * mix * SPACE.talentPerWork * (1 + discoveryBonus(n.space).talent))) - Math.ceil(programStaff(n) / 2)
 }
 
 export const staffOf = (sp: SpaceState | undefined) => (sp ? sp.engineers + sp.astronauts : 0)

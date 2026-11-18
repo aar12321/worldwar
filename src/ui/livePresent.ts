@@ -11,6 +11,7 @@ import { battleLine, scenesFor } from './battleText'
 import { useFx } from './globeBridge'
 import { landedEffect, missileName } from './missileText'
 import { salvoLine } from './missileWarText'
+import { programNews } from '../engine/missileProgram'
 
 type Tone = 'info' | 'error' | 'success'
 
@@ -180,6 +181,9 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
       }
     }
   }
+
+  // The missile program: a facility opened, a project ready for its test, a test that worked or failed, staff poached.
+  for (const n of programNews(before, game, player)) say(n.tone, n.text)
 
   // At most one note of each kind a day, so a busy front at 4x does not bury the screen.
   if (lines.error.length) toast(lines.error.length > 2 ? `${lines.error[0]} (and ${lines.error.length - 1} more)` : lines.error.join(' '), 'error', 6500)

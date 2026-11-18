@@ -1,4 +1,5 @@
 import { LIVE } from '../data/live'
+import { opFactor, shieldFactor } from './blocCombat'
 import { combinedStrike, planPartners, shareSpoils } from './relations'
 import { addOpinion, forgetNation } from '../ai/opinion'
 import { BANKING } from '../data/banking'
@@ -397,6 +398,12 @@ export function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, t
       attNotes.push(`surprise on an unguarded border (+${Math.round(surprise * 100)}%)`)
     }
   }
+  // A bloc operation's army fights with the combined-arms bonus of the members in it.
+  const combined = opFactor(army)
+  if (combined !== 1) {
+    attPenalty *= combined
+    attNotes.push(`combined arms of the bloc (+${Math.round((combined - 1) * 100)}%)`)
+  }
   const attacker = army ? makeCombatant(attackerNation, { ...attackerNation.military, units: army.units }, null, attNotes, attPenalty, 1) : picked ? makeCombatant(attackerNation, { ...attackerNation.military, units: picked }, null, attNotes, attPenalty, 1) : makeCombatant(attackerNation, free === attackerNation.military.units ? attackerNation.military : { ...attackerNation.military, units: free! }, null, attNotes, attPenalty, share)
   // The defender's patrols meet a landing from the sea or the air and sink part of it before it comes ashore.
   let sunk: UnitCounts | null = null
@@ -425,7 +432,10 @@ export function prepareAttack(s: GameState, map: WorldMap, nationId: NationId, t
   const weights = defenseWeights(s, defenderId, nationId, reach.bySea)
   const defending = weights ? { ...defenderNation.military, units: scaled(defenderNation.military.units, weights) } : defenderNation.military
   if (weights && UNIT_TYPES.some((k) => Math.abs(weights[k] - 1) > 0.02 && defenderNation.military.units[k] >= 0.05)) defNotes.push('forces on station: strongest at their own post')
-  const defender = makeCombatant(defenderNation, defending, garrison, defNotes, 1, defendingShare(s, defenderNation, target, defNotes))
+  // A bloc's Shield defends its own countries harder.
+  const shield = shieldFactor(s, defenderId)
+  if (shield !== 1) defNotes.push(`the bloc's Shield (+${Math.round((shield - 1) * 100)}%)`)
+  const defender = makeCombatant(defenderNation, defending, garrison, defNotes, shield, defendingShare(s, defenderNation, target, defNotes))
   return { attacker, defender, garrison, share, bySea: reach.bySea, defendShare: defendingShare(s, defenderNation, target, []), via: reach.via, sunk, intercept, surprise, picked }
 }
 
@@ -602,7 +612,7 @@ export function resolveAttack(
   if (captured) reach(attackerNation, 'capture')
   if (captured) transferRegion(s, map, target, nationId)
   // A faction's joint army fights under its lead: the members at war with the defender share the credit.
-  const partners = army?.faction ? (s.factions?.find((f) => f.id === army.faction!.id)?.members ?? []).filter((m) => m !== nationId && s.nations[m]?.alive && atWar(s, m, defenderId)) : s.relations?.plans.length ? planPartners(s, nationId, defenderId).filter((m) => s.nations[m]?.alive && atWar(s, m, defenderId)) : []
+  const partners = army?.op ? Object.keys(army.op.from).filter((m) => m !== nationId && s.nations[m]?.alive && atWar(s, m, defenderId)).sort() : army?.faction ? (s.factions?.find((f) => f.id === army.faction!.id)?.members ?? []).filter((m) => m !== nationId && s.nations[m]?.alive && atWar(s, m, defenderId)) : s.relations?.plans.length ? planPartners(s, nationId, defenderId).filter((m) => s.nations[m]?.alive && atWar(s, m, defenderId)) : []
   recordBattle(s, report, captured && wasCapital, partners)
   if (captured) {
     addOpinion(s, defenderId, nationId, 'Seized our land', -8, 0.2)

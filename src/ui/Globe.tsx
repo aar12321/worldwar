@@ -15,7 +15,7 @@ import { useSlowGame } from './hooks'
 import { paintSignature } from './globe/paint'
 import { useArmyLayer } from './globe/useArmyLayer'
 import { useMissileFx } from './globe/useMissileFx'
-import { BORDER_COLORS, NEON, frontColors, mix, relationColors, tint, wash, withAlpha } from './colors'
+import { BLOC_COLORS, BORDER_COLORS, NEON, frontColors, mix, relationColors, tint, wash, withAlpha } from './colors'
 import { borderPaths, stationBadges, tensionBadges, type StationBadge } from './globe/borderLayer'
 import { neighborsOf } from '../engine/borders'
 import { globeBridge, useFx, type BattleOverlay } from './globeBridge'
@@ -60,13 +60,26 @@ function regionColor(game: GameState | null, id: RegionId): string {
   return wash(game.nations[game.regions[id].owner]?.color ?? '#8d6b4a', terrain)
 }
 
+/** The Blocs map: the bloc a nation is in, from where the player stands. */
+function blocColor(game: GameState, owner: string): string {
+  const list = game.factions ?? []
+  const theirs = list.find((f) => f.members.includes(owner))
+  if (!theirs) return BLOC_COLORS.none
+  const mine = list.find((f) => f.members.includes(game.playerId))
+  if (mine && theirs.id === mine.id) return BLOC_COLORS.yours
+  if (mine && theirs.members.some((m) => mine.members.some((x) => atWar(game, m, x)))) return BLOC_COLORS.enemy
+  const order = [...list].sort((a, b) => (a.id < b.id ? -1 : 1)).filter((f) => f.id !== mine?.id)
+  return BLOC_COLORS.others[Math.max(0, order.findIndex((f) => f.id === theirs.id)) % BLOC_COLORS.others.length]
+}
+
 /** What a country's color means in a map mode other than Political. */
-function modeColor(game: GameState, mode: 'relations' | 'fronts' | 'borders', id: RegionId, neighbors?: Set<string>, palette: 'standard' | 'colorblind' = 'standard'): string {
+function modeColor(game: GameState, mode: 'relations' | 'fronts' | 'borders' | 'blocs', id: RegionId, neighbors?: Set<string>, palette: 'standard' | 'colorblind' = 'standard'): string {
   const RELATION_COLORS = relationColors(palette)
   const FRONT_COLORS = frontColors(palette)
   const r = game.regions[id]
   const me = game.playerId
   const mine = r.owner === me
+  if (mode === 'blocs') return blocColor(game, r.owner)
   // Borders mode keeps the land quiet (yours, your neighbors', the rest) so the lines drawn on it read.
   if (mode === 'borders') return mine ? BORDER_COLORS.yours : neighbors?.has(r.owner) ? BORDER_COLORS.neighbor : BORDER_COLORS.other
   if (mode === 'relations') {

@@ -20,6 +20,8 @@ import { Bar, StatTile, Tiles } from './kit'
 import { UnitIcon } from './icons'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import { usePlayerView } from './hooks'
+import { BLOC } from '../data/blocs'
+import { BlocPanel } from './Bloc'
 
 type FactionTab = 'council' | 'pool' | 'contracts' | 'log'
 
@@ -427,7 +429,7 @@ function PoolTab({ game, f, me, orders }: { game: GameState; f: Faction; me: Nat
   )
 }
 
-function InviteBox({ game, f, me, orders }: { game: GameState; f: Faction; me: NationId; orders: Order[] }) {
+export function InviteBox({ game, f, me, orders }: { game: GameState; f: Faction; me: NationId; orders: Order[] }) {
   const focus = useGame((s) => s.factionFocus)
   const [pick, setPick] = useState<NationId | null>(null)
   const [reveal, setReveal] = useState<NationId | null>(null)
@@ -729,7 +731,12 @@ function Found({ game, me }: { game: GameState; me: NationId }) {
   )
 }
 
+/** The desk: the bloc (docs/BLOC_STATUS.md), or the old faction with its pool and votes when the bloc layer is switched off. */
 export function FactionPanel() {
+  return BLOC.on ? <BlocPanel /> : <LegacyFactionPanel />
+}
+
+function LegacyFactionPanel() {
   const view = usePlayerView()
   const [tab, setTab] = useState<FactionTab>('council')
   const focus = useGame((s) => s.factionFocus)

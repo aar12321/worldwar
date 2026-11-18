@@ -16,6 +16,7 @@ import { useFxPrefs } from './settings'
 import { preloadArt } from '../art/MANIFEST'
 import { TIMING } from './timing'
 import type { FlightSpec } from './engine'
+import { DEVS, TEST_LOOK } from '../data/missileProgram'
 
 const { map } = getWorld()
 const pointOf = (id: string | undefined) => (id ? map.regions[id] : undefined)
@@ -32,6 +33,12 @@ function flightSpecs(game: GameState): FlightSpec[] {
   }
   for (const f of game.flights ?? []) add(f, f.kind ?? 'hypersonic', f.count)
   for (const f of game.nukes ?? []) add(f, 'nuke', 1)
+  // Missile program test launches: an arc from the capital out to the test range at sea, drawn by every screen.
+  for (const t of game.missileTests ?? []) {
+    const from = pointOf(t.from)
+    if (!from || !DEVS[t.dev]) continue
+    out.push({ id: t.id, kind: TEST_LOOK[DEVS[t.dev].branch], from, to: t.to, launched: t.launched, lands: t.lands, count: 1, mine: t.nationId === me, incoming: false })
+  }
   return out
 }
 
@@ -73,6 +80,7 @@ export function FxOverlay({ globe }: { globe: MutableRefObject<GlobeMethods | un
   const game = useGame((s) => s.game)
   const flights = useGame((s) => s.game?.flights)
   const nukes = useGame((s) => s.game?.nukes)
+  const tests = useGame((s) => s.game?.missileTests)
   const armies = useGame((s) => s.game?.armies)
   const salvos = useGame((s) => s.game?.salvos)
   const playerId = useGame((s) => s.game?.playerId)
@@ -179,7 +187,7 @@ export function FxOverlay({ globe }: { globe: MutableRefObject<GlobeMethods | un
     }
     fxEngine.syncFlights(flightSpecs(g))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flights, nukes, playerId, !!game])
+  }, [flights, nukes, tests, playerId, !!game])
 
   useEffect(() => {
     const g = useGame.getState().game

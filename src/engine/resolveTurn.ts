@@ -19,6 +19,9 @@ import { runFalseAlarms, warnAnswer } from './missileDoctrine'
 import { applyBuildWarhead, fireNuke, launchNuke, runNuclear } from './nuclear'
 import { runCoalitions } from './coalition'
 import { applySpace, describeSpace, runSpaceWorld } from './space'
+import { applyProgram, describeProgram, runMissileProgram } from './missileProgram'
+import { applyCivics, describeCivics } from './civics'
+import { runCivics } from './civicsMonth'
 import { applyDeployment, runDeployment } from './deployment'
 import { applySetAlert, applyShow, runPresence } from './presence'
 import { applySetBorder } from './borders'
@@ -52,6 +55,7 @@ import { clockOf, isLive } from './calendar'
 import { launchArmy, launchStrike, turnBack } from './armies'
 import { answerCrisis, runCrises } from './crises'
 import { runJustification } from './justification'
+import { describeBlocOrder, executeBlocOrder, isBlocOrder, runBlocMonth, runBlocOpsTurn } from './bloc'
 import { describeGift, executeFactionOrder, factionOf, isFactionOrder, resolveFactionVotes, runFactionCampaigns, runFactionMonth } from './factions'
 import { orderCost, validateOrder } from './orders'
 import { createRng } from './rng'
@@ -202,6 +206,10 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Launch a nuclear missile at ${region(o.target)}`
     case 'space':
       return describeSpace(o.action)
+    case 'missileProgram':
+      return describeProgram(o.action)
+    case 'civics':
+      return describeCivics(s, o.action)
     case 'setDeployment':
       return 'Post forces on station'
     case 'setBorder':
@@ -296,6 +304,15 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       const p = factionOf(s, o.nationId)?.proposals.find((x) => x.id === o.proposalId)
       return `Vote ${o.vote} on ${p ? (p.kind === 'war' ? `war on ${nation(p.target!)}` : 'a contract') : 'a proposal'}`
     }
+    case 'blocRole':
+    case 'blocGoal':
+    case 'blocCall':
+    case 'blocAnswer':
+    case 'blocPlan':
+    case 'blocCommit':
+    case 'blocCancel':
+    case 'blocChat':
+      return describeBlocOrder(s, map, o)
   }
 }
 
@@ -312,13 +329,20 @@ const PHASES: Order['type'][][] = [
   ['eventChoice'],
   ['respond'],
   ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder', 'setAlert', 'showOfForce', 'governPuppet'],
+  ['civics'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
   ['factionFound', 'factionJoin', 'factionInvite', 'factionRequest'],
   ['factionLeave'],
   ['factionContribute', 'factionWithdraw'],
   ['factionPropose'],
   ['factionVote'],
+  ['blocRole', 'blocGoal', 'blocChat', 'blocCancel'],
   ['declareWar', 'buildCase', 'annexPuppet', 'annexTerritory', 'forceTrade', 'crisisAction', 'propose', 'resolution'],
+  // A leader can declare war and call the bloc to arms in the same month; members answer and plan and pledge after.
+  ['blocCall'],
+  ['blocAnswer'],
+  ['blocPlan'],
+  ['blocCommit'],
   ['relate'],
   ['cancelTrain'],
   ['setAutoBuy', 'setSubsidies', 'marketSell', 'marketBuy', 'sellShares', 'buyShares'],
@@ -327,7 +351,7 @@ const PHASES: Order['type'][][] = [
   ['train'],
   ['fundAgency', 'fundSystem'],
   ['fundMissiles', 'buildMissiles', 'missileDefense', 'setDoctrine', 'buildWarhead', 'startAircraftDev', 'pauseAircraftDev'],
-  ['space'],
+  ['space', 'missileProgram'],
   ['operation', 'domestic', 'recon', 'missileTruce', 'scramble', 'strike', 'raid', 'nuke'],
 ]
 
@@ -413,6 +437,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   }
   // The pooled armies of factions at war attack as one.
   runFactionCampaigns(s, map, rng)
+  // Bloc operations whose D-Day is this month: the members' pledged divisions fight as one force (turn games; a live game marches them).
+  runBlocOpsTurn(s, map)
   resolveRebels(s, map, rng)
   fadeWarScore(s)
   // Armies that fought this turn are back at their posts for the next one.
@@ -444,6 +470,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   }
   applyDeals(s, map, rng)
   runFactionMonth(s)
+  runBlocMonth(s, map)
   runRelations(s, map, rng)
   runPolitics(s, map, rng)
   runTerritoryMonth(s, map)
@@ -456,9 +483,11 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runSystems(s)
   runNuclear(s)
   runMissileWar(s)
+  runMissileProgram(s, map)
   runFalseAlarms(s, map)
   runCoalitions(s, map, rng)
   runSpaceWorld(s)
+  runCivics(s, map)
   runWorld(s, gross, workforce)
   updateTiers(s)
   recordHistory(s, gross, net)
@@ -779,6 +808,12 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
     case 'space':
       applySpace(s, n, o.action)
       break
+    case 'missileProgram':
+      applyProgram(s, map, n, o.action)
+      break
+    case 'civics':
+      applyCivics(s, n, o.action)
+      break
     case 'setDeployment':
       applyDeployment(s, map, o)
       break
@@ -852,6 +887,7 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     default:
       if (isFactionOrder(o)) executeFactionOrder(s, map, o, rng)
+      else if (isBlocOrder(o)) executeBlocOrder(s, map, o, rng)
       break
   }
 }

@@ -7,6 +7,7 @@ import { interceptFactor } from './combat'
 import { airPatrolStop, patrolFighters } from './deployment'
 import { addInfamy, addLog, atWar, canUseUnit, clamp, distanceKm } from './helpers'
 import { resolveSalvo, siteDown, specOf, trucePair } from './missileWar'
+import { programCapacity, programCostCut, programStorage, rangeKm } from './programEffects'
 import type { GameState, MissileFlight, MissileType, Nation, NationId, Order, RegionId, SalvoReport, StrikeAim, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
@@ -67,6 +68,9 @@ export function getsThrough(shield: number, kind: MissileType, air?: AirDefense)
   return clamp(pastDefenses(base, air.attacker, air.defender, air.fighters, AIRCRAFT_RULES.huntVs[kind]), 0.05, 1)
 }
 
+/** How far a kind reaches for a nation: the table's range, plus what its missile program's propulsion work adds. */
+export const reachKm = (n: Pick<Nation, 'mprog'> | undefined, kind: MissileType): number => rangeKm(n, kind, MISSILES[kind].km)
+
 /** Where a strike would leave from: the nearest of your countries with a factory that reaches the target, or null if none does. */
 export function launchSite(s: GameState, map: WorldMap, nationId: NationId, target: RegionId, kind: MissileType): RegionId | null {
   const t = map.regions[target]
@@ -77,7 +81,7 @@ export function launchSite(s: GameState, map: WorldMap, nationId: NationId, targ
     // A launch site that a counterforce strike shut cannot fire until it reopens.
     if (MW.enabled && siteDown(s, s.nations[nationId], r.id)) continue
     const km = distanceKm(map.regions[r.id], t)
-    if (km <= MISSILES[kind].km && km < bestKm) {
+    if (km <= reachKm(s.nations[nationId], kind) && km < bestKm) {
       best = r.id
       bestKm = km
     }
@@ -102,7 +106,7 @@ export function validateMissileStrike(s: GameState, map: WorldMap, o: Strike, pe
   if (o.aim === 'site' && (s.regions[o.target]?.buildings.factory ?? 0) <= 0) return 'No launch site there (it needs a factory)'
   if (!launchSite(s, map, o.nationId, o.target, kind)) {
     const shut = MW.enabled && Object.values(s.regions).some((r) => r.owner === o.nationId && r.buildings.factory > 0 && siteDown(s, n, r.id))
-    return shut ? 'Your launch sites are shut by a counterforce strike. They reopen in a month or two.' : `Out of range: ${spec.name.toLowerCase()}s reach ${spec.km} km from a country with a factory`
+    return shut ? 'Your launch sites are shut by a counterforce strike. They reopen in a month or two.' : `Out of range: ${spec.name.toLowerCase()}s reach ${reachKm(n, kind)} km from a country with a factory`
   }
   return null
 }
@@ -191,7 +195,7 @@ export const fundMissilesCost = (n: Nation) => ({ capital: MISSILE_PROGRAM.money
 /** Missiles the program may still build this month. */
 export function buildRoom(n: Nation, turn: number): number {
   const built = n.missileBuilt?.turn === turn ? n.missileBuilt.count : 0
-  return Math.max(0, MISSILE_PROGRAM.capacity[programLevel(n)] - built)
+  return Math.max(0, MISSILE_PROGRAM.capacity[programLevel(n)] + (programLevel(n) > 0 ? programCapacity(n) : 0) - built)
 }
 
 /** Missiles of a kind the program could still build this month: small ones (decoys) take less of the capacity. */
@@ -201,7 +205,7 @@ export const buildRoomFor = (n: Nation, turn: number, kind: MissileType, queued 
 export const arsenalSize = (n: Nation): number => PROGRAM_MISSILES.reduce((sum, k) => sum + Math.floor((n.arsenal?.[k] ?? 0) + 1e-9) * MISSILES[k].slots, 0)
 
 /** The most missiles the program can keep in its stores: a few months of its own production, so a stockpile has a ceiling. */
-export const storageCap = (n: Pick<Nation, 'missileProgram'>): number => MISSILE_PROGRAM.capacity[programLevel(n)] * MISSILE_PROGRAM.storageMonths
+export const storageCap = (n: Pick<Nation, 'missileProgram' | 'mprog'>): number => MISSILE_PROGRAM.capacity[programLevel(n)] * MISSILE_PROGRAM.storageMonths + programStorage(n)
 
 export function buildMissilesProblem(s: GameState, o: Build, pending: Order[]): string | null {
   const n = s.nations[o.nationId]
@@ -218,7 +222,11 @@ export function buildMissilesProblem(s: GameState, o: Build, pending: Order[]): 
   return null
 }
 
-export const buildMissilesCost = (o: Build) => ({ capital: Math.ceil(MISSILES[o.kind].money * o.count), steel: MISSILES[o.kind].steel * o.count })
+/** What a batch costs. A missile program's cheaper lines take a share off the money (never the steel). */
+export const buildMissilesCost = (o: Build, n?: Pick<Nation, 'mprog'>) => {
+  const cut = programCostCut(n)
+  return { capital: Math.ceil(MISSILES[o.kind].money * o.count * (cut > 0 ? 1 - cut : 1)), steel: MISSILES[o.kind].steel * o.count }
+}
 
 export function applyFundMissiles(s: GameState, n: Nation) {
   // The research is paid here: the generic order charge covers money, influence, soldiers and steel, not research.

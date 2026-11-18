@@ -2,6 +2,7 @@ import { armiesToRecall, holdsBackLaunch } from '../ai/liveBot'
 import { LIVE } from '../data/live'
 import { bringHome, calledOff, holdsHome, sendHome, turnBack, launchArmy } from './armies'
 import { fightFactionArmy, launchFactionArmies } from './factions'
+import { blocOpsDue, fightBlocArmy, launchBlocOps } from './bloc'
 import { absDay, clockOf, dayDate, daysInMonth, isLive } from './calendar'
 import { addLog, atWar, newId, totalUnits } from './helpers'
 import { orderCost, validateOrder } from './orders'
@@ -13,6 +14,7 @@ import { strikeHits } from './systems'
 import { answerStrike } from './missileDoctrine'
 import { detonate, nukeCalledOff } from './nuclear'
 import { jointDay } from './coalition'
+import { programDueBy, runProgramDay } from './missileProgram'
 import type { Army, ArmyOutcome, AttackOrder, BattleReport, GameState, MissileFlight, NationId, NukeFlight, Order, RegionId, TrainingJob, Via, WorldMap } from './types'
 import { checkOutcome } from './victory'
 import { resolveAttack } from './warfare'
@@ -88,8 +90,11 @@ function planLaunches(s: GameState, attacks: AttackOrder[]) {
 /** Whether anything needs doing on this day. A quiet day only moves the date. */
 function dueToday(s: GameState, map: WorldMap, today: number): boolean {
   if (s.launches?.some((l) => l.at <= today)) return true
+  if (blocOpsDue(s, today)) return true
   if (s.flights?.some((f) => f.lands <= today)) return true
   if (s.nukes?.some((f) => f.lands <= today)) return true
+  // A missile program's facility, development, test or production line comes due.
+  if (programDueBy(s, today)) return true
   for (const a of s.armies ?? []) {
     if (a.end <= today) return true
     if (a.phase === 'outbound' && calledOff(s, a)) return true
@@ -129,6 +134,9 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
     }
   }
 
+  // 1b. Bloc operations set out so that they arrive on D-Day.
+  for (const army of launchBlocOps(s, map, today)) events.push({ kind: 'launched', army: snapshot(army) })
+
   // 2. An army whose reason has gone turns back: the war ended, the country is already its own, or someone else took it.
   for (const a of [...(s.armies ?? [])].sort((x, y) => byDue(x, y, 0, 0))) {
     if (a.phase !== 'outbound') continue
@@ -155,7 +163,7 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
     if (!s.armies?.some((x) => x.id === a.id)) continue
     // An earlier army may have taken the country today, or the country it set out from may have fallen while it marched.
     const why: ArmyOutcome | null = calledOff(s, a) ?? (!holdsHome(s, a) ? 'cut' : null)
-    const result = why ? null : a.faction ? fightFactionArmy(s, map, a, rng) : resolveAttack(s, map, a.nationId, a.target, rng, a.commit, a.stance, undefined, a)
+    const result = why ? null : a.faction ? fightFactionArmy(s, map, a, rng) : a.op ? fightBlocArmy(s, map, a, rng) : resolveAttack(s, map, a.nationId, a.target, rng, a.commit, a.stance, undefined, a)
     if (!result) {
       // It cannot fight after all: it marches back from where it stands.
       const reason = why ?? 'peace'
@@ -226,6 +234,9 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
       events.push({ kind: 'nuke', flight: { ...f }, landed: true })
     }
   }
+
+  // 8. Missile programs: work that comes due today finishes, and test launches land.
+  runProgramDay(s, map, today)
 
   if (fought) s.outcome = checkOutcome(s, map)
 }

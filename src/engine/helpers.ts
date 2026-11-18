@@ -135,7 +135,7 @@ export const totalUnits = (u: UnitCounts) => (u.infantry ?? 0) + (u.armor ?? 0) 
 export function forceUnits(s: Pick<GameState, 'nations' | 'armies'>, id: NationId): UnitCounts {
   const home = s.nations[id]?.military.units ?? emptyUnits()
   // A faction's joint army carries the pool's soldiers, not the nation's.
-  const away = s.armies?.filter((a) => a.nationId === id && !a.faction)
+  const away = s.armies?.filter((a) => a.nationId === id && !a.faction && !a.op)
   if (!away?.length) return home
   const out = { ...home }
   for (const a of away) for (const k of Object.keys(out) as UnitType[]) out[k] += a.units[k]

@@ -21,6 +21,8 @@ import turnSource from '../resolveTurn.ts?raw'
 import typesSource from '../types.ts?raw'
 import factionSource from '../factions.ts?raw'
 import { FACTION_ORDERS } from '../factions'
+import blocSource from '../bloc.ts?raw'
+import { BLOC_ORDERS } from '../bloc'
 
 // Some of these play whole months on the real map; a busy machine needs more than the default five seconds.
 vi.setConfig({ testTimeout: 120_000 })
@@ -245,6 +247,13 @@ describe('every order is wired in every place', () => {
       if (FACTION_ORDERS.has(t as Order['type'])) {
         expect(factionSource.includes(`case '${t}'`), `factions.ts ${t}`).toBe(true)
         expect(rules.includes('isFactionOrder'), 'checkRules sends faction orders on').toBe(true)
+        continue
+      }
+      // Bloc orders likewise (bloc.ts: rules, executor), and each has its own phase.
+      if (BLOC_ORDERS.has(t as Order['type'])) {
+        expect(blocSource.split(`case '${t}'`).length - 1, `bloc.ts ${t}`).toBeGreaterThanOrEqual(3)
+        expect(rules.includes('isBlocOrder'), 'checkRules sends bloc orders on').toBe(true)
+        expect(phases.includes(`'${t}'`), `PHASES ${t}`).toBe(true)
         continue
       }
       expect(rules.includes(`case '${t}'`), `checkRules ${t}`).toBe(true)
