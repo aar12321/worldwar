@@ -5,7 +5,7 @@ import { lineMax } from '../engine/economy'
 import { guessDivisions, hasIntel, showDivisions } from '../engine/intel'
 import { totalUnits } from '../engine/helpers'
 import type { LiveEvent, LiveStep } from '../engine/live'
-import type { Army, BattleReport, GameState, NationId } from '../engine/types'
+import type { Army, BattleReport, Dispatch, GameState, NationId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { battleLine, scenesFor } from './battleText'
 import { useFx } from './globeBridge'
@@ -186,4 +186,43 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
   if (lines.success.length) toast(lines.success.length > 2 ? `${lines.success[0]} (and ${lines.success.length - 1} more)` : lines.success.join(' '), 'success', 5000)
   if (lines.info.length) toast(lines.info.length > 2 ? `${lines.info[0]} (and ${lines.info.length - 1} more)` : lines.info.join(' '), 'info', 4000)
   return { fxQueue: queue, recentBattles: recent, mine }
+}
+
+/** How a diplomatic note reads: good news green, bad news red. */
+export const DISPATCH_TONE: Record<Dispatch['kind'], 'info' | 'error' | 'success'> = {
+  proposal: 'info',
+  accepted: 'success',
+  joined: 'success',
+  completed: 'success',
+  rejected: 'error',
+  ignored: 'error',
+  broken: 'error',
+  expired: 'error',
+}
+
+export interface OrderNews {
+  text: string
+  tone: 'info' | 'error' | 'success'
+  /** The nation to open Diplomacy on, for an offer waiting for this player's answer. */
+  open?: NationId
+}
+
+/**
+ * Live games with friends: the notes an order brought this player, on the day it happened. A friend's offer waits for an
+ * answer, a rival's answer to this player's offer comes back at once, and an offer this player sent to a friend is on its way.
+ * Only notes the order itself added (same month) count; the month's end has its own summary.
+ */
+export function orderNews(before: GameState | null, after: GameState, own: boolean): OrderNews[] {
+  if (!before || before.turn !== after.turn) return []
+  const player = after.playerId
+  const name = (id: NationId) => after.nations[id]?.name ?? id
+  const fresh = after.dispatches.slice(before.dispatches.length).filter((d) => d.to === player || d.from === player)
+  const out: OrderNews[] = []
+  for (const d of fresh) {
+    if (d.kind === 'proposal' && d.from === player) {
+      if (own) out.push({ text: `Offer sent to ${name(d.to)}. They answer from their Diplomacy desk.`, tone: 'success' })
+    } else if (d.kind === 'proposal' && d.to === player) out.push({ text: d.text, tone: 'info', open: d.from })
+    else out.push({ text: d.text, tone: DISPATCH_TONE[d.kind] })
+  }
+  return out.slice(-3)
 }

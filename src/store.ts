@@ -14,7 +14,7 @@ import { absDate, clockOf, dayDate, isLive } from './engine/calendar'
 import { advanceDay } from './engine/live'
 import type { Commit, Stance } from './data/war'
 import { applyOrderNow, describeOrder, resolveTurn } from './engine/resolveTurn'
-import type { BattleReport, Dispatch, GameState, MonthMark, MonthStats, NationId, Order, Programs, RegionId, Spending, UnitCounts } from './engine/types'
+import type { BattleReport, GameState, MonthMark, MonthStats, NationId, Order, Programs, RegionId, Spending, UnitCounts } from './engine/types'
 import { getWorld } from './map/world'
 import { newClientId, newRoomCode, normalizeCode, validCode, type ChatMessage, type ClientId, type ClockView, type Lobby, type OpenSeat, type RoomSettings } from './net/protocol'
 import { loadOnlineSave, writeOnlineSave } from './net/saves'
@@ -23,7 +23,7 @@ import type { LiveStep } from './engine/live'
 import { openTransport, type TransportStatus } from './net/transport'
 import { globeBridge, useFx } from './ui/globeBridge'
 import { battleLine, scenesFor } from './ui/battleText'
-import { presentLiveStep } from './ui/livePresent'
+import { DISPATCH_TONE, orderNews, presentLiveStep } from './ui/livePresent'
 import { speak } from './ui/plain'
 import type { PendingConfirm } from './ui/confirmRules'
 import { applyPrefs, defaultPrefs, migrateSettingsUi, motionReduced, sanitizePrefs, systemReducesMotion, type UiPrefs } from './ui/prefs'
@@ -582,17 +582,6 @@ export function keptOrder(item: unknown, playerId: string): item is Order {
 
 let toastId = 1
 
-const DISPATCH_TONE: Record<Dispatch['kind'], Toast['tone']> = {
-  proposal: 'info',
-  accepted: 'success',
-  joined: 'success',
-  completed: 'success',
-  rejected: 'error',
-  ignored: 'error',
-  broken: 'error',
-  expired: 'error',
-}
-
 /** Rings and a shake on the globe where land changed hands. */
 function flashCapture(regionId: RegionId, loss: boolean, color: string) {
   const region = getWorld().map.regions[regionId]
@@ -792,8 +781,12 @@ function liveDay(prev: GameState, step: LiveStep) {
 function liveOrder(e: OrderEvent) {
   const st = useGame.getState()
   const { map } = getWorld()
+  const prev = st.game
   const game = withOwnMonth(e.state, st.game)
   useGame.setState({ game, orders: waitingOf(game) })
+  // Offers between friends and the answers to them are news on the day: nobody is watching the Diplomacy desk while the clock runs.
+  const news = orderNews(prev, game, e.own)
+  for (const n of news) st.toast(n.text, n.tone, 6500, n.open ? { label: 'Diplomacy', run: () => useGame.getState().openDiplomacy(n.open!) } : undefined)
   if (e.own) {
     if (e.order.type === 'attack') {
       const a = game.armies?.filter((x) => x.nationId === game.playerId).at(-1)
@@ -803,7 +796,7 @@ function liveOrder(e: OrderEvent) {
   }
   // What a friend does, once, in a line. Only the acts that change the war are worth interrupting for.
   const loud = new Set<Order['type']>(['attack', 'strike', 'nuke', 'declareWar', 'raid', 'recall'])
-  if (!loud.has(e.order.type)) return
+  if (!loud.has(e.order.type) || news.length) return
   const who = e.state.nations[e.nation]?.name ?? e.nation
   try {
     st.toast(`${who}: ${describeOrder(st.game ?? game, map, e.order)}`, 'info', 4500)
