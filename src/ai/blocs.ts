@@ -76,7 +76,7 @@ function opTarget(s: GameState, map: WorldMap, f: Faction, share: number, floor:
   }
   options.sort((a, b) => a.line - b.line || (a.id < b.id ? -1 : 1))
   let best: { id: RegionId; odds: number } | null = null
-  for (const o of options.slice(0, 3)) {
+  for (const o of options.slice(0, 6)) {
     const owner = s.regions[o.id].owner
     const pledges: Record<NationId, Partial<UnitCounts>> = {}
     for (const m of members) if (atWar(s, m, owner) && !s.nations[m].territoryOf) pledges[m] = pledgeOf(s, m, share)
@@ -136,7 +136,7 @@ export function blocBotOrders(s: GameState, map: WorldMap, nationId: NationId, t
 
   // Operations: pledge a share of the free divisions to any planned one against an enemy, unless a war of its own needs them at home.
   // An operation needs a real force to win (a country is defended by its owner's whole army), so a rival sends most of what is free.
-  const share = Math.min(0.9, (hard ? 0.8 : 0.65) * Math.min(1.2, persona.aggression))
+  const share = hard ? 0.85 : 0.75
   for (const op of b.ops) {
     if (op.status !== 'planned' || op.pledges[nationId]) continue
     const owner = s.regions[op.target]?.owner
@@ -163,8 +163,8 @@ export function blocBotOrders(s: GameState, map: WorldMap, nationId: NationId, t
   }
   // An operation: one at a time for a rival bloc, against the weakest country of an enemy it can reach.
   if (b.ops.some((o) => o.status === 'planned' || o.status === 'marching')) return
-  if (!rng.chance((hard ? 0.5 : 0.3) * persona.aggression * diff.aggression)) return
-  const target = opTarget(s, map, f, share, hard ? 0.55 : 0.65, humanOk)
+  if (!rng.chance((hard ? 0.7 : 0.45) * persona.aggression)) return
+  const target = opTarget(s, map, f, share, hard ? 0.4 : 0.5, humanOk)
   if (!target) return
   tryAdd({ type: 'blocPlan', nationId, target, when: isLive(s) ? 12 : 1 })
 }
