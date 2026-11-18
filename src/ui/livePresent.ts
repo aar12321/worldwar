@@ -204,14 +204,14 @@ export function friendLine(after: GameState, order: Order): OrderNews | null {
     case 'attack': {
       const army = [...(after.armies ?? [])].reverse().find((a) => a.nationId === order.nationId && a.target === order.target)
       const when = army ? ` It arrives ${absDate(army.end)}.` : ''
-      return { text: `${who} sent an army against ${mine(order.target) ? 'your ' : ''}${place(order.target)}.${when}`, tone: mine(order.target) ? 'error' : 'info' }
+      return mine(order.target) ? { text: `${who} is marching on ${place(order.target)}.${when}`, tone: 'error' } : { text: `${who} sent an army against ${place(order.target)}.${when}`, tone: 'info' }
     }
     case 'strike':
-      return { text: `${who} fired missiles at ${mine(order.target) ? 'your ' : ''}${place(order.target)}.`, tone: mine(order.target) ? 'error' : 'info' }
+      return { text: `${who} fired missiles at ${place(order.target)}.`, tone: mine(order.target) ? 'error' : 'info' }
     case 'raid':
-      return { text: `${who} sent bombers against ${mine(order.target) ? 'your ' : ''}${place(order.target)}.`, tone: mine(order.target) ? 'error' : 'info' }
+      return { text: `${who} sent bombers against ${place(order.target)}.`, tone: mine(order.target) ? 'error' : 'info' }
     case 'nuke':
-      return { text: `${who} launched a nuclear missile at ${mine(order.target) ? 'your ' : ''}${place(order.target)}!`, tone: 'error' }
+      return { text: `${who} launched a nuclear missile at ${place(order.target)}!`, tone: 'error' }
     case 'recall':
       return { text: `${who} called an army back.`, tone: 'info' }
     default:

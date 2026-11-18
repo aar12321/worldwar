@@ -71,6 +71,11 @@ describe('live rooms: offers between friends are news on the day', () => {
     // Someone else hearing the same order is told who it was against, quietly.
     expect(friendLine({ ...e.state, playerId: 'r2' }, e.order)?.tone).toBe('info')
     expect(friendLine(e.state, { type: 'build', nationId: 'r1', regionId: 'r1', building: 'farm' } as never)).toBeNull()
+    // An army coming for this player's own land is red and plain ("is marching on"), never "your France".
+    const march = friendLine(e.state, { type: 'attack', nationId: 'r1', target: 'r0' } as never)!
+    expect(march.tone).toBe('error')
+    expect(march.text).toMatch(/is marching on r0\.$/)
+    expect(march.text).not.toMatch(/your/)
   })
 
   it('the friend whose screen takes over when the host closes the tab is told the clock is theirs now', async () => {
