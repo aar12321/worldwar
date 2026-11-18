@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { MISSILES, MISSILE_PROGRAM } from '../data/missiles'
-import { buildRoom, buildRoomFor, fundMissilesCost, missileStock, programLevel } from '../engine/missiles'
+import { buildRoom, buildRoomFor, fundMissilesCost, missileStock, programLevel, reachKm, buildMissilesCost } from '../engine/missiles'
 import type { MissileType } from '../engine/types'
 import { Pips } from './bits'
 import { usePlayerView } from './hooks'
@@ -21,7 +21,8 @@ function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> }) {
   const room = buildRoomFor(player, game.turn, kind)
   const n = clampCount(count, room)
   const build = (c: number) => ({ type: 'buildMissiles' as const, nationId: player.id, kind, count: c })
-  const total = (c: number) => `${Math.ceil(spec.money * c)} money${spec.steel > 0 ? `, ${spec.steel * c} steel` : ''}${spec.oil > 0 ? `, ${spec.oil * c} oil` : ''}`
+  // The program's cheaper lines take a share off the money (buildMissilesCost), so the button says what is really charged.
+  const total = (c: number) => `${buildMissilesCost(build(c), player).capital} money${spec.steel > 0 ? `, ${spec.steel * c} steel` : ''}${spec.oil > 0 ? `, ${spec.oil * c} oil` : ''}`
   return (
     <div className={`rounded-xl border border-white/10 bg-white/5 p-3 space-y-2 ${open ? '' : 'opacity-70'}`} data-build={kind}>
       <div className="flex items-start justify-between gap-3">
@@ -33,7 +34,7 @@ function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> }) {
           </div>
           <p className="mt-1 text-[13px] text-white/75">{effectText(kind)}</p>
           <p className="mt-0.5 text-[12px] text-white/65">
-            Each costs {buildCostText(kind)} · reaches {spec.km} km · {spec.days === 1 ? 'a day' : `${spec.days} days`} in the air (live game)
+            Each costs {buildCostText(kind)} · reaches {reachKm(player, kind)} km · {spec.days === 1 ? 'a day' : `${spec.days} days`} in the air (live game)
           </p>
         </div>
         <div className="text-right shrink-0">
