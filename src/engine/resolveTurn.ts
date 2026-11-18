@@ -1,3 +1,4 @@
+import { BLOC } from '../data/blocs'
 import { TECH_BY_ID } from '../data/techTree'
 import { DIRECTIVES } from '../data/companies'
 import { FOCUS } from '../data/cities'
@@ -285,15 +286,15 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
     case 'annexTerritory':
       return `Annex ${nation(o.target)}`
     case 'factionFound':
-      return `Found the faction ${o.name}`
+      return `Found the ${BLOC.on ? 'bloc' : 'faction'} ${o.name}`
     case 'factionJoin':
-      return `Join ${s.factions?.find((f) => f.id === o.factionId)?.name ?? 'a faction'}`
+      return `Join ${s.factions?.find((f) => f.id === o.factionId)?.name ?? (BLOC.on ? 'a bloc' : 'a faction')}`
     case 'factionInvite':
-      return `Invite ${nation(o.target)} to the faction`
+      return `Invite ${nation(o.target)} to the ${BLOC.on ? 'bloc' : 'faction'}`
     case 'factionRequest':
       return `Ask to join ${s.factions?.find((f) => f.id === o.factionId)?.name ?? 'a faction'}`
     case 'factionLeave':
-      return `Leave ${factionOf(s, o.nationId)?.name ?? 'the faction'}`
+      return `Leave ${factionOf(s, o.nationId)?.name ?? (BLOC.on ? 'the bloc' : 'the faction')}`
     case 'factionContribute':
       return `Put ${describeGift(o.gift)} into the pool`
     case 'factionWithdraw':
