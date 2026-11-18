@@ -1,5 +1,6 @@
 import type { AgencyId, DomesticOp, ForeignOp } from '../data/agencies'
 import type { AircraftNodeId } from '../data/aircraft'
+import type { MissileProgramAction, MissileProgramState, MissileTestFlight } from '../data/missileProgram'
 import type { SystemId } from '../data/systems'
 import type { ScenarioGoal } from '../data/scenarios'
 import type { SpaceAction, SpaceState, SpaceWorld } from '../data/space'
@@ -458,6 +459,8 @@ export interface Nation {
   missileProgram?: number
   /** The missile war: interceptor stock, radar, batteries, doctrine, launchers and the ledger. Absent until a nation does something in it. */
   missileWar?: MissileWarState
+  /** The missile program as an organisation: facilities, staff, chief designer, developments, the production line (data/missileProgram.ts). Absent until its first order. */
+  mprog?: MissileProgramState
   /** Missiles built so far in the month `turn`, against the program's capacity. */
   missileBuilt?: { turn: number; count: number }
   /** The last month each nation struck this one with missiles, so it can answer. */
@@ -754,6 +757,8 @@ export type Order =
   | { type: 'fundMissiles'; nationId: NationId }
   /** Builds missiles of a kind from the program: money and steel (and oil) each. */
   | { type: 'buildMissiles'; nationId: NationId; kind: Exclude<MissileType, 'hypersonic'>; count: number }
+  /** Anything the missile program does: build facilities, hire staff and a chief designer, develop, test, set the budget, run the production line. Applies at once. */
+  | { type: 'missileProgram'; nationId: NationId; action: MissileProgramAction }
   /** Starts building one nuclear warhead (a Superpower with the missile technology). */
   | { type: 'buildWarhead'; nationId: NationId }
   /** Fires a nuclear warhead at a country of a nation you are at war with. */
@@ -1171,6 +1176,8 @@ export interface GameState {
   flights?: MissileFlight[]
   /** The world's missile-war tension, 0 to 100: strikes raise it, quiet months and ceasefires lower it. Absent in a quiet world. */
   missileTension?: number
+  /** Missile program test launches in the air (data/missileProgram.ts). Absent until the first test. */
+  missileTests?: MissileTestFlight[]
   /** The last salvos and raids with what stopped them and what they did, newest last. Capped. */
   salvos?: SalvoReport[]
   /** Missile ceasefires: sorted "a|b" key to the last turn it holds. */

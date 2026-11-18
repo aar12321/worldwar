@@ -23,6 +23,7 @@ import { FACTION_ORDERS, factionOrderCost, factionProblem, isFactionOrder, sameF
 import { spaceCost, spaceProblem } from './space'
 import { pauseAircraftDevProblem, startAircraftDevCost, startAircraftDevProblem } from './aircraft'
 import { buildMissilesCost, buildMissilesProblem, fundMissilesCost, fundMissilesProblem } from './missiles'
+import { programCost as missileProgramCost, programProblem as missileProgramProblem } from './missileProgram'
 import { MW } from '../data/missileWar'
 import { defenseCost, defenseProblem, doctrineProblem, raidCost, raidProblem, reconProblem, scrambleProblem, truceProblem } from './missileWar'
 import { buildWarheadCost, buildWarheadProblem, nukeProblem } from './nuclear'
@@ -253,7 +254,7 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       break
     }
     case 'buildMissiles': {
-      const k = buildMissilesCost(o)
+      const k = buildMissilesCost(o, s.nations[o.nationId])
       c.capital = k.capital
       c.steel = k.steel
       break
@@ -268,6 +269,13 @@ export function orderCost(s: GameState, o: Order): OrderCost {
     case 'startAircraftDev':
       c.tp = startAircraftDevCost(o).tp
       break
+    case 'missileProgram': {
+      const k = missileProgramCost(s, s.nations[o.nationId], o.action)
+      c.capital = k.capital
+      c.tp = k.tp
+      c.steel = k.steel
+      break
+    }
     case 'missileDefense':
       c.capital = defenseCost(s, o).capital
       break
@@ -728,6 +736,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
       return buildWarheadProblem(s, o, pending)
     case 'nuke':
       return nukeProblem(s, map, o, pending)
+    case 'missileProgram':
+      return missileProgramProblem(s, n, o.action, nationWorkforce(s, map, o.nationId), pending)
     case 'space':
       return spaceProblem(s, n, o.action, nationWorkforce(s, map, o.nationId), pending.filter((p): p is Extract<Order, { type: 'space' }> => p.type === 'space' && p.nationId === o.nationId).map((p) => p.action))
     case 'setDeployment':

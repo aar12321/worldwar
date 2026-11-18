@@ -13,6 +13,7 @@ import { strikeHits } from './systems'
 import { answerStrike } from './missileDoctrine'
 import { detonate, nukeCalledOff } from './nuclear'
 import { jointDay } from './coalition'
+import { programDueBy, runProgramDay } from './missileProgram'
 import type { Army, ArmyOutcome, AttackOrder, BattleReport, GameState, MissileFlight, NationId, NukeFlight, Order, RegionId, TrainingJob, Via, WorldMap } from './types'
 import { checkOutcome } from './victory'
 import { resolveAttack } from './warfare'
@@ -90,6 +91,8 @@ function dueToday(s: GameState, map: WorldMap, today: number): boolean {
   if (s.launches?.some((l) => l.at <= today)) return true
   if (s.flights?.some((f) => f.lands <= today)) return true
   if (s.nukes?.some((f) => f.lands <= today)) return true
+  // A missile program's facility, development, test or production line comes due.
+  if (programDueBy(s, today)) return true
   for (const a of s.armies ?? []) {
     if (a.end <= today) return true
     if (a.phase === 'outbound' && calledOff(s, a)) return true
@@ -226,6 +229,9 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
       events.push({ kind: 'nuke', flight: { ...f }, landed: true })
     }
   }
+
+  // 8. Missile programs: work that comes due today finishes, and test launches land.
+  runProgramDay(s, map, today)
 
   if (fought) s.outcome = checkOutcome(s, map)
 }

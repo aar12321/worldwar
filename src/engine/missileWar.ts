@@ -9,6 +9,7 @@ import { interceptFactor } from './combat'
 import { freeUnits, patrolCover } from './deployment'
 import { addInfamy, addLog, atWar, clamp, distanceKm, newId, pairKey } from './helpers'
 import { addMissileScore } from './warscore'
+import { boostThrough, harmBoost, programMobile, programRadar, roundsMult, salvoBoost } from './programEffects'
 import type { DefenseItem, GameState, MissileLedger, MissileType, Nation, NationId, Order, RegionId, RegionState, SalvoReport, StrikeAim, WorldMap } from './types'
 import { UNIT_TYPES } from './types'
 
@@ -29,7 +30,10 @@ const writable = (n: Nation) => ((n.missileWar ??= {}).ledger ??= emptyLedger())
 /** Interceptor rounds a nation's store can hold: its shield and its batteries. */
 export function interceptorCap(n: Pick<Nation, 'systems' | 'missileWar'>): number {
   const batteries = Object.values(n.missileWar?.batteries ?? {}).reduce((a, b) => a + b, 0)
-  return Math.round((n.systems?.shield ?? 0) * MW.roundsPerShield + batteries * MW.roundsPerBattery)
+  const base = (n.systems?.shield ?? 0) * MW.roundsPerShield + batteries * MW.roundsPerBattery
+  // An interceptor works and newer interceptor generations (the missile program) let the same store hold more.
+  const mult = roundsMult(n as Pick<Nation, 'mprog'>)
+  return Math.round(mult > 1 ? base * mult : base)
 }
 
 /** Rounds in store. A nation that never fired any has the full store. */
@@ -41,11 +45,13 @@ export function interceptorsOf(n: Pick<Nation, 'systems' | 'missileWar'>): numbe
 /** Early-warning level: the radar program plus the airborne early-warning of finished aircraft developments. */
 export function radarLevel(n: Pick<Nation, 'missileWar' | 'aircraft'>): number {
   const awacs = MW.awacsNodes.filter((id) => devDone(n, id)).length
-  return Math.min(MW.radarMax, (n.missileWar?.radar ?? 0) + awacs)
+  return Math.min(MW.radarMax, (n.missileWar?.radar ?? 0) + awacs + programRadar(n as Pick<Nation, 'mprog'>))
 }
 
 export const batteryLevel = (n: Pick<Nation, 'missileWar'>, region: RegionId): number => n.missileWar?.batteries?.[region] ?? 0
 export const mobileLevel = (n: Pick<Nation, 'missileWar'>): number => n.missileWar?.mobile ?? 0
+/** Mobile launchers that hide from counterforce: the Missile War's own level plus the missile program's mobile launchers. */
+export const mobileCover = (n: Pick<Nation, 'missileWar' | 'mprog'>): number => mobileLevel(n) + programMobile(n)
 export const doctrineOf = (n: Pick<Nation, 'missileWar'>) => n.missileWar?.doctrine ?? 'hold'
 
 /** How much of a country is city, 0 to 1: the share of its people who live where a missile hurts most. */
@@ -116,7 +122,8 @@ export function salvoDefense(s: GameState, attackerId: NationId, victimId: Natio
   const scramble = scrambled && MW.enabled && victim.military.units.fighter >= 0.5 ? Math.min(0.3, MW.scrambleStop * hunted) : 0
   const afterScramble = afterHunters * (1 - scramble)
   const patrol = victim.military.deployment ? Math.min(STATION.missileStopMax, STATION.missileStopPer * patrolCover(s, victimId).air) * STATION.missileCatch[kind] : 0
-  const through = clamp(afterScramble * (1 - patrol), 0.05, 1)
+  // The missile program: the attacker's decoys, stealth and speed slip past a share of all of it, the defender's newer interceptors stop a little more.
+  const through = boostThrough(clamp(afterScramble * (1 - patrol), 0.05, 1), salvoBoost(s.nations[attackerId], victim))
   // Where it was stopped, in order met. The floor of 5% is not a defence, so the parts are scaled to add up to what really was stopped.
   const parts = { shield: 1 - q1, batteries: q1 - q2, fighters: q2 - afterScramble, patrol: afterScramble - afterScramble * (1 - patrol) }
   const sum = parts.shield + parts.batteries + parts.fighters + parts.patrol
@@ -142,14 +149,17 @@ export interface Harm {
 }
 
 /** The harm `count` missiles' worth of a kind does when `through` of them arrive. Pure: used for the real thing and the forecast. */
-export function harmOf(kind: MissileType, count: number, through: number, aim: StrikeAim, region: Pick<RegionState, 'cities'>, mobile = 0, seen = false): Harm {
+export function harmOf(kind: MissileType, count: number, through: number, aim: StrikeAim, region: Pick<RegionState, 'cities'>, mobile = 0, seen = false, boost?: { harm: number; harden: number }): Harm {
   const spec = MISSILES[kind]
+  // The missile program: better guidance and warheads make each missile that lands count for more; hardened silos save part of a store.
+  const fired = count
+  if (boost && boost.harm > 0) count = count * (1 + boost.harm)
   const site = aim === 'site'
   const harm = site ? MW.siteHarm : 1
   const landed = count * through
   const lossPct = Math.min(spec.peopleMax, count * spec.people) * through * harm * (1 + spec.urban * urbanShare(region))
   const hide = site && !seen ? Math.min(0.9, mobile * MW.mobileHide) : 0
-  const stock = site ? Math.min(spec.siteMax, count * spec.site) * through * (1 - hide) : 0
+  const stock = site ? Math.min(spec.siteMax, count * spec.site) * through * (1 - hide) * (boost && boost.harden > 0 ? 1 - boost.harden : 1) : 0
   return {
     lossPct,
     line: spec.line > 0 ? Math.min(spec.lineMax, count * spec.line) * through * harm : 0,
@@ -159,8 +169,8 @@ export function harmOf(kind: MissileType, count: number, through: number, aim: S
     fuel: !site && spec.fuel > 0 ? Math.min(spec.fuelMax, count * spec.fuel) * through : 0,
     air: spec.air > 0 ? Math.min(spec.airMax, count * spec.air) * through * (site ? 1.5 : 1) : 0,
     stock,
-    down: site ? Math.min(MW.siteDownMax, Math.ceil(landed * MW.siteDownPer)) : 0,
-    tension: spec.tension * landed * (site ? MW.siteTension : 1),
+    down: site ? Math.min(MW.siteDownMax, Math.ceil(fired * through * MW.siteDownPer)) : 0,
+    tension: spec.tension * (fired * through) * (site ? MW.siteTension : 1),
   }
 }
 
@@ -199,7 +209,7 @@ function applyHarm(s: GameState, map: WorldMap, nationId: NationId, target: Regi
   const place = map.regions[target].name
   const through = def.through
   const bomberLine = o.raid ? 1 + (aircraftEffects(n)?.bomberLine ?? 0) : 1
-  const h = harmOf(kind, o.raid ? o.raid.survivors * MW.raid.perBomber : fired, o.raid ? 1 : through, aim, region, mobileLevel(victim), launchersSeen(s, n, victim.id))
+  const h = harmOf(kind, o.raid ? o.raid.survivors * MW.raid.perBomber : fired, o.raid ? 1 : through, aim, region, mobileCover(victim), launchersSeen(s, n, victim.id), o.raid ? undefined : harmBoost(n, victim))
   const parts: string[] = []
   const lineBefore = region.line
   if (h.line > 0) {
@@ -257,7 +267,7 @@ function applyHarm(s: GameState, map: WorldMap, nationId: NationId, target: Regi
   }
   if (aim === 'site' && h.down > 0 && region.buildings.factory > 0) {
     const war = (victim.missileWar ??= {})
-    const months = Math.max(1, h.down - Math.floor(mobileLevel(victim) / 2))
+    const months = Math.max(1, h.down - Math.floor(mobileCover(victim) / 2))
     ;(war.down ??= {})[target] = Math.max(war.down[target] ?? -1, s.turn + months)
     siteHit = true
     parts.push(`the launch site is shut for ${months} month${months === 1 ? '' : 's'}`)

@@ -35,6 +35,7 @@ import { coverageMult, coverageOf, demandOf, peopleStability, populationGrowth, 
 import { commanderTrait } from './generals'
 import { spaceEffects } from './spaceEffects'
 import { runSpace, spaceEngineerDemand } from './space'
+import { programBill, programEngineerDemand } from './missileProgram'
 
 export const ECON = {
   /** Tax per worker. Raised from 12 when spending became real money, so a nation's first month nets what it always did. */
@@ -307,7 +308,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     systemLevels: Object.values(n.systems ?? {}).reduce((a, b) => a + (b ?? 0), 0),
     // A project in a country is smaller than a national one, so it draws half as hard on the engineers.
     activeProjects: activeProjects(n).length + 0.5 * activeLocal(s, nationId).length,
-    extraEngineers: spaceEngineerDemand(n, workforce),
+    extraEngineers: spaceEngineerDemand(n, workforce) + programEngineerDemand(n, workforce),
   }
   const demand = demandOf(n, basis)
   const coverage = coverageOf(n, demand)
@@ -465,6 +466,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'Space program', amount: -space.bill.total, kind: 'cost' },
     { label: 'Space mining', amount: space.money, kind: 'income' },
     { label: 'Aircraft development', amount: -aircraft, kind: 'cost' },
+    { label: 'Missile program', amount: -programBill(n).total, kind: 'cost' },
     { label: 'Governors', amount: -governors, kind: 'cost' },
     { label: 'Settlers', amount: -settle, kind: 'cost' },
     { label: 'Quarantine', amount: -quarantine, kind: 'cost' },
