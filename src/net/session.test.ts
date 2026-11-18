@@ -205,7 +205,7 @@ describe('playing a month together', () => {
     expect(seats[2].readyList[seats[2].readyList.length - 1]).toEqual([])
   })
 
-  it('several people in one faction: the host resolves founding, joining, pooling and a vote, and every screen agrees', async () => {
+  it('several people in one bloc: the host resolves founding, joining, a call to arms, an operation all three pledge to, and every screen agrees', async () => {
     const { seats } = await started(3)
     // The host's copy is the one that counts: give the founder the influence a war costs.
     seats[0].s.game!.nations.r0.resources.pp = 500
@@ -222,17 +222,28 @@ describe('playing a month together', () => {
     await play([[{ type: 'factionInvite', nationId: 'r0', target: 'r1' }, { type: 'factionInvite', nationId: 'r0', target: 'r2' }], [], [{ type: 'factionJoin', nationId: 'r1', factionId: f()!.id }]])
     await play([[], [{ type: 'factionJoin', nationId: 'r1', factionId: f()!.id }], [{ type: 'factionJoin', nationId: 'r2', factionId: f()!.id }]])
     expect(f()?.members.sort()).toEqual(['r0', 'r1', 'r2'])
-    await play([[{ type: 'factionContribute', nationId: 'r0', gift: { stock: { money: 20 }, units: { infantry: 1 } } }], [{ type: 'factionContribute', nationId: 'r1', gift: { stock: { money: 15 } } }], []])
-    // 35 went in; the pool paid a month's upkeep for the one soldier.
-    expect(f()!.pool.stock.money).toBeGreaterThan(30)
-    expect(f()!.pool.stock.money).toBeLessThan(35)
-    await play([[{ type: 'factionPropose', nationId: 'r0', proposal: { kind: 'war', target: 'r3' } }], [], []])
-    const id = f()!.proposals[0]?.id
-    expect(id).toBeTruthy()
-    await play([[], [{ type: 'factionVote', nationId: 'r1', proposalId: id, vote: 'yes' }], [{ type: 'factionVote', nationId: 'r2', proposalId: id, vote: 'no' }]])
-    expect(f()!.proposals).toHaveLength(0)
-    expect(f()!.wars.length).toBe(1)
+    // The leader declares war and calls the bloc to arms in the same month; both others join with one click.
+    await play([[{ type: 'declareWar', nationId: 'r0', target: 'r3' }, { type: 'blocCall', nationId: 'r0', target: 'r3' }], [], []])
+    const call = f()!.bloc!.calls.find((c) => c.target === 'r3')!
+    expect(call).toBeTruthy()
+    await play([[], [{ type: 'blocAnswer', nationId: 'r1', callId: call.id, join: true }], [{ type: 'blocAnswer', nationId: 'r2', callId: call.id, join: true }]])
+    expect(seats[0].s.game!.wars).toEqual(expect.arrayContaining(['r1|r3', 'r2|r3']))
+    // An operation on r3: planned by the leader (who cannot reach it), D-Day next month; all three pledge, r2 leads it over its border.
+    await play([[{ type: 'blocPlan', nationId: 'r0', target: 'r3', when: 1 }], [], []])
+    const op = f()!.bloc!.ops[0]
+    expect(op.status).toBe('planned')
+    await play([
+      [{ type: 'blocCommit', nationId: 'r0', opId: op.id, units: { infantry: 1 } }],
+      [{ type: 'blocCommit', nationId: 'r1', opId: op.id, units: { infantry: 1 } }],
+      [{ type: 'blocCommit', nationId: 'r2', opId: op.id, units: { infantry: 1 } }],
+    ])
+    const done = f()!.bloc!.ops.find((o) => o.id === op.id)!
+    expect(done.status).toBe('done')
+    expect(done.result?.failed).toBeUndefined()
+    expect(Object.keys(done.result!.members).sort()).toEqual(['r0', 'r1', 'r2'])
+    expect(done.result!.lead).toBe('r2')
     for (const x of seats) expect(fingerprint(x.s.game!)).toBe(fingerprint(seats[0].s.game!))
+    for (const x of seats) expect(x.s.game!.factions![0].bloc!.ops.find((o) => o.id === op.id)?.result?.battleId).toBe(done.result!.battleId)
   })
 
   it('ignores orders for someone else, and orders from an old month', async () => {

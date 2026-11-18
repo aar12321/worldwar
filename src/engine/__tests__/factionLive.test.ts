@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeAll, afterAll } from 'vitest'
 import { addOpinion } from '../../ai/opinion'
 import { armiesToRecall } from '../../ai/liveBot'
 import { launchFactionArmies, factionOf } from '../factions'
@@ -13,6 +13,16 @@ import type { GameState, NationId, Order } from '../types'
 import { UNIT_TYPES } from '../types'
 import { invariantProblems } from './invariants'
 import { giveRegions, lineMap, setMilitary, startState } from './fixtures'
+import { BLOC } from '../../data/blocs'
+// These tests pin the legacy faction rules (the common pool, votes, the pooled army). They still run, with the bloc layer switched off,
+// which is the switch-off proof of docs/BLOC_STATUS.md; the bloc rules themselves are in bloc*.test.ts.
+beforeAll(() => {
+  BLOC.on = false
+})
+afterAll(() => {
+  BLOC.on = true
+})
+
 
 /**
  * A faction's joint offensive in a live game: it sets out on the day the vote passes as a real army, fights on arrival, comes home.
