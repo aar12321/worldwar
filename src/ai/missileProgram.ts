@@ -32,21 +32,21 @@ export function manageMissileProgram(s: GameState, nationId: NationId, econ: Eco
   const atWar = enemiesOf(s, nationId).length > 0
   const rng = createRng((s.seed ^ 0x3b0c) >>> 0, s.turn * 100003 + hashText(nationId))
   // Who starts one: a rival with a missile charter, a Hard rival at war, or now and then a rich and restless one.
-  const founds = programLevel(n) >= 1 || (skill === 2 && atWar) || (econ.gross >= 40 && econ.netCapital >= 10 && n.resources.capital >= 150 && n.aggression >= 0.2 && rng.chance(skill === 2 ? 0.25 : 0.12))
+  const founds = programLevel(n) >= 1 || (skill === 2 && atWar) || (econ.gross >= 40 && econ.netCapital >= 10 && n.resources.capital >= 150 && n.aggression >= 0.2 && rng.chance(skill === 2 ? 0.12 : 0.06))
   if (!p && !founds) return 0
-  if (!rng.chance(skill === 2 ? 0.6 : 0.35)) return 0
+  if (!rng.chance(skill === 2 ? 0.75 : 0.4)) return 0
   const bill = programBill(n).total
   // A program that has become a burden is put on a lean budget before anything else.
   if (p && econ.netCapital < 0 && p.budget > 0.5) {
     tryAdd({ type: 'missileProgram', nationId, action: { kind: 'budget', level: 0.5 } })
     return 0
   }
-  if (econ.netCapital < 8 || bill > (skill === 2 ? 0.12 : 0.06) * econ.gross) return 0
+  if (econ.netCapital < 8 || bill > (skill === 2 ? 0.08 : 0.05) * econ.gross) return 0
   let orders = skill === 2 ? 2 : 1
   let spent = 0
   const workforce = econ.workforce
   const go = (action: MissileProgramAction, cost: number, upkeep = 0): boolean => {
-    if (orders <= 0 || cost + 40 > Math.min(budget - spent, n.resources.capital - spent - 60) || econ.netCapital - upkeep < 6) return false
+    if (orders <= 0 || cost + 20 > Math.min(budget - spent, n.resources.capital - spent - 40) || econ.netCapital - upkeep < 6) return false
     if (programProblem(s, n, action, workforce)) return false
     if (!tryAdd({ type: 'missileProgram', nationId, action })) return false
     orders--

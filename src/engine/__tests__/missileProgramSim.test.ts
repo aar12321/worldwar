@@ -54,12 +54,12 @@ describe('rivals and the missile program', () => {
     const { s: _s, ...line } = r
     console.info('hard 24 months', JSON.stringify(line))
     expect(r.programs).toBeGreaterThanOrEqual(2)
-    expect(r.facilities).toBeGreaterThan(r.programs)
+    expect(r.facilities).toBeGreaterThanOrEqual(r.programs)
     expect(r.tests).toBeGreaterThan(0)
     expect(r.successes).toBeGreaterThan(0)
-    // No spam: at most a test a month for the busiest, and the bill inside a sixth of income.
+    // No spam: at most a test a month for the busiest, and the bill inside an eighth of income.
     expect(r.maxTests).toBeLessThanOrEqual(24)
-    expect(r.worstShare).toBeLessThan(0.17)
+    expect(r.worstShare).toBeLessThan(0.12)
   }, 600_000)
 
   it('Medium rivals are modest', () => {
