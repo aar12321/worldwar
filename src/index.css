@@ -898,8 +898,10 @@ body:has(.drawer) .map-modes {
   .pill-stack .live-alert ~ .advice-pill:not(.live-alert) {
     display: none;
   }
+  /* The bar spans the screen (see .hud-next): the desktop cap of 260px left the 4x button and Players and chat hanging outside it. */
   .hud-live {
     gap: 4px !important;
+    max-width: none !important;
   }
   .hud-live > .flex {
     flex: 1;

@@ -57,4 +57,10 @@ describe('the desktop layout beside the nav rail', async () => {
     expect(px('.armies-dock', 'left')).toBeGreaterThan(railEnd)
     expect(px('.armies-dock', 'left')).toBe(px('.drawer', 'left'))
   })
+
+  it('on a phone the live clock bar is as wide as the screen, so nothing in it hangs outside the box', () => {
+    const phone = css.slice(css.indexOf('@media (max-width: 900px)'))
+    const rule = phone.match(/\n  \.hud-live \{([^}]*)\}/)?.[1] ?? ''
+    expect(rule).toMatch(/max-width: none !important/)
+  })
 })
