@@ -93,6 +93,7 @@ game behaviour do.
 | 20 | Rematch | Both back in the lobby, LIVE kept, nations kept | - | - | 59 |
 | 21 | Turns mode | Lobby Turns, Ready on both, January resolves, monthly report on both | - | - | 60–65 |
 | 22 | 10-minute live soak at 4× with a war (attacks every minute, 41 game months) | Both screens same checksum at the end; 1 resync on the guest in 10 min; toasts 0–6 per 30 s; JS heap after GC 65 MB at month 42 and 64.5 MB at month 48 (no growth); DOM 350 → 520 nodes as armies and labels grew | - | - | - |
+| 23a | Final re-run on the fixed build (fresh room, France / Germany) | "Germany declared war on you!" (red) on the host; "Germany is marching on France. It arrives 4 January 2026."; peace offer between the humans arrives with **Answer**, which opens Diplomacy at the inbox (Accept / Decline at the top, "This month" news); aircraft development screen opens; War Room "AI Battle Command" at level 3 (dev money and tech, same on both screens) shows the planner, target ranking and auto-command; checksums equal | The attack note first read "against your France" | Reworded to "is marching on" (test in `liveNews.test.ts`) | 70–76 |
 | 23 | Engine cost per live day (real map, 2 humans, node) | ordinary day p50 < 1 ms, p95 7 ms; **month end p50 630 ms, max 840 ms** (AI planning, every screen); game state 650 KB | Month-end hitch (not fixed: engine work, out of scope) | Guide recommends 2× | - |
 
 ## Not verified
@@ -100,6 +101,7 @@ game behaviour do.
 * Two real computers on different networks, a real phone browser and its background throttling (all runs were two contexts on one
   machine through the sandbox proxy).
 * Frame time with effects on Auto on a real GPU (software GL under heavy load here).
-* Nuclear launch confirmation, aircraft Develop and the AI Command Center were only opened, not driven end to end in the two-player
-  room; territories and puppets through a peace between the two humans were not reached.
+* Nuclear launch and its confirmation (needs a Superpower with Hypersonic Missiles; the confirm rule exists in `confirmRules.ts`),
+  starting an aircraft development, and running the AI auto-command were not driven in the two-player room; the screens were
+  opened. Territories and puppets through a peace between the two humans were not reached (a white peace offer was sent and shown).
 * "Players vote" pause rule in the browser (unit tests only).
