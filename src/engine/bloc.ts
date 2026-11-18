@@ -661,7 +661,7 @@ export function executeBlocOrder(s: GameState, map: WorldMap, o: BlocOrder, rng:
       const dday = isLive(s) ? clockOf(s) + o.when : s.turn + o.when
       const op: BlocOp = { id: newId(s, 'op'), by: o.nationId, target: o.target, enemy: owner, created: s.turn, dday, pledges: {}, status: 'planned' }
       b.ops.push(op)
-      feed(s, f, `${nm(s, o.nationId)} plans an operation on ${map.regions[o.target].name} (${nm(s, owner)}): D-Day ${isLive(s) ? `in ${o.when} days` : `at the end of ${o.when === 1 ? 'next month' : `${o.when} months from now`}`}. Pledge divisions on the Operations tab.`, 'op', o.nationId)
+      feed(s, f, `${nm(s, o.nationId)} plans an operation on ${map.regions[o.target].name}${map.regions[o.target].name === nm(s, owner) ? '' : ` (${nm(s, owner)})`}: D-Day ${isLive(s) ? `in ${o.when} days` : `at the end of ${o.when === 1 ? 'next month' : `${o.when} months from now`}`}. Pledge divisions on the Operations tab.`, 'op', o.nationId)
       break
     }
     case 'blocCommit': {

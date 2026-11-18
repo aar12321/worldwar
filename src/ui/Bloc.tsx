@@ -608,7 +608,7 @@ function FeedTab({ g, f, me }: { g: GameState; f: Faction; me: NationId }) {
     <div className="space-y-4">
       <section className="rounded-2xl border border-white/14 bg-white/5 p-3 space-y-2" aria-label="Write to the bloc">
         <div className="flex gap-2">
-          <input value={text} onChange={(e) => setText(e.target.value)} maxLength={BLOC.chatMax} placeholder="Write to the bloc (everyone in it sees this)" aria-label="Message to the bloc" className="field flex-1 min-w-0 px-3 py-2 text-[15px]" />
+          <input value={text} onChange={(e) => setText(e.target.value)} maxLength={BLOC.chatMax} placeholder="Message your bloc" aria-label="Message to the bloc" className="field flex-1 min-w-0 px-3 py-2 text-[15px]" />
           <OrderButton order={{ type: 'blocChat', nationId: me, text }} label="Send" tone="btn-primary" onDone={() => setText('')} />
         </div>
         {!isLive(g) && <p className="text-[12px] text-white/55">Turn games: your message is posted when the month ends.</p>}
