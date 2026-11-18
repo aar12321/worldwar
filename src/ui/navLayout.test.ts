@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import css from '../index.css?raw'
 import { phoneSlots, splitForPhone } from './navLayout'
 
 const desks = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `d${i}` }))
@@ -41,7 +40,11 @@ describe('splitForPhone', () => {
   })
 })
 
-describe('the desktop layout beside the nav rail', () => {
+describe('the desktop layout beside the nav rail', async () => {
+  // The stylesheet as written (a CSS import is empty under the test runner, and the app's types know no node:fs).
+  const fsName = 'node:fs'
+  const { readFileSync } = (await import(/* @vite-ignore */ fsName)) as { readFileSync: (p: URL, enc: 'utf8') => string }
+  const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
   /** A px value from the first top-level rule for `selector` in index.css. */
   const px = (selector: string, prop: string) => {
     const block = css.match(new RegExp(`^\\${selector} \\{([^}]*)\\}`, 'm'))?.[1] ?? ''
