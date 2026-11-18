@@ -113,7 +113,7 @@ export interface MinistrySpec {
 }
 
 export const MINISTRY_SPECS: Record<MinistryId, MinistrySpec> = {
-  finance: { name: 'Finance', title: 'Minister of Finance', profession: 'economists', blurb: 'Collects taxes better and wastes less.', effects: { treasury: 0.03 } },
+  finance: { name: 'Finance', title: 'Minister of Finance', profession: 'economists', blurb: 'Collects taxes better and wastes less.', effects: { treasury: 0.04 } },
   interior: { name: 'Interior', title: 'Minister of the Interior', profession: 'administrators', blurb: 'Order at home and officials who can run more.', effects: { stability: 2, admin: 1.5 } },
   foreign: { name: 'Foreign Affairs', title: 'Foreign Minister', profession: 'diplomats', blurb: 'Influence abroad, and every nation thinks a little better of you.', effects: { influence: 0.6, trade: 0.06 } },
   defence: { name: 'Defence', title: 'Minister of Defence', profession: 'officers', blurb: 'Cheaper forces and a people that tire of war more slowly.', effects: { upkeep: -0.08, weariness: -0.15 } },
@@ -151,9 +151,9 @@ export const CABINET = {
   popularity: [15, 85] as [number, number],
   /** Competence added for each 0.1 of profession coverage above 1 (taken away below it), at most +-10. */
   competencePerCoverage: 10,
-  /** Salary a month: a share of gross income, times (0.5 + competence / 100), plus a floor. */
-  salaryShare: 0.006,
-  salaryFloor: 0.15,
+  /** Salary a month: this much per square root of (population / 10 million), times (0.5 + competence / 100), plus a floor. About 0.4 for a good minister of a 40-million nation. */
+  salaryPerPop: 0.12,
+  salaryFloor: 0.1,
   /** Months of salary paid on appointment. */
   signing: 3,
   /** Stability lost on a dismissal, plus this much per 10 points of popularity above 50. */

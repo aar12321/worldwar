@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CABINET, CIVICS, GROUPS, GROUPS_RULES, MINISTRIES, PIPELINE, POLICY_AREAS, POLICY_SPECS, PROFESSIONS, SECTORS_ORDER, SERVICE, TALENT, type CivicsAction } from '../../data/civics'
+import { CABINET, CIVICS, GROUPS, GROUPS_RULES, MINISTRIES, MINISTRY_SPECS, PIPELINE, POLICY_AREAS, POLICY_SPECS, PROFESSIONS, SECTORS_ORDER, SERVICE, TALENT, type CivicsAction } from '../../data/civics'
 import { manageCivics } from '../../ai/civics'
 import { opinionReport } from '../../ai/opinion'
 import {
@@ -130,7 +130,7 @@ describe('the cabinet', () => {
     expect(salary).toBeGreaterThan(0)
     expect(gov).toBeGreaterThan(0)
     // What the minister collects is the effect of the ministry at their power, less what their corruption wastes.
-    expect(gov / e.gross).toBeCloseTo(0.03 * ministerPower(s.nations.r0, s.nations.r0.civics!.cabinet.finance!) - (m.corruption / 100) * CABINET.wastePerCorruption, 9)
+    expect(gov / e.gross).toBeCloseTo(MINISTRY_SPECS.finance.effects.treasury! * ministerPower(s.nations.r0, s.nations.r0.civics!.cabinet.finance!) - (m.corruption / 100) * CABINET.wastePerCorruption, 9)
     expect(e.netCapital).toBeCloseTo(before + gov - salary, 6)
   })
 

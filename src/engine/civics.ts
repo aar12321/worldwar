@@ -305,7 +305,7 @@ export function nationPopulation(s: Pick<GameState, 'regions'>, id: NationId): n
 }
 
 /** A minister's salary a month: more for a bigger nation and a better minister. */
-export const salaryOf = (m: Pick<Minister, 'competence'>, population: number) => CABINET.salaryFloor + 0.25 * Math.sqrt(Math.max(0, population) / 10) * (0.5 + m.competence / 100)
+export const salaryOf = (m: Pick<Minister, 'competence'>, population: number) => CABINET.salaryFloor + CABINET.salaryPerPop * Math.sqrt(Math.max(0, population) / 10) * (0.5 + m.competence / 100)
 
 /** What a minister delivers, 0 to 1: competence, times how well their ministry is staffed. */
 export function ministerPower(n: TalentNation, m: Minister, cov?: Record<Profession, number>): number {
