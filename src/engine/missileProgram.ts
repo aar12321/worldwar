@@ -550,15 +550,31 @@ export function describeProgram(a: Act): string {
 
 // ---- Test launches ----
 
-/** Where tests land: out over the sea from the capital, a few hundred km off, the same spot every time for a nation. */
+/**
+ * Where tests land: a safe zone out at sea. Of points 700 and 1100 km off the capital in twelve directions, the one farthest from any
+ * country's centre (so open water, not a neighbour). The same spot every time for a nation, on every screen.
+ */
 export function testRange(map: WorldMap, s: GameState, n: Nation): { from: string; to: { lat: number; lng: number } } | null {
   const from = map.regions[n.capital] ? n.capital : Object.values(s.regions).filter((r) => r.owner === n.id && map.regions[r.id]).map((r) => r.id).sort()[0]
   if (!from) return null
   const at = map.regions[from]
-  const dir = hashId(n.id) % 4
-  const dLat = [-7, 7, -5, 5][dir]
-  const dLng = [9, -9, -11, 11][dir]
-  return { from, to: { lat: clamp(at.lat + dLat, -70, 75), lng: ((at.lng + dLng + 540) % 360) - 180 } }
+  const centres = Object.values(map.regions)
+  let best = { lat: at.lat, lng: at.lng }
+  let bestScore = -1
+  for (const km of [700, 1100]) {
+    for (let i = 0; i < 12; i++) {
+      const bearing = (i / 12) * 2 * Math.PI
+      const lat = clamp(at.lat + (km / 111) * Math.cos(bearing), -70, 75)
+      const lng = ((at.lng + (km / (111 * Math.max(0.2, Math.cos((at.lat * Math.PI) / 180)))) * Math.sin(bearing) + 540) % 360) - 180
+      let near = Infinity
+      for (const c of centres) near = Math.min(near, distanceKm(c, { lat, lng }))
+      if (near > bestScore + 1e-9) {
+        bestScore = near
+        best = { lat, lng }
+      }
+    }
+  }
+  return { from, to: best }
 }
 
 function launchTest(s: GameState, map: WorldMap, n: Nation, dev: MissileDevId) {

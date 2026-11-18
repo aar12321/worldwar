@@ -193,8 +193,8 @@ function TestPad({ player }: { player: Nation }) {
   }, [burst, reduced])
   if (!game) return null
   const n = game.nations[player.id] ?? player
-  const ready = DEV_IDS.filter((id) => n.mprog?.devs[id]?.state === 'test')
   const flights = (game.missileTests ?? []).filter((t) => t.nationId === n.id)
+  const ready = DEV_IDS.filter((id) => n.mprog?.devs[id]?.state === 'test' && !flights.some((t) => t.dev === id))
   const now = clockOf(game)
   if (!ready.length && !flights.length && burst === null) return null
   return (

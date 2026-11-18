@@ -21,6 +21,7 @@ import {
   programTalentCap,
   rivalPrograms,
   testOdds,
+  testRange,
 } from '../missileProgram'
 import { buildMissilesCost, buildRoom, launchSite, reachKm, storageCap } from '../missiles'
 import { harmOf, interceptorCap, salvoDefense } from '../missileWar'
@@ -30,6 +31,9 @@ import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import { talentCap } from '../space'
 import type { GameState, Order } from '../types'
 import { lineMap, startState } from './fixtures'
+import { getWorld } from '../../map/world'
+import { createInitialState } from '../../data/startingNations'
+import { distanceKm } from '../helpers'
 
 const map = lineMap(8)
 const act = (action: MissileProgramAction, nationId = 'r0'): Order => ({ type: 'missileProgram', nationId, action })
@@ -617,6 +621,21 @@ describe('malformed orders and the switch', () => {
       expect(programBill(s.nations.r0).total).toBe(0)
     } finally {
       MPROG.on = true
+    }
+  })
+})
+
+describe('the test range', () => {
+  it('tests land in a safe zone: open water, far from every country centre, the same spot every time', () => {
+    const { map: world } = getWorld()
+    const s = createInitialState(world, { playerRegionId: 'poland', seed: 3, difficulty: 'normal', goal: 'classic', victoryShare: 2 })
+    for (const id of ['poland', 'china', 'russia', 'nigeria', 'france', 'iran', 'japan', 'brazil']) {
+      const n = s.nations[id]
+      if (!n) continue
+      const r = testRange(world, s, n)!
+      const near = Math.min(...Object.values(world.regions).map((c) => distanceKm(c, r.to)))
+      expect(near, id).toBeGreaterThan(300)
+      expect(testRange(world, s, n)).toEqual(r)
     }
   })
 })

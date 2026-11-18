@@ -32,7 +32,7 @@ export function manageMissileProgram(s: GameState, nationId: NationId, econ: Eco
   const atWar = enemiesOf(s, nationId).length > 0
   const rng = createRng((s.seed ^ 0x3b0c) >>> 0, s.turn * 100003 + hashText(nationId))
   // Who starts one: a rival with a missile charter, a Hard rival at war, or now and then a rich and restless one.
-  const founds = programLevel(n) >= 1 || (skill === 2 && atWar) || (econ.gross >= 45 && n.resources.capital >= 200 && n.aggression >= 0.25 && rng.chance(skill === 2 ? 0.25 : 0.12))
+  const founds = programLevel(n) >= 1 || (skill === 2 && atWar) || (econ.gross >= 40 && econ.netCapital >= 10 && n.resources.capital >= 150 && n.aggression >= 0.2 && rng.chance(skill === 2 ? 0.25 : 0.12))
   if (!p && !founds) return 0
   if (!rng.chance(skill === 2 ? 0.6 : 0.35)) return 0
   const bill = programBill(n).total
