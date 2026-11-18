@@ -513,14 +513,13 @@ export function employmentOf(n: Pick<Nation, 'people' | 'civics' | 'space'>, e: 
   const rate = clamp(n.people?.unemployment ?? 0.05, 0, 1)
   const unemployed = force * rate
   const employed = force - unemployed
-  const E = EMPLOYMENT
   const w = Math.max(0.3, e.basis.workforce)
-  const military = Math.min(employed * 0.15, (e.divisions * E.perDivision) / 1000)
+  const military = Math.min(employed * 0.15, (e.divisions * EMPLOYMENT.perDivision) / 1000)
   const pub = Math.min(employed * 0.4, force * SERVICE.share[n.civics?.service ?? SERVICE.standard])
-  const research = Math.min(employed * 0.1, force * (n.people?.skills.scientists ?? 0.013) * E.researchShare + (n.space ? (n.space.engineers + n.space.astronauts) / 1000 : 0))
+  const research = Math.min(employed * 0.1, force * (n.people?.skills.scientists ?? 0.013) * EMPLOYMENT.researchShare + (n.space ? (n.space.engineers + n.space.astronauts) / 1000 : 0))
   const privateJobs = Math.max(0, employed - military - pub - research)
-  const farm = clamp(E.farmBase + E.farmPerDevelopment * e.basis.development + (E.farmPerFarm * e.buildings.farm) / w, E.farmMin, E.farmMax)
-  const industry = clamp(E.industryBase + (E.industryPerFactory * e.basis.factories) / w, 0, E.industryMax)
+  const farm = clamp(EMPLOYMENT.farmBase + EMPLOYMENT.farmPerDevelopment * e.basis.development + (EMPLOYMENT.farmPerFarm * e.buildings.farm) / w, EMPLOYMENT.farmMin, EMPLOYMENT.farmMax)
+  const industry = clamp(EMPLOYMENT.industryBase + (EMPLOYMENT.industryPerFactory * e.basis.factories) / w, 0, EMPLOYMENT.industryMax)
   const services = Math.max(0, 1 - farm - industry)
   const t = farm + industry + services
   return {

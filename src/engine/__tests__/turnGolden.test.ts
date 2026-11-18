@@ -8,16 +8,31 @@ import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { PRESENCE } from '../../data/presence'
 import { RELATIONS } from '../../data/relations'
+import { CIVICS } from '../../data/civics'
 import { withOldCombat } from './oldCombat'
 import { withOldMissiles } from './oldMissiles'
 import { withOldWarScore } from './oldWarScore'
 
-/** Runs `fn` with the relationship layer (rivals tending friendships, the opinion lines it adds: docs/RELATIONS_STATUS.md) switched off. */
+/** Runs `fn` with the government desk (cabinet, civil service, reforms, the bots that use them: docs/GOVERNMENT_STATUS.md) switched off. */
+function withoutCivics<T>(fn: () => T): T {
+  const on = CIVICS.on
+  CIVICS.on = false
+  try {
+    return fn()
+  } finally {
+    CIVICS.on = on
+  }
+}
+
+/**
+ * Runs `fn` with the relationship layer (rivals tending friendships, the opinion lines it adds: docs/RELATIONS_STATUS.md) switched off,
+ * and every layer added after it (the government desk) too, so each older layer's proof keeps running against its own world.
+ */
 function withoutRelations<T>(fn: () => T): T {
   const on = RELATIONS.on
   RELATIONS.on = false
   try {
-    return fn()
+    return withoutCivics(fn)
   } finally {
     RELATIONS.on = on
   }
@@ -85,6 +100,10 @@ function withoutPresence<T>(fn: () => T): T {
  * Re-pinned (the Normal and Hard bot worlds; the small war did not move) for relationships (docs/RELATIONS_STATUS.md): Medium and Hard rivals open embassies, visit friends,
  * send aid, build programs and ask the player for help, and opinions gain a 'same system of government' line. Checked before pinning: with `RELATIONS.on` switched off
  * (`withoutRelations`, the last test of this file, and wrapped round every layer test above it) the previous pins (6b42de15579c5 and 196fdf3f5c5b29) return exactly.
+ * Re-pinned (all three state hashes; the small war's log did not move) for the government desk (docs/GOVERNMENT_STATUS.md): Medium and Hard rivals appoint
+ * ministers, size the civil service and pass reforms, and every human nation carries a neutral desk. Checked before pinning: with `CIVICS.on` switched off
+ * (`withoutCivics`, 'the government desk is the only thing ...' below; `withoutRelations` now switches it off too, so every older layer keeps its proof) the
+ * previous pins (1f72167c03ee2, 1719b377e4ad6a, 6be372c0f58e4) return exactly, and the small war with the human's unused desk taken out hashes to its old pin.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -146,7 +165,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('1f72167c03ee2')
+    expect(hash(JSON.stringify(s))).toBe('48f1aff68a4fa')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -156,12 +175,12 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned in the final pass (docs/FINAL_STATUS.md): Hard rivals in a faction now offer fuel and ration contracts to the pool (src/ai/factions.ts, contractIdea).
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
     // All of presence, the missile war and the combat tuning on; the layers below show what each added.
-    expect(hash(JSON.stringify(s))).toBe('1719b377e4ad6a')
+    expect(hash(JSON.stringify(s))).toBe('144ef130064a5b')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
+    expect(hash(JSON.stringify(state))).toBe('d077c31c237c4')
     expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
   })
 
@@ -225,6 +244,25 @@ describe('turn mode resolves exactly as pinned', () => {
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
     })
   }, 400_000)
+
+  it('the government desk is the only thing that moved the current pins: with it switched off the previous hashes return', () => {
+    withoutCivics(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('1f72167c03ee2')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1719b377e4ad6a')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    })
+  }, 400_000)
+
+  it('the desk alone, unused, adds only its own field: the small war with the human desk taken out hashes to its previous pin', () => {
+    // r0 is the human: it is given a neutral desk at each month end and never acts on it, and no bot in the small war looks at its desk
+    // (they are Normal bots, but three months is less than their schedule needs), so removing that one field gives the old state exactly.
+    const { state } = smallWar()
+    expect(state.nations.r0.civics?.cabinet).toEqual({})
+    for (const n of Object.values(state.nations)) delete n.civics
+    expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
+  })
 
   it('a turn game carries none of the live fields', () => {
     const { state } = smallWar()
