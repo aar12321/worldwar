@@ -46,6 +46,10 @@ Nothing is pooled: every army and treasury stays its owner's. Leaving costs good
 - `src/engine/__tests__/blocSim.test.ts` (in the sims set): two years of rival blocs on the real world, Normal and Hard; Easy never forms a bloc.
 - Legacy: `factions.test.ts`, `factionsFinal.test.ts`, `factionLive.test.ts`, `factionToasts.test.ts` run with `BLOC.on` off and still pass (the switch-off proof that the old rules are intact). `territories.test.ts` checks a bloc never plans on its own territory.
 
+- `balance.test.ts` (order wiring) checks every bloc order has its rules, executor and phase; `deployment.test.ts`'s posture-free hash runs with blocs off (it predates them).
+- Mutation checks (12, all killed by bloc.test/blocFuzz): combined-arms bonus removed; survivors shared equally; pledge not checked against the army; migration split equally; roles not unique; Mutual Defence inert; live force leaving on D-Day instead of arriving; anyone can call to arms; captured country kept by the lead; the old pool left open; Shield inert; a member not at war fighting anyway.
+- Full `vitest run` after the last change set: 1742 passed, 0 failed except the two fixed right after (order-wiring and the posture-free hash), both re-run green.
+
 ### Sim numbers (24 months, real world)
 
 ```
