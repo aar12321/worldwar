@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GameState } from '../engine/types'
-import { friendLine, orderNews } from '../ui/livePresent'
+import { friendLine, newsFor, orderNews } from '../ui/livePresent'
 import { takeoverNote } from '../ui/onlineLiveText'
 import { gameOf, liveRoom, patchAll, type LiveSeat } from './liveHarness'
 
@@ -93,6 +93,14 @@ describe('live rooms: offers between friends are news on the day', () => {
     expect(note).toMatch(/clock is yours/)
     // Nor is a lobby that changed host before the game began.
     expect(takeoverNote(before, { ...guest.s.lobby!, phase: 'lobby' }, 'b')).toBeNull()
+  })
+
+  it("the one who answered is not shown an answer written for the one who asked ('Germany accepted your invitation')", () => {
+    const joined = { kind: 'accepted', from: 'germany', to: 'france', proposalKind: 'faction', text: 'Germany accepted your invitation to Rhine Accord.' } as const
+    expect(newsFor(joined, 'france')).toBe(true)
+    expect(newsFor(joined, 'germany')).toBe(false)
+    // A player's own act told in the third person is still theirs to see.
+    expect(newsFor({ kind: 'broken', from: 'germany', to: 'france', proposalKind: 'pact', text: 'Germany tore up its pact with France.' }, 'germany')).toBe(true)
   })
 
   it('says nothing for orders that bring no diplomatic news, or across a month end', () => {

@@ -25,7 +25,7 @@ import type { LiveStep } from './engine/live'
 import { openTransport, type TransportStatus } from './net/transport'
 import { globeBridge, useFx } from './ui/globeBridge'
 import { battleLine, scenesFor } from './ui/battleText'
-import { DISPATCH_TONE, friendLine, orderNews, presentLiveStep } from './ui/livePresent'
+import { DISPATCH_TONE, friendLine, newsFor, orderNews, presentLiveStep } from './ui/livePresent'
 import { takeoverNote } from './ui/onlineLiveText'
 import { speak } from './ui/plain'
 import type { PendingConfirm } from './ui/confirmRules'
@@ -701,7 +701,7 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
   for (const text of blocNews(before === next ? null : before, next, player).slice(0, 3)) toast(text, 'info', 7000)
   // With the report off, the turn's big moments still get a line.
   if (!settings.monthlyReport) {
-    const mineNews = next.dispatches.filter((d) => d.to === player || d.from === player)
+    const mineNews = next.dispatches.filter((d) => newsFor(d, player))
     for (const d of mineNews.slice(-3)) toast(d.text, DISPATCH_TONE[d.kind], 6000)
     if (!fx.length) for (const b of mine) if (b.captured) toast(battleLine(b, next, player).text, b.defender.nationId === player ? 'error' : 'success', 6000)
   }
@@ -776,7 +776,7 @@ function liveDay(prev: GameState, step: LiveStep) {
     const risings = game.battles.filter((b) => b.attacker.nationId === 'rebels' && b.defender.nationId === player).map(lineOf)
     patch.liveNote = buildReport(month.stats, game, player, [...month.battles, ...risings])
     game.monthStart = markMonth(game, player, presented.mine.filter((b) => b.attacker.nationId !== 'rebels').map(lineOf))
-    for (const d of game.dispatches.filter((x) => x.to === player || x.from === player).slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
+    for (const d of game.dispatches.filter((x) => newsFor(x, player)).slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
     for (const text of factionNews(prev, game, player).slice(0, 3)) st.toast(text, 'info', 7000)
     for (const text of blocNews(prev, game, player).slice(0, 3)) st.toast(text, 'info', 7000)
     const failed = game.log.filter((e) => e.turn === prev.turn && e.text.startsWith('Order failed') && e.nations.includes(player))
@@ -1302,7 +1302,7 @@ export const useGame = create<GameStore>((set, get) => ({
       set({ game: next, undoStack: takeBack ? [...get().undoStack, { game, label: describeOrder(game, map, order) }].slice(-UNDO_LIMIT) : [] })
       if (!playing && !takeBack) get().toast(`${describeOrder(game, map, order)}: done. This cannot be taken back.`, 'info', 5000)
       // An offer a rival answered on the spot (live games) says how it went.
-      for (const d of next.dispatches.slice(seen)) if (d.to === game.playerId || d.from === game.playerId) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
+      for (const d of next.dispatches.slice(seen)) if (newsFor(d, game.playerId)) get().toast(d.text, DISPATCH_TONE[d.kind], 6000)
       if (playing) {
         immediate = [...immediate, order]
         sendPlan(orders)
@@ -1591,7 +1591,7 @@ export const useGame = create<GameStore>((set, get) => ({
       if (st.settings.liveReport === 'pause') patch.summary = report
       else patch.liveNote = report
       // The month's diplomacy still gets a line while the clock runs: wars declared on you, offers, answers.
-      const news = step.state.dispatches.filter((d) => d.to === game.playerId || d.from === game.playerId)
+      const news = step.state.dispatches.filter((d) => newsFor(d, game.playerId))
       for (const d of news.slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
       for (const text of factionNews(game, step.state, game.playerId).slice(0, 3)) st.toast(text, 'info', 7000)
       for (const text of blocNews(game, step.state, game.playerId).slice(0, 3)) st.toast(text, 'info', 7000)

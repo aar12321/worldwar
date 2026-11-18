@@ -223,6 +223,12 @@ export function friendLine(after: GameState, order: Order): OrderNews | null {
   }
 }
 
+/** Answers are written for the side that asked ("Germany accepted your invitation"): the one who answered is not shown its own answer. */
+const REPLIES = new Set<Dispatch['kind']>(['accepted', 'rejected', 'joined', 'ignored'])
+
+/** Whether a diplomatic note is this player's news: sent to them, or their own act told in the third person (never their own answer). */
+export const newsFor = (d: Dispatch, player: NationId) => d.to === player || (d.from === player && !REPLIES.has(d.kind))
+
 /** How a diplomatic note reads: good news green, bad news red. */
 export const DISPATCH_TONE: Record<Dispatch['kind'], 'info' | 'error' | 'success'> = {
   proposal: 'info',
@@ -251,7 +257,7 @@ export function orderNews(before: GameState | null, after: GameState, own: boole
   if (!before || before.turn !== after.turn) return []
   const player = after.playerId
   const name = (id: NationId) => after.nations[id]?.name ?? id
-  const fresh = after.dispatches.slice(before.dispatches.length).filter((d) => d.to === player || d.from === player)
+  const fresh = after.dispatches.slice(before.dispatches.length).filter((d) => newsFor(d, player))
   const out: OrderNews[] = []
   for (const d of fresh) {
     if (d.kind === 'proposal' && d.from === player) {
