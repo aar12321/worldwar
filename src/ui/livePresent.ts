@@ -239,7 +239,7 @@ export function jointShare(game: GameState, battleId: string, player: NationId):
 /** The line for a member of a joint operation who did not lead it. */
 export function jointLine(j: NonNullable<ReturnType<typeof jointShare>>, place: string): { text: string; good: boolean } {
   const how = j.captured ? `took ${place}` : j.won ? `won the battle for ${place}` : `was repulsed at ${place}`
-  return { text: `${j.bloc}'s joint operation ${how}. You sent ${j.sent.toFixed(1)} divisions and lost ${j.lost.toFixed(1)}.`, good: j.won }
+  return { text: `${j.bloc}'s joint operation ${how}. You sent ${j.sent.toFixed(1)} divisions and ${j.lost < 0.05 ? 'lost none' : `lost ${j.lost.toFixed(1)}`}.`, good: j.won }
 }
 
 /** Answers are written for the side that asked ("Germany accepted your invitation"): the one who answered is not shown its own answer. */

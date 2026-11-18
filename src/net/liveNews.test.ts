@@ -112,6 +112,7 @@ describe('live rooms: offers between friends are news on the day', () => {
     const line = jointLine(j, 'Belgium')
     expect(line.good).toBe(false)
     expect(line.text).toBe("Rhine Accord's joint operation was repulsed at Belgium. You sent 4.9 divisions and lost 1.3.")
+    expect(jointLine({ ...j, won: true, lost: 0.01 }, 'Belgium').text).toMatch(/won the battle for Belgium\. You sent 4\.9 divisions and lost none\.$/)
     // Not a member, or another battle: nothing.
     expect(jointShare(g, 'b263', 'spain')).toBeNull()
     expect(jointShare(g, 'b1', 'germany')).toBeNull()
