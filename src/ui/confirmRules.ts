@@ -1,4 +1,5 @@
 import { BODIES, MISSIONS } from '../data/space'
+import { BLOC } from '../data/blocs'
 import { quote } from '../engine/space'
 import { SOCIAL, SOCIAL_RULES } from '../data/society'
 import { describeOrder } from '../engine/resolveTurn'
@@ -100,6 +101,7 @@ export function confirmFor(game: GameState, map: WorldMap, o: Order): Omit<Pendi
       return asks(`${before - o.level > 1 ? 'Cut' : 'Reduce'} ${SOCIAL[o.policy].name.toLowerCase()}?`, `People will lose it: stability falls by ${(before - o.level) * SOCIAL_RULES.cutStability} at once, and the benefit fades over a few months. Raising it again costs influence again.`, 'Cut it', true)
     }
     case 'factionLeave':
+      if (BLOC.on) return asks('Leave the bloc?', 'You lose its perks and your role, your pledges to its operations are dropped, and the members will think less of you. Your divisions are your own: there is nothing to take back.', 'Leave', true)
       return asks('Leave the faction?', 'You take back what is left of your claim, less the exit fee (or nothing, if the charter forfeits). Soldiers stay in the pool while the faction is at war, and the members will think less of you.', 'Leave', true)
     case 'factionPropose':
       return o.proposal.kind === 'war' ? asks(`Put war on ${name(o.proposal.target)} to the vote?`, 'If the members pass it, every member that can joins the war, and the pooled army attacks. The influence is spent whether or not it passes.', 'Put it to the vote') : null

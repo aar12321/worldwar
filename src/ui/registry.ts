@@ -190,7 +190,7 @@ export const DESKS: DeskDef[] = [
     badge: (c) => (c.game ? c.game.relations?.requests.filter((q) => q.to === c.game!.playerId).length || null : null),
   },
 
-  { id: 'faction', label: 'Faction', hint: 'Votes, the common pool and contracts of your faction', icon: 'faction', key: 'f', group: 'world', order: 65, shell: 'custom', load: lazyOf(() => import('./Faction'), 'FactionPanel'), keywords: ['alliance', 'bloc', 'vote', 'pool', 'contracts', 'members'], badge: (c) => c.factionDue || null },
+  { id: 'faction', label: 'Bloc', hint: 'Your alliance bloc: joint operations, calls to arms, the season objective, perks and roles', icon: 'faction', key: 'f', group: 'world', order: 65, shell: 'custom', load: lazyOf(() => import('./Faction'), 'FactionPanel'), keywords: ['alliance', 'bloc', 'faction', 'operation', 'call to arms', 'objective', 'perks', 'roles', 'members'], badge: (c) => c.factionDue || null },
 
   { id: 'log', label: 'News', hint: 'What has happened lately', icon: 'news', key: 'n', aliases: ['l'], group: 'home', order: 90, nav: false, shell: 'custom', load: lazyOf(() => import('./SidePanels'), 'LogPanel'), keywords: ['log', 'dispatches', 'history', 'events'] },
   { id: 'settings', label: 'Settings', hint: 'Look and feel, controls, saves', icon: 'settings', key: '', group: 'home', order: 91, nav: false, shell: 'custom', load: lazyOf(() => import('./SidePanels'), 'SettingsPanel'), keywords: ['options', 'preferences', 'save', 'load', 'text size', 'contrast'], tabs: SETTINGS_TABS.map(([id, label]) => ({ id, label, hint: `Settings: ${label}` })) },

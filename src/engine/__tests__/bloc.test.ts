@@ -132,7 +132,7 @@ describe('operations', () => {
     expect(r.bonus).toBeCloseTo(BLOC.perMember)
     const report = s.battles.find((b) => b.id === r.battleId)!
     expect(report.modifiers.join(' ')).toMatch(/Bloc operation of Iron Pact/)
-    expect(report.attackerNotes?.join(' ') ?? JSON.stringify(report)).toMatch(/combined arms/)
+    expect(report.modifiers.join(' ')).toMatch(/combined arms of the bloc \(\+8%\)/)
     // Each member is down by exactly what the report says it lost (nothing else touched the armies but the economy's training).
     for (const m of ['r0', 'r1'] as const) expect(before[m] - totalUnits(s.nations[m].military.units)).toBeCloseTo(r.members[m].lost, 5)
     expect(r.won).toBe(true)
