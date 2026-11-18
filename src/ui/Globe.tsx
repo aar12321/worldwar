@@ -60,7 +60,6 @@ function regionColor(game: GameState | null, id: RegionId): string {
   return wash(game.nations[game.regions[id].owner]?.color ?? '#8d6b4a', terrain)
 }
 
-/** What a country's color means in a map mode other than Political. */
 /** The Blocs map: the bloc a nation is in, from where the player stands. */
 function blocColor(game: GameState, owner: string): string {
   const list = game.factions ?? []
@@ -73,6 +72,7 @@ function blocColor(game: GameState, owner: string): string {
   return BLOC_COLORS.others[Math.max(0, order.findIndex((f) => f.id === theirs.id)) % BLOC_COLORS.others.length]
 }
 
+/** What a country's color means in a map mode other than Political. */
 function modeColor(game: GameState, mode: 'relations' | 'fronts' | 'borders' | 'blocs', id: RegionId, neighbors?: Set<string>, palette: 'standard' | 'colorblind' = 'standard'): string {
   const RELATION_COLORS = relationColors(palette)
   const FRONT_COLORS = frontColors(palette)
