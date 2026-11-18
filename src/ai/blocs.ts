@@ -2,14 +2,14 @@ import { BLOC, ROLES } from '../data/blocs'
 import { difficultyOf } from '../data/difficulty'
 import { FACTION } from '../data/factions'
 import { PERSONALITIES } from '../data/personalities'
-import { blocOf, blocPower, joinProblem, leaderOf, sendable } from '../engine/bloc'
+import { blocOf, blocPower, forecastOp, joinProblem, leaderOf, sendable } from '../engine/bloc'
 import { isLive } from '../engine/calendar'
 import { SENDABLE } from '../engine/deploy'
 import { factionName, factionOf } from '../engine/factions'
 import { alliesOf, atWar, enemiesOf, regionsOf, totalUnits } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { createRng } from '../engine/rng'
-import type { BlocRole, GameState, NationId, Order, RegionId, UnitCounts, WorldMap } from '../engine/types'
+import type { BlocRole, Faction, GameState, NationId, Order, RegionId, UnitCounts, WorldMap } from '../engine/types'
 import { canAttackRegion } from '../engine/warfare'
 import { botAcceptsInvite } from './factions'
 import { opinionOf } from './opinion'
@@ -60,16 +60,28 @@ function pledgeOf(s: GameState, id: NationId, share: number): Partial<UnitCounts
   return out
 }
 
-/** The weakest country of the bloc's enemies that a member at war with it can reach. */
-function opTarget(s: GameState, map: WorldMap, members: NationId[], humansOk: (id: NationId) => boolean): RegionId | null {
-  let best: { id: RegionId; line: number } | null = null
+/**
+ * The enemy country the bloc is likeliest to take: the few weakest lines its members at war can reach, each played out with the
+ * divisions the rival members would pledge. Null when none is worth it (odds below `floor`).
+ */
+function opTarget(s: GameState, map: WorldMap, f: Faction, share: number, floor: number, humansOk: (id: NationId) => boolean): RegionId | null {
+  const members = f.members.filter((m) => s.nations[m]?.alive)
+  const options: { id: RegionId; line: number }[] = []
   const enemies = [...new Set(members.flatMap((m) => enemiesOf(s, m)))].filter((e) => !members.includes(e) && s.nations[e]?.alive && humansOk(e)).sort()
   for (const e of enemies) {
     for (const r of regionsOf(s, e).sort()) {
       if (!members.some((m) => atWar(s, m, e) && canAttackRegion(s, map, m, r).ok)) continue
-      const line = s.regions[r].line
-      if (!best || line < best.line) best = { id: r, line }
+      options.push({ id: r, line: s.regions[r].line })
     }
+  }
+  options.sort((a, b) => a.line - b.line || (a.id < b.id ? -1 : 1))
+  let best: { id: RegionId; odds: number } | null = null
+  for (const o of options.slice(0, 3)) {
+    const owner = s.regions[o.id].owner
+    const pledges: Record<NationId, Partial<UnitCounts>> = {}
+    for (const m of members) if (atWar(s, m, owner) && !s.nations[m].territoryOf) pledges[m] = pledgeOf(s, m, share)
+    const odds = forecastOp(s, map, f, { id: 'plan', by: f.founder, target: o.id, enemy: owner, created: s.turn, dday: s.turn + 1, pledges, status: 'planned' }, 8).winChance
+    if (odds >= floor && (!best || odds > best.odds)) best = { id: o.id, odds }
   }
   return best?.id ?? null
 }
@@ -101,7 +113,8 @@ export function blocBotOrders(s: GameState, map: WorldMap, nationId: NationId, t
     const brothers = Object.values(s.nations).filter((n) => n.alive && n.id !== nationId && !n.overlord && foes.some((e) => atWar(s, n.id, e)) && opinionOf(s, map, nationId, n.id, { coalition: false }) >= 0).map((n) => n.id)
     const friends = [...new Set([...alliesOf(s, nationId), ...brothers])].filter((a) => s.nations[a]?.alive && !factionOf(s, a) && !s.nations[a].overlord)
     if (friends.length === 0) return
-    if (!rng.chance((hard ? 0.18 : 0.1) * persona.loyalty * (brothers.length ? 1.5 : 1))) return
+    // Fewer new blocs the more there are: a rival would rather join one.
+    if (!rng.chance(((hard ? 0.18 : 0.1) * persona.loyalty * (brothers.length ? 1.5 : 1)) / (1 + (s.factions?.length ?? 0) / 6))) return
     tryAdd({ type: 'factionFound', nationId, name: factionName(s, nationId) })
     return
   }
@@ -122,7 +135,8 @@ export function blocBotOrders(s: GameState, map: WorldMap, nationId: NationId, t
   }
 
   // Operations: pledge a share of the free divisions to any planned one against an enemy, unless a war of its own needs them at home.
-  const share = (hard ? 0.35 : 0.25) * Math.min(1.3, persona.aggression)
+  // An operation needs a real force to win (a country is defended by its owner's whole army), so a rival sends most of what is free.
+  const share = Math.min(0.9, (hard ? 0.8 : 0.65) * Math.min(1.2, persona.aggression))
   for (const op of b.ops) {
     if (op.status !== 'planned' || op.pledges[nationId]) continue
     const owner = s.regions[op.target]?.owner
@@ -150,7 +164,7 @@ export function blocBotOrders(s: GameState, map: WorldMap, nationId: NationId, t
   // An operation: one at a time for a rival bloc, against the weakest country of an enemy it can reach.
   if (b.ops.some((o) => o.status === 'planned' || o.status === 'marching')) return
   if (!rng.chance((hard ? 0.5 : 0.3) * persona.aggression * diff.aggression)) return
-  const target = opTarget(s, map, f.members.filter((m) => s.nations[m]?.alive), humanOk)
+  const target = opTarget(s, map, f, share, hard ? 0.55 : 0.65, humanOk)
   if (!target) return
   tryAdd({ type: 'blocPlan', nationId, target, when: isLive(s) ? 12 : 1 })
 }

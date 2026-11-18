@@ -134,3 +134,11 @@ export const BORDER_COLORS = { yours: '#1c4a86', neighbor: '#3b4354', other: '#2
 
 /** The color of a border's tension: calm green, through amber, to red. */
 export const tensionColor = (t: number) => (t >= 60 ? '#ff453a' : t >= 35 ? '#ffb340' : '#30d158')
+
+/** The Blocs map: your bloc, blocs at war with it, every other bloc in a color of its own, and nations in none. */
+export const BLOC_COLORS = {
+  yours: '#2f7fe0',
+  enemy: '#d8433a',
+  none: '#3a3f47',
+  others: ['#c9a227', '#8e5bd0', '#2fae7a', '#d07a2f', '#3fb6c9', '#c95b9a', '#7f9a3a', '#a07a5a'],
+}

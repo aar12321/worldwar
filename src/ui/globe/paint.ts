@@ -18,5 +18,6 @@ export function paintSignature(game: GameState | null, mode: MapMode): string {
     for (const id of map.order) out += `${Math.round(game.regions[id].line * 10)}/${Math.round(lineMax(game, map, id) * 10)},`
   }
   if (mode === 'borders') out += `|${borderSignature(game)}`
+  if (mode === 'blocs') out += `|${game.wars.join(',')}|${(game.factions ?? []).map((f) => `${f.id}:${f.members.join('.')}`).join(',')}`
   return out
 }

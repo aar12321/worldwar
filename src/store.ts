@@ -47,7 +47,7 @@ export type { PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'space' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' | 'missiles'
 /** What the globe's colors mean. */
-export type MapMode = 'political' | 'relations' | 'fronts' | 'borders'
+export type MapMode = 'political' | 'relations' | 'fronts' | 'borders' | 'blocs'
 
 export interface PolicyPatch {
   taxRate?: number

@@ -15,7 +15,9 @@ import { computeEconomy, lineMax } from './economy'
 import { cityDevelopCost } from './cities'
 import { difficultyOf } from '../data/difficulty'
 import { FACTION } from '../data/factions'
-import { alliesOf, enemiesOf, hasPact, isAllied, maxWars, puppetsOf, territoriesOf, totalUnits } from './helpers'
+import { BLOC } from '../data/blocs'
+import { joinProblem } from './bloc'
+import { alliesOf, atWar, enemiesOf, hasPact, isAllied, maxWars, puppetsOf, territoriesOf, totalUnits } from './helpers'
 import { factionOf, seatsUsed, votesWaiting } from './factions'
 import { invitablePartners } from './partners'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
@@ -354,9 +356,17 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       target: { desk: 'faction' },
     })
   }
+  // Blocs: a call to arms waiting on you, and an operation against an enemy you are fighting that has no pledge of yours yet.
+  const bloc = BLOC.on ? factionOf(s, nationId) : null
+  if (bloc?.bloc) {
+    const call = bloc.bloc.calls.find((c) => c.by !== nationId && !c.answers[nationId] && c.expires >= s.turn && !joinProblem(s, nationId, c.target) && !pending.some((o) => o.type === 'blocAnswer' && o.callId === c.id))
+    if (call) add('now', 42, { id: 'bloc-call', title: `Call to arms: ${s.nations[call.by]?.name ?? 'a member'} against ${s.nations[call.target]?.name ?? 'a country'}`, detail: `${bloc.name} asks you to join the war. One click on the Bloc desk: Join or Decline. Joining adds ${BLOC.joinPrestige} prestige to the bloc.`, action: 'Answer', target: { desk: 'faction' } })
+    const op = bloc.bloc.ops.find((o) => o.status === 'planned' && !o.pledges[nationId] && atWar(s, nationId, s.regions[o.target]?.owner ?? '') && !pending.some((p) => p.type === 'blocCommit' && p.opId === o.id))
+    if (op) add('soon', 30, { id: 'bloc-op', title: `Pledge divisions to the operation on ${map.regions[op.target]?.name ?? 'an enemy country'}`, detail: `${s.nations[op.by]?.name ?? 'A member'} planned it. Every member that sends divisions makes the joint attack ${Math.round(BLOC.perMember * 100)}% stronger; the spoils go by what each sent.`, action: 'Open Operations', target: { desk: 'faction' } })
+  }
   const invite = (s.factions ?? []).find((f) => !factionOf(s, nationId) && f.invites.some((i) => i.nation === nationId && i.expires >= s.turn))
   if (invite && !pending.some((o) => o.type === 'factionJoin')) {
-    add('soon', 25, { id: 'faction-invite', title: `${invite.name} invited you`, detail: 'Members pool money, materials and soldiers and vote on wars together. You can leave later and take back your share.', action: 'See the invitation', target: { desk: 'faction' } })
+    add('soon', 25, { id: 'faction-invite', title: `${invite.name} invited you`, detail: BLOC.on ? 'A bloc plans joint operations, answers calls to arms together, and earns perks with its objectives. Your army stays your own; you can leave any time.' : 'Members pool money, materials and soldiers and vote on wars together. You can leave later and take back your share.', action: 'See the invitation', target: { desk: 'faction' } })
   }
 
   // Partners you could bring into your faction, or a faction to found with them: the same people the Diplomacy desk lists.
@@ -368,7 +378,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       add('idea', 20, {
         id: 'faction-partner',
         title: `Invite ${them} to your faction`,
-        detail: `${them} is your ${best.relations.includes('ally') ? 'ally' : 'pact partner'} but not in ${myFaction.name}. Members pool money and soldiers and vote on wars together.${best.outlook === 'unlikely' ? ' They are unlikely to say yes yet.' : ''}`,
+        detail: `${them} is your ${best.relations.includes('ally') ? 'ally' : 'pact partner'} but not in ${myFaction.name}. ${BLOC.on ? 'Every member that fights in an operation makes it stronger.' : 'Members pool money and soldiers and vote on wars together.'}${best.outlook === 'unlikely' ? ' They are unlikely to say yes yet.' : ''}`,
         action: 'Open the invitation list',
         target: { desk: 'faction', nation: best.id },
       })
@@ -376,7 +386,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   } else if (!myFaction && !n.overlord) {
     const ally = alliesOf(s, nationId).find((a) => s.nations[a]?.alive && !factionOf(s, a) && !s.nations[a].overlord && (difficultyOf(s.settings.difficulty).coalitions || s.humans.includes(a)))
     if (ally && n.resources.pp >= FACTION.foundInfluence && !pending.some((o) => o.type === 'factionFound')) {
-      add('idea', 2, { id: 'faction-found', title: `Found a faction with ${s.nations[ally].name}`, detail: `You are allied. A faction pools money, oil and soldiers, and the members vote on wars together. It costs ${FACTION.foundInfluence} influence.`, action: 'Open the Faction desk', target: { desk: 'faction', nation: ally } })
+      add('idea', 2, { id: 'faction-found', title: `Found a faction with ${s.nations[ally].name}`, detail: BLOC.on ? `You are allied. A bloc plans joint operations, calls its members to arms with one click and earns perks. It costs ${FACTION.foundInfluence} influence.` : `You are allied. A faction pools money, oil and soldiers, and the members vote on wars together. It costs ${FACTION.foundInfluence} influence.`, action: 'Open the Faction desk', target: { desk: 'faction', nation: ally } })
     }
   }
 

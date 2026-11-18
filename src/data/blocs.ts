@@ -46,7 +46,7 @@ export const BLOC = {
   leaderInfluence: 1,
   /** Objectives: how much is asked. */
   conquer: 2,
-  arsenalGrowth: 0.15,
+  arsenalGrowth: 0.25,
   outmatchRatio: 1.1,
 }
 
