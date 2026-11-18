@@ -65,7 +65,7 @@ function BillRow({ b }: { b: Bill }) {
         <div className="min-w-0">
           <div className="text-[14px] font-semibold">{spec.name}: {spec.options[b.option]?.name}</div>
           <div className="text-[12px] text-white/60">
-            {drafting ? `Drafting: about ${Math.max(1, Math.ceil(b.left / speed))} months left, then the vote` : `${PIPELINE.body[player.government] ?? 'The council'} votes at the end of this month`}
+            {drafting ? `Drafting: about ${Math.max(1, Math.ceil(b.left / speed))} month${Math.max(1, Math.ceil(b.left / speed)) === 1 ? '' : 's'} left, then the vote` : `${PIPELINE.body[player.government] ?? 'The council'} votes at the end of this month`}
           </div>
         </div>
         <span className={`chip shrink-0 ${chance < 0.5 ? 'text-[#ffb340]' : ''}`}>{Math.round(chance * 100)}% to pass</span>

@@ -9,6 +9,7 @@ import { cleanMark } from './monthMark'
 import { POOL_RESOURCES, UNIT_TYPES } from './types'
 import { EVENT_GAP_TURNS, FIRST_EVENT_TURN } from './events'
 import type { GameState, WorldMap } from './types'
+import { cleanCivics } from './civics'
 
 /** Checks a loaded save and fills a few fields, so a damaged or slightly older game can still load. */
 export function normalizeGame(game: GameState, map: WorldMap): GameState {
@@ -45,6 +46,12 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
     n.autoBuy ??= ['food', 'oil', 'goods']
     n.military.attacksThisTurn ??= 0
     n.military.exposed ??= 0
+    // The government desk: repaired if damaged, dropped if it cannot be read. Saves from before it simply have none.
+    if (n.civics !== undefined) {
+      const desk = cleanCivics(n.civics)
+      if (desk) n.civics = desk
+      else delete n.civics
+    }
   }
   for (const r of Object.values(game.regions)) {
     r.cities ??= startingCities(map.regions[r.id])
