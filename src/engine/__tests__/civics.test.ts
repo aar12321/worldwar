@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CABINET, CIVICS, MINISTRIES, PIPELINE, POLICY_AREAS, POLICY_SPECS, PROFESSIONS, SECTORS_ORDER, SERVICE, TALENT, type CivicsAction } from '../../data/civics'
+import { CABINET, CIVICS, GROUPS, GROUPS_RULES, MINISTRIES, PIPELINE, POLICY_AREAS, POLICY_SPECS, PROFESSIONS, SECTORS_ORDER, SERVICE, TALENT, type CivicsAction } from '../../data/civics'
 import { manageCivics } from '../../ai/civics'
 import { opinionReport } from '../../ai/opinion'
 import {
@@ -269,12 +269,16 @@ describe('the policy pipeline', () => {
 
   it('lobbying raises the chance to pass, a council passes more than a parliament, and limits hold', () => {
     const s = game()
+    // A parliament at middling stability, so the chance is well inside its bounds.
+    s.nations.r0.government = 'democracy'
+    s.nations.r0.stability = 50
     applyOrderNow(s, map, civ({ kind: 'draft', area: 'industrial', option: 'strategic' }))
     const n = s.nations.r0
     const bill = n.civics!.bills[0]
     const before = passChance(s, n, bill)
     expect(applyOrderNow(s, map, civ({ kind: 'lobby', bill: bill.id })).error).toBeNull()
-    expect(passChance(s, n, bill)).toBeCloseTo(Math.min(PIPELINE.max, before + PIPELINE.lobbyChance), 9)
+    expect(before).toBeLessThan(PIPELINE.max - PIPELINE.lobbyChance)
+    expect(passChance(s, n, bill)).toBeCloseTo(before + PIPELINE.lobbyChance, 9)
     for (let i = 1; i < PIPELINE.lobbyMax; i++) applyOrderNow(s, map, civ({ kind: 'lobby', bill: bill.id }))
     expect(validateOrder(s, map, civ({ kind: 'lobby', bill: bill.id }))).toMatch(/hard as it can/)
     const chance = (g: GameState['nations'][string]['government']) => passChance(s, { ...n, government: g }, { area: 'industrial', option: 'strategic', lobby: 0 })
@@ -313,8 +317,14 @@ describe('interest groups', () => {
     const s = game()
     s.nations.r0.civics = newCivics()
     for (const id of MINISTRIES) s.nations.r0.civics.cabinet[id] = { ...candidatesFor(s, s.nations.r0, id)[0], ideology: 'hardliner' }
-    const g = civicsEffects(s.nations.r0).parts.find((p) => p.label === 'Interest groups')!.value
-    expect(Math.abs(g)).toBeLessThanOrEqual(25 * 2 * 0.06 * 5 + 1e-9)
+    const eff = civicsEffects(s.nations.r0)
+    const g = eff.parts.find((p) => p.label === 'Interest groups')!.value
+    // Nine hardliners please the military 54 points, but only the capped 25 counts.
+    expect(eff.groups.military).toBe(54)
+    const w = GROUPS_RULES.weight[s.nations.r0.government]
+    const capped = GROUPS.reduce((a, k) => a + Math.max(-GROUPS_RULES.choiceCap, Math.min(GROUPS_RULES.choiceCap, eff.groups[k])) * w[k] * GROUPS_RULES.stabilityPerPoint, 0)
+    expect(g).toBeCloseTo(capped, 12)
+    expect(Math.abs(g)).toBeLessThanOrEqual(GROUPS.reduce((a, k) => a + GROUPS_RULES.choiceCap * w[k] * GROUPS_RULES.stabilityPerPoint, 0))
     const { approval } = groupReport(s, s.nations.r0)
     expect(approval).toBeGreaterThanOrEqual(0)
     expect(approval).toBeLessThanOrEqual(100)
