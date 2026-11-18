@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GameState } from '../engine/types'
-import { friendLine, newsFor, orderNews } from '../ui/livePresent'
+import { friendLine, jointLine, jointShare, newsFor, orderNews } from '../ui/livePresent'
 import { takeoverNote } from '../ui/onlineLiveText'
 import { gameOf, liveRoom, patchAll, type LiveSeat } from './liveHarness'
 
@@ -101,6 +101,20 @@ describe('live rooms: offers between friends are news on the day', () => {
     expect(newsFor(joined, 'germany')).toBe(false)
     // A player's own act told in the third person is still theirs to see.
     expect(newsFor({ kind: 'broken', from: 'germany', to: 'france', proposalKind: 'pact', text: 'Germany tore up its pact with France.' }, 'germany')).toBe(true)
+  })
+
+  it('a bloc member who sent divisions to a joint operation led by a friend hears how it went', () => {
+    const g = {
+      factions: [{ name: 'Rhine Accord', members: ['france', 'germany'], bloc: { ops: [{ result: { battleId: 'b263', won: false, captured: false, members: { france: { sent: 4.9, lost: 1.25 }, germany: { sent: 4.9, lost: 1.25 } } } }] } }],
+    } as unknown as GameState
+    const j = jointShare(g, 'b263', 'germany')!
+    expect(j).toMatchObject({ bloc: 'Rhine Accord', sent: 4.9 })
+    const line = jointLine(j, 'Belgium')
+    expect(line.good).toBe(false)
+    expect(line.text).toBe("Rhine Accord's joint operation was repulsed at Belgium. You sent 4.9 divisions and lost 1.3.")
+    // Not a member, or another battle: nothing.
+    expect(jointShare(g, 'b263', 'spain')).toBeNull()
+    expect(jointShare(g, 'b1', 'germany')).toBeNull()
   })
 
   it('says nothing for orders that bring no diplomatic news, or across a month end', () => {

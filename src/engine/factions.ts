@@ -1120,12 +1120,12 @@ export function factionNews(before: GameState | null, next: GameState, player: N
   for (const g of next.factions ?? []) {
     const inv = g.invites.find((i) => i.nation === player && i.expires >= next.turn)
     const had = before?.factions?.find((x) => x.id === g.id)?.invites.some((i) => i.nation === player)
-    if (inv && !had && !f) out.push(`${next.nations[inv.by]?.name ?? 'A nation'} invited you to join ${g.name}. See the Faction desk.`)
+    if (inv && !had && !f) out.push(`${next.nations[inv.by]?.name ?? 'A nation'} invited you to join ${g.name}. See the ${BLOC.on ? 'Bloc' : 'Faction'} desk.`)
   }
   if (!f) return out
   // Someone asked to come in, and a member can say yes by inviting it.
   for (const r of f.requests ?? []) {
-    if (r.expires >= next.turn && !was?.requests?.some((x) => x.nation === r.nation)) out.push(`${next.nations[r.nation]?.name ?? 'A nation'} asks to join ${f.name}. Invite it from the Faction desk.`)
+    if (r.expires >= next.turn && !was?.requests?.some((x) => x.nation === r.nation)) out.push(`${next.nations[r.nation]?.name ?? 'A nation'} asks to join ${f.name}. Invite it from the ${BLOC.on ? 'Bloc' : 'Faction'} desk.`)
   }
   for (const p of f.proposals) {
     if (p.by === player || p.votes[player]) continue

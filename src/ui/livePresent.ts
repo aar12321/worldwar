@@ -80,7 +80,9 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
     switch (e.kind) {
       case 'battle': {
         const b = e.report
-        const involved = b.attacker.nationId === player || b.defender.nationId === player
+        // A bloc's joint operation fights under its lead member's flag: the others who sent divisions fought it too.
+        const joint = b.attacker.nationId === player ? null : jointShare(game, b.id, player)
+        const involved = b.attacker.nationId === player || b.defender.nationId === player || !!joint
         battleFx(b, involved, game.nations[player]?.color ?? '#fff', settings.reducedMotion)
         if (!involved) break
         mine.push(b)
@@ -99,7 +101,7 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
           const scene = scenesFor(settings.battleScenes, player, [b])
           queue = [...queue, ...scene]
         }
-        const line = battleLine(b, game, player)
+        const line = joint ? jointLine(joint, place(b.regionId)) : battleLine(b, game, player)
         say(line.good ? 'success' : 'error', line.text)
         break
       }
@@ -221,6 +223,23 @@ export function friendLine(after: GameState, order: Order): OrderNews | null {
     default:
       return null
   }
+}
+
+/** This player's part in the joint operation that fought battle `battleId`, if their bloc ran it and they sent divisions. */
+export function jointShare(game: GameState, battleId: string, player: NationId): { bloc: string; won: boolean; captured: boolean; sent: number; lost: number } | null {
+  for (const f of game.factions ?? []) {
+    if (!f.members.includes(player)) continue
+    const r = f.bloc?.ops?.find((o) => o.result?.battleId === battleId)?.result
+    const mine = r?.members[player]
+    if (r && mine) return { bloc: f.name, won: r.won, captured: r.captured, sent: mine.sent, lost: mine.lost }
+  }
+  return null
+}
+
+/** The line for a member of a joint operation who did not lead it. */
+export function jointLine(j: NonNullable<ReturnType<typeof jointShare>>, place: string): { text: string; good: boolean } {
+  const how = j.captured ? `took ${place}` : j.won ? `won the battle for ${place}` : `was repulsed at ${place}`
+  return { text: `${j.bloc}'s joint operation ${how}. You sent ${j.sent.toFixed(1)} divisions and lost ${j.lost.toFixed(1)}.`, good: j.won }
 }
 
 /** Answers are written for the side that asked ("Germany accepted your invitation"): the one who answered is not shown its own answer. */
