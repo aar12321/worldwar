@@ -19,6 +19,8 @@ import { runFalseAlarms, warnAnswer } from './missileDoctrine'
 import { applyBuildWarhead, fireNuke, launchNuke, runNuclear } from './nuclear'
 import { runCoalitions } from './coalition'
 import { applySpace, describeSpace, runSpaceWorld } from './space'
+import { applyCivics, describeCivics } from './civics'
+import { runCivics } from './civicsMonth'
 import { applyDeployment, runDeployment } from './deployment'
 import { applySetAlert, applyShow, runPresence } from './presence'
 import { applySetBorder } from './borders'
@@ -202,6 +204,8 @@ export function describeOrder(s: GameState, map: WorldMap, o: Order): string {
       return `Launch a nuclear missile at ${region(o.target)}`
     case 'space':
       return describeSpace(o.action)
+    case 'civics':
+      return describeCivics(s, o.action)
     case 'setDeployment':
       return 'Post forces on station'
     case 'setBorder':
@@ -312,6 +316,7 @@ const PHASES: Order['type'][][] = [
   ['eventChoice'],
   ['respond'],
   ['setPolicy', 'setPrograms', 'setGovernment', 'enactLaw', 'repealLaw', 'setSocial', 'campaign', 'setGovernor', 'setDirective', 'moveCapital', 'setDeployment', 'setBorder', 'setAlert', 'showOfForce', 'governPuppet'],
+  ['civics'],
   ['cancelDeal', 'leaveAlliance', 'breakPact'],
   ['factionFound', 'factionJoin', 'factionInvite', 'factionRequest'],
   ['factionLeave'],
@@ -459,6 +464,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runFalseAlarms(s, map)
   runCoalitions(s, map, rng)
   runSpaceWorld(s)
+  runCivics(s, map)
   runWorld(s, gross, workforce)
   updateTiers(s)
   recordHistory(s, gross, net)
@@ -778,6 +784,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       break
     case 'space':
       applySpace(s, n, o.action)
+      break
+    case 'civics':
+      applyCivics(s, n, o.action)
       break
     case 'setDeployment':
       applyDeployment(s, map, o)

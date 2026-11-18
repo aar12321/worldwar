@@ -6,6 +6,7 @@ import { projectPower, scaleBonus } from './industry'
 import { societyEffects } from './society'
 import { spaceEffects } from './spaceEffects'
 import { clamp } from './helpers'
+import { civicsEffects } from './civics'
 import type { GameState, MapRegion, Nation, NationId, People, RegionState, SkillKey, Spending, WorldMap } from './types'
 import { SKILL_KEYS } from './types'
 
@@ -103,7 +104,7 @@ export function healthTarget(n: Nation, b: PeopleBasis, doctorCoverage: number):
   for (const t of n.techs) med += MEDICINE[t]?.health ?? 0
   const program = (n.research2?.medicine ?? 0) * PROGRAM_RULES.health
   const centre = scaleBonus(0.05, projectPower(n, 'medCentre'))
-  return clamp(PEOPLE.healthBase + PEOPLE.healthPerLevel * sp.health + hospitals + PEOPLE.healthPerHousing * sp.housing + med + program + centre + 0.2 * b.development + societyEffects(n).social.health + spaceEffects(n).health, 0, 0.98)
+  return clamp(PEOPLE.healthBase + PEOPLE.healthPerLevel * sp.health + hospitals + PEOPLE.healthPerHousing * sp.housing + med + program + centre + 0.2 * b.development + societyEffects(n).social.health + spaceEffects(n).health + (n.civics ? civicsEffects(n).health : 0), 0, 0.98)
 }
 
 /**
@@ -113,22 +114,32 @@ export function healthTarget(n: Nation, b: PeopleBasis, doctorCoverage: number):
 export function schoolingTarget(n: Nation, development = 0.5): number {
   const stage = STAGES[n.programs?.stage ?? 'secondary']
   const level = clamp(Math.round(n.spending?.schools ?? 2), 0, 4)
-  return clamp(stage.cap * PEOPLE.schoolingByLevel[level] * (0.75 + 0.5 * development) + societyEffects(n).social.schooling, 0, 0.98)
+  return clamp(stage.cap * PEOPLE.schoolingByLevel[level] * (0.75 + 0.5 * development) + societyEffects(n).social.schooling + (n.civics ? civicsEffects(n).schooling : 0), 0, 0.98)
+}
+
+/** Why unemployment is heading where it is: each cause and how much it adds (negative is more jobs). They sum, in this order, to the target before it is held to range. */
+export function jobsParts(n: Nation, b: PeopleBasis): { label: string; value: number }[] {
+  const perW = b.buildings / Math.max(0.3, b.workforce)
+  const rate = n.bank?.rate ?? BANKING.neutralRate
+  const retrain = (n.spending?.jobless ?? 1) >= 2 ? PEOPLE.jobsRetrain : 0
+  const parts = [
+    { label: 'Normal turnover', value: PEOPLE.jobsBase },
+    { label: 'Conquered land', value: PEOPLE.jobsPerOccupied * b.occupiedShare },
+    { label: 'Unrest', value: PEOPLE.jobsPerUnrest * Math.max(0, 50 - n.stability) },
+    { label: 'Interest rate', value: PEOPLE.jobsPerRate * (rate - BANKING.neutralRate) },
+    { label: 'Workplaces (buildings per worker)', value: -(PEOPLE.jobsPerBuilding * clamp(perW - 1, -1, 3)) },
+    { label: 'Retraining (generous jobless support)', value: -retrain },
+    { label: 'Programs for the people', value: societyEffects(n).social.jobs },
+  ]
+  // The government desk: the civil service, the labour minister and reforms. Absent without a desk, so the sum is exactly as before.
+  if (n.civics) parts.push({ label: 'Civil service, ministers and reforms', value: civicsEffects(n).jobs })
+  return parts
 }
 
 /** Unemployment the nation is heading toward. */
 export function jobsTarget(n: Nation, b: PeopleBasis): number {
-  const perW = b.buildings / Math.max(0.3, b.workforce)
-  const rate = n.bank?.rate ?? BANKING.neutralRate
-  const retrain = (n.spending?.jobless ?? 1) >= 2 ? PEOPLE.jobsRetrain : 0
-  const v =
-    PEOPLE.jobsBase +
-    PEOPLE.jobsPerOccupied * b.occupiedShare +
-    PEOPLE.jobsPerUnrest * Math.max(0, 50 - n.stability) +
-    PEOPLE.jobsPerRate * (rate - BANKING.neutralRate) -
-    PEOPLE.jobsPerBuilding * clamp(perW - 1, -1, 3) -
-    retrain +
-    societyEffects(n).social.jobs
+  let v = 0
+  for (const p of jobsParts(n, b)) v += p.value
   return clamp(v, PEOPLE.jobsMin, PEOPLE.jobsMax)
 }
 

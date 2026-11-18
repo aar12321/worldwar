@@ -3,6 +3,7 @@ import type { AircraftNodeId } from '../data/aircraft'
 import type { SystemId } from '../data/systems'
 import type { ScenarioGoal } from '../data/scenarios'
 import type { SpaceAction, SpaceState, SpaceWorld } from '../data/space'
+import type { CivicsAction, CivicsState } from '../data/civics'
 import type { Commit, Stance } from '../data/war'
 export type Terrain = 'plains' | 'forest' | 'mountain' | 'desert' | 'urban'
 export type RegionId = string
@@ -452,6 +453,8 @@ export interface Nation {
   projects: Partial<Record<ProjectId, ProjectState>>
   /** The space agency: talent, rockets, flights, labs, outposts. Absent until the first space order, so a nation that never uses it is unchanged. */
   space?: SpaceState
+  /** The government desk: cabinet, civil service, policies in the pipeline (see `engine/civics.ts`). Absent until the first month of a human nation or a bot's first order, so a nation without it is unchanged. */
+  civics?: CivicsState
   /** Cruise, tactical and ballistic missiles in store (hypersonic ones are `military.units.missile`). */
   arsenal?: Partial<Record<MissileType, number>>
   /** The missile program's level, 0 to 3. */
@@ -760,6 +763,7 @@ export type Order =
   | { type: 'nuke'; nationId: NationId; target: RegionId }
   /** Anything the space program does: hire, develop and build rockets, launch missions, run the labs, claim and build on other worlds. Applies at once. */
   | { type: 'space'; nationId: NationId; action: SpaceAction }
+  | { type: 'civics'; nationId: NationId; action: CivicsAction }
   /** Starts an aircraft development (research is paid now, money month by month). */
   | { type: 'startAircraftDev'; nationId: NationId; node: AircraftNodeId }
   /** Puts a development on hold, which frees its slot and its monthly bill, or takes it up again. */
