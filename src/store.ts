@@ -839,6 +839,12 @@ if (typeof document !== 'undefined') {
     session?.setHidden(document.hidden)
     if (document.hidden) persistLive()
   })
+  // A closed tab says goodbye, so a friend takes over the room at once instead of waiting out the host's silence.
+  window.addEventListener('pagehide', (e) => {
+    if (e.persisted || !session) return
+    persistLive()
+    session.leave()
+  })
 }
 
 const ROOM_ERRORS = {

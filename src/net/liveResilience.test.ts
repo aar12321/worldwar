@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { LIVE } from '../data/live'
 import { clockOf } from '../engine/calendar'
 import type { Order } from '../engine/types'
-import { GAP_MS } from './session'
+import { GAP_MS, HOST_GIVE_UP_MS, HOST_TIMEOUT_MS } from './session'
 import { dayOf, gameOf, liveRoom, patchAll, same, settle } from './liveHarness'
 
 const DAY = LIVE.msPerDay
@@ -130,6 +130,50 @@ describe('live rooms: the host goes away', () => {
     expect(b.orders.filter((o) => o.by === 'c')).toHaveLength(1)
     expect(c.s.liveStatus().pending).toBe(0)
     expect(same(room, [b, c])).toBe(true)
+  })
+
+  it('a friend whose line dies without the relay noticing does not crown itself, and comes back to the game as it went on', async () => {
+    const room = await liveRoom(2)
+    const [host, guest] = room.seats
+    start(room)
+    await room.run(2 * DAY)
+    // Cut off both ways while its own line still says "connected", as a phone that lost its signal looks to the relay for a while.
+    room.hub.dropFrom.add('b')
+    room.hub.deaf.add('b')
+    await room.run(30_000)
+    expect(guest.s.isHost).toBe(false)
+    expect(host.s.isHost).toBe(true)
+    const played = dayOf(host)
+    expect(played).toBeGreaterThan(dayOf(guest) + 20)
+    room.hub.dropFrom.delete('b')
+    room.hub.deaf.delete('b')
+    await room.run(6000)
+    await settle(200)
+    await room.run(DAY)
+    // Nothing the host played while the friend was gone is undone.
+    expect(host.s.isHost).toBe(true)
+    expect(guest.s.isHost).toBe(false)
+    expect(dayOf(host)).toBeGreaterThanOrEqual(played)
+    expect(same(room)).toBe(true)
+    expect(guest.s.liveStatus().inSync).toBe(true)
+  })
+
+  it('in a room of two, a host that vanished without a word is replaced once its silence has gone on long enough', async () => {
+    const room = await liveRoom(2)
+    const [host, guest] = room.seats
+    start(room)
+    await room.run(2 * DAY)
+    room.hub.dropFrom.add('host')
+    room.hub.deaf.add('host')
+    await room.run(HOST_TIMEOUT_MS + 3000, [guest])
+    expect(guest.s.isHost).toBe(false)
+    await room.run(HOST_GIVE_UP_MS - HOST_TIMEOUT_MS, [guest])
+    expect(guest.s.isHost).toBe(true)
+    expect(guest.s.clock.running).toBe(true)
+    const at = dayOf(guest)
+    await room.run(2 * DAY, [guest])
+    expect(dayOf(guest)).toBeGreaterThan(at)
+    expect(host.s.isHost).toBe(true)
   })
 
   it('the host that left comes back as an ordinary player and follows the new host', async () => {

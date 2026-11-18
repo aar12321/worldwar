@@ -14,6 +14,13 @@ import type { Transport, TransportStatus } from './transport'
 export const PING_MS = 2500
 export const PEER_TIMEOUT_MS = 9000
 export const HOST_TIMEOUT_MS = 12000
+/**
+ * A host that has gone quiet without saying goodbye is replaced at once only by players who can hear most of the room. A screen
+ * that hears nobody cannot tell whether the host went or its own line did (the relay notices a dead line only after tens of
+ * seconds), so it waits this long before taking over: a phone that lost its signal for half a minute must not come back as a
+ * second host with an older game and roll everyone back to it.
+ */
+export const HOST_GIVE_UP_MS = 45_000
 /** A plan is sent again this often, so a message the network dropped costs a few seconds, not the player's month. */
 export const RESEND_MS = 6000
 /** A screen that finds it is behind asks for the game, but not more often than this. */
@@ -1253,11 +1260,18 @@ export class OnlineSession {
     if (this.hostIsGone(t)) this.electIfFirst()
   }
 
-  /** The host said it was leaving, or has gone quiet for too long. */
+  /** The host said it was leaving, or has gone quiet for too long: long enough, or for long enough with most of the room still here. */
   private hostIsGone(t: number): boolean {
     if (this.hostQuit) return true
-    const seen = this.lobby ? this.seen.get(this.lobby.host) : undefined
-    return seen !== undefined && t - seen > HOST_TIMEOUT_MS
+    const lobby = this.lobby
+    const seen = lobby ? this.seen.get(lobby.host) : undefined
+    if (!lobby || seen === undefined) return false
+    const quiet = t - seen
+    if (quiet > HOST_GIVE_UP_MS) return true
+    if (quiet <= HOST_TIMEOUT_MS) return false
+    const players = lobby.players.filter((p) => !p.clientId.startsWith(OPEN_PREFIX))
+    const here = players.filter((p) => p.clientId !== lobby.host && this.connected(p.clientId)).length
+    return here * 2 > players.length
   }
 
   /**
@@ -1267,6 +1281,8 @@ export class OnlineSession {
   private electIfFirst() {
     const lobby = this.lobby
     if (!lobby || this.isHost || this.transport.status !== 'connected') return
+    // The browser knows its network is gone before the relay does.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return
     if (lobby.phase === 'playing' && !this.game) return
     const candidates = lobby.players.map((p) => p.clientId).filter((id) => id !== lobby.host && !id.startsWith(OPEN_PREFIX) && this.connected(id)).sort()
     if (candidates[0] === this.clientId) this.becomeHost()
