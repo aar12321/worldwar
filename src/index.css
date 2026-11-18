@@ -1052,10 +1052,11 @@ body:has(.drawer) .map-modes {
 }
 
 /* Live games: a panel of armies over the globe, above the map colors. */
+/* Beside the nav rail, as the drawer is: under it, the cards were cut in half. */
 .armies-dock {
   position: absolute;
   z-index: 17;
-  left: 16px;
+  left: 116px;
   bottom: 118px;
   width: 268px;
   max-height: 46vh;

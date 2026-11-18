@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { phoneSlots, splitForPhone } from './navLayout'
 
@@ -37,5 +38,21 @@ describe('splitForPhone', () => {
     expect(s.shown).toHaveLength(5)
     expect(s.more.map((d) => d.id)).not.toContain('d7')
     expect(s.shown.length + s.more.length).toBe(9)
+  })
+})
+
+describe('the desktop layout beside the nav rail', () => {
+  const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
+  /** A px value from the first top-level rule for `selector` in index.css. */
+  const px = (selector: string, prop: string) => {
+    const block = css.match(new RegExp(`^\\${selector} \\{([^}]*)\\}`, 'm'))?.[1] ?? ''
+    return Number(block.match(new RegExp(`\\b${prop}: (\\d+)px`))?.[1])
+  }
+
+  it('the armies dock starts right of the rail, where the drawer does, so its cards are not cut in half', () => {
+    const railEnd = px('.nav-dock', 'left') + px('.nav-dock', 'width')
+    expect(railEnd).toBeGreaterThan(80)
+    expect(px('.armies-dock', 'left')).toBeGreaterThan(railEnd)
+    expect(px('.armies-dock', 'left')).toBe(px('.drawer', 'left'))
   })
 })
