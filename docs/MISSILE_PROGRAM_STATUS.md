@@ -33,11 +33,12 @@ The missile screen is now a program you build and run, on one tab: **Military, M
 
 ## Tests
 
-- `src/engine/__tests__/missileProgram.test.ts` (46): time maths, facilities (charter, tier, one at a time, bill in the economy), talent (cap, shared with space both ways, factory draw, branch speed, chief candidates), development (in-house vs contractor, gates, slots, test roll with both outcomes over seeds, determinism, stand limit, no-test projects, foreign exposure), budget and stall, effects on strikes (range, evade/intercept and forecast agree, harm and hardening, cost/capacity/storage, rounds, caps), production line, live (opens on its day, mid-month finish, countdown and landing, quiet days stay quiet, two runs identical), rivals (poach risk, poaching over 30 months seeded, analysts), screen news, fuzz (28 malformed actions refused without throwing or charging, a human's junk month resolves, 400 random actions), switch-off, data sanity, safe-zone test range on the real map.
+- `src/engine/__tests__/missileProgram.test.ts` (45): time maths, facilities (charter, tier, one at a time, bill in the economy), talent (cap, shared with space both ways, factory draw, branch speed, chief candidates), development (in-house vs contractor, gates, slots, test roll with both outcomes over seeds, determinism, stand limit, no-test projects, foreign exposure), budget and stall, effects on strikes (range, evade/intercept and forecast agree, harm and hardening, cost/capacity/storage, rounds, caps), production line, live (opens on its day, mid-month finish, countdown and landing, quiet days stay quiet, two runs identical), rivals (poach risk, poaching over 30 months seeded, analysts), screen news, fuzz (28 malformed actions refused without throwing or charging, a human's junk month resolves, 400 random actions), switch-off, data sanity, safe-zone test range on the real map.
 - Mutation checks: 17 mutations of the rules (branch speed, budget pace, shared pool, charter cap, failure learning, the roll, stall, poaching, line delivery, foreign exposure, the live wake-up, evasion, range, caps, harm, cost cut, the economy line), each caught by at least one test (script kept out of the repo; rerun by hand-editing the line and running the file).
 - `src/net/missileProgramLive.test.ts` (2): two-player live room; malformed and forged orders change nothing.
-- `src/engine/__tests__/missileProgramSim.test.ts` (SIMS set): 12 Easy months, no programs; 24 Hard months: programs, tests, bill share bounded; Medium modest.
-- Goldens: see turnGolden.test.ts (re-pinned with a switch-off proof: `MPROG.on = false` gives back the previous pins).
+- `src/engine/__tests__/missileProgramSim.test.ts` (SIMS set): 12 Easy months, no programs; 24 Hard months on the real world (seed 5): 13 programs, 18 facility levels, 4 developments in service, 7 tests (4 successes), 47 staff, 3 poached; the worst sustained bill (last six months' average) 8.4% of a rival's income; 24 Medium months: 1 program (an institute). Bounds: Easy none, Hard at least 2 programs and tests, bill under 12% of income.
+- `deployment.test.ts` (its pre-feature hash) switches `MPROG.on` off as it does `RELATIONS.on`; `registry.test.ts` lists the new tab.
+- Goldens: only the Hard-bot world moved (`1719b377e4ad6a` to `6899ffe1eaea4`); the Normal-bot world and the small war did not. Proof: the new test 'the missile program is the only thing that moved the current pins' runs all three with `MPROG.on = false` and gets every previous pin back, and every older layer test is wrapped in `withoutProgram` too.
 
 ## Not done / not verified
 
@@ -48,3 +49,6 @@ The missile screen is now a program you build and run, on one tab: **Military, M
 - Test arcs use the existing missile looks; a test's success or failure has no special impact effect on the globe.
 - Balance is checked by the 24-month sims and the bill-share bounds, not by long human play; the numbers are first guesses in data tables.
 - Two-player online was tested with the in-memory room harness, not across two real browsers.
+- The globe arc of a test is fed to the same flight engine as missiles (`FxOverlay.flightSpecs`), but a screenshot with the clock stepped by hand showed only the launch flash at the capital, not the arc in flight; it was not seen moving in a running browser.
+- Medium rivals found a program rarely (one in 24 months on seed 5); Hard rivals are the visible rivals.
+- Upkeep and salaries are not shown in the Economy desk's forecast breakdown beyond the single "Missile program" line.
