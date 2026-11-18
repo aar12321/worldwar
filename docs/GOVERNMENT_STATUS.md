@@ -58,6 +58,12 @@ Neutral desk changes nothing; switched off, a full desk changes nothing and orde
 
 `turnGolden.test.ts`: the three main pins move (bots now hire ministers and pass reforms, and the human nation carries a desk). Proof, as for every earlier layer: with `CIVICS.on = false` (`withoutCivics`, test "the government desk is the only thing that moved the current pins") the previous pins `1f72167c03ee2`, `1719b377e4ad6a`, `6be372c0f58e4` and the small war's log return exactly; every older layer test now also runs with the desk off (inside `withoutRelations`). And the small war (no bot reaches its desk schedule in three months) hashes to its previous pin once the human's unused desk is taken out: the desk adds only its own field.
 
+New pins: Normal world `48f1aff68a4fa`, Hard world `144ef130064a5b`, small war `d077c31c237c4` (its log `d1dad457aab3c` unchanged). `deployment.test.ts`'s old-world hash switches the desk off beside the relationship layer, as it already did for that layer.
+
+## Runs
+
+`npm run test:fast` 1622 passed (two failures it found, the deployment proof and the value audit of `EMPLOYMENT` keys, were fixed and their files re-run green), `test:golden` 12/12, `test:sims` 113/113, `tsc -b` and `oxlint` clean. Screenshots: `node scripts/gov-shots.mjs` (turns) and `--mode live`, every section at 1440x900 and 390x844, no page errors in either.
+
 ## Not verified / limits
 
 - A real two-browser online game was not played: online safety rests on every change being a normal order (`civics`) checked by `validateOrder` on whoever applies it, candidates derived from the seed (no client-only state), the turn/live parity test and the fuzz.
