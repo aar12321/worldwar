@@ -1,6 +1,6 @@
 import { CABINET, CIVICS, JOBS_HISTORY, MINISTRIES, MINISTRY_SPECS, PIPELINE, POLICY_AREAS, POLICY_SPECS, SECTORS_ORDER, TALENT } from '../data/civics'
 import { computeEconomy } from './economy'
-import { draftSpeed, employmentOf, groupReport, newCivics, passChance } from './civics'
+import { draftSpeed, employmentOf, groupReport, nationPopulation, newCivics, passChance } from './civics'
 import { addLog, clamp } from './helpers'
 import { createRng } from './rng'
 import type { GameState, Nation, WorldMap } from './types'
@@ -40,8 +40,7 @@ function tell(s: GameState, n: Nation, human: boolean, text: string) {
 function civicsMonth(s: GameState, map: WorldMap, n: Nation, human: boolean) {
   const c = n.civics!
   const rng = createRng((s.seed ^ SALT) >>> 0, s.turn * 100003 + hashString(n.id))
-  const e = computeEconomy(s, map, n.id)
-  c.force = Math.max(0.01, e.population * TALENT.participation)
+  c.force = Math.max(0.01, nationPopulation(s, n.id) * TALENT.participation)
   const { approval } = groupReport(s, n)
 
   // Ministers: experience, loyalty, scandals and resignations.
@@ -107,7 +106,7 @@ function civicsMonth(s: GameState, map: WorldMap, n: Nation, human: boolean) {
   }
 
   if (human) {
-    const job = employmentOf(n, e)
+    const job = employmentOf(n, computeEconomy(s, map, n.id))
     c.history.push({ turn: s.turn, force: job.force, sectors: SECTORS_ORDER.map((k) => job.sectors[k]), unemployment: job.rate })
     if (c.history.length > JOBS_HISTORY) c.history.splice(0, c.history.length - JOBS_HISTORY)
   }
