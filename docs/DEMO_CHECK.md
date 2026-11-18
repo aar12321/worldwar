@@ -1,6 +1,6 @@
 # Two-player demo rehearsal (live, then turns)
 
-Rehearsal of tonight's demo on current `main` (merged at `16ded50`), on the **real Supabase relay** (`kind: supabase`), with two
+Rehearsal of tonight's demo on current `main` (merged at `16ded50`, then again after merging `4c1bbd9`: Missile Program tab, Government desk, alliance blocs), on the **real Supabase relay** (`kind: supabase`), with two
 Playwright Chromium contexts on one machine (software GL). Host "Hana" at 1440x900; guest "Bo" at 1440x900, and a second pass with
 the guest at 390x844 (phone). Screenshots are in the session scratchpad (`.../scratchpad/demo/shots/`, names below), not in the repo.
 
@@ -46,14 +46,30 @@ game behaviour do.
 8. Missiles: Military → **Missile War** → Open the program → **Raise to level 1**, **Build** cruise missiles, then strike from the
    country card or War Room. The target gets a purple "Missiles incoming" chip and the salvo report (interceptors, batteries).
    The defender can buy radar / a battery in the same tab.
-9. Military → Theatres / Deployment (one-click postures), Economy → People / Projects / Government / Space tabs: just open them.
-10. Peace: Diplomacy → Make peace (territories, puppet, reparations) once one side is winning.
+9. **Missile Program** (Military → Missile Program), from both seats: the "Next steps" box has *Do it* buttons: found the research
+   institute, hire two rocket engineers, raise the charter to level 1. Pick a development (e.g. Improved motors) with the *Foreign
+   contractor* to be fast, and build the *Engine test stand* the month after (one facility at a time). When the note "Improved motors
+   is ready for its test launch" comes, press **Test launch**: a 3-2-1 countdown, the arc to the sea, "Test launch succeeded … in
+   service. Milestone: First light." on both screens.
+10. **Government** (Economy → Government): *Cabinet* → **Appoint** a minister (Finance is first); *Policies* → **Draft** a reform
+    (e.g. the flat tax: "About 4 months to the vote, 62% to pass now"). Both are instant and show on the friend's screen too.
+11. **Bloc** (nav → Bloc): found it **in the first minute** (it opens on the 1st of next month), invite the friend the month after,
+    the friend joins from their Bloc desk (another month). Then both declare war on a common neighbour (France and Germany: Belgium),
+    and on the Operations tab one member plans an operation (target, D-Day in N days), both **pledge** divisions with the steppers;
+    the card shows "D-Day in 12 days", odds and +8% combined arms. On D-Day the joint force strikes as one; the leader gets the battle
+    and the other member gets "Rhine Accord's joint operation won the battle for Belgium. You sent 4.9 divisions and lost none."
+12. Military → Theatres / Deployment (one-click postures), Economy → People / Projects / Government / Space tabs: just open them.
+13. Peace: Diplomacy → Make peace (territories, puppet, reparations) once one side is winning.
 
 ### Known rough edges (avoid or explain)
 
 * The month end is a short freeze on every screen (the AI plans; ~0.6 s on this loaded machine). At 4× it comes every ~15 s.
   Prefer 2×, especially with a phone.
-* Factions: founding, inviting and joining all wait for the 1st of the next month.
+* Blocs: founding, inviting and joining each wait for the 1st of the next month, so a bloc takes three month ends to stand up
+  (about 45 s at 4×, 90 s at 2×). Found it right after pressing Play. The Bloc found screen does not show that a founding is pending;
+  the order tray and the toast "Found the bloc …: waiting for the 1st" do.
+* Missile Program orders and Government appointments give no toast of their own on the screen that gave them (the guest sees
+  "Sent to the host…"); the tab updates. A second facility while one is building is refused with "A Nation builds one facility at a time".
 * A missile **ceasefire** can only be offered to AI rivals, not to your friend.
 * The Missile War header can still say "Calm · No missiles in the air" while the "In the air" list below shows an incoming salvo
   (the stage label follows world tension, not flights).
@@ -94,6 +110,10 @@ game behaviour do.
 | 21 | Turns mode | Lobby Turns, Ready on both, January resolves, monthly report on both | - | - | 60–65 |
 | 22 | 10-minute live soak at 4× with a war (attacks every minute, 41 game months) | Both screens same checksum at the end; 1 resync on the guest in 10 min; toasts 0–6 per 30 s; JS heap after GC 65 MB at month 42 and 64.5 MB at month 48 (no growth); DOM 350 → 520 nodes as armies and labels grew | - | - | - |
 | 23a | Final re-run on the fixed build (fresh room, France / Germany) | "Germany declared war on you!" (red) on the host; "Germany is marching on France. It arrives 4 January 2026."; peace offer between the humans arrives with **Answer**, which opens Diplomacy at the inbox (Accept / Decline at the top, "This month" news); aircraft development screen opens; War Room "AI Battle Command" at level 3 (dev money and tech, same on both screens) shows the planner, target ranking and auto-command; checksums equal | The attack note first read "against your France" | Reworded to "is marching on" (test in `liveNews.test.ts`) | 70–76 |
+| 24 | Merged `4c1bbd9`, fresh room France / Germany, Missile Program from both seats: Do it ×3 (institute, 2 engineers, charter 1), foreign contractor on Improved motors, test stand the next month, **Test launch** from both | All orders accepted through the host; institute and stand open at month ends on both screens; both tests launched the same day, landed, "Test launch succeeded: Improved motors is in service. Milestone: First light." on both; `mprog` stats equal (1 test, 1 success); checksums equal at every check | A second facility while one builds is refused ("A Nation builds one facility at a time"): by design | - | 80, 81, 89 |
+| 25 | Government from both seats: Cabinet → Appoint (Finance), Policies → Draft (flat tax) | Both ministers and both bills identical on both screens, checksums equal | - | - | 82, 83, 84 |
+| 26 | Bloc: host founds "Rhine Accord" (desk found screen), invites Germany the next month, guest joins from its Bloc desk | Works on both screens over three month ends | Tray/toast said "Found the faction …", "Invite Germany to the faction"; the invite note said "See the Faction desk" (the nav says Bloc); and **the joiner was shown "Germany accepted your invitation to Rhine Accord"** (a note written for the inviter) | Bloc wording when blocs are on (`describeOrder`, `factionNews`; test `blocWords.test.ts`); the one who answered is not shown answers written for the asker (`newsFor`, used by every diplomatic toast; test in `liveNews.test.ts`) | 85–88 |
+| 27 | Both at war with Belgium; host plans a joint operation (D-Day in 12 days), both pledge 4 infantry + 1 tank | Operations tab on both: "D-Day in 12 days (19 April 2026)", odds 58%, force 9.8 div., +8% combined arms, both pledges; the force marched and struck on D-Day; the same result object on both screens | **The guest, who sent half the force, got no word of the battle** (the report is under the leader's flag) | `jointShare`/`jointLine` in `livePresent.ts`: members who sent divisions get "Rhine Accord's joint operation won the battle for Belgium. You sent 4.9 divisions and lost none." (test in `liveNews.test.ts`); re-run on the fixed build (bloc formed through the dev hook identically on both screens, to skip the two month-end waits): seen on the guest, checksums equal | 90–95 |
 | 23 | Engine cost per live day (real map, 2 humans, node) | ordinary day p50 < 1 ms, p95 7 ms; **month end p50 630 ms, max 840 ms** (AI planning, every screen); game state 650 KB | Month-end hitch (not fixed: engine work, out of scope) | Guide recommends 2× | - |
 
 ## Not verified
