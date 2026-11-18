@@ -1,4 +1,4 @@
-import type { ClockRequest, ClockView } from '../net/protocol'
+import type { ClientId, ClockRequest, ClockView, Lobby } from '../net/protocol'
 import type { LiveStatus } from '../net/session'
 import type { OnlineView } from '../store'
 
@@ -31,3 +31,13 @@ export function syncLine(live: LiveStatus | null, connection: OnlineView['connec
   return { text: `In sync${ping}`, tone: live.rttMs !== null && live.rttMs > 400 ? 'warn' : 'ok' }
 }
 
+
+/**
+ * The note for a player whose screen has just taken over a game under way because the host left: the room runs on their
+ * screen now and the clock is theirs. Null when nothing changed hands (the room's creator, a lobby, a host already).
+ */
+export function takeoverNote(before: Lobby | null | undefined, after: Lobby, me: ClientId): string | null {
+  if (!before || before.host === me || after.host !== me || after.phase !== 'playing') return null
+  const gone = before.players.find((p) => p.clientId === before.host)?.name ?? 'The host'
+  return `${gone} left, so the game runs on your screen now. You are the host: the clock is yours.`
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GameState } from '../engine/types'
 import { friendLine, orderNews } from '../ui/livePresent'
+import { takeoverNote } from '../ui/onlineLiveText'
 import { gameOf, liveRoom, patchAll, type LiveSeat } from './liveHarness'
 
 /** What each screen would toast for the orders it has seen since `from`, computed the way the store does it. */
@@ -70,6 +71,23 @@ describe('live rooms: offers between friends are news on the day', () => {
     // Someone else hearing the same order is told who it was against, quietly.
     expect(friendLine({ ...e.state, playerId: 'r2' }, e.order)?.tone).toBe('info')
     expect(friendLine(e.state, { type: 'build', nationId: 'r1', regionId: 'r1', building: 'farm' } as never)).toBeNull()
+  })
+
+  it('the friend whose screen takes over when the host closes the tab is told the clock is theirs now', async () => {
+    const room = await liveRoom(2)
+    const [host, guest] = room.seats
+    const before = structuredClone(guest.s.lobby!)
+    expect(takeoverNote(before, before, 'b')).toBeNull()
+    // The room's creator is never told it "took over".
+    expect(takeoverNote(host.s.lobby, host.s.lobby!, 'host')).toBeNull()
+    host.s.leave()
+    await room.run(1000, [guest])
+    expect(guest.s.isHost).toBe(true)
+    const note = takeoverNote(before, guest.s.lobby!, 'b')
+    expect(note).toMatch(/^Hana left/)
+    expect(note).toMatch(/clock is yours/)
+    // Nor is a lobby that changed host before the game began.
+    expect(takeoverNote(before, { ...guest.s.lobby!, phase: 'lobby' }, 'b')).toBeNull()
   })
 
   it('says nothing for orders that bring no diplomatic news, or across a month end', () => {

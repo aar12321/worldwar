@@ -24,6 +24,7 @@ import { openTransport, type TransportStatus } from './net/transport'
 import { globeBridge, useFx } from './ui/globeBridge'
 import { battleLine, scenesFor } from './ui/battleText'
 import { DISPATCH_TONE, friendLine, orderNews, presentLiveStep } from './ui/livePresent'
+import { takeoverNote } from './ui/onlineLiveText'
 import { speak } from './ui/plain'
 import type { PendingConfirm } from './ui/confirmRules'
 import { applyPrefs, defaultPrefs, migrateSettingsUi, motionReduced, sanitizePrefs, systemReducesMotion, type UiPrefs } from './ui/prefs'
@@ -874,7 +875,11 @@ async function connect(name: string, code: string, role: 'create' | 'join' | 're
     name: clean,
     map: getWorld().map,
     events: {
-      onLobby: (lobby) => patch({ lobby, host: lobby.host === id.clientId, status: lobby.phase === 'playing' ? 'playing' : 'lobby', connecting: false, error: null }),
+      onLobby: (lobby) => {
+        const note = takeoverNote(useGame.getState().online?.lobby, lobby, id.clientId)
+        patch({ lobby, host: lobby.host === id.clientId, status: lobby.phase === 'playing' ? 'playing' : 'lobby', connecting: false, error: null })
+        if (note) useGame.getState().toast(note, 'info', 8000)
+      },
       onHost: (host) => patch({ host }),
       onStart: (state) => {
         if (isLive(state)) return liveStart(state)
