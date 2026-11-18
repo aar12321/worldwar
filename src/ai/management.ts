@@ -115,6 +115,8 @@ export function manageCountry(
   }
 
   spent += manageStatecraft(s, nationId, econ, skill, rng, tryAdd, budget - spent)
+  // A missile program: a small team for a Medium rival, a growing one for a Hard rival (src/ai/missileProgram.ts). Its own random stream.
+  spent += manageMissileProgram(s, nationId, econ, skill, tryAdd, budget - spent)
   if (skill < 2) return spent
 
   // The strongest tier borrows to keep up, repays when rich, invests in friends, and sanctions rivals.
@@ -244,8 +246,6 @@ function manageStatecraft(s: GameState, nationId: NationId, econ: EconomyReport,
 
   // A space program: modest for a Medium rival, serious for a Hard one, always inside what the country can spare.
   spent += manageSpace(s, nationId, econ, skill, tryAdd, budget - spent)
-  // A missile program: a small team for a Medium rival with a missile charter, a growing one for a Hard rival (src/ai/missileProgram.ts).
-  spent += manageMissileProgram(s, nationId, econ, skill, tryAdd, budget - spent)
   return spent
 }
 

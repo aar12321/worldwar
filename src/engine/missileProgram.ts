@@ -38,6 +38,7 @@ import { arsenalSize, buildMissilesCost, programLevel, storageCap } from './miss
 import { ledgerOf } from './missileWar'
 import { branchSpeed, programFx, programStaff, usefulStaff } from './programEffects'
 import { createRng } from './rng'
+import { nationWorkforce } from './economy'
 import type { GameState, LogKind, Nation, NationId, Order, WorldMap } from './types'
 
 /**
@@ -673,10 +674,10 @@ export function runMissileProgram(s: GameState, map: WorldMap) {
       } else delete p.stalled
     }
   }
-  poach(s, nations)
+  poach(s, map, nations)
 }
 
-function poach(s: GameState, nations: Nation[]) {
+function poach(s: GameState, map: WorldMap, nations: Nation[]) {
   for (const n of nations) {
     const p = n.mprog!
     const staff = programStaff(n)
@@ -688,7 +689,10 @@ function poach(s: GameState, nations: Nation[]) {
     const chance = POACH.base * guard * budget * (rivals.length ? 1 : POACH.quiet)
     const roll = rng.next()
     if (roll >= chance) continue
-    const to = [...rivals].sort((a, b) => Number(atWar(s, n.id, b.id)) - Number(atWar(s, n.id, a.id)) || programStaff(b) - programStaff(a) || (a.id < b.id ? -1 : 1))[0]
+    // They go to a working rival program (one with an institute) that has room for them in its own talent pool.
+    const to = [...rivals]
+      .filter((o) => (o.mprog?.fac.institute ?? 0) >= 1 && programTalentCap(o, nationWorkforce(s, map, o.id)) - programStaff(o) >= POACH.heads[1])
+      .sort((a, b) => Number(atWar(s, n.id, b.id)) - Number(atWar(s, n.id, a.id)) || programStaff(b) - programStaff(a) || (a.id < b.id ? -1 : 1))[0]
     settle(s, n, monthEnd(s))
     if (p.chief && p.chief.skill >= 3 && rng.chance(POACH.chief)) {
       const c = p.chief

@@ -17,14 +17,26 @@ import type { Difficulty, GameState } from '../types'
 function play(difficulty: Difficulty, months: number, seed = 5) {
   const { map } = getWorld()
   let s: GameState = createInitialState(map, { playerRegionId: 'poland', seed, difficulty, goal: 'classic', victoryShare: 2 })
-  let worstShare = 0
+  // The bill as a share of income, per nation, over the last six months: a sustained cost, not the one-month spike of a country
+  // that just lost land or took in defectors before its bot sheds staff.
+  const shares = new Map<string, number[]>()
   for (let i = 0; i < months && s.outcome === 'playing'; i++) {
     if (s.pendingEvent) s = applyEventChoice(s, map, 0)
     s = resolveTurn(s, map, [...generateAllBotOrders(s, map), ...generateBotOrders(s, map, s.playerId, false)])
+    if (i < months - 6) continue
     for (const n of Object.values(s.nations)) {
       if (!n.alive || !n.mprog || n.isPlayer) continue
       const gross = computeEconomy(s, map, n.id).gross
-      if (gross > 0) worstShare = Math.max(worstShare, programBill(n).total / gross)
+      if (gross > 0) shares.set(n.id, [...(shares.get(n.id) ?? []), programBill(n).total / gross])
+    }
+  }
+  let worstShare = 0
+  let worstWho = ''
+  for (const [id, list] of shares) {
+    const avg = list.reduce((a, b) => a + b, 0) / list.length
+    if (avg > worstShare) {
+      worstShare = avg
+      worstWho = id
     }
   }
   const programs = Object.values(s.nations).filter((n) => n.mprog && !n.isPlayer)
@@ -40,6 +52,7 @@ function play(difficulty: Difficulty, months: number, seed = 5) {
     poached: sum((n) => n.mprog!.stats.poached),
     maxTests: Math.max(0, ...programs.map((n) => n.mprog!.stats.tests)),
     worstShare,
+    worstWho,
     news: s.log.filter((l) => l.text.startsWith('TEST LAUNCH')).length,
   }
 }
@@ -59,7 +72,7 @@ describe('rivals and the missile program', () => {
     expect(r.successes).toBeGreaterThan(0)
     // No spam: at most a test a month for the busiest, and the bill inside an eighth of income.
     expect(r.maxTests).toBeLessThanOrEqual(24)
-    expect(r.worstShare).toBeLessThan(0.15)
+    expect(r.worstShare).toBeLessThan(0.12)
   }, 600_000)
 
   it('Medium rivals are modest', () => {

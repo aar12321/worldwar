@@ -34,7 +34,6 @@ export function manageMissileProgram(s: GameState, nationId: NationId, econ: Eco
   // Who starts one: a rival with a missile charter, a Hard rival at war, or now and then a rich and restless one.
   const founds = programLevel(n) >= 1 || (skill === 2 && atWar) || (econ.gross >= 40 && econ.netCapital >= 10 && n.resources.capital >= 150 && n.aggression >= 0.2 && rng.chance(skill === 2 ? 0.12 : 0.06))
   if (!p && !founds) return 0
-  if (!rng.chance(skill === 2 ? 0.75 : 0.4)) return 0
   const bill = programBill(n).total
   // A program that has become a burden is put on a lean budget before anything else.
   if (p && (econ.netCapital < 0 || bill > 0.1 * econ.gross) && p.budget > 0.5) {
@@ -47,6 +46,8 @@ export function manageMissileProgram(s: GameState, nationId: NationId, econ: Eco
     if (role) tryAdd({ type: 'missileProgram', nationId, action: { kind: 'dismiss', role, count: Math.min(2, p.staff[role] ?? 0) } })
     return 0
   }
+  // Shedding cost (above) is checked every month; growing the program only on some.
+  if (!rng.chance(skill === 2 ? 0.75 : 0.4)) return 0
   if (econ.netCapital < 8 || bill > (skill === 2 ? 0.08 : 0.05) * econ.gross) return 0
   let orders = skill === 2 ? 2 : 1
   let spent = 0
@@ -79,7 +80,7 @@ export function manageMissileProgram(s: GameState, nationId: NationId, econ: Eco
   const charter = programLevel(n)
   if (orders > 0 && fac('institute') >= 1 && (charter < 1 || (skill === 2 && charter < 2 && done >= 3)) && !fundMissilesProblem(n)) {
     const k = fundMissilesCost(n)
-    if (n.resources.capital - spent > k.capital + 200 && n.resources.tp >= k.tp && tryAdd({ type: 'fundMissiles', nationId })) {
+    if (n.resources.capital - spent > k.capital + 100 && n.resources.tp >= k.tp && tryAdd({ type: 'fundMissiles', nationId })) {
       orders--
       spent += k.capital
     }
@@ -90,8 +91,8 @@ export function manageMissileProgram(s: GameState, nationId: NationId, econ: Eco
     const next = list.find((id) => devStatus(n, id) === 'ready')
     if (next) go({ kind: 'develop', dev: next }, DEVS[next].money)
   }
-  // 4. A Hard rival grows the program: crews, a bureau, analysts, a bigger institute, a plant, a chief designer.
-  if (skill === 2) {
+  // 4. A Hard rival grows the program once the core stands: crews, a bureau, analysts, a bigger institute, a plant, a chief designer.
+  if (skill === 2 && fac('institute') >= 1 && (p?.staff.engineer ?? 0) >= 2) {
     if ((p?.staff.crew ?? 0) < 2 && cap - programStaff(n) >= 1) go({ kind: 'hire', role: 'crew', count: 1 }, 5, 0.6)
     if (fac('bureau') < 1) build('bureau')
     if ((p?.staff.analyst ?? 0) < 1 && cap - programStaff(n) >= 1) go({ kind: 'hire', role: 'analyst', count: 1 }, 7, 0.9)

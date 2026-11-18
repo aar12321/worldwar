@@ -509,6 +509,8 @@ describe('rivals', () => {
       s.nations.r0.mprog!.budget = 0.5
       withDevs(s, 'r1', [])
       s.nations.r1.mprog!.staff.engineer = 1
+      // Defectors go only to a working program (an institute) with room in its own talent pool.
+      s.nations.r1.mprog!.fac.institute = 1
       for (let i = 0; i < 30; i++) s = month(s)
       return s
     }
