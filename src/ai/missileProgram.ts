@@ -37,8 +37,14 @@ export function manageMissileProgram(s: GameState, nationId: NationId, econ: Eco
   if (!rng.chance(skill === 2 ? 0.75 : 0.4)) return 0
   const bill = programBill(n).total
   // A program that has become a burden is put on a lean budget before anything else.
-  if (p && econ.netCapital < 0 && p.budget > 0.5) {
+  if (p && (econ.netCapital < 0 || bill > 0.1 * econ.gross) && p.budget > 0.5) {
     tryAdd({ type: 'missileProgram', nationId, action: { kind: 'budget', level: 0.5 } })
+    return 0
+  }
+  // Still too dear (the country shrank, the war bit): let staff go, the biggest team first.
+  if (p && bill > 0.12 * econ.gross) {
+    const role = (Object.keys(p.staff) as (keyof typeof p.staff)[]).sort((a, b) => (p.staff[b] ?? 0) - (p.staff[a] ?? 0) || (a < b ? -1 : 1))[0]
+    if (role) tryAdd({ type: 'missileProgram', nationId, action: { kind: 'dismiss', role, count: Math.min(2, p.staff[role] ?? 0) } })
     return 0
   }
   if (econ.netCapital < 8 || bill > (skill === 2 ? 0.08 : 0.05) * econ.gross) return 0

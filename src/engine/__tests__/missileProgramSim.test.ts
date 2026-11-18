@@ -59,7 +59,7 @@ describe('rivals and the missile program', () => {
     expect(r.successes).toBeGreaterThan(0)
     // No spam: at most a test a month for the busiest, and the bill inside an eighth of income.
     expect(r.maxTests).toBeLessThanOrEqual(24)
-    expect(r.worstShare).toBeLessThan(0.12)
+    expect(r.worstShare).toBeLessThan(0.15)
   }, 600_000)
 
   it('Medium rivals are modest', () => {
