@@ -23,7 +23,7 @@ import type { LiveStep } from './engine/live'
 import { openTransport, type TransportStatus } from './net/transport'
 import { globeBridge, useFx } from './ui/globeBridge'
 import { battleLine, scenesFor } from './ui/battleText'
-import { DISPATCH_TONE, orderNews, presentLiveStep } from './ui/livePresent'
+import { DISPATCH_TONE, friendLine, orderNews, presentLiveStep } from './ui/livePresent'
 import { speak } from './ui/plain'
 import type { PendingConfirm } from './ui/confirmRules'
 import { applyPrefs, defaultPrefs, migrateSettingsUi, motionReduced, sanitizePrefs, systemReducesMotion, type UiPrefs } from './ui/prefs'
@@ -796,14 +796,9 @@ function liveOrder(e: OrderEvent) {
     return
   }
   // What a friend does, once, in a line. Only the acts that change the war are worth interrupting for.
-  const loud = new Set<Order['type']>(['attack', 'strike', 'nuke', 'declareWar', 'raid', 'recall'])
-  if (!loud.has(e.order.type) || news.length) return
-  const who = e.state.nations[e.nation]?.name ?? e.nation
-  try {
-    st.toast(`${who}: ${describeOrder(st.game ?? game, map, e.order)}`, 'info', 4500)
-  } catch {
-    st.toast(`${who} gave an order.`, 'info', 3000)
-  }
+  if (news.length) return
+  const line = friendLine(game, e.order)
+  if (line) st.toast(line.text, line.tone, line.tone === 'error' ? 7000 : 4500)
 }
 
 /** The clock changed: the screen's own Play button and the armies' glide follow it. */

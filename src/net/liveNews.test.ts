@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GameState } from '../engine/types'
-import { orderNews } from '../ui/livePresent'
+import { friendLine, orderNews } from '../ui/livePresent'
 import { gameOf, liveRoom, patchAll, type LiveSeat } from './liveHarness'
 
 /** What each screen would toast for the orders it has seen since `from`, computed the way the store does it. */
@@ -50,6 +50,26 @@ describe('live rooms: offers between friends are news on the day', () => {
     expect(answer[0].text).toMatch(/accepted/)
     // The one who answered is not told their own answer twice over (their Diplomacy desk shows it).
     expect(newsOf(guest, guestMidSeen, guestMid).every((n) => !n.open)).toBe(true)
+  })
+
+  it("a friend's war reads as news to the one it is aimed at, not as an order to carry out", async () => {
+    const room = await liveRoom(2)
+    const [host, guest] = room.seats
+    patchAll(room, (g) => {
+      for (const n of Object.values(g.nations)) n.resources.pp = 200
+    })
+    const seen = host.orders.length
+    guest.s.sendCommand({ type: 'declareWar', nationId: 'r1', target: 'r0' })
+    await room.run(600)
+    const e = host.orders.slice(seen).find((x) => x.order.type === 'declareWar')!
+    expect(e.own).toBe(false)
+    const line = friendLine(e.state, e.order)!
+    expect(line.tone).toBe('error')
+    expect(line.text).toMatch(/declared war on you!$/)
+    expect(line.text).not.toMatch(/^.*: Declare war/)
+    // Someone else hearing the same order is told who it was against, quietly.
+    expect(friendLine({ ...e.state, playerId: 'r2' }, e.order)?.tone).toBe('info')
+    expect(friendLine(e.state, { type: 'build', nationId: 'r1', regionId: 'r1', building: 'farm' } as never)).toBeNull()
   })
 
   it('says nothing for orders that bring no diplomatic news, or across a month end', () => {

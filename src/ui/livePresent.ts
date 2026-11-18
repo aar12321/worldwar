@@ -5,7 +5,7 @@ import { lineMax } from '../engine/economy'
 import { guessDivisions, hasIntel, showDivisions } from '../engine/intel'
 import { totalUnits } from '../engine/helpers'
 import type { LiveEvent, LiveStep } from '../engine/live'
-import type { Army, BattleReport, Dispatch, GameState, NationId } from '../engine/types'
+import type { Army, BattleReport, Dispatch, GameState, NationId, Order } from '../engine/types'
 import { getWorld } from '../map/world'
 import { battleLine, scenesFor } from './battleText'
 import { useFx } from './globeBridge'
@@ -186,6 +186,37 @@ export function presentLiveStep({ step, player, before, fxQueue, recentBattles, 
   if (lines.success.length) toast(lines.success.length > 2 ? `${lines.success[0]} (and ${lines.success.length - 1} more)` : lines.success.join(' '), 'success', 5000)
   if (lines.info.length) toast(lines.info.length > 2 ? `${lines.info[0]} (and ${lines.info.length - 1} more)` : lines.info.join(' '), 'info', 4000)
   return { fxQueue: queue, recentBattles: recent, mine }
+}
+
+/**
+ * Live games with friends: a friend's warlike order, in one line as this player should hear it ("Germany declared war on you!"),
+ * red when it is aimed at this player. Null for orders that are not worth interrupting for.
+ */
+export function friendLine(after: GameState, order: Order): OrderNews | null {
+  const { map } = getWorld()
+  const me = after.playerId
+  const who = after.nations[order.nationId]?.name ?? order.nationId
+  const place = (id: string) => map.regions[id]?.name ?? id
+  const mine = (region: string) => after.regions[region]?.owner === me
+  switch (order.type) {
+    case 'declareWar':
+      return order.target === me ? { text: `${who} declared war on you!`, tone: 'error' } : { text: `${who} declared war on ${after.nations[order.target]?.name ?? order.target}.`, tone: 'info' }
+    case 'attack': {
+      const army = [...(after.armies ?? [])].reverse().find((a) => a.nationId === order.nationId && a.target === order.target)
+      const when = army ? ` It arrives ${absDate(army.end)}.` : ''
+      return { text: `${who} sent an army against ${mine(order.target) ? 'your ' : ''}${place(order.target)}.${when}`, tone: mine(order.target) ? 'error' : 'info' }
+    }
+    case 'strike':
+      return { text: `${who} fired missiles at ${mine(order.target) ? 'your ' : ''}${place(order.target)}.`, tone: mine(order.target) ? 'error' : 'info' }
+    case 'raid':
+      return { text: `${who} sent bombers against ${mine(order.target) ? 'your ' : ''}${place(order.target)}.`, tone: mine(order.target) ? 'error' : 'info' }
+    case 'nuke':
+      return { text: `${who} launched a nuclear missile at ${mine(order.target) ? 'your ' : ''}${place(order.target)}!`, tone: 'error' }
+    case 'recall':
+      return { text: `${who} called an army back.`, tone: 'info' }
+    default:
+      return null
+  }
 }
 
 /** How a diplomatic note reads: good news green, bad news red. */
