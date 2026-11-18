@@ -10,6 +10,7 @@ import { PRESENCE } from '../../data/presence'
 import { RELATIONS } from '../../data/relations'
 import { MPROG } from '../../data/missileProgram'
 import { CIVICS } from '../../data/civics'
+import { BLOC } from '../../data/blocs'
 import { withOldCombat } from './oldCombat'
 import { withOldMissiles } from './oldMissiles'
 import { withOldWarScore } from './oldWarScore'
@@ -33,7 +34,7 @@ function withoutRelations<T>(fn: () => T): T {
   const on = RELATIONS.on
   RELATIONS.on = false
   try {
-    return withoutCivics(fn)
+    return withoutBlocs(() => withoutCivics(fn))
   } finally {
     RELATIONS.on = on
   }
@@ -47,6 +48,17 @@ function withoutProgram<T>(fn: () => T): T {
     return fn()
   } finally {
     MPROG.on = on
+  }
+}
+
+/** Runs `fn` with the bloc layer (docs/BLOC_STATUS.md: objectives, roles, calls to arms, operations, rivals playing blocs) switched off: factions play as before. */
+function withoutBlocs<T>(fn: () => T): T {
+  const on = BLOC.on
+  BLOC.on = false
+  try {
+    return fn()
+  } finally {
+    BLOC.on = on
   }
 }
 
@@ -120,6 +132,10 @@ function withoutPresence<T>(fn: () => T): T {
  * ministers, size the civil service and pass reforms, and every human nation carries a neutral desk. Checked before pinning: with `CIVICS.on` switched off
  * (`withoutCivics`, 'the government desk is the only thing ...' below; `withoutRelations` now switches it off too, so every older layer keeps its proof) the
  * previous pins (1f72167c03ee2, 1719b377e4ad6a, 6be372c0f58e4) return exactly, and the small war with the human's unused desk taken out hashes to its old pin.
+ * Re-pinned (the Normal and Hard bot worlds; the small war did not move) for blocs (docs/BLOC_STATUS.md): factions became alliance blocs with
+ * objectives, roles, calls to arms and joint operations, and Medium and Hard rivals play them instead of pooling and voting. Checked before
+ * pinning: with `BLOC.on` switched off (`withoutBlocs`, 'blocs are the only thing that moved ...', also wrapped round every earlier layer
+ * test) the previous pins (1f72167c03ee2 and 1719b377e4ad6a) return exactly.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -181,7 +197,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('48f1aff68a4fa')
+    expect(hash(JSON.stringify(s))).toBe('10cf7a356e2bea')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -192,8 +208,8 @@ describe('turn mode resolves exactly as pinned', () => {
     // With that one call switched off the previous hash 'df245a2f24bc9' returns, so nothing else moved.
     // All of presence, the missile war and the combat tuning on; the layers below show what each added.
     // Re-pinned for the missile program (Hard rivals build, hire, develop and test): with it switched off '1719b377e4ad6a' returns (see below).
-    // Missile program + government desk together (each proven alone below).
-    expect(hash(JSON.stringify(s))).toBe('8831350af922a')
+    // Missile program + government desk + blocs together (each proven alone below).
+    expect(hash(JSON.stringify(s))).toBe('11d73d1672f834')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
@@ -263,32 +279,42 @@ describe('turn mode resolves exactly as pinned', () => {
     }))
   }, 400_000)
 
-  it('the missile program is the only other thing that moved the current pins: with it switched off the government-desk pins return', () => {
-    withoutProgram(() => {
+  it('blocs are the only thing that moved the current pins: with the bloc layer switched off the missile-program + desk pins return', () => {
+    withoutBlocs(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('48f1aff68a4fa')
-      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('144ef130064a5b')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('8831350af922a')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('d077c31c237c4')
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
     })
   }, 400_000)
 
+  it('the missile program is the only other thing that moved the current pins: with it switched off the government-desk pins return', () => {
+    withoutBlocs(() => withoutProgram(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('48f1aff68a4fa')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('144ef130064a5b')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('d077c31c237c4')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    }))
+  }, 400_000)
+
   it('the government desk is the only other thing that moved the current pins: with it switched off the missile-program pins return', () => {
-    withoutCivics(() => {
+    withoutBlocs(() => withoutCivics(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('1f72167c03ee2')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('6899ffe1eaea4')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
-    })
+    }))
   }, 400_000)
 
   it('with both the missile program and the government desk switched off the pins from before either return', () => {
-    withoutCivics(() => withoutProgram(() => {
+    withoutBlocs(() => withoutCivics(() => withoutProgram(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('1f72167c03ee2')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1719b377e4ad6a')
       expect(hash(JSON.stringify(smallWar().state))).toBe('6be372c0f58e4')
-    }))
+    })))
   })
 
   it('the desk alone, unused, adds only its own field: the small war with the human desk taken out hashes to its previous pin', () => {

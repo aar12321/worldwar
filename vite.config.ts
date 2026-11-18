@@ -14,6 +14,7 @@ const SIMS = [
   'src/engine/__tests__/balance.test.ts',
   'src/engine/__tests__/economyCurves.test.ts',
   'src/engine/__tests__/simulation.test.ts',
+  'src/engine/__tests__/blocSim.test.ts',
   'src/engine/__tests__/scenarioSim[ABC].test.ts',
   'src/engine/__tests__/warScoreSim.test.ts',
   'src/engine/__tests__/liveBots.test.ts',

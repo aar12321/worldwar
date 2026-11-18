@@ -20,6 +20,7 @@ import { companyEffects, tradeValue, validateDirective, validateTrade } from './
 import { crisisCost, validateCrisisAction } from './crises'
 import { fundSystemCost, missilesLeft, strikeCost, validateFundSystem, validateStrike } from './systems'
 import { FACTION_ORDERS, factionOrderCost, factionProblem, isFactionOrder, sameFaction } from './factions'
+import { BLOC_ORDERS, blocOrderCost, blocProblem, isBlocOrder } from './bloc'
 import { spaceCost, spaceProblem } from './space'
 import { civicsCost, civicsProblem } from './civics'
 import { pauseAircraftDevProblem, startAircraftDevCost, startAircraftDevProblem } from './aircraft'
@@ -51,10 +52,10 @@ import { annexTerritoryCost, commandProblem, forceTradeProblem, ownOrderProblem 
 import { TERRITORY } from '../data/territories'
 
 /** Orders that wait for the month to end. Everything else happens the moment you issue it. */
-export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'forceTrade', 'releaseTerritory', 'annexTerritory', 'operation', 'domestic', 'strike', 'raid', 'nuke', 'eventChoice', ...FACTION_ORDERS])
+export const MONTH_END_ORDERS = new Set<Order['type']>(['setPolicy', 'setPrograms', 'moveCapital', 'researchProgram', 'resolution', 'propose', 'respond', 'research', 'cancelDeal', 'leaveAlliance', 'breakPact', 'buildCase', 'crisisAction', 'annexPuppet', 'governPuppet', 'forceTrade', 'releaseTerritory', 'annexTerritory', 'operation', 'domestic', 'strike', 'raid', 'nuke', 'eventChoice', ...FACTION_ORDERS, ...BLOC_ORDERS])
 
 /** Orders that happen at once in a live game, though a turn game waits for the month to end. */
-const LIVE_NOW = new Set<Order['type']>(['strike', 'raid', 'nuke', 'respond', 'propose'])
+const LIVE_NOW = new Set<Order['type']>(['strike', 'raid', 'nuke', 'respond', 'propose', ...BLOC_ORDERS])
 
 /**
  * Whether an order waits for the month to end in this game. In a live game a missile salvo flies at once, an answer to an offer
@@ -87,6 +88,9 @@ export function undoable(s: Pick<GameState, 'settings'>, o: Order): boolean {
       return isLive(s)
     case 'propose':
     case 'respond':
+    // A call to arms and its answer are war: rivals of Mutual Defence join on the spot in a live game.
+    case 'blocCall':
+    case 'blocAnswer':
       return !isLive(s)
     default:
       return true
@@ -342,6 +346,10 @@ export function orderCost(s: GameState, o: Order): OrderCost {
       c.steel = k.steel
       break
     }
+    case 'blocPlan':
+    case 'blocCall':
+      c.pp = blocOrderCost(o).pp
+      break
     default:
       break
   }
@@ -427,6 +435,7 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
   const own = ownOrderProblem(s, o)
   if (own) return own
   if (isFactionOrder(o)) return factionProblem(s, map, o, pending)
+  if (isBlocOrder(o)) return blocProblem(s, map, o, pending)
   switch (o.type) {
     case 'relate':
       return relationProblem(s, map, o, pending)

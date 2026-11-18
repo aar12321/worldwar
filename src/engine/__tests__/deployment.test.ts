@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { BLOC } from '../../data/blocs'
 import { RELATIONS } from '../../data/relations'
 import { MPROG } from '../../data/missileProgram'
 import { CIVICS } from '../../data/civics'
@@ -901,6 +902,8 @@ describe('a game where nobody stations forces plays as it always did', () => {
     MPROG.on = false
     // So is the government desk (docs/GOVERNMENT_STATUS.md), which came after it.
     CIVICS.on = false
+    // Blocs (docs/BLOC_STATUS.md) move rivals' choices on purpose too; this hash is from before them.
+    BLOC.on = false
     // The war score model (docs/WARSCORE_STATUS.md) adds fields of its own; with the old tally this hash is unchanged.
     const { map } = getWorld()
     let s = createInitialState(map, { playerRegionId: 'poland', seed: 7, difficulty: 'normal', goal: 'classic', victoryShare: 2 })
@@ -919,6 +922,7 @@ describe('a game where nobody stations forces plays as it always did', () => {
     RELATIONS.on = true
     MPROG.on = true
     CIVICS.on = true
+    BLOC.on = true
     expect(hash(JSON.stringify(s))).toBe('103075820c12de')
   }), 300_000)
 })

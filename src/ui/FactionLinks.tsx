@@ -1,5 +1,7 @@
 import { inviteOutlook } from '../ai/factions'
 import { CHARTER_TEXT, FACTION } from '../data/factions'
+import { BLOC } from '../data/blocs'
+import { levelOf } from '../engine/bloc'
 import { factionName, factionOf } from '../engine/factions'
 import { RELATION_TEXT, partnerRelations } from '../engine/partners'
 import { OUTLOOK_TEXT } from './pickerItems'
@@ -10,7 +12,10 @@ import { useGame } from '../store'
 import { OrderButton } from './panel'
 import { useHumanName, usePlayerView } from './hooks'
 
-const charterLine = (f: Faction) => `${CHARTER_TEXT.vote[f.charter.vote]} · ${CHARTER_TEXT.spoils[f.charter.spoils]} · ${CHARTER_TEXT.exit[f.charter.exit]}`
+const charterLine = (f: Faction) => (BLOC.on ? `Bloc level ${levelOf(f.bloc?.xp ?? 0)} · joint operations, calls to arms, perks` : `${CHARTER_TEXT.vote[f.charter.vote]} · ${CHARTER_TEXT.spoils[f.charter.spoils]} · ${CHARTER_TEXT.exit[f.charter.exit]}`)
+/** What the desk calls a faction: a bloc, unless the bloc layer is switched off. */
+const W = BLOC.on ? 'bloc' : 'faction'
+const WD = BLOC.on ? 'Bloc' : 'Faction'
 
 /**
  * Invitations, requests and how they went, for the Diplomacy desk's offers and the Faction desk alike:
@@ -26,7 +31,7 @@ export function FactionNotices({ game, me }: { game: GameState; me: NationId }) 
   if (invited.length + asked.length + askers.length + sent.length === 0) return null
   return (
     <section className="space-y-2" aria-label="Faction invitations">
-      <div className="label text-[#ffd60a]">Faction invitations and requests</div>
+      <div className="label text-[#ffd60a]">{WD} invitations and requests</div>
       {invited.map((g) => {
         const inv = g.invites.find((i) => i.nation === me)!
         return (
@@ -80,22 +85,22 @@ export function FactionRow({ id }: { id: NationId }) {
   const same = !!mine && mine.id === theirs?.id
   const link = (
     <button className="btn btn-quiet px-3 py-1.5 text-[13px] text-[#64d2ff] underline" onClick={() => openFaction(id)}>
-      Open Faction desk
+      Open {WD} desk
     </button>
   )
   // Founding has no target of its own, so the reasons a partner is not a fit are checked here.
-  const foundBlock = !mine && !theirs ? (n.overlord ? `${n.name} is a puppet` : player.overlord ? 'A puppet cannot found a faction' : atWar(game, me, id) ? `You are at war with ${n.name}` : null) : null
+  const foundBlock = !mine && !theirs ? (n.overlord ? `${n.name} is a puppet` : player.overlord ? `A puppet cannot found a ${W}` : atWar(game, me, id) ? `You are at war with ${n.name}` : null) : null
   const odds = mine && !theirs && !human ? inviteOutlook(game, map, id, mine) : null
   const foundOrder = { type: 'factionFound' as const, nationId: me, name: factionName(game, me) }
   return (
-    <div className="rounded-lg bg-black/25 p-2.5 space-y-2" aria-label={`Faction: ${n.name}`}>
+    <div className="rounded-lg bg-black/25 p-2.5 space-y-2" aria-label={`${WD}: ${n.name}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="label">Faction</div>
+          <div className="label">{WD}</div>
           {theirs ? (
             <>
               <div className="text-[14px] font-semibold truncate">
-                {theirs.name} {same && <span className="chip chip-green ml-1">Your faction</span>}
+                {theirs.name} {same && <span className="chip chip-green ml-1">Your {W}</span>}
               </div>
               <div className="text-[12px] text-white/70">
                 {theirs.members.length} member{theirs.members.length === 1 ? '' : 's'}: {theirs.members.map((m) => game.nations[m]?.name).join(', ')}
@@ -120,7 +125,7 @@ export function FactionRow({ id }: { id: NationId }) {
         {mine && !theirs && (
           <OrderButton
             order={{ type: 'factionInvite', nationId: me, target: id }}
-            label="Invite to my faction"
+            label={`Invite to my ${W}`}
             cost="free"
             effect={human ? `${human} sees it when the next month begins` : `They answer when the month ends${odds ? ` (${OUTLOOK_TEXT[odds].text.toLowerCase()})` : ''}`}
             tone="btn-primary"
@@ -129,7 +134,7 @@ export function FactionRow({ id }: { id: NationId }) {
         {!mine && theirs && (
           <OrderButton
             order={{ type: 'factionRequest', nationId: me, factionId: theirs.id }}
-            label="Ask to join their faction"
+            label={`Ask to join their ${W}`}
             cost={`${FACTION.requestInfluence} influence`}
             effect={theirs.members.some((m) => game.humans.includes(m) || game.nations[m]?.isPlayer) ? 'A member who is a player decides' : 'Its members answer when the month ends'}
           />
@@ -137,16 +142,16 @@ export function FactionRow({ id }: { id: NationId }) {
         {!mine && !theirs && !foundBlock && (
           <OrderButton
             order={foundOrder}
-            label="Found a faction with them"
+            label={`Found a ${W} with them`}
             cost={`${FACTION.foundInfluence} influence`}
-            effect="You found it when the month ends, then invite them from the Faction desk"
+            effect={`You found it when the month ends, then invite them from the ${WD} desk`}
             onDone={() => useGame.setState({ factionFocus: id })}
           />
         )}
         {link}
       </div>
-      {foundBlock && <p className="text-[12px] text-[#ffb4ae]">Cannot found a faction with them: {foundBlock}.</p>}
-      {mine && theirs && !same && <p className="text-[12px] text-white/65">You are in different factions. Leave yours on the Faction desk to join theirs.</p>}
+      {foundBlock && <p className="text-[12px] text-[#ffb4ae]">Cannot found a {W} with them: {foundBlock}.</p>}
+      {mine && theirs && !same && <p className="text-[12px] text-white/65">You are in different {W}s. Leave yours on the {WD} desk to join theirs.</p>}
       {mine && !theirs && relations.length === 0 && !human && odds === 'unlikely' && <p className="text-[12px] text-white/60">They do not know you well enough to say yes to this yet.</p>}
     </div>
   )

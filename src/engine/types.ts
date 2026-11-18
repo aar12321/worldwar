@@ -803,6 +803,16 @@ export type Order =
   | { type: 'factionWithdraw'; nationId: NationId; gift: FactionGift }
   | { type: 'factionPropose'; nationId: NationId; proposal: FactionProposalDraft }
   | { type: 'factionVote'; nationId: NationId; proposalId: string; vote: 'yes' | 'no' }
+  /** Blocs (docs/BLOC_STATUS.md): take a role, choose the season's objective, call the bloc to arms, answer a call, plan a joint operation, pledge forces to it, call it off, write in the feed. */
+  | { type: 'blocRole'; nationId: NationId; role: BlocRole | null }
+  | { type: 'blocGoal'; nationId: NationId; goal: BlocGoalKind; target?: NationId }
+  | { type: 'blocCall'; nationId: NationId; target: NationId }
+  | { type: 'blocAnswer'; nationId: NationId; callId: string; join: boolean }
+  /** `when`: months from now to D-Day in a turn game (1 to 3), days from now in a live game. */
+  | { type: 'blocPlan'; nationId: NationId; target: RegionId; when: number }
+  | { type: 'blocCommit'; nationId: NationId; opId: string; units: Partial<UnitCounts> }
+  | { type: 'blocCancel'; nationId: NationId; opId: string }
+  | { type: 'blocChat'; nationId: NationId; text: string }
   /** Relationships: a state visit, an embassy, aid, a joint venture, a joint war plan and the rest (src/engine/relations.ts). Happens at once for a player; a rival's runs with the month's orders. */
   | RelateOrder
   /** Online: this player's answer to the decision waiting for them (`GameState.pendingEvents`). */
@@ -1274,6 +1284,11 @@ export interface Army {
    * fights with. It never joins a nation's military and cannot be recalled.
    */
   faction?: { id: string; war: string; base: UnitCounts }
+  /**
+   * Set on a bloc operation's joint army (live games): the divisions each member sent. They left the members' militaries at launch; what
+   * comes home is shared back to them in the same proportions. `nationId` is the member whose border it set out over.
+   */
+  op?: { id: string; bloc: string; from: Record<NationId, UnitCounts>; bonus: number }
 }
 
 /**
@@ -1505,7 +1520,102 @@ export interface Faction {
   /** The pooled army could not be fed or fuelled last month, so it fights at reduced strength. */
   short?: { oil?: boolean; food?: boolean }
   /** What happened lately: votes, wars, contracts, members. */
-  history: { turn: number; text: string }[]
+  history: { turn: number; text: string; by?: NationId; kind?: BlocFeedKind }[]
+  /** The bloc layer (docs/BLOC_STATUS.md): prestige, roles, the season's objective, calls to arms and operations. Absent until the bloc rules first run for it. */
+  bloc?: BlocState
+}
+
+// ---- Blocs: the faction as an alliance with objectives, perks, roles and joint operations ----
+
+export type BlocRole = 'arsenal' | 'shield' | 'breadbasket' | 'spymaster'
+export type BlocGoalKind = 'conquer' | 'hold' | 'arsenal' | 'strike' | 'grow' | 'defend' | 'outmatch'
+export type BlocFeedKind = 'chat' | 'op' | 'goal' | 'call' | 'level' | 'member'
+
+/** The season's shared objective, with what it is measured against. */
+export interface BlocGoal {
+  kind: BlocGoalKind
+  /** A member to defend, or the rival bloc's founder to outmatch. */
+  target?: NationId
+  since: number
+  /** The last month it can be done in. */
+  until: number
+  /** What it started from: countries of the members, their strength, their number. */
+  base: number
+  /** The members when it began. */
+  members: NationId[]
+  /** Hold and defend: set when a country was lost. */
+  broken?: boolean
+  /** Strike: an operation won. */
+  hits?: number
+}
+
+/** A call to arms: join a member's war against `target`, with one click. */
+export interface BlocCall {
+  id: string
+  by: NationId
+  target: NationId
+  /** Made by the rules when a member was attacked or went to war, not by an order. */
+  auto?: boolean
+  created: number
+  /** The last month it can be answered in. */
+  expires: number
+  answers: Record<NationId, 'join' | 'decline'>
+}
+
+export interface BlocOpMember {
+  /** Divisions sent, and lost. */
+  sent: number
+  lost: number
+  /** Share of the force's strength. */
+  share: number
+}
+
+/** How an operation ended. */
+export interface BlocOpResult {
+  won: boolean
+  captured: boolean
+  battleId?: string
+  turn: number
+  day?: number
+  /** Who led it over its border: the force fought with its training. */
+  lead: NationId
+  bonus: number
+  members: Record<NationId, BlocOpMember>
+  /** Who got the country, and the money split. */
+  owner?: NationId
+  spoils?: Record<NationId, number>
+  /** Why it did not fight. */
+  failed?: string
+}
+
+/** A joint operation: a target, a D-Day, and what each member pledges from its own army. */
+export interface BlocOp {
+  id: string
+  by: NationId
+  target: RegionId
+  /** Who held the target when it was planned. */
+  enemy: NationId
+  created: number
+  /** A turn game: the month whose end it fights in. A live game: the absolute day it should arrive. */
+  dday: number
+  pledges: Record<NationId, Partial<UnitCounts>>
+  status: 'planned' | 'marching' | 'done' | 'cancelled'
+  armyId?: string
+  result?: BlocOpResult
+}
+
+export interface BlocState {
+  /** Prestige: objectives, wins and calls answered raise it, and it unlocks perks. */
+  xp: number
+  roles: Partial<Record<NationId, BlocRole>>
+  goal?: BlocGoal
+  /** Objectives completed, and failed. */
+  done: number
+  failed: number
+  calls: BlocCall[]
+  ops: BlocOp[]
+  /** What each member has done for the bloc, for the members list. */
+  record: Record<NationId, { ops: number; sent: number; joined: number }>
 }
 
 /** A nuclear program: warheads built, and the turns the ones under construction are done. */

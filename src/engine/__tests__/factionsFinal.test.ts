@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeAll, afterAll } from 'vitest'
 import { generateAllBotOrders, generateBotOrders } from '../../ai/bot'
 import { botContractVote } from '../../ai/factions'
 import { addOpinion } from '../../ai/opinion'
@@ -12,6 +12,16 @@ import { createRng } from '../rng'
 import { marketPrices } from '../trade'
 import type { Faction, FactionGift, FactionProposal, GameState, NationId, Order } from '../types'
 import { giveRegions, lineMap, setMilitary, startState } from './fixtures'
+import { BLOC } from '../../data/blocs'
+// These tests pin the legacy faction rules (the common pool, votes, the pooled army). They still run, with the bloc layer switched off,
+// which is the switch-off proof of docs/BLOC_STATUS.md; the bloc rules themselves are in bloc*.test.ts.
+beforeAll(() => {
+  BLOC.on = false
+})
+afterAll(() => {
+  BLOC.on = true
+})
+
 
 const map = lineMap(8)
 
