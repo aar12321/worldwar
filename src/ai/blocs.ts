@@ -66,15 +66,16 @@ function pledgeOf(s: GameState, id: NationId, share: number): Partial<UnitCounts
  */
 function opTarget(s: GameState, map: WorldMap, f: Faction, share: number, floor: number, humansOk: (id: NationId) => boolean): RegionId | null {
   const members = f.members.filter((m) => s.nations[m]?.alive)
-  const options: { id: RegionId; line: number }[] = []
+  const options: { id: RegionId; line: number; power: number }[] = []
   const enemies = [...new Set(members.flatMap((m) => enemiesOf(s, m)))].filter((e) => !members.includes(e) && s.nations[e]?.alive && humansOk(e)).sort()
   for (const e of enemies) {
     for (const r of regionsOf(s, e).sort()) {
       if (!members.some((m) => atWar(s, m, e) && canAttackRegion(s, map, m, r).ok)) continue
-      options.push({ id: r, line: s.regions[r].line })
+      options.push({ id: r, line: s.regions[r].line, power: militaryPower(s, e) })
     }
   }
-  options.sort((a, b) => a.line - b.line || (a.id < b.id ? -1 : 1))
+  // The weakest enemy first (its whole army defends), then the weakest line.
+  options.sort((a, b) => a.power - b.power || a.line - b.line || (a.id < b.id ? -1 : 1))
   let best: { id: RegionId; odds: number } | null = null
   for (const o of options.slice(0, 6)) {
     const owner = s.regions[o.id].owner

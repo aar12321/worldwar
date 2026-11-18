@@ -319,9 +319,12 @@ function PledgeForm({ g, op, me, orders }: { g: GameState; op: BlocOp; me: Natio
   const atWarNow = atWar(g, me, g.regions[op.target]?.owner ?? '')
   return (
     <div className="rounded-xl bg-black/30 p-3 space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[14.5px] font-semibold">Your pledge</span>
-        <span className="text-[12.5px] text-white/70">{num(total, 1)} divisions · they stay home until the force sets out</span>
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[14.5px] font-semibold">Your pledge</span>
+          <span className="text-[14px] font-semibold tabular-nums text-[#8ec5ff]">{num(total, 1)} div.</span>
+        </div>
+        <p className="text-[12px] text-white/60">From your own army. They stay home until the force sets out.</p>
       </div>
       {!atWarNow && <p className="text-[12.5px] text-[#ffd60a]">You are not at war with {nm(g, g.regions[op.target]?.owner ?? op.enemy)}: your pledge only counts if you are by D-Day.</p>}
       {kinds.length === 0 && <p className="text-[13px] text-white/65">You have no free divisions to send.</p>}
@@ -338,12 +341,22 @@ function PledgeForm({ g, op, me, orders }: { g: GameState; op: BlocOp; me: Natio
   )
 }
 
-function OpCard({ g, f, op, me, orders }: { g: GameState; f: Faction; op: BlocOp; me: NationId; orders: Order[] }) {
+function OpCard({ g, f, op: real, me, orders }: { g: GameState; f: Faction; op: BlocOp; me: NationId; orders: Order[] }) {
   const { map } = getWorld()
+  // A pledge queued for the month's end already counts in what the card shows.
+  const queued = orders.find((o): o is Extract<Order, { type: 'blocCommit' }> => o.type === 'blocCommit' && o.opId === real.id)
+  const op = useMemo<BlocOp>(() => {
+    if (!queued) return real
+    const pledges = { ...real.pledges }
+    if (Object.values(queued.units).some((v) => (v ?? 0) > 0)) pledges[me] = queued.units
+    else delete pledges[me]
+    return { ...real, pledges }
+  }, [real, queued, me])
   const fc = useMemo(() => forecastOp(g, map, f, op), [g, map, f, op])
   const owner = g.regions[op.target]?.owner ?? op.enemy
   const army = op.armyId ? g.armies?.find((a) => a.id === op.armyId) : undefined
   const pledged = Object.keys(op.pledges).sort()
+  const odds = fc.winChance
   const canCancel = op.status === 'planned' && (op.by === me || leaderOf(f) === me)
   const arrive = army ? army.end - clockOf(g) : 0
   return (
@@ -361,7 +374,7 @@ function OpCard({ g, f, op, me, orders }: { g: GameState; f: Faction; op: BlocOp
       </div>
       {op.status === 'planned' && (
         <div className="grid grid-cols-3 gap-2">
-          <StatTile label="Odds today" value={fc.lead ? pct(fc.winChance) : '—'} tone={fc.winChance >= 0.65 ? 'good' : fc.winChance >= 0.4 ? 'warn' : 'bad'} sub={fc.lead ? `led by ${nm(g, fc.lead)}` : 'nobody can lead it yet'} />
+          <StatTile label="Odds today" value={fc.lead ? pct(odds) : '—'} tone={odds >= 0.65 ? 'good' : odds >= 0.4 ? 'warn' : 'bad'} sub={fc.lead ? `led by ${nm(g, fc.lead)}` : 'nobody can lead it yet'} />
           <StatTile label="Force" value={`${num(fc.divisions, 1)} div.`} sub={`${fc.fighters.length} member${fc.fighters.length === 1 ? '' : 's'}`} />
           <StatTile label="Combined arms" value={`+${pct(fc.bonus)}`} sub={`+${pct(BLOC.perMember)} a member`} tone={fc.bonus > 0 ? 'good' : undefined} />
         </div>
@@ -377,7 +390,8 @@ function OpCard({ g, f, op, me, orders }: { g: GameState; f: Faction; op: BlocOp
           ))}
         </div>
       </div>
-      {op.status === 'planned' && f.members.includes(me) && <PledgeForm key={`${op.id}-${JSON.stringify(op.pledges[me] ?? {})}`} g={g} op={op} me={me} orders={orders} />}
+      {op.status === 'planned' && fc.lead && odds < 0.4 && <p className="text-[12.5px] text-[#ffd08a]">A country is defended by its owner's whole army: pledge more divisions, or bring in more members, before D-Day.</p>}
+      {op.status === 'planned' && f.members.includes(me) && <PledgeForm key={`${real.id}-${JSON.stringify(real.pledges[me] ?? {})}`} g={g} op={real} me={me} orders={orders} />}
       {canCancel && <OrderButton order={{ type: 'blocCancel', nationId: me, opId: op.id }} label="Call it off" tone="btn-quiet" effect="Pledges are released" />}
     </div>
   )
