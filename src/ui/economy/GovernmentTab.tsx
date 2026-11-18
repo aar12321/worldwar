@@ -1,16 +1,158 @@
+import { useState } from 'react'
 import { ELECTION, GOVERNMENTS, GOVERNMENT_TYPES, REFORM } from '../../data/government'
 import { EMPIRE_RULES } from '../../data/empire'
 import { LAW_SPECS } from '../../data/unitTypes'
+import { GROUP_SPECS, MINISTRIES, MINISTRY_SPECS, PIPELINE, POLICY_AREAS, POLICY_SPECS, PROFESSION_SPECS, SERVICE } from '../../data/civics'
 import { lawConflict, lawSlots, tierOf } from '../../engine/empire'
 import { electionNeed } from '../../engine/people'
 import { monthsToElection } from '../../engine/politics'
+import { civicsEffects, employmentOf, groupReport, passChance, talentReport } from '../../engine/civics'
 import type { LawId } from '../../engine/types'
 import { usePlayerView } from '../hooks'
-import { OrderButton } from '../panel'
-import { Card } from './parts'
+import { pct } from '../format'
+import { StatTile, Tiles } from '../kit'
+import { OrderButton, Tabs } from '../panel'
+import { Card, Line } from './parts'
+import { CabinetSection } from './government/Cabinet'
+import { GroupsSection } from './government/Groups'
+import { JobsSection } from './government/Jobs'
+import { PoliciesSection } from './government/Policies'
+import { TalentSection } from './government/Talent'
+import { millions, people } from './government/words'
+
+type Section = 'command' | 'cabinet' | 'talent' | 'jobs' | 'policies' | 'groups' | 'constitution'
+
+const SECTIONS: [Section, string][] = [
+  ['command', 'Overview'],
+  ['cabinet', 'Cabinet'],
+  ['talent', 'Talent'],
+  ['jobs', 'Jobs'],
+  ['policies', 'Policies'],
+  ['groups', 'Groups'],
+  ['constitution', 'Laws'],
+]
+
+/** The section last open, so coming back to the tab lands where the player left it. */
+let lastSection: Section = 'command'
+
+/**
+ * The government as a command view: the cabinet and its candidates, the nation's talent and who uses it, jobs and employment, the
+ * policy pipeline, the interest groups, and the form of government with its laws. Every change is an order (`civics`), so it runs the
+ * same in a turn game, a live game and online.
+ */
+export function GovernmentTab() {
+  const view = usePlayerView()!
+  const { game, player, econ } = view
+  const [section, setSectionState] = useState<Section>(lastSection)
+  const setSection = (s: Section) => {
+    lastSection = s
+    setSectionState(s)
+  }
+  const filled = MINISTRIES.filter((id) => player.civics?.cabinet[id]).length
+  const { approval } = groupReport(game, player)
+  const job = employmentOf(player, econ)
+  const short = talentReport(player, econ).filter((r) => r.coverage < 1).length
+  const bills = player.civics?.bills.length ?? 0
+  return (
+    <section className="econ-grid">
+      <Tiles compact>
+        <StatTile label="Approval" value={`${Math.round(approval)}%`} tone={approval < 40 ? 'bad' : approval > 60 ? 'good' : undefined} sub={`stability ${Math.round(player.stability)}%`} />
+        <StatTile label="Cabinet" value={`${filled} of ${MINISTRIES.length}`} sub={filled ? 'ministers in office' : 'no ministers yet'} tone={filled === 0 ? 'warn' : undefined} />
+        <StatTile label="Unemployment" value={pct(job.rate, 1)} tone={job.rate > 0.1 ? 'bad' : job.rate > 0.07 ? 'warn' : 'good'} sub={`${millions(job.unemployed)} of ${millions(job.force)}`} />
+        <StatTile label="Civil service" value={SERVICE.levels[player.civics?.service ?? SERVICE.standard]} sub={`${millions(job.sectors.public)} public jobs`} />
+        <StatTile label="Talent short" value={short ? `${short} ${short === 1 ? 'kind' : 'kinds'}` : 'None'} tone={short ? 'warn' : 'good'} sub="see Talent" />
+        <StatTile label="Bills" value={`${bills} of ${PIPELINE.maxBills}`} sub={bills ? 'in the pipeline' : 'nothing drafting'} />
+      </Tiles>
+      <div className="span-all">
+        <Tabs value={section} onChange={setSection} options={SECTIONS} label="Government sections" />
+      </div>
+      {section === 'command' && <CommandSection go={setSection} />}
+      {section === 'cabinet' && <CabinetSection />}
+      {section === 'talent' && <TalentSection />}
+      {section === 'jobs' && <JobsSection />}
+      {section === 'policies' && <PoliciesSection />}
+      {section === 'groups' && <GroupsSection />}
+      {section === 'constitution' && <ConstitutionSection />}
+    </section>
+  )
+}
+
+/** One screen of the whole desk, each card leading to its section. */
+function CommandSection({ go }: { go: (s: Section) => void }) {
+  const { game, player, econ } = usePlayerView()!
+  const c = player.civics
+  const rows = talentReport(player, econ)
+  const { groups } = groupReport(game, player)
+  const eff = civicsEffects(player)
+  const job = employmentOf(player, econ)
+  const salaries = -(econ.lines.find((l) => l.label === 'Cabinet salaries')?.amount ?? 0)
+  const open = (s: Section, label: string) => (
+    <button className="btn btn-quiet shrink-0" onClick={() => go(s)}>
+      {label}
+    </button>
+  )
+  const reforms = POLICY_AREAS.filter((a) => c?.policies[a])
+  return (
+    <>
+      <Card title="Cabinet" hint="Ministers chosen from candidates. Each delivers by competence and costs a salary." right={open('cabinet', 'Hire')}>
+        <div className="flex flex-wrap gap-1.5">
+          {MINISTRIES.map((id) => {
+            const m = c?.cabinet[id]
+            return (
+              <span key={id} className={`chip ${m ? '' : 'opacity-60'}`} title={m ? `${m.name}, competence ${Math.round(m.competence)}` : 'Vacant'}>
+                {MINISTRY_SPECS[id].name}: {m ? (m.name.split(' ')[1] ?? m.name) : 'vacant'}
+              </span>
+            )
+          })}
+        </div>
+        <div className="text-[13px] text-white/70">
+          Stability from the desk {eff.stability >= 0 ? '+' : ''}
+          {eff.stability.toFixed(1)} · salaries {salaries.toFixed(1)} a month
+        </div>
+      </Card>
+      <Card title="Jobs and employment" hint="The labour force, who works where and the civil service." right={open('jobs', 'Details')}>
+        <div className="text-[14px] space-y-1">
+          <Line k="Labour force" v={millions(job.force)} />
+          <Line k="Employed" v={`${millions(job.employed)} (${pct(1 - job.rate, 1)})`} />
+          <Line k="Public sector" v={millions(job.sectors.public)} />
+          <Line k="Out of work" v={`${millions(job.unemployed)} (${pct(job.rate, 1)})`} warn={job.rate > 0.07} />
+        </div>
+      </Card>
+      <Card title="Talent" hint="Professionals, the least staffed first." right={open('talent', 'Details')}>
+        <div className="text-[14px] space-y-1">
+          {[...rows]
+            .sort((a, b) => a.coverage - b.coverage)
+            .slice(0, 4)
+            .map((r) => (
+              <Line key={r.profession} k={PROFESSION_SPECS[r.profession].name} v={`${people(r.pool)} · ${Math.round(r.coverage * 100)}% staffed`} warn={r.coverage < 1} />
+            ))}
+        </div>
+      </Card>
+      <Card title="Policies" hint={`Drafting, the vote in ${PIPELINE.body[player.government] ?? 'the council'}, then phasing in.`} right={open('policies', 'Draft')}>
+        <div className="text-[14px] space-y-1">
+          {(c?.bills ?? []).map((b) => (
+            <Line key={b.id} k={`${POLICY_SPECS[b.area].name}: ${POLICY_SPECS[b.area].options[b.option]?.name}`} v={b.stage === 'drafting' ? 'drafting' : `vote, ${Math.round(passChance(game, player, b) * 100)}%`} />
+          ))}
+          {reforms.map((a) => {
+            const p = c!.policies[a]!
+            return <Line key={a} k={POLICY_SPECS[a].name} v={`${POLICY_SPECS[a].options[p.option]?.name}${p.phase < 1 ? ` (${Math.round(p.phase * 100)}%)` : ''}`} />
+          })}
+          {!(c?.bills.length || reforms.length) && <p className="text-white/60">No reforms yet.</p>}
+        </div>
+      </Card>
+      <Card title="Interest groups" hint="Who is pleased and who is not." right={open('groups', 'Details')}>
+        <div className="text-[14px] space-y-1">
+          {groups.map((g) => (
+            <Line key={g.id} k={GROUP_SPECS[g.id].name} v={`${Math.round(g.satisfaction)}%`} warn={g.satisfaction < 40} />
+          ))}
+        </div>
+      </Card>
+    </>
+  )
+}
 
 /** The form of government and the laws. Spending on the people is in the Budget and People tabs. */
-export function GovernmentTab() {
+function ConstitutionSection() {
   const view = usePlayerView()!
   const { game, player } = view
   const gov = GOVERNMENTS[player.government]
@@ -19,7 +161,7 @@ export function GovernmentTab() {
   const slots = lawSlots(player)
 
   return (
-    <section className="econ-grid">
+    <>
       <Card title={gov.name} hint={gov.blurb} right={<span className="chip">Your government</span>}>
         {election !== null && (
           <p className="text-[14px]">
@@ -79,7 +221,7 @@ export function GovernmentTab() {
           )
         })}
       </div>
-    </section>
+    </>
   )
 }
 

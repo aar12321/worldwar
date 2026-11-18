@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { RELATIONS } from '../../data/relations'
 import { MPROG } from '../../data/missileProgram'
+import { CIVICS } from '../../data/civics'
 import { deploymentOrder, plannedPosture } from '../../ai/deployment'
 import { generateAllBotOrders, generateBotOrders } from '../../ai/bot'
 import { addOpinion } from '../../ai/opinion'
@@ -898,6 +899,8 @@ describe('a game where nobody stations forces plays as it always did', () => {
     RELATIONS.on = false
     // The missile program (docs/MISSILE_PROGRAM_STATUS.md) lets Medium rivals found one; this hash is from before it.
     MPROG.on = false
+    // So is the government desk (docs/GOVERNMENT_STATUS.md), which came after it.
+    CIVICS.on = false
     // The war score model (docs/WARSCORE_STATUS.md) adds fields of its own; with the old tally this hash is unchanged.
     const { map } = getWorld()
     let s = createInitialState(map, { playerRegionId: 'poland', seed: 7, difficulty: 'normal', goal: 'classic', victoryShare: 2 })
@@ -915,6 +918,7 @@ describe('a game where nobody stations forces plays as it always did', () => {
     // Re-pinned again for the combat tuning (docs/WAR_STATUS.md; the old hash 'bc68beaeedca7' returns with those numbers put back, see turnGolden.test.ts).
     RELATIONS.on = true
     MPROG.on = true
+    CIVICS.on = true
     expect(hash(JSON.stringify(s))).toBe('103075820c12de')
   }), 300_000)
 })

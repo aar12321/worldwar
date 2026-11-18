@@ -36,6 +36,7 @@ import { commanderTrait } from './generals'
 import { spaceEffects } from './spaceEffects'
 import { runSpace, spaceEngineerDemand } from './space'
 import { programBill, programEngineerDemand } from './missileProgram'
+import { civicsEffects, civicsMoney, missileEngineerDraw } from './civics'
 
 export const ECON = {
   /** Tax per worker. Raised from 12 when spending became real money, so a nation's first month nets what it always did. */
@@ -308,7 +309,8 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     systemLevels: Object.values(n.systems ?? {}).reduce((a, b) => a + (b ?? 0), 0),
     // A project in a country is smaller than a national one, so it draws half as hard on the engineers.
     activeProjects: activeProjects(n).length + 0.5 * activeLocal(s, nationId).length,
-    extraEngineers: spaceEngineerDemand(n, workforce) + programEngineerDemand(n, workforce),
+    // The missile program's staff are counted once: the program's own staff when it has one, else the desk's charter estimate.
+    extraEngineers: spaceEngineerDemand(n, workforce) + (n.mprog ? programEngineerDemand(n, workforce) : missileEngineerDraw(n)),
   }
   const demand = demandOf(n, basis)
   const coverage = coverageOf(n, demand)
@@ -396,6 +398,7 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
   const governors = admin.governors * EMPIRE_RULES.governorSalary
   const settle = OCCUPATION[n.programs?.occupation ?? 'standard'].cost * occupied
   const quarantine = n.programs?.quarantine ? EPIDEMIC.quarantineCost * workforce : 0
+  const civics = civicsMoney(n, population, workforce, gross)
   const badLoans = n.programs?.creditSector && n.stability < BANKING.badLoanStability ? BANKING.badLoanCost * Math.max(1, n.sectors[n.programs.creditSector] ?? 0) * 0.5 : 0
 
   const foodProduction =
@@ -436,6 +439,8 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'Programs for the people', value: soc.stability },
     // Projects in your countries (cultural centres) share the one ceiling on care with the programs, so a centre in every country cannot buy perfect calm.
     { label: 'Projects in your countries', value: softCap(soc.rawStability + localStability) - soc.stability },
+    // The government desk (ministers, civil service, reforms, interest groups): a line only for a nation that has one.
+    ...(n.civics ? [{ label: 'Cabinet and reforms', value: civicsEffects(n).stability }] : []),
   ]
   const stabilityTarget = clamp(
     stabilityParts.reduce((sum, p) => sum + p.value, 0),
@@ -471,6 +476,9 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'Settlers', amount: -settle, kind: 'cost' },
     { label: 'Quarantine', amount: -quarantine, kind: 'cost' },
     { label: 'Bad loans', amount: -badLoans, kind: 'cost' },
+    { label: 'Cabinet salaries', amount: -civics.salaries, kind: 'cost' },
+    { label: 'Civil service', amount: -civics.service, kind: civics.service > 0 ? 'cost' : 'income' },
+    { label: 'Government (collection, waste, reforms)', amount: civics.treasury, kind: civics.treasury >= 0 ? 'income' : 'cost' },
     { label: 'War bills', amount: -warBillTotal, kind: 'cost' },
     { label: 'Interest on bonds', amount: -interest, kind: 'cost' },
     { label: 'Subsidies', amount: -subsidies, kind: 'cost' },

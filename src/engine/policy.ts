@@ -3,12 +3,13 @@ import { EMPIRE_RULES } from '../data/empire'
 import { TECH_BY_ID } from '../data/techTree'
 import { LAW_SPECS } from '../data/unitTypes'
 import { societyEffects } from './society'
+import { civicsEffects } from './civics'
 import type { Nation } from './types'
 
 const FIELDS = Object.keys(NO_EFFECTS) as (keyof PolicyEffects)[]
 
 /** All the ways a nation's government, laws and technology change its economy, added together. Laws buy less calm than they once did. */
-export function policyEffects(n: Pick<Nation, 'government' | 'laws' | 'techs'> & Partial<Pick<Nation, 'social' | 'campaigns' | 'projects'>>): PolicyEffects {
+export function policyEffects(n: Pick<Nation, 'government' | 'laws' | 'techs'> & Partial<Pick<Nation, 'social' | 'campaigns' | 'projects' | 'civics'>>): PolicyEffects {
   const out: PolicyEffects = { ...NO_EFFECTS }
   const add = (e: Partial<PolicyEffects> | undefined) => {
     if (!e) return
@@ -23,5 +24,7 @@ export function policyEffects(n: Pick<Nation, 'government' | 'laws' | 'techs'> &
   for (const id of (n as Nation).techs ?? []) add(TECH_BY_ID[id]?.modifiers.policy)
   // Programs for the people: output, research, money and the rest. Their stability is counted on its own, under a ceiling.
   add(societyEffects(n).policy)
+  // The government desk: ministers, the civil service and reforms (its stability and money are counted on their own lines).
+  if (n.civics) add(civicsEffects(n as Nation).policy)
   return out
 }

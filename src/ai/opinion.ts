@@ -6,6 +6,7 @@ import { sameFaction } from '../engine/factions'
 import { FACTION } from '../data/factions'
 import { RELATIONS } from '../data/relations'
 import { relationLines } from '../engine/relationParts'
+import { foreignMinisterOpinion } from '../engine/civics'
 
 /** A coalition forms against the player once they hold this fraction of their victory target. */
 export const COALITION_THRESHOLD = 0.35
@@ -137,6 +138,8 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   for (const m of storedOpinion(s, holder, target)) push(m.label, m.value)
   // Embassies, running programs, a joint war plan, long friendship and neglect: worked out from the state, not stored.
   if (s.relations) for (const l of relationLines(s, holder, target)) push(l.label, l.value)
+  // A capable foreign minister wins a little goodwill everywhere (the government desk; nothing without one).
+  push('Their foreign minister', foreignMinisterOpinion(s.nations[target]))
   const total = Math.round(clamp(parts.reduce((sum, p) => sum + p.value, 0), -100, 100))
   return { total, parts }
 }

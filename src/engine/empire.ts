@@ -4,6 +4,7 @@ import { LAW_SPECS } from '../data/unitTypes'
 import { addLog, distanceKm } from './helpers'
 import { projectPower, scaleBonus } from './industry'
 import { societyEffects } from './society'
+import { civicsEffects } from './civics'
 import { countWeight } from './puppets'
 import { territoryCountWeight } from './territories'
 import type { GameState, LawId, Nation, NationId, RegionId, Tier, WorldMap } from './types'
@@ -155,7 +156,9 @@ export function adminReport(s: GameState, map: WorldMap, id: NationId, skilledSh
     scaleBonus(EMPIRE_RULES.adminDigitalGov, projectPower(n, 'digitalGov')) +
     Math.max(0, caps.length - 1) * EMPIRE_RULES.adminRegionalCapital +
     // Honest courts and clear rules let the same officials run more.
-    societyEffects(n).social.admin
+    societyEffects(n).social.admin +
+    // The government desk: a bigger civil service, the interior minister, digital government.
+    (n.civics ? civicsEffects(n).admin : 0)
   const over = Math.max(0, load - capacity)
   return {
     capacity,
