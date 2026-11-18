@@ -86,6 +86,9 @@ export function undoable(s: Pick<GameState, 'settings'>, o: Order): boolean {
       return isLive(s)
     case 'propose':
     case 'respond':
+    // A call to arms and its answer are war: rivals of Mutual Defence join on the spot in a live game.
+    case 'blocCall':
+    case 'blocAnswer':
       return !isLive(s)
     default:
       return true

@@ -554,7 +554,7 @@ function MembersTab({ g, f, me, orders }: { g: GameState; f: Faction; me: Nation
                 {n && <LocateButton id={id} compact />}
               </div>
               <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[12.5px] text-white/70">
-                <span>{regionsOf(g, id).length} countries</span>
+                <span>{regionsOf(g, id).length} countr{regionsOf(g, id).length === 1 ? 'y' : 'ies'}</span>
                 <span>{rec?.ops ?? 0} operations · {num(rec?.sent ?? 0, 1)} divisions sent</span>
                 <span>{rec?.joined ?? 0} calls answered</span>
                 {enemiesOf(g, id).length > 0 && <span className="text-[#ff8a84]">at war with {enemiesOf(g, id).map((e) => nm(g, e)).join(', ')}</span>}
