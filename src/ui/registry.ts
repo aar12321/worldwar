@@ -124,7 +124,7 @@ export const DESKS: DeskDef[] = [
       economyTab('space', 'Space', 'Space program: rockets, missions, labs, colonies', lazyOf(() => import('./economy/SpaceTab'), 'SpaceTab'), ['rocket', 'launch', 'mars', 'moon', 'satellite', 'colony', 'orbit']),
       economyTab('market', 'Market', 'Buy and sell food, oil, steel and goods', lazyOf(() => import('./economy/MarketTab'), 'MarketTab'), ['trade', 'oil', 'steel', 'food', 'goods', 'buy', 'sell']),
       economyTab('stocks', 'Stocks', 'The stock exchange and your companies', lazyOf(() => import('./economy/StocksTab'), 'StocksTab'), ['shares', 'dividend', 'company', 'exchange']),
-      economyTab('government', 'Government', 'Government and laws', lazyOf(() => import('./economy/GovernmentTab'), 'GovernmentTab'), ['laws', 'democracy', 'monarchy', 'junta', 'election']),
+      economyTab('government', 'Government', 'Cabinet, talent, jobs, policies and laws', lazyOf(() => import('./economy/GovernmentTab'), 'GovernmentTab'), ['laws', 'democracy', 'monarchy', 'junta', 'election', 'cabinet', 'ministers', 'talent', 'jobs', 'employment', 'civil service', 'policies', 'parliament', 'interest groups']),
     ],
   },
 
