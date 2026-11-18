@@ -203,7 +203,7 @@ export const DISPATCH_TONE: Record<Dispatch['kind'], 'info' | 'error' | 'success
 export interface OrderNews {
   text: string
   tone: 'info' | 'error' | 'success'
-  /** The nation to open Diplomacy on, for an offer waiting for this player's answer. */
+  /** Who sent an offer that waits for this player's answer (the toast then has a button to answer it). */
   open?: NationId
 }
 

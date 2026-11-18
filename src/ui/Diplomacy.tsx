@@ -778,7 +778,7 @@ export function DiplomacyPanel() {
       )}
       {mine.length > 0 && (
         <section className="space-y-1.5">
-          <div className="label">Last month</div>
+          <div className="label">{isLive(game) ? 'This month' : 'Last month'}</div>
           {mine.map((d, i) => (
             <p key={i} className={`text-[13px] border-l-2 border-white/15 pl-2 ${DISPATCH_COLOR[d.kind]}`}>
               {d.text}
