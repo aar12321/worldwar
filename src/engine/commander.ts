@@ -1,4 +1,4 @@
-import { STANCES, WAR, type Commit, type Stance } from '../data/war'
+import { COMMITS, STANCES, WAR, type Commit, type Stance } from '../data/war'
 import { UNIT_SPECS } from '../data/unitTypes'
 import { attackPool, cleanUnits, compactUnits, SENDABLE, worthOf } from './deploy'
 import { forecastPlan, type AttackPlan, type Forecast } from './forecast'
@@ -53,6 +53,11 @@ export interface PlanOptions {
   stance?: Stance
   /** Fewest percent to win to accept a plan, for auto-command. */
   minWin?: number
+  /**
+   * Let the composition search fire missiles with the attack. Off by default: the player's planner and auto-command never attach
+   * missiles to an attack (they are fired from Military, Missile War). An order that names missiles is still accepted by the engine.
+   */
+  missiles?: boolean
 }
 
 export interface PlannedAttack {
@@ -88,7 +93,7 @@ function search(s: GameState, map: WorldMap, id: NationId, target: RegionId, sta
   if (cap < WAR.minForce) return null
   const coastal = !!map.regions[target]?.coastal
   const nation = s.nations[id]
-  const missilePool = missilesLeft(nation.military.units.missile, o.pending ?? [], id)
+  const missilePool = o.missiles ? missilesLeft(nation.military.units.missile, o.pending ?? [], id) : 0
   const kinds = SENDABLE.filter((k) => pool[k] >= 0.1 && (coastal || k !== 'naval'))
   const step = Math.max(0.5, roundHalf(cap / (o.quick ? 8 : 14)))
   const units: Partial<UnitCounts> = {}
@@ -210,12 +215,19 @@ export function compareStances(s: GameState, map: WorldMap, id: NationId, plan: 
 
 const PRESETS: Commit[] = ['probe', 'main', 'allin']
 
-/** Level 1 and 2: the best of the three preset sizes (proportional to what you have), which is all the first levels recommend. */
-export function planPreset(s: GameState, map: WorldMap, id: NationId, target: RegionId, o: PlanOptions): { commit: Commit; forecast: Forecast; stance: Stance; score: number } | null {
+/**
+ * The best of the three preset sizes (proportional to what you have) and the stance, for an objective: what the War Room's planner
+ * recommends at every level, since the War Room sends one of these. `named` gives the units a preset sends when the caller sends named
+ * units (the War Room does), so the plan is judged on exactly the force that would go. With a share to keep at home (`keepHome`, or the
+ * `defend` objective), a preset that would send more is skipped.
+ */
+export function planPreset(s: GameState, map: WorldMap, id: NationId, target: RegionId, o: PlanOptions, named?: (c: Commit) => Partial<UnitCounts>): { commit: Commit; forecast: Forecast; stance: Stance; score: number } | null {
   let best: { commit: Commit; forecast: Forecast; stance: Stance; score: number } | null = null
-  for (const commit of PRESETS) {
+  const keep = o.keepHome !== undefined || o.objective === 'defend' ? keepOf(o) : 0
+  const presets = PRESETS.filter((c) => COMMITS[c].share <= 1 - keep + 1e-9)
+  for (const commit of presets.length ? presets : PRESETS.slice(0, 1)) {
     for (const stance of (o.stance ? [o.stance] : ['assault', 'blitz', 'siege']) as Stance[]) {
-      const f = forecastPlan(s, map, id, { target, stance, commit }, 128, false)
+      const f = forecastPlan(s, map, id, named ? { target, stance, units: named(commit) } : { target, stance, commit }, 128, false)
       if (!f) continue
       const sc = score(f, o.objective, worthOf(f.sent))
       if (!best || sc > best.score + 1e-9) best = { commit, forecast: f, stance, score: sc }
@@ -366,12 +378,7 @@ export function advise(s: GameState, map: WorldMap, id: NationId, plan: AttackPl
     tone: f.winChance >= 0.7 ? 'good' : f.winChance >= 0.4 ? 'warn' : 'bad',
     text: `${name}${foe.name !== name ? ` (${foe.name})` : ''}: ${pct(f.winChance)} to win with ${formatDivisions(sent)} divisions${f.winChance < 0.4 ? '. Not yet.' : f.winChance >= 0.7 ? '. A good attack.' : '. A coin toss: improve it first.'}`,
   })
-  // What to do first: missiles soften the line.
-  const stock = nation.military.units.missile
-  if (stock >= 1 && (plan.missiles ?? 0) < 1 && f.lineBefore > 2 && f.winChance >= 0.35) {
-    const shield = foe.systems?.shield ?? 0
-    out.push({ tone: 'info', text: `Soften it first: you hold ${Math.floor(stock)} missiles. Each cuts the Defense Line by ${(0.35 * (1 - [0, 0.2, 0.35, 0.5][shield])).toFixed(2)} even if the battle is lost${shield ? ` (their shield level ${shield} stops part)` : ''}.` })
-  }
+  // Missiles are not part of an attack's advice: they are fired from Military, Missile War.
   // Supply and weariness.
   if (nation.oilShortage) out.push({ tone: 'bad', text: 'You are out of oil: tanks, planes and ships fight at a fraction of their strength. Buy oil before sending them.' })
   if (nation.foodShortage) out.push({ tone: 'bad', text: 'Food shortage: your whole army fights 30% weaker. Fix it before attacking.' })
@@ -384,7 +391,7 @@ export function advise(s: GameState, map: WorldMap, id: NationId, plan: AttackPl
   if (rec && level >= 1) {
     const better = rec.forecast.winChance - f.winChance
     if (level >= 3 && Math.abs(better) >= 0.03) {
-      out.push({ tone: 'info', text: `Best plan for "${OBJECTIVES[rec.objective].name.toLowerCase()}": ${listUnits(rec.plan.units)}${rec.plan.missiles ? ` and ${rec.plan.missiles} missiles` : ''} on ${STANCES[rec.plan.stance].name}: ${pct(rec.forecast.winChance)} to win (${better >= 0 ? '+' : ''}${Math.round(better * 100)} points), losing about ${formatDivisions(rec.forecast.yourLosses)}.` })
+      out.push({ tone: 'info', text: `Best plan for "${OBJECTIVES[rec.objective].name.toLowerCase()}": ${listUnits(rec.plan.units)} on ${STANCES[rec.plan.stance].name}: ${pct(rec.forecast.winChance)} to win (${better >= 0 ? '+' : ''}${Math.round(better * 100)} points), losing about ${formatDivisions(rec.forecast.yourLosses)}.` })
     }
     if (level >= 2 && rec.plan.stance !== plan.stance) {
       out.push({ tone: 'info', text: `Switch to ${STANCES[rec.plan.stance].name}: ${STANCES[rec.plan.stance].blurb}` })
@@ -483,7 +490,7 @@ export function planMonth(s: GameState, map: WorldMap, id: NationId, auto: AutoS
       taken.add(row.target)
       continue
     }
-    const order: Extract<Order, { type: 'attack' }> = { type: 'attack', nationId: id, target: row.target, stance: planned.plan.stance, units: planned.plan.units, missiles: planned.plan.missiles ?? 0 }
+    const order: Extract<Order, { type: 'attack' }> = { type: 'attack', nationId: id, target: row.target, stance: planned.plan.stance, units: planned.plan.units }
     if (validateOrder(s, map, order, queue)) {
       taken.add(row.target)
       continue
