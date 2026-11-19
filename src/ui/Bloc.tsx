@@ -631,6 +631,8 @@ function FeedTab({ g, f, me }: { g: GameState; f: Faction; me: NationId }) {
 
 function FoundBloc({ g, me }: { g: GameState; me: NationId }) {
   const [name, setName] = useState('')
+  // A founding waits for the 1st: say so here, not only in the order tray (docs/DEMO_CHECK.md).
+  const founding = useGame((s) => s.orders.find((o) => o.type === 'factionFound' && o.nationId === me))
   const others = [...(g.factions ?? [])].sort((a, b) => blocPower(g, b) - blocPower(g, a))
   return (
     <div className="space-y-5">
@@ -648,6 +650,11 @@ function FoundBloc({ g, me }: { g: GameState; me: NationId }) {
           <span className="label">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={FACTION.nameMax} placeholder="The Iron Pact" aria-label="Bloc name" className="field w-full px-3 py-2 text-[15px]" />
         </label>
+        {founding && founding.type === 'factionFound' && (
+          <p className="rounded-lg border border-[#ffd60a]/50 bg-[#ffd60a]/8 px-3 py-2 text-[13px] text-[#ffd60a]" data-testid="bloc-founding">
+            {founding.name ? `${founding.name} is` : 'Your bloc is'} founded {isLive(g) ? 'on the 1st of next month' : 'when the month ends'}. Then invite others from this desk. Cancel it in the order tray.
+          </p>
+        )}
         <OrderButton order={{ type: 'factionFound', nationId: me, name }} label="Found the bloc" cost={`${FACTION.foundInfluence} influence`} effect="It exists when the month ends; then invite others" tone="btn-primary" className="w-full" />
       </section>
       {others.length > 0 && (

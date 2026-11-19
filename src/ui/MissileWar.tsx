@@ -342,6 +342,19 @@ function Planner({ game, player }: { game: GameState; player: Nation }) {
   )
 }
 
+function LedgerGrid({ rows }: { rows: string[][] }) {
+  return (
+    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+      {rows.map(([k, v]) => (
+        <div key={k} className="rounded-lg bg-white/6 py-1.5">
+          <dt className="label">{k}</dt>
+          <dd className="text-[15px] font-semibold tabular-nums">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
 /** The kill ledger: what you fired and what stopped it, the exchange and the last salvos. */
 function LedgerCard({ game, player }: { game: GameState; player: Nation }) {
   const st = warStatus(game, player)
@@ -351,12 +364,19 @@ function LedgerCard({ game, player }: { game: GameState; player: Nation }) {
   return (
     <section className="inset-card p-3.5 space-y-3" aria-label="Kill ledger" data-ledger>
       <h3 className="text-[15px] font-semibold">Kill ledger</h3>
-      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-        {[
+      <LedgerGrid
+        rows={[
           ['Fired', `${led.fired}`],
           ['Got through', `${led.hits}`],
           ['Shot down', `${led.shotDown}`],
           ['Exchange', st.exchange === null ? 'n/a' : `${st.exchange.toFixed(1)} : 1`],
+        ]}
+      />
+      <details className="text-[13px]">
+        <summary className="cursor-pointer text-white/75">The whole ledger: dead, line, sites, stores, rounds, aircraft</summary>
+        <div className="mt-2">
+      <LedgerGrid
+        rows={[
           ['Dealt (M dead)', led.killed.toFixed(1)],
           ['Taken (M dead)', led.lost.toFixed(1)],
           ['Line dealt', led.lineDealt.toFixed(1)],
@@ -365,13 +385,10 @@ function LedgerCard({ game, player }: { game: GameState; player: Nation }) {
           ['Stock destroyed', led.stockDestroyed.toFixed(0)],
           ['Rounds spent', led.interceptorsSpent.toFixed(0)],
           ['Aircraft lost', led.aircraftLost.toFixed(1)],
-        ].map(([k, v]) => (
-          <div key={k} className="rounded-lg bg-white/6 py-1.5">
-            <dt className="label">{k}</dt>
-            <dd className="text-[15px] font-semibold tabular-nums">{v}</dd>
-          </div>
-        ))}
-      </dl>
+        ]}
+      />
+        </div>
+      </details>
       {reports.length ? (
         <ol className="space-y-1.5" aria-label="Recent salvos">
           {reports.map((r) => (
