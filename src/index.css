@@ -922,7 +922,8 @@ body:has(.drawer) .map-modes {
     max-width: 100%;
   }
   /* With a desk open the HUD keeps one row of numbers, so the desk gets the height. */
-  body:has(.drawer) .hud-resources > :nth-child(n + 7) {
+  body:has(.drawer) .hud-resources > :nth-child(n + 7),
+  body:has(.country-card) .hud-resources > :nth-child(n + 7) {
     display: none;
   }
   .nav-dock {
