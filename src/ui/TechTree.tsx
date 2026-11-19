@@ -6,7 +6,7 @@ import { validateOrder } from '../engine/orders'
 import type { TechBranch } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { fmt, usePlayerView } from './hooks'
+import { fmt, signed, usePlayerView } from './hooks'
 import { techBonuses } from '../engine/techBonuses'
 import { speak } from './plain'
 
@@ -92,8 +92,10 @@ function Bonuses() {
   const view = usePlayerView()!
   const groups = techBonuses(view.player)
   return (
-    <details className="inset-card p-4 mb-6" open>
-      <summary className="cursor-pointer text-[16px] font-semibold tracking-tight">What your technology gives you</summary>
+    <details className="inset-card p-4 mb-4">
+      <summary className="cursor-pointer text-[16px] font-semibold tracking-tight">
+        What your technology gives you <span className="text-[13px] font-normal text-white/60">({view.player.techs.length} researched)</span>
+      </summary>
       {groups.length === 0 ? (
         <p className="text-[14px] text-white/70 mt-2">Nothing yet. Research a technology and its bonuses will be listed here.</p>
       ) : (
@@ -124,7 +126,7 @@ export function TechTree() {
   const view = usePlayerView()
   const setPanel = useGame((s) => s.setPanel)
   if (!view) return null
-  const { player, committed } = view
+  const { player, committed, econ } = view
   return (
     <div data-section="tech" aria-label="Research" className="drawer drawer-wide surface">
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-none">
@@ -136,6 +138,7 @@ export function TechTree() {
           <div className="text-right">
             <div className="label">Available</div>
             <div className="text-[22px] font-semibold tabular-nums">{fmt(player.resources.tp - committed.tp)}</div>
+            <div className="text-[12px] text-white/60 tabular-nums">{signed(econ.tpGain)} a month</div>
           </div>
           <button className="icon-close" aria-label="Close" onClick={() => setPanel('tech')}>
             ×
