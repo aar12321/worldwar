@@ -5,7 +5,7 @@ import { SPENDING } from '../../data/people'
 import { PROJECT_IDS, PROJECT_LEVELS, PROJECT_RULES, PROJECTS, WORKS } from '../../data/projects'
 import { describeEffect } from '../../data/society'
 import { tierOf } from '../../engine/empire'
-import { activeProjects, investedIn, levelCost, levelMonths, monthlyCost, projectLevel, projectProblem } from '../../engine/industry'
+import { activeProjects, projectSpeed, investedIn, levelCost, levelMonths, monthlyCost, projectLevel, projectProblem } from '../../engine/industry'
 import type { LocalProjectId, ProjectId, RegionId } from '../../engine/types'
 import { activeLocal, localCost, localInvested, localLevel, localMonthly, localMonths, localProblem, localScale, rushCost, rushGain } from '../../engine/works'
 import { getWorld } from '../../map/world'
@@ -159,6 +159,7 @@ function NationalCard({ id }: { id: ProjectId }) {
       rush={{ type: 'rushProject', nationId: player.id, project: id }}
       rushPrice={state && !state.done ? rushCost(game, player, id) : 0}
       rushMonths={rushGain(player, econ.coverage.engineers)}
+      speed={projectSpeed({ spending: view.pendingPolicy.spending }, econ.coverage.engineers)}
     />
   )
 }
@@ -278,6 +279,7 @@ function LocalCard({ id, regionId }: { id: LocalProjectId; regionId: RegionId })
       rush={{ type: 'rushProject', nationId: player.id, project: id, regionId }}
       rushPrice={building ? rushCost(game, player, id, regionId) : 0}
       rushMonths={rushGain(player, econ.coverage.engineers)}
+      speed={projectSpeed({ spending: view.pendingPolicy.spending }, econ.coverage.engineers)}
       where={spec.needs ? `Needs ${NEED_TEXT[spec.needs]}.` : undefined}
     />
   )

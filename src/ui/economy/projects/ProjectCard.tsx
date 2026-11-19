@@ -26,7 +26,10 @@ export interface ProjectCardProps {
   pause: Order
   rush: Order
   rushPrice: number
+  /** Progress a rush adds (`rushGain`), in the same units as `months`. */
   rushMonths: number
+  /** Progress a month (`projectSpeed`): engineers and public works make a month count for more or less than one. */
+  speed: number
   /** Where it can be built, for a project in a country. */
   where?: string
 }
@@ -37,7 +40,13 @@ export function ProjectCard(p: ProjectCardProps) {
   const building = !!p.state && !p.state.done
   const upgrading = building && p.level > 0
   const nextLevel = p.level + 1
-  const left = building ? Math.max(0, p.months - (p.state?.progress ?? 0)) : p.months
+  // Progress grows by `speed` a month and the bill is paid every month until it is done, so the real months (and the real total)
+  // follow the speed: short of engineers, a project takes longer and costs more.
+  const speed = Math.max(0.05, p.speed)
+  const realMonths = (progress: number) => Math.max(0, Math.ceil((p.months - progress) / speed - 1e-9))
+  const left = realMonths(building ? (p.state?.progress ?? 0) : 0)
+  const slow = speed < 0.98 ? ' (slowed: short of engineers or low public works)' : speed > 1.02 ? ' (sped up by public works)' : ''
+
   return (
     <div className={`inset-card p-3.5 space-y-2 ${p.level > 0 ? 'ring-1 ring-[#30d158]/25' : ''}`}>
       <div className="flex items-start justify-between gap-3">
@@ -60,10 +69,10 @@ export function ProjectCard(p: ProjectCardProps) {
           <div className="flex items-center justify-between gap-2 text-[13px]">
             <span className="text-white/75">
               {upgrading ? `Level ${nextLevel}: ` : ''}
-              {p.state?.paused ? 'Paused' : `${left.toFixed(0)} month${left.toFixed(0) === '1' ? '' : 's'} left`} · {signed(-p.monthly)} a month
+              {p.state?.paused ? 'Paused' : `about ${left} month${left === 1 ? '' : 's'} left`} · {signed(-p.monthly)} a month
             </span>
             <span className="flex gap-1.5">
-              <OrderButton order={p.rush} label="Rush" cost={`${p.rushPrice} money`} effect={`${Math.round(p.rushMonths * 10) / 10} months sooner`} />
+              <OrderButton order={p.rush} label="Rush" cost={`${p.rushPrice} money`} effect={`about ${Math.round((p.rushMonths / speed) * 10) / 10} months sooner`} />
               <OrderButton order={p.pause} label={p.state?.paused ? 'Resume' : 'Pause'} />
             </span>
           </div>
@@ -78,7 +87,7 @@ export function ProjectCard(p: ProjectCardProps) {
             </>
           )}
           <div className="flex items-center justify-between gap-3">
-            <span className={`text-[13px] ${p.problem ? 'text-[#ff8a84]' : 'text-white/75'}`}>{p.problem ?? `${p.cost} money over ${p.months} months`}</span>
+            <span className={`text-[13px] ${p.problem ? 'text-[#ff8a84]' : 'text-white/75'}`}>{p.problem ?? `${Math.round(p.monthly * left)} money over about ${left} months${slow}`}</span>
             <OrderButton order={p.start} label={p.level > 0 ? `Build level ${nextLevel}` : 'Start'} cost={`${Math.round(p.cost / p.months)}/mo`} tone="btn-primary" />
           </div>
         </div>
