@@ -14,7 +14,8 @@ import { Card, Line } from './economy/parts'
 import { Bar, Pending, StatTile, Tiles } from './kit'
 import { OrderButton } from './panel'
 import { usePlayerView } from './hooks'
-import { CostEffect, EmptyState, NumberStepper } from './widgets'
+import { ConfirmButton, CostEffect, EmptyState, NumberStepper } from './widgets'
+import { useGame } from '../store'
 
 const pctTxt = (v: number) => `${Math.round(v * 100)}%`
 const signed1 = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}`
@@ -74,6 +75,7 @@ function PuppetCard({ puppet, pending }: { puppet: Nation; pending: boolean }) {
   const served = game.turn - (puppet.overlordSince ?? 0)
   const annexable = served >= EMPIRE.annexMonths
   const human = game.humans.includes(puppet.id)
+  const issueOrder = useGame((s) => s.issueOrder)
   return (
     <article className="inset-card p-3.5 space-y-3" aria-label={`${puppet.name}, a puppet of yours`}>
       <div className="flex items-start justify-between gap-3">
@@ -115,7 +117,15 @@ function PuppetCard({ puppet, pending }: { puppet: Nation; pending: boolean }) {
           cost={`${annexCost(game, puppet.id)} influence`}
           effect={annexable ? (loyalty === undefined ? 'Its land, army and treasury join yours.' : loyalty >= 70 ? 'Loyal: it joins you cheaply and settles at once.' : loyalty < 40 ? 'Restive: it costs more and its land settles slowly.' : 'Its land, army and treasury join yours.') : `Must serve ${EMPIRE.annexMonths} months first`}
         />
-        <OrderButton order={{ type: 'releasePuppet', nationId: player.id, target: puppet.id }} label="Set it free" effect="They will remember it kindly" tone="btn-quiet" />
+        <ConfirmButton
+          label="Set it free"
+          title={`Set ${puppet.name} free?`}
+          text={`${puppet.name} becomes independent. Its tribute stops, it no longer counts toward your empire, and it will not fight beside you. It will remember it kindly.`}
+          confirmLabel="Set it free"
+          danger
+          className="btn-quiet px-3 py-1 text-[13px]"
+          onConfirm={() => issueOrder({ type: 'releasePuppet', nationId: player.id, target: puppet.id })}
+        />
       </div>
       {open && <Garrison puppet={puppet} />}
     </article>
