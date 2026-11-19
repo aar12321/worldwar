@@ -952,6 +952,16 @@ export interface RelationsState {
   contact: Record<string, number>
 }
 
+/** Ties between nations kept month to month (src/engine/ties.ts). Absent until two nations first fight or trade. */
+export interface TiesState {
+  /** Sorted "a|b" -> the last month the two were at war: the clock of a long peace starts after it. */
+  fought: Record<string, number>
+  /** Sorted "a|b" -> the month an unbroken run of trade deals between the two began. */
+  tradeSince: Record<string, number>
+  /** Sorted "a|b" -> the last month a trade deal ran between the two (a short gap between deals does not break the run). */
+  tradeLast: Record<string, number>
+}
+
 export type ResolutionKind = 'sanctions' | 'ceasefire' | 'recognition' | 'accord'
 
 export interface BattleSide {
@@ -1212,6 +1222,8 @@ export interface GameState {
   monthStart?: MonthMark
   /** Relationships: embassies, exchanges, ventures, joint war plans, favours, requests. Absent until a nation first does something in the Relations desk. */
   relations?: RelationsState
+  /** Ties: the last war and the run of trade between each pair (docs/RELATIONS_STATUS.md). Absent until a war or a trade deal; only with `TIES.on`. */
+  ties?: TiesState
   /** Live games played by several people online: each human's orders that wait for the 1st of the next month, in the order the host took them. */
   liveOrders?: Record<NationId, Order[]>
   /** Live games played by several people online: the human nations the AI plays right now because their players are away. */

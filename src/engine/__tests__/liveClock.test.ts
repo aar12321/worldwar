@@ -21,6 +21,8 @@ function stripped(s: GameState) {
   delete copy.launches
   delete copy.flights
   delete copy.settings.mode
+  // A live game dates its news to the day; a turn game only to the month.
+  for (const e of copy.log ?? []) delete e.day
   return copy
 }
 

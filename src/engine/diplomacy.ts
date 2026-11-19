@@ -1,5 +1,6 @@
 import { evaluateProposal } from '../ai/diplomat'
-import { addOpinion, decayOpinions } from '../ai/opinion'
+import { addOpinion, addOpinionCapped, decayOpinions } from '../ai/opinion'
+import { TIES } from '../data/relations'
 import { LIBERATE_TEXT, PUPPET } from '../data/puppets'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
 import { EMPIRE, JUSTIFY, WAR } from '../data/war'
@@ -352,7 +353,9 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
         // A pledge to fight beside the proposer, with nothing else changing hands.
       } else if (bundleEmpty(receive)) {
         const value = bundleValue(give, marketPrices(s)) * Math.max(1, months)
-        addOpinion(s, p.to, p.from, 'Generous gifts', Math.min(30, 4 + value / 6), 0.5)
+        // With ties on, gifts stack only to a ceiling: generosity is remembered, but it cannot buy unlimited goodwill.
+        if (TIES.on) addOpinionCapped(s, p.to, p.from, 'Generous gifts', Math.min(30, 4 + value / 6), 0.5, TIES.giftCap)
+        else addOpinion(s, p.to, p.from, 'Generous gifts', Math.min(30, 4 + value / 6), 0.5)
       } else if (bundleEmpty(give)) {
         // Paying tribute under threat is not friendship.
         addOpinion(s, p.to, p.from, 'Forced us to pay tribute', -20, 0.25)

@@ -1,4 +1,4 @@
-import { PROGRAMS, RELATIONS } from '../data/relations'
+import { PROGRAMS, RELATIONS, TIES } from '../data/relations'
 import { pairKey } from './helpers'
 import type { GameState, NationId, ProgramKind } from './types'
 
@@ -31,6 +31,8 @@ export function monthsQuiet(s: GameState, a: NationId, b: NationId): number | nu
   const k = pairKey(a, b)
   const arranged = r.since[k] !== undefined || r.embassies.some((e) => (e.from === a && e.to === b) || (e.from === b && e.to === a)) || s.deals.some((d) => d.kind === 'trade' && ((d.from === a && d.to === b) || (d.from === b && d.to === a)))
   if (!arranged) return null
+  // With ties on, goods changing hands every month is contact: a running trade deal never leaves a partner feeling neglected.
+  if (TIES.on && s.deals.some((d) => d.kind === 'trade' && ((d.from === a && d.to === b) || (d.from === b && d.to === a)) && (d.contract?.start ?? 0) <= s.turn)) return 0
   return Math.max(0, s.turn - (r.contact[k] ?? r.since[k] ?? s.turn))
 }
 
@@ -58,7 +60,9 @@ export function relationLines(s: GameState, holder: NationId, target: NationId):
     if (!((p.a === holder && p.b === target) || (p.a === target && p.b === holder))) continue
     const st = PROGRAMS.steady[p.kind]
     if (!st) continue
-    const v = ramp(0, st[0], s.turn - p.start, st[1])
+    // With ties on, a bigger joint venture is worth more: its ceiling grows with the stake.
+    const cap = TIES.on && p.kind === 'venture' ? Math.min(TIES.venture.max, TIES.venture.base + (p.stake ?? 0) / TIES.venture.perStake) : st[1]
+    const v = ramp(0, st[0], s.turn - p.start, cap)
     if (v.value >= 0.5 || v.step > 0) out.push({ label: PROGRAM_LABEL[p.kind], value: v.value, step: v.step })
   }
   for (const p of r.plans) {

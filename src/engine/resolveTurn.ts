@@ -28,7 +28,7 @@ import { applySetAlert, applyShow, runPresence } from './presence'
 import { applySetBorder } from './borders'
 import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
-import { addOpinion } from '../ai/opinion'
+import { addOpinion, addOpinionCapped } from '../ai/opinion'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
 import { annexPuppet, applyDeals, breakPact, cancelDeal, declareWar, expireDiplomacy, forceDeal, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
 import { addToSector, cleanInvestments, makeInvestment } from './business'
@@ -70,6 +70,8 @@ import { killNation, resolveAttack, resolveRebels } from './warfare'
 import { fadeWarScore } from './warscore'
 import { applyGovern, describePatch } from './puppets'
 import { applyRelate, runRelations } from './relations'
+import { runTies } from './ties'
+import { TIES } from '../data/relations'
 import { describeRelate } from './relationsView'
 import { annexTerritory, commanded, releaseTerritory, runTerritoryMonth } from './territories'
 
@@ -473,6 +475,7 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   runFactionMonth(s)
   runBlocMonth(s, map)
   runRelations(s, map, rng)
+  runTies(s)
   runPolitics(s, map, rng)
   runTerritoryMonth(s, map)
   runEpidemics(s, map, nationNeighborMap(s, map), doctors)
@@ -677,7 +680,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       const target = s.nations[o.target]
       addToSector(target, o.sector, o.amount, nationWorkforce(s, map, o.target), INVEST.efficiency)
       makeInvestment(s, o.nationId, o.target, o.sector, o.amount)
-      addOpinion(s, o.target, o.nationId, 'Invested in our businesses', 12, 0.2)
+      // With ties on, the money itself is a lasting line ('Invests in our economy', src/engine/ties.ts); the thanks for each new investment is small and capped.
+      if (TIES.on) addOpinionCapped(s, o.target, o.nationId, 'Invested in our businesses', TIES.invest.thanks, 0.2, TIES.invest.thanksCap)
+      else addOpinion(s, o.target, o.nationId, 'Invested in our businesses', 12, 0.2)
       if (n.isPlayer) addLog(s, 'economy', `You invested ${Math.round(o.amount)} in ${target.name}'s ${SECTORS[o.sector].name.toLowerCase()}. It pays dividends while you stay at peace.`, [o.nationId, o.target])
       break
     }

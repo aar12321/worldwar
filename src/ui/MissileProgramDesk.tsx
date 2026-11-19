@@ -26,15 +26,16 @@ import { MISSILES, MISSILE_PROGRAM, PROGRAM_MISSILES } from '../data/missiles'
 import { MW } from '../data/missileWar'
 import { clockOf, isLive } from '../engine/calendar'
 import { activeDevs, chiefCandidates, chiefHireCost, chiefSalary, devLock, devPrice, devSlots, devStatus, lineRate, milestones, poachRisk, programBill, programTalentCap, rivalPrograms, testMoney, testOdds, testsAllowed, testsUsed, type DevStatus } from '../engine/missileProgram'
-import { arsenalSize, buildRoom, fundMissilesCost, missileStock, programLevel, storageCap } from '../engine/missiles'
+import { arsenalSize, buildRoom, fundMissilesCost, programLevel, storageCap } from '../engine/missiles'
 import { interceptorCap, mobileCover, radarLevel } from '../engine/missileWar'
 import { programFx, programStaff } from '../engine/programEffects'
-import type { GameState, Nation, Order } from '../engine/types'
+import type { GameState, MissileType, Nation, Order } from '../engine/types'
 import { useGame } from '../store'
 import { Pips } from './bits'
 import { fmt, usePlayerView } from './hooks'
 import { Bar, StatTile, Tiles } from './kit'
-import { MISSILE_SWATCH } from './missileText'
+import { MISSILE_SWATCH, PROGRAM_KINDS } from './missileText'
+import { BuildRow } from './MissileProgram'
 import { capabilities, devEffectLines, nextLevel, programSteps, timeline, whenText } from './missileProgramText'
 import { OrderButton } from './panel'
 
@@ -505,35 +506,34 @@ function Production({ game, player }: { game: GameState; player: Nation }) {
   const level = programLevel(player)
   const room = buildRoom(player, game.turn)
   return (
-    <Section title="Production and stockpile" sub={`Stores ${arsenalSize(player)} of ${storageCap(player)} · the workshop builds ${room} more this month at once · the line delivers ${fmt(rate, 1)} a month.`} id="production">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {PROGRAM_MISSILES.map((k) => (
-          <div key={k} className="rounded-xl bg-white/6 px-3 py-2" data-stock={k}>
-            <div className="flex items-center gap-1.5 label">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: MISSILE_SWATCH[k] }} aria-hidden />
-              {MISSILES[k].name.replace(' missile', '').replace(' rocket', '')}
-            </div>
-            <div className="text-[20px] font-semibold tabular-nums">{missileStock(player, k)}</div>
-          </div>
-        ))}
-      </div>
+    <Section title="Production and stockpile" sub={`Stores ${arsenalSize(player)} of ${storageCap(player)} · the workshop builds ${room} more this month, at once · the line delivers ${fmt(rate, 1)} a month. Missiles are fired from Missile War.`} id="production">
       {level < 1 ? (
         <p className="text-[13px] text-[#ffd60a]">Raise the charter to level 1 to build missiles.</p>
       ) : (
         <div className="space-y-2">
-          <div className="flex gap-1 flex-wrap" role="radiogroup" aria-label="Missile to build">
-            {PROGRAM_MISSILES.filter((k) => MISSILES[k].level <= level).map((k) => (
-              <button key={k} role="radio" aria-checked={kind === k} className={`btn px-2.5 py-1.5 text-[13px] ${kind === k ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setKind(k as ProgramKind)}>
-                {MISSILES[k].name}
-              </button>
-            ))}
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <OrderButton order={{ type: 'buildMissiles', nationId: player.id, kind, count: Math.max(1, Math.min(3, room)) }} label={`Workshop: build ${Math.max(1, Math.min(3, room))} now`} effect="Into the stores at once, from this month's capacity." tone="btn-primary" />
+          {PROGRAM_KINDS.filter((k) => MISSILES[k].level <= level).map((k) => (
+            <BuildRow key={k} kind={k as Exclude<MissileType, 'hypersonic'>} />
+          ))}
+          {PROGRAM_KINDS.some((k) => MISSILES[k].level > level) && (
+            <p className="text-[12px] text-white/60">
+              Later: {PROGRAM_KINDS.filter((k) => MISSILES[k].level > level).map((k) => `${MISSILES[k].name.toLowerCase()}s at charter level ${MISSILES[k].level}`).join(', ')}.
+            </p>
+          )}
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+            <div className="text-[14px] font-semibold">Production line</div>
             {plant > 0 ? (
-              <OrderButton order={act(player, { kind: 'produce', missile: kind, count: 6 })} label="Line: queue 6" effect={`${Math.round((1 - PRODUCTION_RULES.price) * 100)}% cheaper, delivered one by one.`} />
+              <>
+                <div className="flex gap-1 flex-wrap" role="radiogroup" aria-label="Missile for the line">
+                  {PROGRAM_MISSILES.filter((k) => MISSILES[k].level <= level).map((k) => (
+                    <button key={k} role="radio" aria-checked={kind === k} className={`btn px-2.5 py-1.5 text-[13px] ${kind === k ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setKind(k as ProgramKind)}>
+                      {MISSILES[k].name}
+                    </button>
+                  ))}
+                </div>
+                <OrderButton order={act(player, { kind: 'produce', missile: kind, count: 6 })} label={`Queue 6 ${MISSILES[kind].name.toLowerCase()}s`} effect={`${Math.round((1 - PRODUCTION_RULES.price) * 100)}% cheaper than the workshop, delivered one by one.`} />
+              </>
             ) : (
-              <p className="text-[12px] text-white/60 self-center">A production plant runs a line that delivers day by day, cheaper.</p>
+              <p className="text-[12px] text-white/60">Build a production plant (Structure, above) for a line that delivers day by day, cheaper than the workshop.</p>
             )}
           </div>
         </div>

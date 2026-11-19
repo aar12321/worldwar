@@ -13,8 +13,8 @@ export function StatTile({ label, value, sub, tone }: { label: string; value: Re
 }
 
 /** A grid of stat tiles. `compact` folds each tile into a label-and-value row on phones, so a page of figures does not push its content off the screen. */
-export function Tiles({ children, compact = false }: { children: ReactNode; compact?: boolean }) {
-  return <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 span-all ${compact ? 'tiles-compact' : ''}`}>{children}</div>
+export function Tiles({ children, compact = false, four = false }: { children: ReactNode; compact?: boolean; /** Four to a row on a wide screen, for a row of four figures. */ four?: boolean }) {
+  return <div className={`grid grid-cols-2 ${four ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2 span-all ${compact ? 'tiles-compact' : ''}`}>{children}</div>
 }
 
 /** A thin progress bar. `value` is 0 to 1. */

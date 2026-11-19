@@ -7,7 +7,7 @@ import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { PRESENCE } from '../../data/presence'
-import { RELATIONS } from '../../data/relations'
+import { RELATIONS, TIES } from '../../data/relations'
 import { MPROG } from '../../data/missileProgram'
 import { CIVICS } from '../../data/civics'
 import { BLOC } from '../../data/blocs'
@@ -51,12 +51,29 @@ function withoutProgram<T>(fn: () => T): T {
   }
 }
 
-/** Runs `fn` with the bloc layer (docs/BLOC_STATUS.md: objectives, roles, calls to arms, operations, rivals playing blocs) switched off: factions play as before. */
+/**
+ * Runs `fn` with ties (docs/RELATIONS_STATUS.md, "Ties and the starting mood": trade, investment and a long peace as opinion lines, the
+ * milder starting mood, the earned fear of your power) switched off: every opinion is worked out as before.
+ */
+function withoutTies<T>(fn: () => T): T {
+  const on = TIES.on
+  TIES.on = false
+  try {
+    return fn()
+  } finally {
+    TIES.on = on
+  }
+}
+
+/**
+ * Runs `fn` with the bloc layer (docs/BLOC_STATUS.md: objectives, roles, calls to arms, operations, rivals playing blocs) switched off: factions play as before.
+ * Ties came after blocs, so they are switched off too, and every older layer's proof keeps running against its own world.
+ */
 function withoutBlocs<T>(fn: () => T): T {
   const on = BLOC.on
   BLOC.on = false
   try {
-    return fn()
+    return withoutTies(fn)
   } finally {
     BLOC.on = on
   }
@@ -136,6 +153,11 @@ function withoutPresence<T>(fn: () => T): T {
  * objectives, roles, calls to arms and joint operations, and Medium and Hard rivals play them instead of pooling and voting. Checked before
  * pinning: with `BLOC.on` switched off (`withoutBlocs`, 'blocs are the only thing that moved ...', also wrapped round every earlier layer
  * test) the previous pins (1f72167c03ee2 and 1719b377e4ad6a) return exactly.
+ * Re-pinned (all three state hashes; the small war's log did not move) for ties (docs/RELATIONS_STATUS.md, "Ties and the starting mood"): trade deals
+ * that grow with worth and time, money invested, joint ventures by stake and a long peace as opinion lines, a milder temperament and border unease,
+ * no fear of a big nation before it takes land, and the record of wars and runs of trade (the new `ties` field). Checked before pinning: with
+ * `TIES.on` switched off (`withoutTies`, 'ties are the only thing that moved ...'; `withoutBlocs` now switches it off too, so every older layer keeps
+ * its proof) the previous pins (10cf7a356e2bea, 11d73d1672f834, d077c31c237c4) return exactly.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -197,7 +219,8 @@ describe('turn mode resolves exactly as pinned', () => {
   it('twelve months of bots on the real world', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
-    expect(hash(JSON.stringify(s))).toBe('10cf7a356e2bea')
+    // Re-pinned for ties (trade, investment and a long peace in every opinion; the milder starting mood): with them off '10cf7a356e2bea' returns (see below).
+    expect(hash(JSON.stringify(s))).toBe('a0f8d651bfe97')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -209,12 +232,14 @@ describe('turn mode resolves exactly as pinned', () => {
     // All of presence, the missile war and the combat tuning on; the layers below show what each added.
     // Re-pinned for the missile program (Hard rivals build, hire, develop and test): with it switched off '1719b377e4ad6a' returns (see below).
     // Missile program + government desk + blocs together (each proven alone below).
-    expect(hash(JSON.stringify(s))).toBe('11d73d1672f834')
+    // Re-pinned for ties: with them off '11d73d1672f834' returns (see below).
+    expect(hash(JSON.stringify(s))).toBe('1879299a3721df')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
-    expect(hash(JSON.stringify(state))).toBe('d077c31c237c4')
+    // Re-pinned for ties (the war is remembered for a long peace later): with them off 'd077c31c237c4' returns (see below). The log did not move.
+    expect(hash(JSON.stringify(state))).toBe('19d872c4a61078')
     expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
   })
 
@@ -279,6 +304,16 @@ describe('turn mode resolves exactly as pinned', () => {
     }))
   }, 400_000)
 
+  it('ties are the only thing that moved the current pins: with them switched off the pins from before them return', () => {
+    withoutTies(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('10cf7a356e2bea')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('11d73d1672f834')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('d077c31c237c4')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    })
+  }, 400_000)
+
   it('blocs are the only thing that moved the current pins: with the bloc layer switched off the missile-program + desk pins return', () => {
     withoutBlocs(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('48f1aff68a4fa')
@@ -320,7 +355,7 @@ describe('turn mode resolves exactly as pinned', () => {
   it('the desk alone, unused, adds only its own field: the small war with the human desk taken out hashes to its previous pin', () => {
     // r0 is the human: it is given a neutral desk at each month end and never acts on it, and no bot in the small war looks at its desk
     // (they are Normal bots, but three months is less than their schedule needs), so removing that one field gives the old state exactly.
-    const { state } = smallWar()
+    const { state } = withoutTies(() => smallWar())
     expect(state.nations.r0.civics?.cabinet).toEqual({})
     for (const n of Object.values(state.nations)) delete n.civics
     expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')

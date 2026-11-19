@@ -23,6 +23,7 @@ import { usePlayerView } from './hooks'
 type BlocTab = 'overview' | 'operations' | 'members' | 'feed'
 
 const num = (v: number, d = 0) => (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('en-US', { maximumFractionDigits: d })
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 const pct = (v: number) => `${Math.round(v * 100)}%`
 const MEMBER_COLORS = ['#0a84ff', '#30d158', '#ffd60a', '#ff9f0a', '#bf5af2', '#64d2ff', '#ff6482', '#ac8e68']
 const nm = (g: GameState, id: NationId) => g.nations[id]?.name ?? id
@@ -237,7 +238,7 @@ function Scoreboard({ g, f }: { g: GameState; f: Faction }) {
               <span className="font-semibold truncate">
                 {r.f.name} {mine && <span className="chip chip-blue">You</span>} {enemy && <span className="chip chip-red">At war</span>}
               </span>
-              <span className="text-white/70 tabular-nums whitespace-nowrap">Lv {levelOf(blocOf(r.f).xp)} · {seatsUsed(g, r.f)} members · {num(r.power)}</span>
+              <span className="text-white/70 tabular-nums whitespace-nowrap">Lv {levelOf(blocOf(r.f).xp)} · {plural(seatsUsed(g, r.f), 'member', 'members')} · {num(r.power)}</span>
             </div>
             <div className="mt-1.5">
               <Bar value={r.power / top} color={mine ? '#0a84ff' : enemy ? '#ff453a' : '#8e8e93'} label={`${r.f.name} strength`} />
@@ -264,7 +265,7 @@ function WarsAndCall({ g, f, me, orders }: { g: GameState; f: Faction; me: Natio
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold">{nm(g, e)}</span>
               <span className="flex items-center gap-2">
-                <span className="text-[12.5px] text-white/70">{regionsOf(g, e).length} countries</span>
+                <span className="text-[12.5px] text-white/70">{plural(regionsOf(g, e).length, 'country', 'countries')}</span>
                 <LocateButton id={e} compact />
               </span>
             </div>
@@ -631,6 +632,8 @@ function FeedTab({ g, f, me }: { g: GameState; f: Faction; me: NationId }) {
 
 function FoundBloc({ g, me }: { g: GameState; me: NationId }) {
   const [name, setName] = useState('')
+  // A founding waits for the 1st: say so here, not only in the order tray (docs/DEMO_CHECK.md).
+  const founding = useGame((s) => s.orders.find((o) => o.type === 'factionFound' && o.nationId === me))
   const others = [...(g.factions ?? [])].sort((a, b) => blocPower(g, b) - blocPower(g, a))
   return (
     <div className="space-y-5">
@@ -648,6 +651,11 @@ function FoundBloc({ g, me }: { g: GameState; me: NationId }) {
           <span className="label">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={FACTION.nameMax} placeholder="The Iron Pact" aria-label="Bloc name" className="field w-full px-3 py-2 text-[15px]" />
         </label>
+        {founding && founding.type === 'factionFound' && (
+          <p className="rounded-lg border border-[#ffd60a]/50 bg-[#ffd60a]/8 px-3 py-2 text-[13px] text-[#ffd60a]" data-testid="bloc-founding">
+            {founding.name ? `${founding.name} is` : 'Your bloc is'} founded {isLive(g) ? 'on the 1st of next month' : 'when the month ends'}. Then invite others from this desk. Cancel it in the order tray.
+          </p>
+        )}
         <OrderButton order={{ type: 'factionFound', nationId: me, name }} label="Found the bloc" cost={`${FACTION.foundInfluence} influence`} effect="It exists when the month ends; then invite others" tone="btn-primary" className="w-full" />
       </section>
       {others.length > 0 && (
@@ -657,7 +665,7 @@ function FoundBloc({ g, me }: { g: GameState; me: NationId }) {
             <div key={x.id} className="rounded-xl border border-white/12 bg-white/5 p-3 text-[14px] space-y-1.5">
               <div className="flex justify-between gap-2">
                 <span className="font-semibold">{x.name}</span>
-                <span className="text-white/65 whitespace-nowrap">Lv {levelOf(blocOf(x).xp)} · {seatsUsed(g, x)} members · {num(blocPower(g, x))}</span>
+                <span className="text-white/65 whitespace-nowrap">Lv {levelOf(blocOf(x).xp)} · {plural(seatsUsed(g, x), 'member', 'members')} · {num(blocPower(g, x))}</span>
               </div>
               <div className="text-white/75">{x.members.map((m) => nm(g, m)).join(', ')}</div>
               <OrderButton order={{ type: 'factionRequest', nationId: me, factionId: x.id }} label={`Ask to join ${x.name}`} cost={`${FACTION.requestInfluence} influence`} effect={x.members.some((m) => isPerson(g, m)) ? 'A member who is a player decides' : 'Its members answer when the month ends'} />
@@ -684,7 +692,7 @@ export function BlocPanel() {
   return (
     <PanelShell
       title="Bloc"
-      kicker={f ? `${f.name} · level ${levelOf(b.xp)} · ${seatsUsed(g, f)} members${rival ? ` · rival: ${rival.name}` : ''}` : 'Form an alliance bloc: joint operations, objectives, perks and roles.'}
+      kicker={f ? `${f.name} · level ${levelOf(b.xp)} · ${plural(seatsUsed(g, f), 'member', 'members')}${rival ? ` · rival: ${rival.name}` : ''}` : 'Form an alliance bloc: joint operations, objectives, perks and roles.'}
       panel="faction"
       tabs={
         f ? (

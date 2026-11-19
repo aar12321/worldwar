@@ -51,6 +51,18 @@ export function warStatus(game: GameState, player: Nation): WarStatus {
   }
 }
 
+/**
+ * The line under the ladder. The rung is the world's tension, not what is flying: a salvo can be in the air on a Calm rung, so the
+ * salvos in the air come first and the rung's meaning after.
+ */
+export function ladderNote(st: Pick<WarStatus, 'rung' | 'incoming' | 'outgoing'>): string {
+  const blurb = MW.ladder[st.rung].blurb
+  const salvos = (n: number) => `${n} salvo${n === 1 ? '' : 's'}`
+  if (st.incoming > 0) return `${salvos(st.incoming)} on the way to you${st.outgoing > 0 ? ` and ${salvos(st.outgoing)} of yours in the air` : ''} (see In the air, below). ${blurb}`
+  if (st.outgoing > 0) return `${salvos(st.outgoing)} of yours in the air. ${blurb}`
+  return blurb
+}
+
 export interface Step {
   id: string
   /** What to do, in a sentence, and why. */

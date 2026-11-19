@@ -15,7 +15,7 @@ import { usePlayerView } from './hooks'
 import { MissileSection } from './MissileSection'
 import { NuclearCard } from './NuclearCard'
 import { ALERT_COLOR, flightsFor, lookColor, stageOf, type Incoming, type Palette } from './missileFx'
-import { raidReach, nextSteps, salvoLine, warStatus, type Step } from './missileWarText'
+import { ladderNote, raidReach, nextSteps, salvoLine, warStatus, type Step } from './missileWarText'
 import { missileName } from './missileText'
 import { OrderButton } from './panel'
 
@@ -23,14 +23,33 @@ const { map } = getWorld()
 const nameOf = (game: GameState, id: string) => game.nations[id]?.name ?? id
 const palette = (): Palette => (useGame.getState().settings.ui.palette === 'colorblind' ? 'colorblind' : 'standard')
 
+/**
+ * The desk's game with today's salvos and date. The desks read a slower copy of a live game that skips days on which only the clock,
+ * armies and flights moved, so without this a salvo launched on a quiet day did not show here (and the ladder said nothing was flying).
+ */
+function useMissileGame(): GameState | null {
+  const slow = usePlayerView()?.game ?? null
+  const flights = useGame((s) => s.game?.flights)
+  const day = useGame((s) => s.game?.day)
+  return useMemo(() => (slow && (slow.flights !== flights || slow.day !== day) ? { ...slow, flights, day } : slow), [slow, flights, day])
+}
+
 /** The ladder: five rungs, the world's tension on it, and what the rung means. */
 export function TensionLadder({ game }: { game: GameState }) {
   const st = warStatus(game, game.nations[game.playerId])
   return (
     <div className="space-y-1.5" data-rung={st.rung} role="img" aria-label={`Missile war tension ${Math.round(st.tension)} of 100: ${st.rungName}`}>
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="text-[15px] font-semibold">{st.rungName}</div>
-        <div className="text-[13px] text-white/70 tabular-nums">tension {Math.round(st.tension)} / 100</div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="text-[15px] font-semibold">{st.rungName}</span>
+          {st.incoming > 0 && (
+            <span className="chip chip-red" data-incoming={st.incoming}>
+              {st.incoming} incoming
+            </span>
+          )}
+          {st.outgoing > 0 && <span className="chip">{st.outgoing} outgoing</span>}
+        </div>
+        <div className="text-[13px] text-white/70 tabular-nums">world tension {Math.round(st.tension)} / 100</div>
       </div>
       <div className="grid grid-cols-5 gap-1">
         {MW.ladder.map((r, i) => (
@@ -40,7 +59,9 @@ export function TensionLadder({ game }: { game: GameState }) {
           </div>
         ))}
       </div>
-      <p className="text-[12px] text-white/65">{MW.ladder[st.rung].blurb}</p>
+      <p className="text-[12px] text-white/65" data-ladder-note>
+        {ladderNote(st)}
+      </p>
     </div>
   )
 }
@@ -82,13 +103,13 @@ export function SalvoTimeline({ game, flight, mine }: { game: GameState; flight:
   )
 }
 
-function StepRow({ step }: { step: Step }) {
+function StepRow({ step, game }: { step: Step; game: GameState }) {
   const openMilitary = useGame((s) => s.openMilitary)
   const tone = step.tone === 'urgent' ? 'border-[#ff453a]/70 bg-[#ff453a]/10' : 'border-white/10 bg-white/5'
   return (
     <li className={`rounded-xl border p-2.5 space-y-1.5 ${tone}`} data-step={step.id}>
       <p className="text-[13px] text-white/90">{step.text}</p>
-      {step.order && <OrderButton order={step.order} label={stepLabel(step)} tone={step.tone === 'urgent' ? 'btn-red' : 'btn-primary'} className="w-full sm:w-auto" />}
+      {step.order && <OrderButton order={step.order} game={game} label={stepLabel(step)} tone={step.tone === 'urgent' ? 'btn-red' : 'btn-primary'} className="w-full sm:w-auto" />}
       {step.go && !step.order && (
         <button
           className="btn btn-quiet px-3 py-1.5 text-[13px]"
@@ -101,7 +122,7 @@ function StepRow({ step }: { step: Step }) {
             } else openMilitary(step.go === 'deploy' ? 'deploy' : step.go === 'war' ? 'wars' : step.go === 'program' ? 'program' : 'systems')
           }}
         >
-          {step.go === 'strike' ? 'Open the strike planner' : step.go === 'deploy' ? 'Open Deployment' : 'Open the program'}
+          {step.go === 'strike' ? 'Open the strike planner' : step.go === 'deploy' ? 'Open Deployment' : step.go === 'war' ? 'Open Wars' : step.go === 'systems' ? 'Open Systems' : 'Open the program'}
         </button>
       )}
     </li>
@@ -113,9 +134,9 @@ const stepLabel = (s: Step): string =>
 
 /** The concrete next steps in the missile war, with a button for each. Used by the Missile War tab and the missile program. */
 export function NextSteps({ limit = 4 }: { limit?: number }) {
-  const view = usePlayerView()
-  if (!view) return null
-  const { game, player } = view
+  const game = useMissileGame()
+  if (!game) return null
+  const player = game.nations[game.playerId]
   const steps = nextSteps(game, map, player, isLive(game), limit)
   const st = warStatus(game, player)
   return (
@@ -126,7 +147,7 @@ export function NextSteps({ limit = 4 }: { limit?: number }) {
           {st.rungName} · {st.incoming} incoming · {st.outgoing} outgoing · exchange {st.exchange === null ? 'n/a' : `${st.exchange.toFixed(1)} : 1`}
         </span>
       </div>
-      {steps.length ? <ul className="space-y-2">{steps.map((s) => <StepRow key={s.id} step={s} />)}</ul> : <p className="text-[13px] text-white/70">Nothing urgent. Your defences are up and you have no war to fight with missiles.</p>}
+      {steps.length ? <ul className="space-y-2">{steps.map((s) => <StepRow key={s.id} step={s} game={game} />)}</ul> : <p className="text-[13px] text-white/70">Nothing urgent. Your defences are up and you have no war to fight with missiles.</p>}
     </section>
   )
 }
@@ -330,6 +351,19 @@ function Planner({ game, player }: { game: GameState; player: Nation }) {
   )
 }
 
+function LedgerGrid({ rows }: { rows: string[][] }) {
+  return (
+    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+      {rows.map(([k, v]) => (
+        <div key={k} className="rounded-lg bg-white/6 py-1.5">
+          <dt className="label">{k}</dt>
+          <dd className="text-[15px] font-semibold tabular-nums">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
 /** The kill ledger: what you fired and what stopped it, the exchange and the last salvos. */
 function LedgerCard({ game, player }: { game: GameState; player: Nation }) {
   const st = warStatus(game, player)
@@ -339,12 +373,19 @@ function LedgerCard({ game, player }: { game: GameState; player: Nation }) {
   return (
     <section className="inset-card p-3.5 space-y-3" aria-label="Kill ledger" data-ledger>
       <h3 className="text-[15px] font-semibold">Kill ledger</h3>
-      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-        {[
+      <LedgerGrid
+        rows={[
           ['Fired', `${led.fired}`],
           ['Got through', `${led.hits}`],
           ['Shot down', `${led.shotDown}`],
           ['Exchange', st.exchange === null ? 'n/a' : `${st.exchange.toFixed(1)} : 1`],
+        ]}
+      />
+      <details className="text-[13px]">
+        <summary className="cursor-pointer text-white/75">The whole ledger: dead, line, sites, stores, rounds, aircraft</summary>
+        <div className="mt-2">
+      <LedgerGrid
+        rows={[
           ['Dealt (M dead)', led.killed.toFixed(1)],
           ['Taken (M dead)', led.lost.toFixed(1)],
           ['Line dealt', led.lineDealt.toFixed(1)],
@@ -353,13 +394,10 @@ function LedgerCard({ game, player }: { game: GameState; player: Nation }) {
           ['Stock destroyed', led.stockDestroyed.toFixed(0)],
           ['Rounds spent', led.interceptorsSpent.toFixed(0)],
           ['Aircraft lost', led.aircraftLost.toFixed(1)],
-        ].map(([k, v]) => (
-          <div key={k} className="rounded-lg bg-white/6 py-1.5">
-            <dt className="label">{k}</dt>
-            <dd className="text-[15px] font-semibold tabular-nums">{v}</dd>
-          </div>
-        ))}
-      </dl>
+        ]}
+      />
+        </div>
+      </details>
       {reports.length ? (
         <ol className="space-y-1.5" aria-label="Recent salvos">
           {reports.map((r) => (
@@ -398,17 +436,14 @@ function CeasefireCard({ game, player }: { game: GameState; player: Nation }) {
 
 /** The Missile War desk: everything about the missile war in one place, with what to do next at the top. */
 export function MissileWarTab() {
-  const view = usePlayerView()
-  if (!view) return null
-  const { game, player } = view
+  const game = useMissileGame()
+  if (!game) return null
+  const player = game.nations[game.playerId]
   const live = isLive(game)
   const incoming = flightsFor(game, player.id, 'incoming')
   const outgoing = flightsFor(game, player.id, 'outgoing')
   return (
     <div className="space-y-3" data-missile-war>
-      <p className="text-[13px] text-white/75">
-        Missiles are a war of their own. Radar sees them coming, interceptors and batteries shoot them down until the store runs dry, decoys and big salvos burn the rounds, and counterforce strikes and raids go after the launchers. Every strike raises the world's tension.
-      </p>
       <section className="inset-card p-3.5 space-y-3">
         <TensionLadder game={game} />
         <NextSteps limit={5} />
@@ -419,7 +454,7 @@ export function MissileWarTab() {
           {incoming.map((f) => (
             <div key={f.id} className="space-y-1.5">
               <SalvoTimeline game={game} flight={f} mine="incoming" />
-              {!f.scrambled && <OrderButton order={{ type: 'scramble', nationId: player.id, flightId: f.id }} label="Scramble fighters" cost={`${MW.scrambleMoney} money`} effect={`A scrambled wing counts ${MW.scrambleWing} times and stops ${Math.round(MW.scrambleStop * 100)}% more of this salvo.`} tone="btn-red" />}
+              {!f.scrambled && <OrderButton game={game} order={{ type: 'scramble', nationId: player.id, flightId: f.id }} label="Scramble fighters" cost={`${MW.scrambleMoney} money`} effect={`A scrambled wing counts ${MW.scrambleWing} times and stops ${Math.round(MW.scrambleStop * 100)}% more of this salvo.`} tone="btn-red" />}
             </div>
           ))}
           {outgoing.map((f) => (
@@ -437,6 +472,9 @@ export function MissileWarTab() {
       <LedgerCard game={game} player={player} />
       <Planner game={game} player={player} />
       {launchSiteHint(game, player)}
+      <p className="text-[12px] text-white/60">
+        How the missile war works: radar sees salvos coming, interceptors and batteries shoot them down until the store runs dry, decoys and big salvos burn the rounds, and counterforce strikes and raids go after the launchers. Every strike raises the world's tension.
+      </p>
     </div>
   )
 }

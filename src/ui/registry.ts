@@ -187,7 +187,7 @@ export const DESKS: DeskDef[] = [
     order: 62,
     shell: 'custom',
     load: lazyOf(() => import('./Relations'), 'RelationsPanel'),
-    keywords: ['relationship', 'opinion', 'visit', 'embassy', 'aid', 'venture', 'locate', 'favour', 'war plan', 'trade', 'partners', 'attache'],
+    keywords: ['relationship', 'opinion', 'trust', 'visit', 'embassy', 'aid', 'venture', 'investment', 'locate', 'favour', 'war plan', 'trade', 'partners', 'neighbours', 'attache'],
     badge: (c) => (c.game ? c.game.relations?.requests.filter((q) => q.to === c.game!.playerId).length || null : null),
   },
 
