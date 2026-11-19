@@ -102,7 +102,7 @@ export function SalvoTimeline({ game, flight, mine }: { game: GameState; flight:
   )
 }
 
-function StepRow({ step }: { step: Step }) {
+function StepRow({ step, game }: { step: Step; game: GameState }) {
   const view = usePlayerView()!
   const openMilitary = useGame((s) => s.openMilitary)
   const openWarRoom = useGame((s) => s.openWarRoom)
@@ -110,7 +110,7 @@ function StepRow({ step }: { step: Step }) {
   return (
     <li className={`rounded-xl border p-2.5 space-y-1.5 ${tone}`} data-step={step.id}>
       <p className="text-[13px] text-white/90">{step.text}</p>
-      {step.order && <OrderButton order={step.order} label={stepLabel(step)} tone={step.tone === 'urgent' ? 'btn-red' : 'btn-primary'} className="w-full sm:w-auto" />}
+      {step.order && <OrderButton order={step.order} game={game} label={stepLabel(step)} tone={step.tone === 'urgent' ? 'btn-red' : 'btn-primary'} className="w-full sm:w-auto" />}
       {step.go && !step.order && (
         <button
           className="btn btn-quiet px-3 py-1.5 text-[13px]"
@@ -147,7 +147,7 @@ export function NextSteps({ limit = 4 }: { limit?: number }) {
           {st.rungName} · {st.incoming} incoming · {st.outgoing} outgoing · exchange {st.exchange === null ? 'n/a' : `${st.exchange.toFixed(1)} : 1`}
         </span>
       </div>
-      {steps.length ? <ul className="space-y-2">{steps.map((s) => <StepRow key={s.id} step={s} />)}</ul> : <p className="text-[13px] text-white/70">Nothing urgent. Your defences are up and you have no war to fight with missiles.</p>}
+      {steps.length ? <ul className="space-y-2">{steps.map((s) => <StepRow key={s.id} step={s} game={game} />)}</ul> : <p className="text-[13px] text-white/70">Nothing urgent. Your defences are up and you have no war to fight with missiles.</p>}
     </section>
   )
 }
@@ -431,7 +431,7 @@ export function MissileWarTab() {
           {incoming.map((f) => (
             <div key={f.id} className="space-y-1.5">
               <SalvoTimeline game={game} flight={f} mine="incoming" />
-              {!f.scrambled && <OrderButton order={{ type: 'scramble', nationId: player.id, flightId: f.id }} label="Scramble fighters" cost={`${MW.scrambleMoney} money`} effect={`A scrambled wing counts ${MW.scrambleWing} times and stops ${Math.round(MW.scrambleStop * 100)}% more of this salvo.`} tone="btn-red" />}
+              {!f.scrambled && <OrderButton game={game} order={{ type: 'scramble', nationId: player.id, flightId: f.id }} label="Scramble fighters" cost={`${MW.scrambleMoney} money`} effect={`A scrambled wing counts ${MW.scrambleWing} times and stops ${Math.round(MW.scrambleStop * 100)}% more of this salvo.`} tone="btn-red" />}
             </div>
           ))}
           {outgoing.map((f) => (

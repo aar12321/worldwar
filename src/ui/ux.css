@@ -83,6 +83,16 @@ input:focus-visible {
   .country-card {
     max-height: calc((100dvh - 150px) / var(--ui-scale) - var(--hud-h));
   }
+  /* The country card is a bottom sheet on a phone: at most about half the screen, so the globe and the country stay in view. */
+  .country-card {
+    max-height: min(calc(46dvh / var(--ui-scale)), calc((100dvh - 150px) / var(--ui-scale) - var(--hud-h)));
+  }
+  /* With an alert chip under the top bar (missiles or an army on the way), a desk starts below it, so the chip never covers the
+     desk's title and its close button. */
+  body:has(.pill-stack > *) .drawer,
+  body:has(.pill-stack > *) .drawer-wide {
+    max-height: calc((100dvh - 150px) / var(--ui-scale) - var(--hud-h) - 60px);
+  }
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */

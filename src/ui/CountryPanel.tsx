@@ -101,52 +101,7 @@ export function CountryPanel() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin p-5 space-y-4">
-        {!mine && (
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between text-[14px]">
-              <span className="font-semibold">Military strength</span>
-              <span className="tabular-nums text-white/80">
-                You {myPower.toFixed(0)} · them {showPower(theirView)}
-              </span>
-            </div>
-            <div className="h-2.5 rounded-full bg-[#ff453a]/70 overflow-hidden" role="img" aria-label={`Your strength ${myPower.toFixed(0)} against ${showPower(theirView)}`}>
-              <div className="h-full bg-[#0a84ff]" style={{ width: `${(myPower / Math.max(1, myPower + theirPower)) * 100}%` }} />
-            </div>
-            {war && (
-              <p className="text-[12.5px] leading-snug text-white/70" title="Strength adds up what each unit is worth. It leaves out their garrison, the terrain, the Defense Line, the stance and how much of your force goes, and the defender wins ties.">
-                Strength is not odds.{' '}
-                {odds ? (
-                  <>
-                    Attacking {mr.name} now: a main force wins <b className="text-white/90">{oddsText(odds.main)}</b>, everything <b className="text-white/90">{oddsText(odds.allin)}</b>.
-                  </>
-                ) : (
-                  'Out of reach for now: odds appear when you can attack. A main force usually needs about twice their strength to be sure.'
-                )}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              {UNIT_TYPES.filter((u) => owner.military.units[u] >= 0.05).map((u) => (
-                <span key={u} className="chip" title={`${owner.name}'s ${u}`}>
-                  <UnitIcon unit={u} size={15} /> {formatDivisions(owner.military.units[u])}
-                </span>
-              ))}
-              {UNIT_TYPES.every((u) => owner.military.units[u] < 0.05) && <span className="text-[13px] text-white/70">No field army. Only the garrison defends.</span>}
-            </div>
-          </div>
-        )}
-        <div className="space-y-1.5">
-          <div className="flex items-baseline justify-between text-[14px]">
-            <span className="font-semibold">Defense Line</span>
-            <span className="tabular-nums text-white/80">
-              {line.toFixed(1)} of {max.toFixed(1)}
-            </span>
-          </div>
-          <LineBar now={line} max={max} />
-          {mine && <p className="text-[13px] text-white/70">An enemy must wear this down to zero to take the country. Barracks make it longer.</p>}
-        </div>
-        <BorderCard game={game} map={map} selected={selected} mine={mine} />
-        {region.rebels > 0 && <p className="text-[14px] text-[#ff8a84]">Rebels are fighting here ({region.rebels.toFixed(1)} divisions).</p>}
-
+        {/* The next useful action first: on a phone the card is a short sheet, and the buttons must not hide below the numbers. */}
         {mine ? (
           <div className="flex flex-wrap gap-2">
             <button className="btn btn-primary" onClick={() => openEconomy('country', selected)}>
@@ -193,6 +148,52 @@ export function CountryPanel() {
             </button>
           </div>
         )}
+
+        {!mine && (
+          <div className="space-y-1.5">
+            <div className="flex items-baseline justify-between text-[14px]">
+              <span className="font-semibold">Military strength</span>
+              <span className="tabular-nums text-white/80">
+                You {myPower.toFixed(0)} · them {showPower(theirView)}
+              </span>
+            </div>
+            <div className="h-2.5 rounded-full bg-[#ff453a]/70 overflow-hidden" role="img" aria-label={`Your strength ${myPower.toFixed(0)} against ${showPower(theirView)}`}>
+              <div className="h-full bg-[#0a84ff]" style={{ width: `${(myPower / Math.max(1, myPower + theirPower)) * 100}%` }} />
+            </div>
+            {war && (
+              <p className="text-[12.5px] leading-snug text-white/70" title="Strength adds up what each unit is worth. It leaves out their garrison, the terrain, the Defense Line, the stance and how much of your force goes, and the defender wins ties.">
+                Strength is not odds.{' '}
+                {odds ? (
+                  <>
+                    Attacking {mr.name} now: a main force wins <b className="text-white/90">{oddsText(odds.main)}</b>, everything <b className="text-white/90">{oddsText(odds.allin)}</b>.
+                  </>
+                ) : (
+                  'Out of reach for now: odds appear when you can attack. A main force usually needs about twice their strength to be sure.'
+                )}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {UNIT_TYPES.filter((u) => owner.military.units[u] >= 0.05).map((u) => (
+                <span key={u} className="chip" title={`${owner.name}'s ${u}`}>
+                  <UnitIcon unit={u} size={15} /> {formatDivisions(owner.military.units[u])}
+                </span>
+              ))}
+              {UNIT_TYPES.every((u) => owner.military.units[u] < 0.05) && <span className="text-[13px] text-white/70">No field army. Only the garrison defends.</span>}
+            </div>
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <div className="flex items-baseline justify-between text-[14px]">
+            <span className="font-semibold">Defense Line</span>
+            <span className="tabular-nums text-white/80">
+              {line.toFixed(1)} of {max.toFixed(1)}
+            </span>
+          </div>
+          <LineBar now={line} max={max} />
+          {mine && <p className="text-[13px] text-white/70">An enemy must wear this down to zero to take the country. Barracks make it longer.</p>}
+        </div>
+        <BorderCard game={game} map={map} selected={selected} mine={mine} />
+        {region.rebels > 0 && <p className="text-[14px] text-[#ff8a84]">Rebels are fighting here ({region.rebels.toFixed(1)} divisions).</p>}
 
         <details className="details-card">
           <summary>More about {mr.name}</summary>
