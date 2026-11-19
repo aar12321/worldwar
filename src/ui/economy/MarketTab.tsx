@@ -76,19 +76,20 @@ function MarketRow({ r, prices, room, per, toggleAuto }: { r: TradeResource; pri
         </span>
         <span className={`tabular-nums ${per < 0 ? 'text-[#ff8a84]' : 'text-white/75'}`}>{signed(per)} a month</span>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <OrderButton order={buy(5)} label="Buy 5" cost={`${marketValue(game, player, r, 5, 'buy', prices).toFixed(0)} money`} tone="btn-primary" />
-        <OrderButton order={buy(20)} label="Buy 20" cost={`${marketValue(game, player, r, 20, 'buy', prices).toFixed(0)} money`} tone="btn-primary" />
-        <OrderButton order={sell(5)} label="Sell 5" cost={`+${marketValue(game, player, r, 5, 'sell', prices).toFixed(0)} money`} />
-        <OrderButton order={sell(20)} label="Sell 20" cost={`+${marketValue(game, player, r, 20, 'sell', prices).toFixed(0)} money`} />
-      </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <label className="flex items-center gap-2 text-[13px] text-white/75">
           Amount
-          <input type="number" min={1} max={9999} step={1} className="field w-24 px-2 py-1.5 text-[14px] tabular-nums" value={amount} onChange={(e) => setAmount(+e.target.value)} aria-label={`Amount of ${MARKET[r].name} to trade`} />
+          <input type="number" min={1} max={9999} step={1} className="field w-20 px-2 py-1.5 text-[14px] tabular-nums" value={amount} onChange={(e) => setAmount(+e.target.value)} aria-label={`Amount of ${MARKET[r].name} to trade`} />
         </label>
-        <OrderButton order={buy(custom)} label={`Buy ${custom}`} cost={`${marketValue(game, player, r, custom, 'buy', prices).toFixed(0)}`} tone="btn-primary" className="flex-1" />
-        <OrderButton order={sell(custom)} label={`Sell ${custom}`} cost={`+${marketValue(game, player, r, custom, 'sell', prices).toFixed(0)}`} className="flex-1" />
+        {[5, 20, 50].map((n) => (
+          <button key={n} type="button" className={`btn px-2.5 py-1 text-[13px] ${custom === n ? 'btn-primary' : 'btn-quiet'}`} aria-pressed={custom === n} onClick={() => setAmount(n)}>
+            {n}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <OrderButton order={buy(custom)} label={`Buy ${custom}`} cost={`${marketValue(game, player, r, custom, 'buy', prices).toFixed(0)} money`} tone="btn-primary" />
+        <OrderButton order={sell(custom)} label={`Sell ${custom}`} cost={`+${marketValue(game, player, r, custom, 'sell', prices).toFixed(0)} money`} />
       </div>
       {toThree > 0 && (
         <OrderButton order={buy(Math.min(toThree, Math.floor(room)))} label={`Fill to 3 months`} effect={`${Math.min(toThree, Math.floor(room))} of ${toThree} that would be needed (trade room ${room.toFixed(0)})`} />
