@@ -6,7 +6,7 @@ import { MARKET, TRAIN_QUEUE_LIMIT, UNIT_SPECS } from '../data/unitTypes'
 import { landBorders } from '../engine/deployment'
 import { factionOf } from '../engine/factions'
 import { formatDivisions, regionsOf, territoriesOf, totalUnits } from '../engine/helpers'
-import { annexTerritoryCost, cutOf, forceTradeProblem } from '../engine/territories'
+import { annexTerritoryCost, cutOf, forceTradeProblem, maxTerritories } from '../engine/territories'
 import { validateOrder } from '../engine/orders'
 import { trainMonths } from '../engine/training'
 import type { Nation, NationId, Order, TradeResource, UnitType } from '../engine/types'
@@ -52,7 +52,7 @@ export default function TerritoriesTab() {
         A territory is held for ever. You take <strong>{pctTxt(TERRITORY.cut)}</strong> of its revenue every month, and nothing it does can lower that. It sits in your faction and cannot leave, fights in every war you fight, and owes no war reparations. Its people are its own, not yours, but you <strong>command its army</strong> and may force it into trade deals. It still pays its own upkeep.
       </p>
       <Tiles>
-        <StatTile label="Territories" value={ids.length} sub={`of ${TERRITORY.maxByTier[Math.max(0, Math.min(4, (player.tier ?? 1) - 1))]} your rank allows`} />
+        <StatTile label="Territories" value={ids.length} sub={`of ${maxTerritories(player)} your rank allows`} />
         <StatTile label="Your cut a month" value={money(cut)} sub={`${pctTxt(TERRITORY.cut)} of their revenue`} tone="good" />
         <StatTile label="Taken so far" value={money(taken)} sub="money, all territories" />
         <StatTile label="Their armies" value={formatDivisions(army)} sub="divisions you command" />

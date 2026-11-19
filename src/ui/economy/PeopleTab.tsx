@@ -195,7 +195,7 @@ function Mood() {
     { label: 'Food', value: econ.foodConsumption > 0 ? (econ.foodProduction / econ.foodConsumption) * 80 : 100, status: player.foodShortage ? 'Starving' : econ.netFood < 0 ? 'Running down' : 'Fed' },
     { label: 'Goods', value: econ.goodsUse > 0 ? (econ.goodsProduction / econ.goodsUse) * 80 : 100, status: player.goodsShortage ? 'Sold out' : econ.netGoods < 0 ? 'Running down' : 'Well supplied' },
     { label: 'Work', value: econ.laborRatio * 100, status: `${Math.round(econ.laborRatio * 100)}% of jobs filled` },
-    { label: 'Taxes', value: 100 - view.pendingPolicy.taxRate * 250, status: `${Math.round(view.pendingPolicy.taxRate * 100)}% tax` },
+    { label: 'Taxes', value: 65 + 2 * econ.stabilityParts.filter((x) => x.label === 'High taxes' || x.label === 'Low taxes').reduce((a, x) => a + x.value, 0), status: `${Math.round(view.pendingPolicy.taxRate * 100)}% tax` },
     { label: 'Peace', value: 100 - (player.warWeariness / 60) * 100, status: player.warWeariness > 25 ? 'War-weary' : player.warWeariness > 8 ? 'Tired of war' : enemiesOf(game, player.id).length ? 'At war' : 'Calm' },
     { label: 'Prices', value: 100 - Math.max(0, player.bank.inflation - 2) * 6, status: `${player.bank.inflation.toFixed(1)}% inflation` },
     { label: 'Health', value: player.people.health * 100, status: `${Math.round(lifeExpectancy(player.people.health))} years of life` },
