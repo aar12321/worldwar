@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BUSINESS, INVEST, SECTORS, SECTOR_IDS } from '../../data/business'
 import { CORPORATE_TAX } from '../../data/government'
 import { fundingGain, growthClimate, investedIn, sectorCap } from '../../engine/business'
@@ -10,15 +11,14 @@ import { ENTERPRISE, ARMS_EXPORTS } from '../../data/projects'
 import { tierOf } from '../../engine/empire'
 import { enterpriseCost, enterpriseEfficiency } from '../../engine/industry'
 import { signed, usePlayerView } from '../hooks'
-import { Pending } from '../kit'
+import { Bar, Pending } from '../kit'
 import { OrderButton } from '../panel'
-import { Card, Line, SliderRow } from './parts'
+import { Card, GoTo, Line, SliderRow } from './parts'
 
 /** Private business: six sectors that grow on their own, and what you can do to help or tax them. */
 export function BusinessTab() {
   const view = usePlayerView()!
   const setPolicy = useGame((s) => s.setPolicy)
-  const issueOrder = useGame((s) => s.issueOrder)
   const { game, player, econ } = view
   const setPrograms = useGame((st) => st.setPrograms)
   const spec0 = tierOf(player)
@@ -28,7 +28,6 @@ export function BusinessTab() {
   const climate = growthClimate({ ...player, corporateTax: corp }, policyEffects(player))
   const mine = game.investments.filter((i) => i.investor === player.id)
   const theirs = game.investments.filter((i) => i.target === player.id)
-  const toggleSubsidy = (id: SectorId) => issueOrder({ type: 'setSubsidies', nationId: player.id, sectors: player.subsidies.includes(id) ? player.subsidies.filter((x) => x !== id) : [...player.subsidies, id] })
 
   return (
     <section className="econ-grid">
@@ -41,45 +40,13 @@ export function BusinessTab() {
         </div>
       </Card>
 
-      {SECTOR_IDS.map((id) => {
-        const size = player.sectors[id] ?? 0
-        const spec = SECTORS[id]
-        const subsidized = player.subsidies.includes(id)
-        const fund = (amount: number) => ({ type: 'fundSector' as const, nationId: player.id, sector: id, amount })
-        return (
-          <Card key={id} title={spec.name} hint={`${spec.blurb} Each point makes ${spec.yields} a month.`} right={<span className="text-[14px] font-semibold tabular-nums shrink-0">{size.toFixed(1)}<span className="text-white/60"> of {cap.toFixed(0)}</span></span>}>
-            <div className="h-2 rounded-full bg-white/12 overflow-hidden" role="img" aria-label={`${spec.name} ${size.toFixed(1)} of ${cap.toFixed(0)}`}>
-              <div className="h-full bg-[#30d158]" style={{ width: `${Math.min(100, (size / cap) * 100)}%` }} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <OrderButton order={fund(50)} label="Grant 50" cost="50 money" effect={`+${fundingGain(size, 50).toFixed(1)} size`} tone="btn-primary" />
-              <OrderButton order={fund(150)} label="Grant 150" cost="150 money" effect={`+${fundingGain(size, 150).toFixed(1)} size`} tone="btn-primary" />
-            </div>
-            {player.stateOwned.includes(id) ? (
-              <div className="flex items-center justify-between gap-3 rounded-xl bg-[#0a84ff]/10 p-2.5 text-[13px]">
-                <span>
-                  <b>State-owned.</b> The state keeps {Math.round(enterpriseEfficiency(player) * 100)}% of its profit ({signed(size * spec.profit * enterpriseEfficiency(player))} a month). It grows at half speed.
-                </span>
-                <OrderButton order={{ type: 'setStateOwned', nationId: player.id, sector: id, mode: 'sell' }} label="Sell" cost={`+${Math.round(ENTERPRISE.sellPerSize * size)}`} />
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <OrderButton order={{ type: 'setStateOwned', nationId: player.id, sector: id, mode: 'buy' }} label="Buy it" cost={`${enterpriseCost(player, id, 'buy')}`} effect="The state takes its profit" />
-                <OrderButton order={{ type: 'setStateOwned', nationId: player.id, sector: id, mode: 'seize' }} label="Seize it" effect={`Free, but stability -${ENTERPRISE.seizeStability} and investors flee`} className="btn-red" />
-              </div>
-            )}
-            <label className="flex items-center justify-between gap-3 text-[14px]">
-              <span>
-                Subsidize
-                <span className="block text-[12px] text-white/65">
-                  Grows {Math.round(BUSINESS.subsidyGrowth * 100)}% faster. Costs {(size * BUSINESS.subsidyCost).toFixed(1)} money a month.
-                </span>
-              </span>
-              <input type="checkbox" checked={subsidized} onChange={() => toggleSubsidy(id)} aria-label={`Subsidize ${spec.name}`} />
-            </label>
-          </Card>
-        )
-      })}
+      <Card title="Sectors" hint="Each grows by itself. Open one to fund it, subsidize it or bring it into state hands." right={<span className="text-[12px] text-white/60 whitespace-nowrap">{player.stateOwned.length} state-owned · {player.subsidies.length} subsidized</span>}>
+        <div className="space-y-1.5">
+          {SECTOR_IDS.map((id) => (
+            <SectorRow key={id} id={id} cap={cap} />
+          ))}
+        </div>
+      </Card>
 
       <Card title="Arms exports" hint="Sell weapons from your arms makers. Income is capped at a tenth of your earnings and it feeds the arms sector, but selling to anyone costs your reputation each month." right={<Pending show={view.pendingPrograms.armsExports !== player.programs.armsExports} />}>
         <div className="grid grid-cols-3 gap-1.5">
@@ -102,8 +69,8 @@ export function BusinessTab() {
         </div>
       </Card>
 
-      <Card title="Investments" hint={`Put money into another nation's firms. They grow, you earn ${(INVEST.dividend * 100).toFixed(1)}% of it back every month, and they like you for it. The money runs down as it pays, so it earns back a little more than you put in, over about 11 years. A war seizes it.`}>
-        {mine.length === 0 && theirs.length === 0 && <p className="text-[14px] text-white/70">No investments yet. Open Diplomacy and pick a nation to invest in.</p>}
+      <Card title="Investments" hint={`Put money into another nation's firms. They grow, you earn ${(INVEST.dividend * 100).toFixed(1)}% of it back every month, and they like you for it. The money runs down as it pays, so it earns back a little more than you put in, over about 11 years. A war seizes it.`} right={<GoTo to={{ desk: 'diplomacy' }}>Diplomacy</GoTo>}>
+        {mine.length === 0 && theirs.length === 0 && <p className="text-[14px] text-white/70">No investments yet. You invest from a nation's page in Diplomacy.</p>}
         {mine.map((i) => (
           <div key={i.id} className="flex justify-between text-[14px]">
             <span>
@@ -119,6 +86,71 @@ export function BusinessTab() {
         )}
       </Card>
     </section>
+  )
+}
+
+/** One sector on one line (its size, and whether the state owns or subsidizes it); opening it shows what can be done with it. */
+function SectorRow({ id, cap }: { id: SectorId; cap: number }) {
+  const view = usePlayerView()!
+  const issueOrder = useGame((s) => s.issueOrder)
+  const { player } = view
+  const [open, setOpen] = useState(false)
+  const size = player.sectors[id] ?? 0
+  const spec = SECTORS[id]
+  const subsidized = player.subsidies.includes(id)
+  const owned = player.stateOwned.includes(id)
+  const fund = (amount: number) => ({ type: 'fundSector' as const, nationId: player.id, sector: id, amount })
+  const toggleSubsidy = () => issueOrder({ type: 'setSubsidies', nationId: player.id, sectors: subsidized ? player.subsidies.filter((x) => x !== id) : [...player.subsidies, id] })
+  return (
+    <div className="rounded-xl bg-white/5">
+      <button className="w-full text-left p-2.5 space-y-1.5 min-h-[44px]" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[15px] font-semibold min-w-0 truncate">{spec.name}</span>
+          <span className="flex items-center gap-1.5 shrink-0">
+            {owned && <span className="chip text-[12px]">State</span>}
+            {subsidized && <span className="chip text-[12px]">Subsidized</span>}
+            <span className="text-[14px] font-semibold tabular-nums">
+              {size.toFixed(1)}
+              <span className="text-white/60"> of {cap.toFixed(0)}</span>
+            </span>
+          </span>
+        </div>
+        <Bar value={size / Math.max(1, cap)} color="#30d158" label={`${spec.name} ${size.toFixed(1)} of ${cap.toFixed(0)}`} />
+      </button>
+      {open && (
+        <div className="px-2.5 pb-2.5 space-y-2">
+          <p className="text-[13px] text-white/70">
+            {spec.blurb} Each point makes {spec.yields} a month.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <OrderButton order={fund(50)} label="Grant 50" cost="50 money" effect={`+${fundingGain(size, 50).toFixed(1)} size`} tone="btn-primary" />
+            <OrderButton order={fund(150)} label="Grant 150" cost="150 money" effect={`+${fundingGain(size, 150).toFixed(1)} size`} tone="btn-primary" />
+          </div>
+          {owned ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-[#0a84ff]/10 p-2.5 text-[13px]">
+              <span>
+                <b>State-owned.</b> The state keeps {Math.round(enterpriseEfficiency(player) * 100)}% of its profit ({signed(size * spec.profit * enterpriseEfficiency(player))} a month). It grows at half speed.
+              </span>
+              <OrderButton order={{ type: 'setStateOwned', nationId: player.id, sector: id, mode: 'sell' }} label="Sell" cost={`+${Math.round(ENTERPRISE.sellPerSize * size)}`} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <OrderButton order={{ type: 'setStateOwned', nationId: player.id, sector: id, mode: 'buy' }} label="Buy it" cost={`${enterpriseCost(player, id, 'buy')}`} effect="The state takes its profit" />
+              <OrderButton order={{ type: 'setStateOwned', nationId: player.id, sector: id, mode: 'seize' }} label="Seize it" effect={`Free, but stability -${ENTERPRISE.seizeStability} and investors flee`} className="btn-red" />
+            </div>
+          )}
+          <label className="flex items-center justify-between gap-3 text-[14px]">
+            <span>
+              Subsidize
+              <span className="block text-[12px] text-white/65">
+                Grows {Math.round(BUSINESS.subsidyGrowth * 100)}% faster. Costs {(size * BUSINESS.subsidyCost).toFixed(1)} money a month.
+              </span>
+            </span>
+            <input type="checkbox" checked={subsidized} onChange={toggleSubsidy} aria-label={`Subsidize ${spec.name}`} />
+          </label>
+        </div>
+      )}
+    </div>
   )
 }
 
