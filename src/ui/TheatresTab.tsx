@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { presetPosture } from '../ai/deployment'
 import { ALERT, ALERT_LEVELS, PRESENCE } from '../data/presence'
-import { BORDER_LABEL } from '../data/deployment'
+import { BORDER_LABEL, STATION } from '../data/deployment'
+import { bordersOf, type BorderView } from '../engine/borders'
 import { alertOf, chokeStatus, readinessOf, showCost } from '../engine/presence'
 import { ledgerLines, PRESET_INFO, postureSummary, recommendPreset, theatresOf, type Preset, type Theatre } from '../engine/theatres'
 import { showDivisions } from '../engine/intel'
@@ -13,6 +14,7 @@ import { globeBridge } from './globeBridge'
 import { usePlayerView } from './hooks'
 import { OrderButton } from './panel'
 import { usePresenceUi } from './globe/presenceUi'
+import { StatTile, Tiles } from './kit'
 
 const { map } = getWorld()
 const pct = (v: number) => `${Math.round(v * 100)}%`
@@ -43,6 +45,11 @@ function Desk({ game }: { game: GameState }) {
   const sum = postureSummary(game, player.id)
   const straits = useMemo(() => chokeStatus(game, map).filter((c) => c.holder || c.contested || c.power[player.id] !== undefined), [game, player.id])
   const ledger = ledgerLines(game, player.id)
+  const RANK = { high: 0, watch: 1, low: 2 } as const
+  const sorted = [...theatres].sort((a, b) => RANK[a.threat] - RANK[b.threat] || b.tension - a.tension || (a.id < b.id ? -1 : 1))
+  const hot = sorted.filter((t) => t.threat !== 'low')
+  const quiet = sorted.filter((t) => t.threat === 'low')
+  const borders = useMemo(() => new Map(bordersOf(game, map, player.id).map((b) => [b.other, b] as const)), [game, player.id])
 
   const applyPreset = (p: Preset) => {
     const want = presetPosture(game, map, player.id, p)
@@ -65,25 +72,30 @@ function Desk({ game }: { game: GameState }) {
           <div className="text-[12px] text-white/65">{sum.posted ? `Readiness ${Math.round(sum.readiness)} of 100` : 'Nothing on station yet'}</div>
         </div>
         {!sum.posted && <p className="text-[13px] text-[#ffd60a]">You have no forces on station. Choose a preset below, or set the posts by hand in Deployment.</p>}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[13px]">
-          <Stat label="Alert" value={ALERT[sum.alert].name} />
-          <Stat label="Upkeep on station" value={`${sum.upkeep.toFixed(1)} a month`} />
-          <Stat label="Supply" value={sum.supply.state === 'good' ? 'Good' : sum.supply.state === 'thin' ? `Thin (${sum.supply.months.toFixed(0)} months of oil)` : 'Dry'} />
-          <Stat label="Oil burn" value={`${sum.oil.toFixed(1)} a month`} />
-        </div>
-        <div className="h-2 rounded-full bg-white/10 overflow-hidden" role="img" aria-label={`Readiness ${Math.round(sum.readiness)} of 100`}>
-          <div className="h-full bg-[#64d2ff]" style={{ width: `${Math.round(sum.readiness)}%` }} />
-        </div>
-        <div className="space-y-1.5">
-          <div className="label">Alert level</div>
-          <div className="flex flex-wrap gap-2">
-            {ALERT_LEVELS.map((a) => (
-              <OrderButton key={a} order={{ type: 'setAlert', nationId: player.id, alert: a }} label={ALERT[a].name} tone={sum.alert === a ? 'btn-primary' : 'btn-quiet'} />
-            ))}
+        <Tiles compact four>
+          <StatTile label="Alert" value={sum.posted ? ALERT[sum.alert].name : 'None'} sub={sum.posted ? `readiness ${Math.round(sum.readiness)} of 100` : 'nothing on station'} />
+          <StatTile label="Upkeep on station" value={sum.upkeep.toFixed(1)} sub="money a month" />
+          <StatTile label="Supply" value={sum.supply.state === 'good' ? 'Good' : sum.supply.state === 'thin' ? 'Thin' : 'Dry'} sub={sum.supply.state === 'thin' ? `${sum.supply.months.toFixed(0)} months of oil` : undefined} tone={sum.supply.state === 'good' ? undefined : sum.supply.state === 'thin' ? 'warn' : 'bad'} />
+          <StatTile label="Oil burn" value={sum.oil.toFixed(1)} sub="a month" />
+        </Tiles>
+        {sum.posted && (
+          <div className="space-y-1.5">
+            <div className="h-2 rounded-full bg-white/10 overflow-hidden" role="img" aria-label={`Readiness ${Math.round(sum.readiness)} of 100`}>
+              <div className="h-full bg-[#64d2ff]" style={{ width: `${Math.round(sum.readiness)}%` }} />
+            </div>
+            <div className="label">Alert level</div>
+            <div className="flex flex-wrap gap-2">
+              {ALERT_LEVELS.map((a) => (
+                <OrderButton key={a} order={{ type: 'setAlert', nationId: player.id, alert: a }} label={ALERT[a].name} tone={sum.alert === a ? 'btn-primary' : 'btn-quiet'} />
+              ))}
+            </div>
+            <p className="text-[12px] text-white/75">{ALERT[sum.alert].hint}</p>
+            <details className="text-[12px] text-white/60">
+              <summary className="cursor-pointer">How readiness works</summary>
+              <p className="mt-1">Readiness moves {PRESENCE.readyStep} points a month toward the level you set, so it cannot be raised on the day a shot is fired. High alert is harder to surprise and its garrisons fight harder; it burns more upkeep and oil.</p>
+            </details>
           </div>
-          <p className="text-[12px] text-white/75">{ALERT[sum.alert].hint}</p>
-          <p className="text-[12px] text-white/60">Readiness moves {PRESENCE.readyStep} points a month toward the level you set, so it cannot be raised on the day a shot is fired. High alert is harder to surprise and its garrisons fight harder; it burns more upkeep and oil.</p>
-        </div>
+        )}
         <div className="space-y-1.5">
           <div className="label">One-click postures</div>
           <p className="text-[13px] text-white/80">
@@ -109,9 +121,22 @@ function Desk({ game }: { game: GameState }) {
       <section className="space-y-2" aria-label="Theatres">
         <div className="text-[16px] font-semibold px-1">Theatres</div>
         {theatres.length === 0 && <p className="text-[13px] text-white/70 px-1">You have no neighbors.</p>}
-        {theatres.map((t) => (
-          <TheatreCard key={t.id} game={game} t={t} picked={picked === t.id} onPick={() => setPicked(t.id)} onFocus={() => focus(t)} />
+        {/* Danger and watch first, hottest first; quiet fronts fold away unless one is picked on the map. */}
+        {hot.map((t) => (
+          <TheatreCard key={t.id} game={game} t={t} border={borders.get(t.other)} picked={picked === t.id} onPick={() => setPicked(t.id)} onFocus={() => focus(t)} />
         ))}
+        {quiet.length > 0 && (
+          <details className="details-card" open={quiet.some((t) => t.id === picked) || hot.length === 0 || undefined}>
+            <summary>
+              {quiet.length} quiet {quiet.length === 1 ? 'theatre' : 'theatres'}: {quiet.map((t) => game.nations[t.other]?.name).join(', ')}
+            </summary>
+            <div className="space-y-2 pt-2">
+              {quiet.map((t) => (
+                <TheatreCard key={t.id} game={game} t={t} border={borders.get(t.other)} picked={picked === t.id} onPick={() => setPicked(t.id)} onFocus={() => focus(t)} />
+              ))}
+            </div>
+          </details>
+        )}
       </section>
 
       <section className="inset-card p-3.5 space-y-2" aria-label="Ledger">
@@ -144,16 +169,7 @@ function Desk({ game }: { game: GameState }) {
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="inset-card py-2">
-      <div className="label">{label}</div>
-      <div className="font-semibold">{value}</div>
-    </div>
-  )
-}
-
-function TheatreCard({ game, t, picked, onPick, onFocus }: { game: GameState; t: Theatre; picked: boolean; onPick: () => void; onFocus: () => void }) {
+function TheatreCard({ game, t, border: b, picked, onPick, onFocus }: { game: GameState; t: Theatre; border?: BorderView; picked: boolean; onPick: () => void; onFocus: () => void }) {
   const other = game.nations[t.other]
   const me = game.nations[game.playerId]
   const d = me.military.deployment
@@ -187,6 +203,23 @@ function TheatreCard({ game, t, picked, onPick, onFocus }: { game: GameState; t:
         <div className="flex flex-wrap gap-2">
           <OrderButton order={o} label={kind === 'ground' ? 'Mass troops (show of force)' : 'Send a squadron (show of force)'} cost={`${showCost(game, o as Extract<Order, { type: 'showOfForce' }>)} money`} effect="Raises tension and their dislike of you; trains your forces; they may raise their guard." tone="btn-quiet" />
         </div>
+      )}
+      {b && (
+        <details className="text-[13px]" data-border={b.other}>
+          <summary className="cursor-pointer text-white/75">Why the tension is {b.tension}, and the border itself</summary>
+          <div className="mt-2 space-y-2">
+            <p className="text-[12px] text-white/65">{b.parts.map((p) => `${p.label} ${p.value > 0 ? '+' : ''}${p.value}`).join(' · ')}</p>
+            {b.land && <p className="text-[12px] text-white/65">A full guard here is about {(STATION.fullPerRegion * b.fronts).toFixed(1)} divisions ({b.fronts} of your {b.fronts === 1 ? 'countries lies' : 'countries lie'} along it). Set the garrison in Deployment.</p>}
+            <div className="flex flex-wrap items-center gap-2">
+              {b.closedByMe ? (
+                <OrderButton order={{ type: 'setBorder', nationId: me.id, neighbor: b.other, closed: false }} label="Reopen the border" tone="btn-quiet" />
+              ) : (
+                <OrderButton order={{ type: 'setBorder', nationId: me.id, neighbor: b.other, closed: true }} label="Close the border" cost={`${STATION.closeCost} influence`} effect="Fewer provocations and stronger cover, but it adds to the tension and they will not like it." tone="btn-quiet" />
+              )}
+              {b.closedByThem && <span className="chip">They closed it too</span>}
+            </div>
+          </div>
+        </details>
       )}
       <span className="sr-only">{th.shape} marker, readiness {Math.round(readinessOf(d))}</span>
     </section>
@@ -224,7 +257,7 @@ function TheatreMap({ game, theatres, picked, onPick }: { game: GameState; theat
   return (
     <section className="inset-card p-3.5 space-y-2" aria-label="Map of theatres">
       <div className="text-[16px] font-semibold">Map of theatres</div>
-      <svg viewBox={`${cx0} ${cy0} ${vw} ${vh}`} className="w-full h-auto rounded-lg bg-[#0c2342]" role="img" aria-label="World map with your theatres marked">
+      <svg viewBox={`${cx0} ${cy0} ${vw} ${vh}`} className="w-full max-w-[640px] h-auto rounded-lg bg-[#0c2342]" role="img" aria-label="World map with your theatres marked">
         {dots.map((d) => (
           <circle key={d.id} cx={d.cx} cy={d.cy} r={(d.mine ? 2.6 : 1.7) * k * 1.6} fill={d.color} opacity={d.mine ? 1 : 0.55} />
         ))}

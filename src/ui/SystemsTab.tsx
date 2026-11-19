@@ -64,15 +64,15 @@ export function SystemsTab() {
   return (
     <div className="space-y-5">
       <p className="text-[14px] text-white/80">
-        The missile program builds the missiles you fire from the Missile War tab. Frontier technologies unlock systems you run for the whole nation. Each has three levels, costs upkeep, and has something that beats it, so no single program wins a war alone.
+        Frontier technologies unlock systems you run for the whole nation. Each has three levels, costs upkeep, and has something that beats it, so no single program wins a war alone.
         {owned.length > 0 ? ` You run ${fmt(systemUpkeep(player), 1)} money a month of them.` : ' Research the Frontier branch to unlock them.'}
       </p>
-      <MissileProgramCard />
       <div className="grid gap-3 md:grid-cols-2">
         {SYSTEM_IDS.map((id) => (
           <SystemCard key={id} id={id} />
         ))}
       </div>
+      <MissileProgramCard />
     </div>
   )
 }

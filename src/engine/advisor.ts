@@ -23,6 +23,7 @@ import { invitablePartners } from './partners'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { fundMissilesCost, launchSite, missileStock, programLevel, recentAttackers } from './missiles'
 import { validateOrder } from './orders'
+import { offerIsMoot } from './offers'
 import { spaceAdvice } from './space'
 import { monthsToElection } from './politics'
 import { ACADEMY, PROJECT_LEVELS, PROJECTS, programCost } from '../data/projects'
@@ -47,7 +48,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
   | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' | 'puppets' | 'territories' }
-  | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' | 'missiles'; /** A country to aim the Missile War's strike planner at. */ region?: RegionId }
+  | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'program' | 'missiles' | 'agencies' | 'systems' | 'armies'; /** A country to aim the Missile War's strike planner at. */ region?: RegionId }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
   | { desk: 'faction'; /** A nation to pick in the invitation list. */ nation?: NationId }
@@ -155,7 +156,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
                 ? `You have none left. Build more from the program, or raise it to level ${level + 1} for ${cost.capital} money and ${cost.tp} research.`
                 : `You have none left. Build more from the program.`,
         action: level === 0 || afford ? 'Open the program' : 'Build missiles',
-        target: { desk: 'military', tab: 'systems' },
+        target: { desk: 'military', tab: 'program' },
       })
     }
   }
@@ -331,7 +332,8 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
 
   // Offers on the table
   const answered = new Set(pending.filter((o) => o.type === 'respond').map((o) => (o as { proposalId: string }).proposalId))
-  const offers = s.proposals.filter((p) => p.to === nationId && !answered.has(p.id))
+  // An offer the world has overtaken (a pact from someone now your ally) is not waiting on you: the Diplomacy desk files it away.
+  const offers = s.proposals.filter((p) => p.to === nationId && !answered.has(p.id) && !offerIsMoot(s, map, p, pending))
   if (offers.length > 0) {
     const first = offers[0]
     add('now', 30, {

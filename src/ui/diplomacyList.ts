@@ -18,3 +18,6 @@ export function closeNations(game: GameState, me: NationId, neighbors: Iterable<
     .filter((id) => game.nations[id]?.alive)
     .sort((a, b) => Number(atWar(game, me, b)) - Number(atWar(game, me, a)) || Number(isAllied(game, me, b)) - Number(isAllied(game, me, a)) || Number(partners.has(b)) - Number(partners.has(a)) || game.nations[a].name.localeCompare(game.nations[b].name))
 }
+
+
+export { offerIsMoot } from '../engine/offers'

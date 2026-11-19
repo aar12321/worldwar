@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { validateOrder } from '../engine/orders'
-import type { Order } from '../engine/types'
+import type { GameState, Order } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame, type Panel } from '../store'
 import { tabBodies, useDeskTab } from './deskTab'
@@ -276,6 +276,7 @@ export function OrderButton({
   tone = '',
   className = '',
   onDone,
+  game,
 }: {
   order: Order
   label: string
@@ -286,11 +287,13 @@ export function OrderButton({
   tone?: string
   className?: string
   onDone?: () => void
+  /** A fresher game to check the order against than the desks' slower copy (a salvo launched today, for one). */
+  game?: GameState
 }) {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
   const askConfirm = useGame((s) => s.askConfirm)
-  const err = validateOrder(view.game, getWorld().map, order, view.orders)
+  const err = validateOrder(game ?? view.game, getWorld().map, order, view.orders)
   const why = err ? speak(err) : null
   const detail = why ?? effect
   return (

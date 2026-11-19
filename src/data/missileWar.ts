@@ -93,7 +93,7 @@ export const MW = {
   worldShare: 0.25,
   /** The ladder. A rung opens at its `from` tension. */
   ladder: [
-    { name: 'Calm', from: 0, blurb: 'No missiles in the air. Nations talk.' },
+    { name: 'Calm', from: 0, blurb: 'Low world tension: few strikes lately. Nations talk.' },
     { name: 'Skirmish', from: 10, blurb: 'Isolated strikes. Rivals watch their radar.' },
     { name: 'Missile war', from: 30, blurb: 'Regular salvos. Interceptor stores run low and false alarms become a risk.' },
     { name: 'Strategic exchange', from: 55, blurb: 'Cities are being hit. The world judges every civilian death harder.' },

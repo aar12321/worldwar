@@ -66,17 +66,17 @@ game behaviour do.
 * The month end is a short freeze on every screen (the AI plans; ~0.6 s on this loaded machine). At 4× it comes every ~15 s.
   Prefer 2×, especially with a phone.
 * Blocs: founding, inviting and joining each wait for the 1st of the next month, so a bloc takes three month ends to stand up
-  (about 45 s at 4×, 90 s at 2×). Found it right after pressing Play. The Bloc found screen does not show that a founding is pending;
-  the order tray and the toast "Found the bloc …: waiting for the 1st" do.
+  (about 45 s at 4×, 90 s at 2×). Found it right after pressing Play. The Bloc found screen now says that a founding is pending
+  (it used to show only in the order tray and the toast).
 * Missile Program orders and Government appointments give no toast of their own on the screen that gave them (the guest sees
   "Sent to the host…"); the tab updates. A second facility while one is building is refused with "A Nation builds one facility at a time".
 * A missile **ceasefire** can only be offered to AI rivals, not to your friend.
-* The Missile War header can still say "Calm · No missiles in the air" while the "In the air" list below shows an incoming salvo
-  (the stage label follows world tension, not flights).
-* Offers that became moot (a pact offer after you are already allied) stay in the inbox with "Cannot accept: Already allied" until
-  they expire.
-* On a phone the country card covers most of the globe; close it (×) to see the map. Desks fill the screen.
-* On the globe, a country's name can be hidden behind its city chips at the default zoom (e.g. Germany).
+* ~~The Missile War header can still say "Calm · No missiles in the air" while the "In the air" list below shows an incoming salvo~~
+  Fixed (docs/UX_AUDIT_WORLD.md): the ladder leads with the salvos in the air and reads today's flights.
+* ~~Offers that became moot stay in the inbox with "Cannot accept: Already allied" until they expire.~~ Fixed: they fold into "no
+  longer possible" with Clear, and the badge and advisor do not count them (docs/UX_AUDIT_WORLD.md).
+* ~~On a phone the country card covers most of the globe.~~ Fixed: it is a half-screen sheet with its buttons first. Desks fill the screen.
+* ~~On the globe, a country's name can be hidden behind its city chips at the default zoom (e.g. Germany).~~ Fixed: nearby cities are dots.
 * If the friend's connection drops for less than ~45 s, they come back to the host's game (nothing is undone); orders they sent
   while offline are dropped after 25 s with "The host did not answer". If the **host** closes the tab, the friend takes over at
   once and is told the clock is theirs.
