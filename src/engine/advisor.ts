@@ -47,7 +47,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
   | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' | 'puppets' | 'territories' }
-  | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' }
+  | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' | 'missiles'; /** A country to aim the Missile War's strike planner at. */ region?: RegionId }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
   | { desk: 'faction'; /** A nation to pick in the invitation list. */ nation?: NationId }
@@ -135,9 +135,9 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
       add(urgency, 85 - ago * 10, {
         id: `struck-${attackerId}`,
         title: `${foe} struck you with missiles`,
-        detail: `You hold ${held}. Answer from the War Room: ${name(answer.id)} is in range${(n.systems?.shield ?? 0) < 1 && n.techs.includes('frontier_missile_defense') ? ', and an Interceptor Shield would stop part of what comes next' : ''}.`,
-        action: 'Answer in the War Room',
-        target: { desk: 'warRoom', region: answer.id },
+        detail: `You hold ${held}. Answer from Military, Missile War: ${name(answer.id)} is in range${(n.systems?.shield ?? 0) < 1 && n.techs.includes('frontier_missile_defense') ? ', and an Interceptor Shield would stop part of what comes next' : ''}.`,
+        action: 'Open Missile War',
+        target: { desk: 'military', tab: 'missiles', region: answer.id },
       })
     } else {
       const level = programLevel(n)
