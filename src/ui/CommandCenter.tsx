@@ -50,6 +50,9 @@ export function CommandCenter({
   const auto = useGame((s) => s.autoCommand)
   const setAuto = useGame((s) => s.setAutoCommand)
   const planAuto = useGame((s) => s.planAutoCommand)
+  // The store refuses auto-command in a live or an online game; the buttons say so instead of failing with a toast.
+  const online = useGame((s) => s.online?.status === 'playing')
+  const autoOff = live ? 'Auto-command plans a month at a time: it is for turn games' : online ? 'Auto-command is not available in an online game' : null
   const [objective, setObjective] = useState<Objective>('win')
   const [keepHome, setKeepHome] = useState(40)
   const [busy, setBusy] = useState<string | null>(null)
@@ -247,7 +250,7 @@ export function CommandCenter({
               <h4 className="text-[14px] font-semibold">Auto-command</h4>
               <p className="text-[12px] text-white/65">Every month it plans your attacks within the limits below and puts them in the order tray, in green, for you to look over and cancel before the month ends.</p>
             </div>
-            <button role="switch" aria-checked={auto.on} className={`btn px-3.5 py-1.5 text-[13px] shrink-0 ${auto.on ? 'btn-primary' : 'border border-white/25'}`} onClick={() => setAuto({ on: !auto.on })} disabled={live} title={live ? 'Auto-command plans a month at a time: it is for turn games' : undefined}>
+            <button role="switch" aria-checked={auto.on} className={`btn px-3.5 py-1.5 text-[13px] shrink-0 ${auto.on ? 'btn-primary' : 'border border-white/25'}`} onClick={() => setAuto({ on: !auto.on })} disabled={!!autoOff} title={autoOff ?? undefined}>
               {auto.on ? 'On' : 'Turn on'}
             </button>
           </div>
@@ -276,10 +279,10 @@ export function CommandCenter({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button className="btn btn-quiet" disabled={live} onClick={() => planAuto()}>
+            <button className="btn btn-quiet" disabled={!!autoOff} title={autoOff ?? undefined} onClick={() => planAuto()}>
               Plan the month now
             </button>
-            <span className="text-[12px] text-white/70">{queuedAuto > 0 ? `${queuedAuto} planned in the tray` : 'Nothing planned yet'}</span>
+            <span className="text-[12px] text-white/70">{autoOff ?? (queuedAuto > 0 ? `${queuedAuto} planned in the tray` : 'Nothing planned yet')}</span>
           </div>
         </div>
       )}
