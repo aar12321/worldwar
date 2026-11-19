@@ -770,7 +770,8 @@ body:has(.drawer) .country-card {
   z-index: 18;
   left: 16px;
   bottom: 16px;
-  width: 300px;
+  /* Five modes (Nations, Relations, Fronts, Borders, Blocs): at 300px the last one was cut off. */
+  width: 372px;
   padding: 6px;
   border-radius: 14px;
 }

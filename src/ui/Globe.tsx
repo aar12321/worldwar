@@ -11,6 +11,7 @@ import type { GameState, RegionId } from '../engine/types'
 import { attackableRegions } from '../engine/warfare'
 import { getWorld, type CountryFeature } from '../map/world'
 import { useGame } from '../store'
+import { nearLabel } from './globe/labels'
 import { useSlowGame } from './hooks'
 import { paintSignature } from './globe/paint'
 import { useArmyLayer } from './globe/useArmyLayer'
@@ -102,6 +103,8 @@ interface Marker {
   title: string
   yours: boolean
   city?: boolean
+  /** A city so close to its country's name that its own name would cover it: drawn as a dot, named on hover in the country card. */
+  dot?: boolean
   /** A live battle's pin, with its Defense Line bar. */
   battle?: BattleOverlay
   /** A short note floating up over the place, such as "+2 Infantry". */
@@ -193,6 +196,16 @@ function paintMarker(d: object): HTMLElement {
   el.style.padding = '2px 8px'
   el.style.borderRadius = '999px'
   el.style.background = m.yours ? 'rgba(196,71,74,0.92)' : 'rgba(21,23,28,0.85)'
+  if (m.city && m.dot) {
+    el.style.width = '7px'
+    el.style.height = '7px'
+    el.style.padding = '0'
+    el.style.border = '1.5px solid rgba(255,255,255,0.85)'
+    el.style.background = 'rgba(10,132,255,0.95)'
+    el.style.transform = 'translate(-50%, -50%)'
+    el.setAttribute('aria-label', m.title)
+    return el
+  }
   if (m.city) {
     el.style.fontSize = '11px'
     el.style.padding = '1px 6px'
@@ -380,9 +393,10 @@ export function WorldGlobe() {
       const mr = map.regions[r.id]
       out.push({ key: r.id, lat: mr.lat, lng: mr.lng, title: mr.name, yours: true })
       // Your other big cities show as small dots, so you can see where your country lives.
-      for (const c of r.cities) if (c.lat !== undefined && c.lng !== undefined) out.push({ key: c.id, lat: c.lat, lng: c.lng, title: c.name, yours: false, city: true })
+      // A city near the country's own name is a dot, so its name chip never hides the country's (Hamburg and Munich over Germany).
+      for (const c of r.cities) if (c.lat !== undefined && c.lng !== undefined) out.push({ key: c.id, lat: c.lat, lng: c.lng, title: c.name, yours: false, city: true, dot: nearLabel(c.lat, c.lng, mr.lat, mr.lng) })
     }
-    const key = out.map((m) => `${m.key}:${m.title}`).join(';')
+    const key = out.map((m) => `${m.key}:${m.title}:${m.dot ? 1 : 0}`).join(';')
     if (key === pinsRef.current.key) return pinsRef.current.list
     pinsRef.current = { key, list: out }
     return out

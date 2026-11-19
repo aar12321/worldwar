@@ -93,6 +93,9 @@ input:focus-visible {
   body:has(.pill-stack > *) .drawer-wide {
     max-height: calc((100dvh - 150px) / var(--ui-scale) - var(--hud-h) - 60px);
   }
+  body:has(.pill-stack > *) .country-card {
+    max-height: min(calc(46dvh / var(--ui-scale)), calc((100dvh - 150px) / var(--ui-scale) - var(--hud-h) - 60px));
+  }
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */
