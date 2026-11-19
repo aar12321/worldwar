@@ -71,7 +71,8 @@ import { fadeWarScore } from './warscore'
 import { applyGovern, describePatch } from './puppets'
 import { applyRelate, runRelations } from './relations'
 import { runTies } from './ties'
-import { TIES } from '../data/relations'
+import { dropMootOffers } from './offers'
+import { DEALINGS, TIES } from '../data/relations'
 import { describeRelate } from './relationsView'
 import { annexTerritory, commanded, releaseTerritory, runTerritoryMonth } from './territories'
 
@@ -499,7 +500,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   s.turn++
   // A live clock reads the 1st of the new month from here on, so the news below carries the right date.
   if (isLive(s)) s.day = 0
-  expireDiplomacy(s)
+  // Offers the month has overtaken are withdrawn once treaties have lapsed and before offers expire, so none expires as "ignored".
+  expireDiplomacy(s, DEALINGS.on ? () => dropMootOffers(s, map) : undefined)
   // Surprise decisions. A one-player game stops for its player. Online, each human gets their own and the month never waits.
   if (s.multiplayer) {
     if (s.turn >= s.nextEventTurn) scheduleHumanEvents(s, map, rng)
@@ -543,6 +545,8 @@ export function applyOrderNow(s: GameState, map: WorldMap, given: Order, pending
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
   }
   executeOrder(s, map, o, rng)
+  // On a live clock an order can overtake an offer at once (an alliance makes a pact offer moot): it is withdrawn the same day.
+  if (DEALINGS.on && isLive(s)) dropMootOffers(s, map)
   return { error: null }
 }
 

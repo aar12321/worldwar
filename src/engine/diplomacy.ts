@@ -600,11 +600,13 @@ function stillRelevant(s: GameState, p: Proposal): boolean {
   }
 }
 
-export function expireDiplomacy(s: GameState) {
+/** The month's end for treaties and offers. `withdraw` runs once treaties have lapsed and before offers expire: it takes out offers the world has overtaken. */
+export function expireDiplomacy(s: GameState, withdraw?: () => void) {
   for (const [k, until] of Object.entries(s.pacts)) if (until < s.turn) delete s.pacts[k]
   for (const [k, until] of Object.entries(s.casusBelli)) if (until < s.turn) delete s.casusBelli[k]
   s.sanctions = (s.sanctions ?? []).filter((x) => x.until >= s.turn)
   s.guarantees = (s.guarantees ?? []).filter((x) => x.until >= s.turn)
+  withdraw?.()
   const kept: Proposal[] = []
   for (const p of s.proposals) {
     if (!stillRelevant(s, p)) continue
