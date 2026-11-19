@@ -1,6 +1,6 @@
 # Relations: status
 
-The Relations desk (`O`) is a command center for how other nations feel about you: more ways to win a nation over than buying it presents, and ways to keep them. Code: `src/engine/relations.ts` (rules), `src/engine/relationParts.ts` (kept-up opinion lines), `src/engine/relationsView.ts` (previews, reasons, health, needs), `src/data/relations.ts` (every number), `src/ai/relations.ts` (rivals), `src/ui/Relations.tsx` and `src/ui/Locate.tsx` (screens). Switch: `RELATIONS.on` (the golden tests use it).
+The Relations desk (`O`) is a command center for how other nations feel about you: more ways to win a nation over than buying it presents, and ways to keep them. Code: `src/engine/relations.ts` (rules), `src/engine/relationParts.ts` (kept-up opinion lines), `src/engine/ties.ts` (trade, investment and peace lines, trust), `src/engine/relationsView.ts` (previews, reasons, health, needs), `src/data/relations.ts` (every number), `src/ai/relations.ts` (rivals), `src/ui/Relations.tsx` and `src/ui/Locate.tsx` (screens). Switches: `RELATIONS.on` and `TIES.on` (the golden tests use both).
 
 All actions are one order, `{ type: 'relate', act, target, ... }`, with a cost, an effect, one cooldown per partner per act, a preview (`previewRelate`) and a refusal sentence. A player's act happens at once (turn and live alike, so there is no parity gap); a rival's runs with the month's orders (phase after Diplomacy). Rivals take only what their opinion of you allows, and say so before you try.
 
@@ -37,25 +37,90 @@ All actions are one order, `{ type: 'relate', act, target, ... }`, with a cost, 
 | Mediate | 5 influence | +8 from them, +5 from the other side; -2 war weariness for both if at war | 10 mo |
 | Call in a favour | one favour | money +25, influence +4 or research +6 from them; they think -2 of you | 3 mo; favours last 36 months, at most 3 per partner |
 
-**Keeping it up.** Treaty anniversary +6 (fades 0.5) every 12 months of a pact or alliance. Steadfast ally: +0.4 a month after a year, to 10. Neglect: with a pact, alliance, trade deal or embassy and no contact for 12 months, -0.8 a month to -10. Contact is any act or running program. Opinion modifiers fade on their own, so the desk shows "relations cool by X a month unless maintained" and when they would be merely cordial. A new line, **Same system of government** +2 (or **Opposed systems** -2, democracy against junta or one-party), applies to every opinion.
+**Keeping it up.** Treaty anniversary +6 (fades 0.5) every 12 months of a pact or alliance. Steadfast ally: +0.4 a month after a year, to 10. Neglect: with a pact, alliance, trade deal or embassy and no contact for 12 months, -0.8 a month to -10. Contact is any act, running program or (with ties on) running trade deal. Opinion modifiers fade on their own, so the desk shows "relations cool by X a month unless maintained" and when they would be merely cordial. A new line, **Same system of government** +2 (or **Opposed systems** -2, democracy against junta or one-party), applies to every opinion.
 
 **Joint war plans.** Hits are recorded per plan. If the partner struck the same country in the same month (live: within 3 days) the second blow is a combined strike: the Defense Line drops a further 0.9. If either partner takes a country the other is paid `split` of its value from the taker's treasury. Plan partners share war-score credit like a faction's army. A strike window sets the country and, live, the day (both armies leave on the same day through the existing joint-strike clock). The plan ends with the war, on time, or when one side makes a separate peace (-10 from the other).
 
 **Rivals.** Medium and Hard: each month a chance (22% / 40%) that a rival with 25 influence and 90 money to spare tends a friendship: plans with a friend that fights the same enemy, aid to a friend in dire need, embassies (three at most), visits, culture, research, students, trade missions, and (Hard) ventures. Easy: 2.5% a month, only a visit or food for a dire friend. Toward a player a rival asks: food or oil, a joint war plan against a shared enemy, a venture, a trade mission, a state visit, backing at the Council. A request lasts four months. Yes: they owe you a favour and +5; no: -1.5; ignored: -4. Easy rivals never punish either. A bot standing in for a player answers its own inbox.
 
+## Ties and the starting mood (`TIES`, `src/engine/ties.ts`)
+
+Players felt that most nations started out wary or hostile, and that trade, investment and partnerships counted for little next to war. Both were true. The audit (measured with `tiesSim.test.ts`: 8 player nations x 3 seeds, 174 rivals each, every rival's opinion of a new player in the first month):
+
+| | ties off (before) | ties on (after) |
+|---|---|---|
+| All rivals: mean opinion of you | -0.35 | +1.30 |
+| All rivals: wary or worse (-5 or less) / hostile (-25 or less) | 21.0% / 0.8% | 7.3% / 0% |
+| All rivals by label | Neutral 51%, Cordial 28%, Wary 20%, Hostile 1% | Neutral 72%, Cordial 21%, Wary 7% |
+| Neighbours: mean | -11.3 | -1.1 |
+| Neighbours: wary or worse / hostile | 57.7% / 11.4% | 20.9% / 0% |
+| China or India: "Fears your power" on every neighbour | -20 from month one (neighbours at -30 to -42) | none until 2 countries are taken |
+
+The start is the same on Normal and Hard (difficulty does not enter the first month). What caused it, and what changed:
+
+1. **Fear of a big nation from month one (logic error).** With the default goal (the whole world) `coalitionActive` fired when a player held 12% of the world's people, so China and India were feared by every neighbour (-20) before doing anything. Now size alarms nobody until the player has taken 2 countries (`TIES.fearAfterTaken`), and the line is -15. Reputation (infamy 60+) still alarms the world at once.
+2. **Easy showed coalitions (logic error).** The bots gated coalitions by difficulty but the desk, the diplomat and the default opinion did not, so Easy players saw "Fears your power". `coalitionActive` now returns false on a difficulty without coalitions, whoever asks.
+3. **The desk asked without the map (inconsistency).** The desk's default opinion called `coalitionActive` without the map, so the classic goal's "half the countries" test never ran there while the bots' did. It now passes the map.
+4. **A permanent border penalty.** Every neighbour carried -6 (-14 for an expansionist) for ever, whatever the treaties or trade. Now -2 (-6 for an expansionist); none with a pact, an alliance or a shared bloc; halved by a running trade deal.
+5. **Temperament skewed cold.** An expansionist was wary of everyone from the start (-6, the Wary line is -5). Now expansionist -3, opportunist 0, isolationist +2, honourable +4, merchant +5.
+6. **Trade read as neglect (logic error).** "Neglected" (-0.8 a month to -10) counted a partner with a running trade deal as untouched, so a two-year trade partner felt neglected. A running deal now counts as contact.
+7. **Investment thanks stacked (unbounded in practice).** Every `invest` order added +12 to one line that stacked to 60, so five small investments bought +60. The thanks is now +3, stacking to 6; the money itself is a lasting line (below).
+8. **Gifts stacked.** A Diplomacy gift added up to +30 to a line that stacked to 60; it now stacks to 30.
+9. **No double counting of ventures.** A joint venture's stake is also an investment record; it counts in the venture's line, not again in the investment line.
+10. **A state visit warned of a protocol incident even with a friend.** The preview now warns only when they think poorly of you (under -5), and mentions the chance of a warm reception at 25+.
+
+What the ties are worth now. Each is a line in "why they feel this way", worked out from the state with a ceiling, and the same between two rivals as toward you:
+
+| Line | Worth | Ceiling | Ends or fades |
+|---|---|---|---|
+| Trade partners (a running trade deal) | 4, + its monthly worth at base prices x 0.1 (to +4), + 0.4 a month of unbroken trade (to +6); a renewal within 2 months keeps the run | 14 (was a flat 10) | when trade stops; "Honored our deal" +10 (fades 0.3) when a deal completes |
+| Invests in our economy | +1 per 12 of your money in their businesses, outside ventures (investments amortise 0.6% a month) | 10 | falls with the stake; "Seized our investment" -30 if they nationalise |
+| Invested in our businesses (thanks for each new investment) | +3 | 6 | fades 0.2 a month |
+| Joint venture (a program) | +0.5 a month | 8 + stake / 40, at most 12 (was 10 for any stake) | ends with the venture; walking out -6 |
+| Generous gifts (Diplomacy) | up to +30 each | 30 in all | fades 0.5 |
+| Aid, rescue, shared technology, forgiven debts | as before (see the table above) | the 45 earned cap | fade |
+| Faction partners (shared bloc) | +12 | 12 | ends with the bloc |
+| Long peace (neighbours, or two nations that have fought) | +0.2 a month after 12 months without war | 5 | a war resets it |
+| Border tensions | -2, expansionist -6; 0 with a treaty or bloc; halved by trade | | |
+
+The negatives are unchanged: at war -50, declared war -40, attacked without cause, missile strikes, spies caught -25, broken pacts and deals -30 to -50, sanctions -25, border incidents. **Trust** is a separate read-only reading (0 to 100, 50 untested; no rule uses it): treaty kept (+4, then +0.5 a month to 15), steady trade (+3, then +0.6 a month to 10), a deal honoured +8, an embassy +4, a shared bloc +8, a long peace (to 8); against it a reputation for aggression (infamy x 0.5, to -30), broken promises (0.6 per point of remembered betrayal, to -40) and war (-40). Labels: Trusted 70+, Reliable 57+, Untested 43+, Doubtful 25+, Distrusted.
+
+State: `GameState.ties` (optional) keeps the last month each pair was at war and the run of trade per pair; absent until there is a war or a trade deal, so old saves load and a quiet game carries nothing. No new order: every tie comes from the existing ones (Diplomacy's trade, invest and gift offers, the desk's ventures).
+
+**24 months later** (bots in every seat but an idle player; `tiesSim.test.ts`, more seeds by `VITE_TIESSIM_RUNS` and `VITE_TIESSIM_DIFF`), ties on / off:
+
+| Game | Rivals wary or worse | Neighbours: mean, hostile | Alliances at the end | Wars declared in 24 months |
+|---|---|---|---|---|
+| Normal, Poland seed 1 | 12.5% / 21.7% | -2.9, 0% / -8.7, 11% | 58 / 56 | |
+| Normal, Poland seed 2 | 9.9% / 22.0% | +0.3, 0% / -8.9, 10% | 55 / 48 | 36 / 34 |
+| Normal, China seed 2 | 7.4% / 20.1% | +0.4, 0% / -28.7, 50% | 52 / 42 | |
+| Normal, Germany seed 1 | 3.2% / 19.4% | +0.8, 0% / -8.6, 11% | 57 / 46 | 53 / 48 |
+| Normal, India seed 1 | 0.6% / 20.0% | +3.4, 0% / -22.6, 25% | 57 / 48 | 40 / 52 |
+| Hard, Poland seed 2 | 6.3% / 20.8% | 0, 0% / -11.0, 10% | 58 / 52 | 30 / 33 |
+| Hard, Poland seed 3 | 6.8% / 19.7% | 0, 0% / -11.6, 10% | 43 / 52 | 39 / 52 |
+| Hard, China seed 2 | 6.7% / 19.6% | +0.6, 0% / -29.1, 53% | 55 / 45 | |
+| Hard, Germany seed 1 | 3.2% / 18.6% | +0.6, 0% / -11.3, 14% | 66 / 58 | 43 / 43 |
+| Hard, India seed 1 | 0.6% / 20.9% | +3.4, 0% / -22.9, 22% | 61 / 57 | 42 / 56 |
+
+The mood holds for a player who does nothing (from there it is earned either way). Rival to rival, the mean opinion rises from about 0.3 to about 1.5, and under 0.1% of pairs reach +-90. Alliances end about 10 to 20% higher (no nation holds more than 4), and wars are not more frequent: as many or fewer were declared in every measured game but one (Normal, Poland seed 2: 36 against 34).
+
 ## What is in the screens
 
-Relations desk (`O`; phone: More sheet and the bar): Nations (search, sort, filters All, Watchlist, Allies, Neighbors, Rivals, Trade partners, My faction, Cooling; trend arrows; chips), a partner card (opinion, health meter with a decay warning, what is moving it each month, reasons grouped as shared enemies, trade, treaties, aid and gifts, visits and exchange, military, faction, government, border tension, bad acts, needs and wants, every action with cost, effect and why-not, history with them), Requests, Running (embassies and their bill, programs, plans, favours both ways), Log. **Locate** is on every row and card here, in Diplomacy cards, Faction members, the jump window ("Locate X on the map") and as Shift+L in the desk: it closes the desk, selects the capital, turns the globe, rings it three times and leaves a toast with **Back to desk**.
+Relations desk (`O`; phone: the bar). **Nations:** a list beside the open nation on a wide screen (one then the other on a phone, with "← Nations" to go back). Find a nation by name; sort by opinion (warmest or coolest), trust, trade value, strength (as your intelligence sees it), distance between capitals, cooling fastest or name; filter chips with counts (Allies, Friendly, Neutral, Wary, Hostile, At war, Bloc, Trade partners, Neighbours, Watchlist; chips with nobody in them are hidden). The list is grouped by tier (At war, Allies, Friendly, Neutral, Wary, Hostile; long tiers show 8 until "Show all"). Each row: opinion, a trend arrow when it is moving, its label, chips (War, Ally, Pact, Bloc, Trade, Embassy, Neighbour, favours owed), the sorted-by number, Watch and Locate. With no nation open (wide screens): tiles for each tier that filter the list, the requests waiting, cooling partners, biggest trade ties and your neighbours, coolest first. **A nation** opens on its headline: status, temperament and bloc chips, Locate, Watch and Diplomacy; their opinion of you with its trend, their trust in you, and "Mostly because" with the three biggest reasons; a warning when relations are cooling or neglected. Then three tabs: **Why** (every reason in groups: treaties and peace, trade and investment, bloc, shared enemies, visits and exchange, aid and gifts, military cooperation, government and temperament, borders and power, grievances; what moves it each month; the trust breakdown; what they need and want, each with "Act →" to the action), **Actions** (a line saying trade deals, investment, loans and treaties are made in Diplomacy, with a button there; "Suggested now", up to three open actions, what they need first; then every group with how many of its actions are open, each row with its effect or the reason it cannot be done, its cost and its button), **History**. **Requests**, **Commitments** (embassies and their bill, programs and ventures, plans, favours both ways) and **History** tabs as before. **Locate** is on every row and card, in Diplomacy cards, Bloc members, the jump window, and Shift+L in the desk. Screenshots: `node scripts/relations-shots.mjs [--mode live] [--two]`.
+
+Nothing here repeats Diplomacy: proposing trade deals, loans, investment, pacts, alliances, guarantees, sanctions, war and peace stay there. Forgiving a debt appears in both: here it also earns a favour.
 
 ## Tests
 
-`relations.test.ts` (rules, caps, cooldowns, programs, ventures, aid, favours, plans, requests, upkeep, views, fuzz of malformed orders, old saves, turn/live parity, no-loop checks), `locate.test.ts`, `relationsSim.test.ts` (short always; long opt-in), `turnGolden.test.ts` (re-pinned; proof below).
+`relations.test.ts` (rules, caps, cooldowns, programs, ventures, aid, favours, plans, requests, upkeep, views, fuzz of malformed orders, old saves, turn/live parity, no-loop checks), `ties.test.ts` (every tie line and its ceiling, each fixed bug with ties on and off, trust, rows, the reason groups, old saves), `locate.test.ts`, `relationsSim.test.ts` (short always; long opt-in), `tiesSim.test.ts` (in the sims set: the starting mood and 24-month drift, on and off), `turnGolden.test.ts` (re-pinned; proof below).
 
 ## Goldens
 
-The Normal and Hard bot worlds moved (the small war did not): rivals now act in the desk and opinions carry the government line. Proof: with `RELATIONS.on` switched off, in the last-but-one test of `turnGolden.test.ts`, the previous pins (`6b42de15579c5`, `196fdf3f5c5b29`, and the small war's two) return exactly, and every layer test runs with it off too. New pins (after the merge with Territory and the +-2 government line): `1f72167c03ee2`, `1719b377e4ad6a`.
+The relationship layer first moved the Normal and Hard bot worlds (proof: with `RELATIONS.on` off the pins `6b42de15579c5` and `196fdf3f5c5b29` return). Ties moved all three state hashes (the small war's battle log did not): Normal `10cf7a356e2bea` -> `a0f8d651bfe97`, Hard `11d73d1672f834` -> `1879299a3721df`, small war `d077c31c237c4` -> `19d872c4a61078`. Proof: with `TIES.on` switched off ('ties are the only thing that moved the current pins', `withoutTies`) the previous three pins return exactly; `withoutBlocs` (and so `withoutRelations`) now switches ties off as well, so every older layer test still proves its own pins. The deployment test that pins a world from before these layers switches ties off too.
 
 ## Sims (Hard, 60 months, seeds 1 to 3, bots in every seat)
+
+Measured when the relationship layer was added, before ties; ties have their own measurements above.
 
 `VITE_RELSIM=hard VITE_RELSIM_SEEDS=1 npx vitest run src/engine/__tests__/relationsSim.test.ts -t long` (a seed at a time; each run prints a `RELSIM` line to stderr). With the rules on, then off:
 
@@ -79,7 +144,11 @@ Opinions stay in range and nobody is pinned at the ends (at most 4 of 1000 pairs
 - Ceding gives a whole country (the map has no strips).
 - Mediation does not end a war.
 - AI strike windows need both nations able to reach the same enemy country; otherwise they only share spoils.
-- Existing generic opinion boosts elsewhere (for example investing in a business, +12) are not under the new warmth cap.
-- Trade and loans still live in the Diplomacy desk: each partner card has a "Treaties and trade" link and Diplomacy cards have "Build relations".
-- Online (several humans): relationship acts toward another player are refused; the screen was checked in single-player turn and live games only.
+- Investment thanks and gifts are capped by their own ceilings (6 and 30), not by the 45 earned cap of the desk's acts.
+- Trade and loans live in the Diplomacy desk: each nation has a "Diplomacy →" button and the Actions tab a line pointing there; Diplomacy cards have "Build relations". The Diplomacy button opens the nation, not a specific composer.
+- Stock stakes in a foreign company do not exist in this game (shares can only be held in companies in your own territory), so there is no stock-stake line; foreign stakes are investments, which have one.
+- Trust is a reading only: no AI decision uses it yet.
+- A long peace starts counting from the first month of the game, and a save from before ties has no record of earlier wars, so pairs that fought before it was made count as at peace since the start.
+- The tier threat of the coalition model (`threatOf`: a Superpower draws rivals together from its tier alone) is unchanged; only the opinion line "Fears your power" and `coalitionActive` are now earned.
+- Online (several humans): relationship acts toward another player are refused and the card says so; checked in a two-human game on one machine (live screens), not over the network.
 - Not checked: the Requests tab with a live request in a browser (covered by engine tests), screen reader behaviour, colorblind palettes.
