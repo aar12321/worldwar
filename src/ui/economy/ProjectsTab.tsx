@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { TIERS } from '../../data/empire'
 import { LOCAL, LOCAL_IDS, NEED_TEXT, describeLocal } from '../../data/localProjects'
 import { SPENDING } from '../../data/people'
-import { PROJECT_IDS, PROJECT_LEVELS, PROJECT_RULES, PROJECTS } from '../../data/projects'
+import { PROJECT_IDS, PROJECT_LEVELS, PROJECT_RULES, PROJECTS, WORKS } from '../../data/projects'
 import { describeEffect } from '../../data/society'
 import { tierOf } from '../../engine/empire'
 import { activeProjects, investedIn, levelCost, levelMonths, monthlyCost, projectLevel, projectProblem } from '../../engine/industry'
@@ -11,10 +11,10 @@ import { activeLocal, localCost, localInvested, localLevel, localMonthly, localM
 import { getWorld } from '../../map/world'
 import { useGame } from '../../store'
 import { signed, usePlayerView } from '../hooks'
-import { LevelPicker, StatTile } from '../kit'
+import { LevelPicker, StatTile, Tiles } from '../kit'
 import { Tabs } from '../panel'
 import { DataList } from '../DataList'
-import { Card } from './parts'
+import { Card, Fold } from './parts'
 import { ProjectCard } from './projects/ProjectCard'
 
 type Mode = 'national' | 'local'
@@ -30,12 +30,12 @@ export function ProjectsTab() {
 
   return (
     <section className="econ-grid">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 span-all">
-        <StatTile label="National projects" value={`${running} of ${spec.projectSlots}`} sub={`up to ${spec.projectSlots} at once`} />
-        <StatTile label="In your countries" value={`${runningLocal} of ${spec.localSlots}`} sub={`up to ${spec.localSlots} at once`} />
+      <Tiles compact>
+        <StatTile label="National projects" value={`${running} of ${spec.projectSlots}`} sub="being built at once" tone={running >= spec.projectSlots ? 'warn' : undefined} />
+        <StatTile label="In your countries" value={`${runningLocal} of ${spec.localSlots}`} sub="being built at once" tone={runningLocal >= spec.localSlots ? 'warn' : undefined} />
         <StatTile label="Building costs" value={signed(-econ.projects.building)} sub="money a month" />
         <StatTile label="Upkeep of finished" value={signed(-econ.projects.upkeep)} sub={`${PROJECT_RULES.maintenance * 100}% of what was put in, a month`} />
-      </div>
+      </Tiles>
       <div className="span-all">
         <Tabs
           value={mode}
@@ -53,6 +53,14 @@ export function ProjectsTab() {
 
 // ---- National ----
 
+/** What a level of public works does, worked out from the same constants the engine uses (`worksEffects`, `projectSpeed`). */
+function worksText(level: number, cost: number): string {
+  const d = level - 2
+  const signedPct = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(Math.round(v * 100))}%`
+  const effects = d === 0 ? 'Standard: no bonus and no penalty.' : `Factories ${signedPct(WORKS.factory * d)}, trade ${signedPct(WORKS.trade * d)}, building prices ${signedPct(-WORKS.buildCost * d)}, projects ${Math.abs(Math.round(PROJECT_RULES.worksSpeed * d * 100))}% ${d > 0 ? 'faster' : 'slower'}, Defense Line repairs ${signedPct(WORKS.heal * d)}.`
+  return `${cost.toFixed(1)} money a month at this level (it scales with the upkeep of your buildings). ${effects}`
+}
+
 function National() {
   const view = usePlayerView()!
   const setPolicy = useGame((s) => s.setPolicy)
@@ -60,37 +68,64 @@ function National() {
   const works = view.pendingPolicy.spending.works
   const reached = player.tier
   const tiers = [1, 2, 3, 4, 5] as const
+  // What you have first, then what you can start now; what a bigger empire opens folds away at the bottom.
+  const mine = PROJECT_IDS.filter((id) => projectLevel(player, id) > 0 || player.projects[id])
+  const open = PROJECT_IDS.filter((id) => !mine.includes(id) && PROJECTS[id].tier <= reached)
+  const locked = PROJECT_IDS.filter((id) => !mine.includes(id) && PROJECTS[id].tier > reached)
   return (
     <>
-      <Card title="Public works" hint="Roads, power and the upkeep of every building. Low levels let factories, trade, wall repairs and projects slip; high levels speed them up and make building cheaper.">
+      <Card title="Public works" hint="Roads, power and the upkeep of every building. Its cost is the Public works line of your Budget. Low levels let factories, trade, Defense Line repairs and projects slip; high levels speed them up and make building cheaper.">
         <LevelPicker label="Public works" levels={SPENDING.works.levels} value={works} onChange={(v) => setPolicy({ spending: { works: v } })} />
-        <p className="text-[13px] text-white/70">
-          Costs {econ.spending.works.toFixed(1)} a month at standard. Level {works}: factories {works >= 2 ? '+' : ''}
-          {((works - 2) * 3).toFixed(0)}%, trade {works >= 2 ? '+' : ''}
-          {((works - 2) * 5).toFixed(0)}%, building prices {works >= 2 ? '' : '+'}
-          {((2 - works) * 3).toFixed(0)}%, projects {works >= 2 ? '' : '−'}
-          {Math.abs((works - 2) * 10)}% {works >= 2 ? 'faster' : 'slower'}.
-        </p>
+        <p className="text-[13px] text-white/70">{worksText(works, -(econ.lines.find((l) => l.label === 'Public works')?.amount ?? 0))}</p>
       </Card>
-      {tiers.map((t) => {
-        const ids = PROJECT_IDS.filter((id) => PROJECTS[id].tier === t)
-        if (!ids.length) return null
-        const spec = TIERS[t - 1]
-        return (
-          <div key={t} className="span-all space-y-2">
-            <div className="flex items-baseline justify-between gap-3 pt-1">
-              <h2 className="text-[15px] font-semibold tracking-tight">{t === 1 ? 'Open to every nation' : spec.name}</h2>
-              <span className={`text-[12px] ${reached >= t ? 'text-[#6eeb8a]' : 'text-white/55'}`}>{t === 1 ? '' : reached >= t ? 'Unlocked' : `Needs ${spec.countries} countries`}</span>
-            </div>
-            <div className="econ-grid">
-              {ids.map((id) => (
-                <NationalCard key={id} id={id} />
-              ))}
-            </div>
-          </div>
-        )
-      })}
+      {mine.length > 0 && (
+        <ProjectGroup title="Yours" note="Built or being built">
+          {mine.map((id) => (
+            <NationalCard key={id} id={id} />
+          ))}
+        </ProjectGroup>
+      )}
+      {open.length > 0 && (
+        <ProjectGroup title={mine.length ? 'You can start' : 'Projects you can start'} note={`${open.length} open to you`}>
+          {open.map((id) => (
+            <NationalCard key={id} id={id} />
+          ))}
+        </ProjectGroup>
+      )}
+      {locked.length > 0 && (
+        <div className="span-all space-y-1.5">
+          <h2 className="text-[15px] font-semibold tracking-tight pt-1">For a bigger empire</h2>
+          {tiers
+            .filter((t) => t > reached)
+            .map((t) => {
+              const ids = locked.filter((id) => PROJECTS[id].tier === t)
+              if (!ids.length) return null
+              return (
+                <Fold key={t} title={`${TIERS[t - 1].name}: ${ids.map((id) => PROJECTS[id].name).join(', ')}`} value={`needs ${TIERS[t - 1].countries} countries`}>
+                  <div className="econ-grid pt-1">
+                    {ids.map((id) => (
+                      <NationalCard key={id} id={id} />
+                    ))}
+                  </div>
+                </Fold>
+              )
+            })}
+        </div>
+      )}
     </>
+  )
+}
+
+/** A heading and a grid of project cards. */
+function ProjectGroup({ title, note, children }: { title: string; note: string; children: ReactNode }) {
+  return (
+    <div className="span-all space-y-2">
+      <div className="flex items-baseline justify-between gap-3 pt-1">
+        <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+        <span className="text-[12px] text-white/55">{note}</span>
+      </div>
+      <div className="econ-grid">{children}</div>
+    </div>
   )
 }
 
