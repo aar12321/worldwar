@@ -68,3 +68,10 @@
 .chev-open {
   transform: rotate(45deg);
 }
+
+/* Research filtered to one branch or to what can be researched now: a few columns, not seven. */
+@media (min-width: 1280px) {
+  .tech-grid.tech-grid-few {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+}

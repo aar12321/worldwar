@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BRANCH_LABELS, TECHS, type Tech } from '../data/techTree'
 import { PROGRAM_RULES, RESEARCH_PROGRAMS, programCost } from '../data/projects'
 import type { ResearchTrack } from '../engine/types'
@@ -9,6 +10,7 @@ import { useGame } from '../store'
 import { fmt, signed, usePlayerView } from './hooks'
 import { techBonuses } from '../engine/techBonuses'
 import { speak } from './plain'
+import './economy/nation.css'
 
 const BRANCHES: TechBranch[] = ['land', 'air', 'naval', 'infra', 'economy', 'frontier', 'medicine']
 const BRANCH_COLOR: Record<TechBranch, string> = { land: '#ff9f0a', air: '#64d2ff', naval: '#0a84ff', infra: '#bf5af2', economy: '#30d158', frontier: '#ff375f', medicine: '#66d4cf' }
@@ -125,8 +127,13 @@ function Bonuses() {
 export function TechTree() {
   const view = usePlayerView()
   const setPanel = useGame((s) => s.setPanel)
+  // Seven branches stacked are nineteen screens on a phone: a filter shows one branch, or only what can be researched now.
+  const [show, setShow] = useState<'all' | 'ready' | TechBranch>('all')
   if (!view) return null
-  const { player, committed, econ } = view
+  const { game, player, committed, econ, orders } = view
+  const ready = (t: Tech) => !player.techs.includes(t.id) && (orders.some((o) => o.type === 'research' && o.techId === t.id) || !validateOrder(game, getWorld().map, { type: 'research', nationId: player.id, techId: t.id }, orders))
+  const branches = show === 'all' || show === 'ready' ? BRANCHES : BRANCHES.filter((b) => b === show)
+  const filters: ['all' | 'ready' | TechBranch, string][] = [['all', 'All'], ['ready', `Can research now (${TECHS.filter(ready).length})`], ...BRANCHES.map((b) => [b, BRANCH_LABELS[b]] as [TechBranch, string])]
   return (
     <div data-section="tech" aria-label="Research" className="drawer drawer-wide surface">
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-none">
@@ -148,13 +155,20 @@ export function TechTree() {
       <div className="flex-1 min-h-0 overflow-auto scroll-thin p-6">
         <Bonuses />
         <Programs />
-        <div className="tech-grid">
-          {BRANCHES.map((b) => (
+        <div className="flex flex-wrap gap-1.5 mb-4" role="radiogroup" aria-label="Show technologies">
+          {filters.map(([id, label]) => (
+            <button key={id} type="button" role="radio" aria-checked={show === id} className={`btn px-2.5 py-1 text-[13px] ${show === id ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setShow(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className={show === 'all' ? 'tech-grid' : 'tech-grid tech-grid-few'}>
+          {branches.map((b) => (show === 'ready' && !TECHS.some((t) => t.branch === b && ready(t)) ? null : (
             <div key={b} className="space-y-3">
               <div className="text-[13px] font-semibold pb-2 border-b border-white/10" style={{ color: BRANCH_COLOR[b] }}>
                 {BRANCH_LABELS[b]}
               </div>
-              {TECHS.filter((t) => t.branch === b)
+              {TECHS.filter((t) => t.branch === b && (show !== 'ready' || ready(t)))
                 .sort((x, y) => x.tier - y.tier)
                 .map((t, i) => (
                   <div key={t.id} className="relative">
@@ -163,7 +177,7 @@ export function TechTree() {
                   </div>
                 ))}
             </div>
-          ))}
+          )))}
         </div>
         <p className="text-[12px] text-white/40 mt-6">Research comes from universities and the people working in your country.</p>
       </div>
