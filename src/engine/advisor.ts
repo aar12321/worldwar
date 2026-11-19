@@ -238,16 +238,16 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   // The people: staffing, health, schools, jobs, epidemics
   const cov = econ.coverage
   if (econ.buildings.factory > 0 && cov.engineers < 0.9) {
-    add(cov.engineers < 0.7 ? 'now' : 'soon', 48, { id: 'engineers', title: 'Your factories are short of engineers', detail: `They are ${Math.round(cov.engineers * 100)}% staffed, so factories run at ${Math.round(econ.factoryStaff * 100)}%. Switch the schools to an Engineering focus, or raise school spending.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+    add(cov.engineers < 0.7 ? 'now' : 'soon', 48, { id: 'engineers', title: 'Your factories are short of engineers', detail: `They are ${Math.round(cov.engineers * 100)}% staffed, so factories run at ${Math.round(econ.factoryStaff * 100)}%. Switch the schools to an Engineering focus, or raise school spending.`, action: 'Open People', target: { desk: 'economy', tab: 'people', section: 'learning' } })
   }
   if (econ.buildings.university > 0 && cov.scientists < 0.9) {
-    add('soon', 36, { id: 'scientists', title: 'Your universities are short of scientists', detail: `They run at ${Math.round(econ.researchStaff * 100)}%. A Science focus and university-level schools raise more.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+    add('soon', 36, { id: 'scientists', title: 'Your universities are short of scientists', detail: `They run at ${Math.round(econ.researchStaff * 100)}%. A Science focus and university-level schools raise more.`, action: 'Open People', target: { desk: 'economy', tab: 'people', section: 'learning' } })
   }
   if (econ.buildings.hospital > 0 && cov.doctors < 0.9) {
-    add('soon', 34, { id: 'doctors', title: 'Your hospitals lack doctors', detail: `Hospitals only help when doctors staff them (${Math.round(cov.doctors * 100)}% now). A Medicine focus trains more.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+    add('soon', 34, { id: 'doctors', title: 'Your hospitals lack doctors', detail: `Hospitals only help when doctors staff them (${Math.round(cov.doctors * 100)}% now). A Medicine focus trains more.`, action: 'Open People', target: { desk: 'economy', tab: 'people', section: 'health' } })
   }
   if (n.people.epidemic > 0.05) {
-    add('now', 78, { id: 'epidemic', title: 'An epidemic is spreading', detail: `Severity ${Math.round(n.people.epidemic * 100)}%. It costs lives, output and calm. ${n.programs.quarantine ? 'The quarantine is helping.' : 'A quarantine ends it sooner, at a price.'}`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+    add('now', 78, { id: 'epidemic', title: 'An epidemic is spreading', detail: `Severity ${Math.round(n.people.epidemic * 100)}%. It costs lives, output and calm. ${n.programs.quarantine ? 'The quarantine is helping.' : 'A quarantine ends it sooner, at a price.'}`, action: 'Open People', target: { desk: 'economy', tab: 'people', section: 'health' } })
   } else if (!n.programs.quarantine) {
     const sick = new Set<NationId>()
     for (const r of Object.values(s.regions)) {
@@ -257,16 +257,16 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
         if (o && o !== nationId && (s.nations[o]?.people?.epidemic ?? 0) > 0.2) sick.add(o)
       }
     }
-    if (sick.size > 0) add('soon', 42, { id: 'epidemic-near', title: 'An epidemic next door', detail: `${[...sick].map((id) => s.nations[id].name).join(', ')} ${sick.size === 1 ? 'has' : 'have'} an epidemic on your border. A quarantine makes it far less likely to cross.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+    if (sick.size > 0) add('soon', 42, { id: 'epidemic-near', title: 'An epidemic next door', detail: `${[...sick].map((id) => s.nations[id].name).join(', ')} ${sick.size === 1 ? 'has' : 'have'} an epidemic on your border. A quarantine makes it far less likely to cross.`, action: 'Open People', target: { desk: 'economy', tab: 'people', section: 'health' } })
   }
   if (n.people.unemployment > 0.1) {
-    add(n.people.unemployment > 0.18 ? 'now' : 'soon', 44, { id: 'jobs', title: `${Math.round(n.people.unemployment * 100)}% of people are out of work`, detail: 'The jobless pay no tax and are angry. More factories and farms, lower interest rates and generous jobless support help.', action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+    add(n.people.unemployment > 0.18 ? 'now' : 'soon', 44, { id: 'jobs', title: `${Math.round(n.people.unemployment * 100)}% of people are out of work`, detail: 'The jobless pay no tax and are angry. More factories and farms, lower interest rates and generous jobless support help.', action: 'Open People', target: { desk: 'economy', tab: 'people', section: 'work' } })
   }
   if (n.people.health < 0.4) {
-    add('soon', 40, { id: 'health', title: 'Your people are unwell', detail: `Health is ${Math.round(n.people.health * 100)}%: shorter lives, fewer children, weaker soldiers. Spend on health, build hospitals, research Sanitation.`, action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+    add('soon', 40, { id: 'health', title: 'Your people are unwell', detail: `Health is ${Math.round(n.people.health * 100)}%: shorter lives, fewer children, weaker soldiers. Spend on health, build hospitals, research Sanitation.`, action: 'Open People', target: { desk: 'economy', tab: 'people', section: 'health' } })
   }
   if (n.people.schooling < 0.35 && econ.netCapital > 2) {
-    add('idea', 30, { id: 'schools', title: 'Few of your people are schooled', detail: 'Schools lift every skill, and research with them.', action: 'Open People', target: { desk: 'economy', tab: 'people' } })
+    add('idea', 30, { id: 'schools', title: 'Few of your people are schooled', detail: 'Schools lift every skill, and research with them.', action: 'Open People', target: { desk: 'economy', tab: 'people', section: 'learning' } })
   }
 
   // Money and the bank
