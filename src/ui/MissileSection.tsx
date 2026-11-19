@@ -132,7 +132,7 @@ function KindRow({ game, player, target, orders, live, kind }: { game: GameState
 }
 
 /**
- * The War Room's missile section: every kind you have or can build, and what each does to this country. Pressing Fire orders the
+ * The missile section of Military, Missile War (the strike planner): every kind you have or can build, and what each does to this country. Pressing Fire orders the
  * strike at once, so nothing leaves with an attack by itself. In a live game the salvo flies and lands after its days; in a turn game
  * it resolves at the month's end.
  */

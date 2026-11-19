@@ -70,8 +70,8 @@ export interface Step {
   /** The order that does it, if one button does. */
   order?: Order
   /** Where to go to do it, if it takes choosing. */
-  go?: 'program' | 'systems' | 'warroom' | 'deploy' | 'war'
-  /** The country to open the War Room on. */
+  go?: 'program' | 'systems' | 'strike' | 'deploy' | 'war'
+  /** The country to aim the strike planner at. */
   target?: string
   tone: 'urgent' | 'do' | 'idea'
 }
@@ -103,9 +103,9 @@ export function nextSteps(game: GameState, map: WorldMap, player: Nation, live: 
     // A target in reach: the first enemy country a launch site reaches.
     const anyKind = missileKinds(player).find((k) => missileStock(player, k) >= 1)
     const target = anyKind && Object.values(game.regions).find((r) => foes.includes(r.owner) && launchSite(game, map, id, r.id, anyKind))
-    if (target) out.push({ id: 'launch', text: `${stock} missiles are ready, and ${map.regions[target.id].name} is in reach. Open the War Room to fire.`, go: 'warroom', target: target.id, tone: 'do' })
+    if (target) out.push({ id: 'launch', text: `${stock} missiles are ready, and ${map.regions[target.id].name} is in reach. Fire from the strike planner.`, go: 'strike', target: target.id, tone: 'do' })
   }
-  if (foes.length && theirs >= 4 && (freeUnits(game, id).air >= 0.25 || stock >= 3)) out.push({ id: 'counterforce', text: `An enemy holds about ${Math.round(theirs)} missiles. Counterforce (aim at launch sites) or a bomber raid destroys the store before it is used.`, go: 'warroom', tone: 'do' })
+  if (foes.length && theirs >= 4 && (freeUnits(game, id).air >= 0.25 || stock >= 3)) out.push({ id: 'counterforce', text: `An enemy holds about ${Math.round(theirs)} missiles. Counterforce (aim at launch sites) or a bomber raid destroys the store before it is used.`, go: 'strike', tone: 'do' })
   if (foes.length && radarLevel(player) < 1 && money > MW.radarMoney[0]) out.push({ id: 'radar', text: 'No early-warning radar: you will not see a salvo until it lands. Level 1 shows them the day they leave.', order: { type: 'missileDefense', nationId: id, item: 'radar' }, tone: 'do' })
   if (interceptorCap(player) > 0 && interceptorCap(player) - interceptorsOf(player) >= 4) {
     const room = interceptorCap(player) - interceptorsOf(player)

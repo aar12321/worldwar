@@ -506,7 +506,7 @@ function Production({ game, player }: { game: GameState; player: Nation }) {
   const level = programLevel(player)
   const room = buildRoom(player, game.turn)
   return (
-    <Section title="Production and stockpile" sub={`Stores ${arsenalSize(player)} of ${storageCap(player)} · the workshop builds ${room} more this month, at once · the line delivers ${fmt(rate, 1)} a month. Missiles are fired from the War Room.`} id="production">
+    <Section title="Production and stockpile" sub={`Stores ${arsenalSize(player)} of ${storageCap(player)} · the workshop builds ${room} more this month, at once · the line delivers ${fmt(rate, 1)} a month. Missiles are fired from Missile War.`} id="production">
       {level < 1 ? (
         <p className="text-[13px] text-[#ffd60a]">Raise the charter to level 1 to build missiles.</p>
       ) : (
@@ -563,7 +563,7 @@ function Capabilities({ player }: { player: Nation }) {
   const fx = programFx(player)
   const rows = capabilities(player)
   return (
-    <Section title="What your missiles get" sub="These numbers are what the War Room and the Missile War tab use for strikes and forecasts." id="capabilities">
+    <Section title="What your missiles get" sub="These numbers are what the Missile War tab uses for strikes and forecasts." id="capabilities">
       <div className="overflow-x-auto">
         <table className="w-full text-[13px] tabular-nums">
           <thead>
@@ -654,7 +654,7 @@ export function MissileProgramTab() {
           <Rivals game={game} player={player} />
         </div>
       </div>
-      <p className="text-[12px] text-white/55">Missiles are fired from the War Room and the Missile War tab. {MW.enabled ? 'Every test and strike moves the world up the tension ladder.' : ''}</p>
+      <p className="text-[12px] text-white/55">Missiles are fired from the Missile War tab. {MW.enabled ? 'Every test and strike moves the world up the tension ladder.' : ''}</p>
     </div>
   )
 }

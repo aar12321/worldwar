@@ -145,6 +145,9 @@ describe('the next steps replace invest-and-wait', () => {
     const steps = nextSteps(t, map, t.nations.r0, false)
     expect(steps.map((x) => x.id)).toContain('launch')
     expect(steps.find((x) => x.id === 'launch')!.target).toBeTruthy()
+    // Firing is done in this tab's strike planner, never in the War Room.
+    expect(steps.find((x) => x.id === 'launch')!.go).toBe('strike')
+    expect(steps.every((x) => !/War Room/.test(x.text))).toBe(true)
     for (const step of steps) if (step.order) expect(validateOrder(t, map, step.order), step.id).toBeNull()
   })
 

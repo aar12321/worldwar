@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { STANCES, COMMITS, type Stance } from '../data/war'
-import { advise, capabilities, OBJECTIVES, planAttack, planPreset, rankTargets, whatIf, type Advice, type Objective, type PlannedAttack, type TargetRow } from '../engine/commander'
-import { attackPool, shareOfPool } from '../engine/deploy'
-import { forecastPlan, type Forecast } from '../engine/forecast'
+import { STANCES, type Stance } from '../data/war'
+import { advise, capabilities, OBJECTIVES, planPreset, rankTargets, whatIf, type Advice, type Objective, type PlannedAttack, type TargetRow } from '../engine/commander'
+import { attackPool } from '../engine/deploy'
+import { forecastMemo, type Forecast } from '../engine/forecast'
 import { formatDivisions, totalUnits } from '../engine/helpers'
-import type { GameState, Nation, Order, RegionId, UnitCounts } from '../engine/types'
+import type { GameState, Nation, Order, RegionId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
+import { choiceName, choicePlan, choiceUnits, type Choice } from './attackChoices'
 import { DataList } from './DataList'
 import { NumberStepper } from './widgets'
 
@@ -14,15 +15,18 @@ const OBJECTIVE_KEYS = Object.keys(OBJECTIVES) as Objective[]
 const ADVICE_TONE: Record<Advice['tone'], string> = { good: 'text-[#6eeb8a]', warn: 'text-[#ffd60a]', bad: 'text-[#ff8a84]', info: 'text-[#9fd0ff]' }
 const ADVICE_MARK: Record<Advice['tone'], string> = { good: '▲', warn: '!', bad: '▼', info: 'i' }
 
+/** What the War Room has chosen: one of the four sizes and a stance. No missiles: an attack never carries them. */
 export interface Deployment {
-  units: UnitCounts
-  missiles: number
+  choice: Choice
   stance: Stance
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 
-/** AI Battle Command, as a panel: plans the attack for you, ranks your targets, writes advice and runs the standing auto-command. */
+/**
+ * AI Battle Command, as a panel: picks the best of the four sizes and the stance for your goal, ranks your targets, writes advice and
+ * runs the standing auto-command. The War Room shows it folded away under its own heading.
+ */
 export function CommandCenter({
   game,
   player,
@@ -54,12 +58,13 @@ export function CommandCenter({
   const online = useGame((s) => s.online?.status === 'playing')
   const autoOff = live ? 'Auto-command plans a month at a time: it is for turn games' : online ? 'Auto-command is not available in an online game' : null
   const [objective, setObjective] = useState<Objective>('win')
-  const [keepHome, setKeepHome] = useState(40)
   const [busy, setBusy] = useState<string | null>(null)
   const [planned, setPlanned] = useState<{ rec: PlannedAttack | null; before: Deployment; beforeF: Forecast | null; recF: Forecast; advice: Advice[]; label: string } | null>(null)
   const [rows, setRows] = useState<TargetRow[] | null>(null)
   const [advice, setAdvice] = useState<Advice[] | null>(null)
   const pool = attackPool(game, player.id, orders, live)
+  const coastal = !!map.regions[target]?.coastal
+  const planOf = (d: Deployment) => choicePlan(target, d.stance, choiceUnits(pool, d.choice, coastal))
 
   // Heavy work runs after the button has had a chance to repaint as "planning".
   const later = (what: string, fn: () => void) => {
@@ -75,60 +80,43 @@ export function CommandCenter({
 
   const plan = () =>
     later('plan', () => {
-      const opts = { objective, keepHome: objective === 'defend' ? keepHome / 100 : undefined, pending: orders, live }
+      const opts = { objective, pending: orders, live }
       const before = current
       const beforeF = forecast
-      let apply: Deployment | null = null
-      let rec: PlannedAttack | null = null
-      let recF: Forecast | null = null
-      if (cap.composition) {
-        rec = planAttack(game, map, player.id, target, opts)
-        if (rec) {
-          apply = { units: { ...pool, ...rec.plan.units, missile: 0 } as UnitCounts, missiles: rec.plan.missiles ?? 0, stance: rec.plan.stance }
-          // The planner names only the kinds it sends; the rest are zero.
-          for (const k of Object.keys(apply.units) as (keyof UnitCounts)[]) if (rec.plan.units[k] === undefined) apply.units[k] = 0
-          recF = rec.forecast
-        }
-      } else {
-        const p = planPreset(game, map, player.id, target, { ...opts, stance: cap.stance ? undefined : 'assault' })
-        if (p) {
-          const commit = p.commit
-          apply = { units: shareOfPool(pool, COMMITS[commit].share), missiles: 0, stance: p.stance }
-          recF = forecastPlan(game, map, player.id, { target, stance: p.stance, units: apply.units }, 512)
-        }
-      }
+      // The War Room sends one of the four sizes, so that is what the planner chooses from, judged on exactly the units that would go.
+      const p = planPreset(game, map, player.id, target, { ...opts, stance: cap.stance ? undefined : 'assault' }, (c) => choiceUnits(pool, c, coastal))
+      const apply: Deployment | null = p ? { choice: p.commit, stance: p.stance } : null
+      // The same forecast the War Room's big number shows for that choice.
+      const recF = apply ? forecastMemo(game, map, player.id, planOf(apply)) : null
       if (!apply || !recF) {
         setPlanned(null)
         setAdvice([{ tone: 'bad', text: 'There is nothing you can send right now.' }])
         return
       }
+      const rec: PlannedAttack = { plan: { ...planOf(apply), units: planOf(apply).units ?? {} }, forecast: recF, objective, score: p!.score }
       onApply(apply)
-      const lines = advise(game, map, player.id, { target, stance: apply.stance, units: apply.units, missiles: apply.missiles }, level, rec)
-      setPlanned({ rec, before, beforeF, recF, advice: lines, label: cap.composition ? `Planned for "${OBJECTIVES[objective].name.toLowerCase()}"` : cap.stance ? 'Best preset size and stance' : 'Best preset size' })
+      const lines = advise(game, map, player.id, planOf(apply), level, rec)
+      setPlanned({ rec, before, beforeF, recF, advice: lines, label: `${choiceName(apply.choice)}, ${STANCES[apply.stance].name}: best for "${OBJECTIVES[objective].name.toLowerCase()}"` })
       setAdvice(lines)
     })
 
   const readSituation = () =>
     later('advise', () => {
-      setAdvice(advise(game, map, player.id, { target, stance: current.stance, units: current.units, missiles: current.missiles }, level, planned?.rec ?? null))
+      setAdvice(advise(game, map, player.id, planOf(current), level, planned?.rec ?? null))
     })
 
   const rank = () =>
     later('rank', () => {
-      setRows(rankTargets(game, map, player.id, { objective, keepHome: objective === 'defend' ? keepHome / 100 : undefined, pending: orders, live }, level))
+      setRows(rankTargets(game, map, player.id, { objective, pending: orders, live }, level))
     })
 
   const rowsWhatIf = planned?.beforeF ? whatIf(planned.beforeF, planned.recF) : null
   const queuedAuto = orders.filter((o) => o.type === 'attack' && o.auto).length
 
   return (
-    <section className="inset-card p-3.5 space-y-3" aria-label="AI Battle Command" data-level={level}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-[15px] font-semibold">AI Battle Command</h3>
-        <span className="rounded-full bg-[#30d158]/20 px-2 py-0.5 text-[11px] font-semibold text-[#6eeb8a]">Level {level}</span>
-      </div>
+    <section className="space-y-3" aria-label="AI Battle Command" data-level={level}>
       <p className="text-[12px] text-white/70">
-        Level 1 gives exact odds and ranks your targets. Level 2 also picks the stance and writes advice. Level 3 plans the best force, size and mix for your goal, and can run a standing auto-command.
+        Level 1 gives exact odds and picks the best of the four sizes. Level 2 also picks the stance and writes advice. Level 3 also ranks targets with the best force for each and can run a standing auto-command.
       </p>
 
       <div role="radiogroup" aria-label="Goal" className="grid grid-cols-2 gap-1.5">
@@ -139,10 +127,9 @@ export function CommandCenter({
         ))}
       </div>
       <p className="text-[12px] text-white/65">{OBJECTIVES[objective].blurb}</p>
-      {objective === 'defend' && <NumberStepper label="Share of your reserve to keep at home" value={keepHome} onChange={setKeepHome} min={0} max={90} step={5} unit="%" slider />}
 
       <div className="flex flex-wrap gap-2">
-        <button className="btn btn-primary" onClick={plan} disabled={busy !== null || totalUnits(pool) < 0.5} data-testid="plan-attack" aria-keyshortcuts="P">
+        <button className="btn btn-primary" onClick={plan} disabled={busy !== null || totalUnits(pool) < 0.5} data-testid="plan-attack">
           {busy === 'plan' ? 'Planning…' : 'Plan this attack for me'}
         </button>
         <button className="btn btn-quiet" onClick={readSituation} disabled={busy !== null}>
@@ -182,7 +169,7 @@ export function CommandCenter({
               {pct(planned.recF.winChance)} to win, losing about {formatDivisions(planned.recF.yourLosses)}.
             </p>
           )}
-          <p className="text-[12px] text-white/60">Applied to the steppers above. Change any of them and the odds update at once. Stance: {STANCES[planned.rec?.plan.stance ?? current.stance].name}.</p>
+          <p className="text-[12px] text-white/60">Chosen above. Pick another size or stance and the odds update at once.</p>
         </div>
       )}
 
