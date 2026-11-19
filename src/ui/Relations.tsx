@@ -114,7 +114,14 @@ function ActRow({ order, title, blurb, label, children }: { order: RelateOrder; 
           {!pv.why && pv.risk && <p className="text-[12px] text-[#ffd60a]/90">{pv.risk}</p>}
           <p className={`text-[12px] tabular-nums ${short ? 'text-[#ff8a84]' : 'text-white/50'}`}>{cost}</p>
         </div>
-        <OrderButton order={order} label={label ?? 'Do it'} tone={pv.why ? 'btn-quiet' : 'btn-primary'} className="shrink-0" />
+        {pv.why ? (
+          // The reason is already on the row; a plain disabled button does not repeat it.
+          <button className="btn btn-quiet shrink-0" disabled aria-label={`${title}: ${pv.why}`}>
+            {label ?? 'Do it'}
+          </button>
+        ) : (
+          <OrderButton order={order} label={label ?? 'Do it'} tone="btn-primary" className="shrink-0" />
+        )}
       </div>
       {children && <div className="space-y-1.5">{children}</div>}
     </div>
@@ -412,16 +419,16 @@ function PartnerCard({ id, pinned, togglePin, onBack }: { id: NationId; pinned: 
   }
   return (
     <div className="space-y-4" data-partner={id} ref={top0}>
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <button className="btn btn-quiet lg:hidden" onClick={onBack}>
-          ← All nations
+      <div className="flex items-center justify-between gap-1">
+        <button className="btn btn-quiet px-2 lg:hidden" onClick={onBack} aria-label="Back to all nations">
+          ← Nations
         </button>
-        <div className="flex gap-1.5 flex-wrap ml-auto">
-          <LocateButton id={id} />
-          <button className="btn btn-quiet" aria-pressed={pinned} onClick={togglePin} title="Keep this nation on your watchlist">
+        <div className="flex gap-1 ml-auto">
+          <LocateButton id={id} className="px-2" />
+          <button className="btn btn-quiet px-2" aria-pressed={pinned} onClick={togglePin} title="Keep this nation on your watchlist">
             {pinned ? '★ Watching' : '☆ Watch'}
           </button>
-          <button className="btn btn-quiet" onClick={() => openDiplomacy(id)} title="Treaties, trade deals, loans, investment, sanctions and peace">
+          <button className="btn btn-quiet px-2" onClick={() => openDiplomacy(id)} title="Treaties, trade deals, loans, investment, sanctions and peace">
             Diplomacy →
           </button>
         </div>
@@ -430,6 +437,7 @@ function PartnerCard({ id, pinned, togglePin, onBack }: { id: NationId; pinned: 
         <span className="w-3 h-3 rounded-full shrink-0" style={{ background: n.color }} />
         <h3 className="text-[20px] font-semibold tracking-tight">{n.name}</h3>
         <span className={`chip ${war ? 'chip-red' : status === 'Ally' ? 'chip-blue' : status === 'Pact' ? 'chip-green' : ''}`}>{status}</span>
+        {human && <span className="chip chip-blue">Player</span>}
         {!human && (
           <span className="chip" title={persona.description}>
             {persona.name}
@@ -676,7 +684,7 @@ function Row({ row, game, sort, pinned, active, onOpen, onPin }: { row: PartnerR
           <Dot color={n.color} />
           <span className="font-semibold truncate text-[14px]">{n.name}</span>
           <span className="ml-auto text-[13px] whitespace-nowrap tabular-nums" style={{ color: opinionColor(row.opinion) }}>
-            {row.human ? 'Player' : sign(row.opinion)} {!row.human && <Trend v={row.trend} />}
+            {row.human ? 'Player' : sign(row.opinion)} {!row.human && Math.abs(row.trend) >= 0.15 && <Trend v={row.trend} />}
           </span>
         </div>
         <div className="flex items-center gap-1 text-[11px] min-w-0">
@@ -776,7 +784,7 @@ function Overview({ rows, game, setFilter, open, requests }: { rows: PartnerRow[
     <div className="space-y-4" data-overview>
       <div className="grid grid-cols-3 xl:grid-cols-6 gap-2">
         {TIER_ORDER.map((t) => (
-          <button key={t} className="rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.07] p-3 text-left" onClick={() => setFilter(t === 'ally' ? 'allies' : t)}>
+          <button key={t} className={`rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.07] p-3 text-left ${count(t) ? '' : 'opacity-45'}`} onClick={() => setFilter(t === 'ally' ? 'allies' : t)} disabled={!count(t)} aria-label={`${TIER_TEXT[t].name}: ${count(t)}. Show them`}>
             <div className="text-[22px] font-semibold tabular-nums" style={{ color: TIER_COLOR[t] }}>
               {count(t)}
             </div>

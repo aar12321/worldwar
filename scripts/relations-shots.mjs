@@ -9,7 +9,22 @@ const outDir = args.includes('--out') ? args[args.indexOf('--out') + 1] : undefi
 const nation = args.includes('--nation') ? args[args.indexOf('--nation') + 1] : 'poland'
 const partner = args.includes('--partner') ? args[args.indexOf('--partner') + 1] : 'germany'
 
+// --two: a game with a second human (the partner), as an online two-player game is seen from the first seat.
+const two = args.includes('--two')
+
 await withGame({ nation, seed: 3, mode, outDir }, async (g) => {
+  if (two) {
+    await g.page.evaluate(({ nation, partner, mode }) => window.__store.getState().newGame({ playerRegionId: nation, humans: [partner], seed: 3, mode }), { nation, partner, mode })
+    await g.page.waitForTimeout(1500)
+    await g.page.evaluate((partner) => window.__store.getState().openRelations(partner), partner)
+    await g.page.waitForTimeout(600)
+    for (const f of await g.shotBoth('rel-two-player')) console.log(f)
+    await g.page.evaluate(() => window.__store.getState().openRelations(null))
+    await g.page.waitForTimeout(400)
+    for (const f of await g.shotBoth('rel-two-board')) console.log(f)
+    console.log('errors', JSON.stringify(g.errors.slice(0, 10)))
+    return
+  }
   await g.advance(mode === 'live' ? { days: 35 } : { months: 1 })
   await g.dismiss()
   const setup = await g.page.evaluate((partner) => {
