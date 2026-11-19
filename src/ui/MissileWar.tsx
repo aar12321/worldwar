@@ -14,7 +14,7 @@ import { Pips } from './bits'
 import { usePlayerView } from './hooks'
 import { MissileSection } from './MissileSection'
 import { ALERT_COLOR, flightsFor, lookColor, stageOf, type Incoming, type Palette } from './missileFx'
-import { raidReach, nextSteps, salvoLine, warStatus, type Step } from './missileWarText'
+import { ladderNote, raidReach, nextSteps, salvoLine, warStatus, type Step } from './missileWarText'
 import { missileName } from './missileText'
 import { OrderButton } from './panel'
 
@@ -22,14 +22,33 @@ const { map } = getWorld()
 const nameOf = (game: GameState, id: string) => game.nations[id]?.name ?? id
 const palette = (): Palette => (useGame.getState().settings.ui.palette === 'colorblind' ? 'colorblind' : 'standard')
 
+/**
+ * The desk's game with today's salvos and date. The desks read a slower copy of a live game that skips days on which only the clock,
+ * armies and flights moved, so without this a salvo launched on a quiet day did not show here (and the ladder said nothing was flying).
+ */
+function useMissileGame(): GameState | null {
+  const slow = usePlayerView()?.game ?? null
+  const flights = useGame((s) => s.game?.flights)
+  const day = useGame((s) => s.game?.day)
+  return useMemo(() => (slow && (slow.flights !== flights || slow.day !== day) ? { ...slow, flights, day } : slow), [slow, flights, day])
+}
+
 /** The ladder: five rungs, the world's tension on it, and what the rung means. */
 export function TensionLadder({ game }: { game: GameState }) {
   const st = warStatus(game, game.nations[game.playerId])
   return (
     <div className="space-y-1.5" data-rung={st.rung} role="img" aria-label={`Missile war tension ${Math.round(st.tension)} of 100: ${st.rungName}`}>
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="text-[15px] font-semibold">{st.rungName}</div>
-        <div className="text-[13px] text-white/70 tabular-nums">tension {Math.round(st.tension)} / 100</div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="text-[15px] font-semibold">{st.rungName}</span>
+          {st.incoming > 0 && (
+            <span className="chip chip-red" data-incoming={st.incoming}>
+              {st.incoming} incoming
+            </span>
+          )}
+          {st.outgoing > 0 && <span className="chip">{st.outgoing} outgoing</span>}
+        </div>
+        <div className="text-[13px] text-white/70 tabular-nums">world tension {Math.round(st.tension)} / 100</div>
       </div>
       <div className="grid grid-cols-5 gap-1">
         {MW.ladder.map((r, i) => (
@@ -39,7 +58,9 @@ export function TensionLadder({ game }: { game: GameState }) {
           </div>
         ))}
       </div>
-      <p className="text-[12px] text-white/65">{MW.ladder[st.rung].blurb}</p>
+      <p className="text-[12px] text-white/65" data-ladder-note>
+        {ladderNote(st)}
+      </p>
     </div>
   )
 }
@@ -113,9 +134,9 @@ const stepLabel = (s: Step): string =>
 
 /** The concrete next steps in the missile war, with a button for each. Used by the Missile War tab and the missile program. */
 export function NextSteps({ limit = 4 }: { limit?: number }) {
-  const view = usePlayerView()
-  if (!view) return null
-  const { game, player } = view
+  const game = useMissileGame()
+  if (!game) return null
+  const player = game.nations[game.playerId]
   const steps = nextSteps(game, map, player, isLive(game), limit)
   const st = warStatus(game, player)
   return (
@@ -389,9 +410,9 @@ function CeasefireCard({ game, player }: { game: GameState; player: Nation }) {
 
 /** The Missile War desk: everything about the missile war in one place, with what to do next at the top. */
 export function MissileWarTab() {
-  const view = usePlayerView()
-  if (!view) return null
-  const { game, player } = view
+  const game = useMissileGame()
+  if (!game) return null
+  const player = game.nations[game.playerId]
   const live = isLive(game)
   const incoming = flightsFor(game, player.id, 'incoming')
   const outgoing = flightsFor(game, player.id, 'outgoing')

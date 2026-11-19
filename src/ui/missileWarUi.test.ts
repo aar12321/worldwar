@@ -8,7 +8,7 @@ import { applyOrderNow } from '../engine/resolveTurn'
 import type { GameState, MissileFlight, SalvoReport } from '../engine/types'
 import { lineMap, setMilitary, startState } from '../engine/__tests__/fixtures'
 import { DECAL_LIFE, FX_CAPS, LOOK, decalsFrom, flightsFor, lookColor, planFx, radarRing, reportDay, stageOf } from './missileFx'
-import { nextSteps, salvoLine, warStatus } from './missileWarText'
+import { ladderNote, nextSteps, salvoLine, warStatus } from './missileWarText'
 
 const map = lineMap(8)
 const names = (id: string) => (id === 'r0' ? 'You' : `Nation ${id}`)
@@ -181,6 +181,27 @@ describe('the next steps replace invest-and-wait', () => {
     expect(st.exchange).toBeNull()
     expect(warStatus(s, s.nations.r1).exchange).toBe(0)
     expect(st.rungName).toBe(MW.ladder[st.rung].name)
+  })
+})
+
+describe('the ladder line', () => {
+  it('never says nothing is flying while a salvo is on its way (the rung is world tension, not flights)', () => {
+    const s = war()
+    // A calm world, and one enemy salvo in the air toward r0.
+    s.missileTension = 0
+    const f: MissileFlight = { id: 'f1', nationId: 'r1', from: 'r1', target: 'r0', count: 4, kind: 'cruise', launched: 0, lands: 2 }
+    s.flights = [f]
+    const st = warStatus(s, s.nations.r0)
+    expect(st.rungName).toBe('Calm')
+    expect(st.incoming).toBe(1)
+    const note = ladderNote(st)
+    expect(note).toMatch(/^1 salvo on the way to you/)
+    expect(note).not.toMatch(/no missiles in the air/i)
+    expect(MW.ladder.map((r) => r.blurb).join(' ')).not.toMatch(/no missiles in the air/i)
+    // The sender sees its own salvo, and nobody else's.
+    expect(ladderNote(warStatus(s, s.nations.r1))).toMatch(/^1 salvo of yours in the air/)
+    s.flights = []
+    expect(ladderNote(warStatus(s, s.nations.r0))).toBe(MW.ladder[0].blurb)
   })
 })
 
