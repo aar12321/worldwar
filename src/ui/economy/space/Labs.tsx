@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
 import { LABS, NODES, NODE_IDS, SAMPLE_NAMES, type NodeId, type SampleKind } from '../../../data/space'
-import { spaceProblem } from '../../../engine/space'
+import { benchRate, monthsToFinish, spaceProblem } from '../../../engine/space'
 import { Pips } from '../../bits'
 import { Bar } from '../../kit'
 import { OrderButton } from '../../panel'
 import { usePlayerView } from '../../hooks'
 import { Card } from '../parts'
 import { Chip, Search } from './shared'
-import { money, spaceOrder } from './words'
+import { money, monthsText, spaceOrder } from './words'
 
 const GROUPS = ['Rockets', 'Life support', 'Mining', 'Spillover'] as const
 const GROUP_BLURB: Record<(typeof GROUPS)[number], string> = {
@@ -20,13 +20,19 @@ const GROUP_BLURB: Record<(typeof GROUPS)[number], string> = {
 /** Samples come home from the flights; the labs turn them into discoveries. */
 export function LabsSection() {
   const view = usePlayerView()!
-  const { player, game, econ } = view
+  const { player, econ } = view
   const sp = player.space
   const [q, setQ] = useState('')
   const query = q.trim().toLowerCase()
   const shown = useMemo(() => NODE_IDS.filter((id) => !query || `${NODES[id].name} ${NODES[id].blurb} ${NODES[id].says} ${NODES[id].group}`.toLowerCase().includes(query)), [query])
   const samples = Object.entries(sp?.samples ?? {}).filter(([, v]) => (v ?? 0) > 0)
   const labs = sp?.labs ?? 0
+  // A bench moves `benchRate` a month (lab level times scientist staffing), so the months shown are the month end's own count.
+  const rate = benchRate(sp, econ.researchStaff)
+  const benchLeft = (progress: number, need: number) => {
+    const m = monthsToFinish(progress, need, rate)
+    return m === null ? 'stalled: no scientists' : `${monthsText(m)} left`
+  }
   return (
     <>
       <Card title="Space labs" hint="The labs study what your flights bring back. Each bench works on one discovery at a time: it costs money every month, research once, and some of the samples. More lab levels open harder discoveries and more benches.">
@@ -38,7 +44,7 @@ export function LabsSection() {
           <OrderButton
             order={spaceOrder(player, { kind: 'lab' })}
             label={sp?.labBuild ? 'Being built' : labs >= LABS.max ? 'Complete' : `Raise to level ${labs + 1}`}
-            cost={labs < LABS.max ? `${LABS.cost[labs + 1]} money, ${LABS.tp[labs + 1]} research` : undefined}
+            cost={labs < LABS.max ? `${LABS.cost[labs + 1]} money over ${LABS.months[labs + 1]} mo, ${LABS.tp[labs + 1]} research` : undefined}
             tone="btn-primary"
           />
         </div>
@@ -67,7 +73,7 @@ export function LabsSection() {
               <li key={r.node} className="space-y-1">
                 <div className="flex justify-between gap-2 text-[14px]">
                   <span className="font-semibold">{NODES[r.node].name}</span>
-                  <span className="text-[12px] text-white/70">{Math.max(0, Math.ceil((NODES[r.node].months - r.progress) / LABS.speed[labs])).toFixed(0)} months left</span>
+                  <span className="text-[12px] text-white/70">{benchLeft(r.progress, NODES[r.node].months)}</span>
                 </div>
                 <Bar value={r.progress / NODES[r.node].months} label={`${NODES[r.node].name} progress`} color="#bf5af2" />
               </li>
@@ -90,7 +96,7 @@ export function LabsSection() {
             </div>
             <div className="econ-grid">
               {ids.map((id) => (
-                <NodeCard key={id} id={id} workforce={econ.workforce} turn={game.turn} />
+                <NodeCard key={id} id={id} workforce={econ.workforce} rate={rate} />
               ))}
             </div>
           </div>
@@ -101,7 +107,7 @@ export function LabsSection() {
   )
 }
 
-function NodeCard({ id, workforce }: { id: NodeId; workforce: number; turn: number }) {
+function NodeCard({ id, workforce, rate }: { id: NodeId; workforce: number; rate: number }) {
   const { player, game } = usePlayerView()!
   const spec = NODES[id]
   const sp = player.space
@@ -110,6 +116,8 @@ function NodeCard({ id, workforce }: { id: NodeId; workforce: number; turn: numb
   const action = { kind: 'research', node: id } as const
   const problem = done || working ? null : spaceProblem(game, player, action, workforce)
   const samples = Object.entries(spec.samples ?? {})
+  // With labs, at the current pace; money is charged every month until it is done.
+  const months = (sp?.labs ?? 0) > 0 ? monthsToFinish(0, spec.months, rate) : null
   return (
     <div className={`inset-card p-3.5 space-y-2 ${done ? 'ring-1 ring-[#30d158]/30' : ''}`}>
       <div className="flex items-start justify-between gap-3">
@@ -121,8 +129,8 @@ function NodeCard({ id, workforce }: { id: NodeId; workforce: number; turn: numb
       </div>
       <p className="text-[13px] text-[#6eeb8a]">{spec.says}</p>
       <div className="flex flex-wrap gap-1.5">
-        <Chip>{spec.months} months</Chip>
-        <Chip>{money(spec.money)} money</Chip>
+        <Chip>{months === null ? `${spec.months} months of lab work` : `about ${monthsText(months)}`}</Chip>
+        <Chip>{money(spec.money / spec.months * (months ?? spec.months))} money</Chip>
         <Chip>{spec.tp} research</Chip>
         {samples.map(([k, v]) => (
           <Chip key={k}>
