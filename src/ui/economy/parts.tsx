@@ -1,4 +1,7 @@
 import { useState, type ReactNode } from 'react'
+import type { AdviceTarget } from '../../engine/advisor'
+import { useGame } from '../../store'
+import './nation.css'
 
 /** A label and a number on one line. */
 export function Line({ k, v, warn, strong }: { k: string; v: string; warn?: boolean; strong?: boolean }) {
@@ -86,5 +89,31 @@ export function SliderRow({
       </div>
       {hint && <div className="text-[13px] text-white/65">{hint}</div>}
     </div>
+  )
+}
+
+/**
+ * A section that folds away: a one-line summary (a title and its number) that opens onto the detail. Used where the reasoning
+ * behind a number should be one tap away but not in the way.
+ */
+export function Fold({ title, value, warn, open, children }: { title: ReactNode; value?: ReactNode; warn?: boolean; open?: boolean; children: ReactNode }) {
+  return (
+    <details className="fold" open={open}>
+      <summary>
+        <span className="fold-title">{title}</span>
+        {value !== undefined && <span className={`tabular-nums ${warn ? 'text-[#ff8a84]' : ''}`}>{value}</span>}
+      </summary>
+      <div className="fold-body">{children}</div>
+    </details>
+  )
+}
+
+/** A quiet button that opens the desk, tab or section that owns a control, the same way an advisor card does. */
+export function GoTo({ to, children, className = '' }: { to: AdviceTarget; children: ReactNode; className?: string }) {
+  const goTo = useGame((s) => s.goTo)
+  return (
+    <button type="button" className={`btn btn-quiet shrink-0 ${className}`} onClick={() => goTo(to)}>
+      {children}
+    </button>
   )
 }
