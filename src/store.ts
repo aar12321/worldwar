@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { generateAllBotOrders } from './ai/bot'
 import { createInitialState, type NewGameOptions } from './data/startingNations'
-import type { AdviceTarget, PeopleSection } from './engine/advisor'
+import type { AdviceTarget, GovSection, PeopleSection } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
 import { factionNews } from './engine/factions'
 import { programNews } from './engine/missileProgram'
@@ -45,7 +45,7 @@ export const SAVE_KEYS = [SAVE_KEY, ORDERS_KEY]
  */
 export type Panel = 'none' | 'briefing' | 'economy' | 'military' | 'tech' | 'diplomacy' | 'faction' | 'empire' | 'log' | 'settings' | (string & {})
 export type EmpireTab = 'overview' | 'provinces' | 'world' | 'reaction' | 'stats' | 'puppets' | 'territories'
-export type { PeopleSection }
+export type { GovSection, PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'space' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' | 'missiles' | 'program'
 /** What the globe's colors mean. */
@@ -212,6 +212,9 @@ export interface GameStore {
   economyTab: EconomyTab
   peopleSection: PeopleSection
   setPeopleSection(section: PeopleSection): void
+  /** The Government tab's open section, kept here so a link or an advice button can open it on a section. */
+  govSection: GovSection
+  setGovSection(section: GovSection): void
   /** Country shown in the Economy desk's upgrade list. Null means the capital. */
   economyRegion: RegionId | null
   militaryTab: MilitaryTab
@@ -989,6 +992,7 @@ export const useGame = create<GameStore>((set, get) => ({
   panel: 'none',
   economyTab: 'country',
   peopleSection: 'overview',
+  govSection: 'command',
   economyRegion: null,
   militaryTab: 'forces',
   empireTab: 'overview',
@@ -1167,6 +1171,10 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ peopleSection: section })
   },
 
+  setGovSection(section) {
+    set({ govSection: section })
+  },
+
   setEconomyRegion(id) {
     set({ economyRegion: id })
   },
@@ -1209,6 +1217,7 @@ export const useGame = create<GameStore>((set, get) => ({
       case 'economy':
         get().openEconomy(target.tab, target.region)
         if (target.section) set({ peopleSection: target.section })
+        if (target.gov) set({ govSection: target.gov })
         break
       case 'military':
         get().openMilitary(target.tab)

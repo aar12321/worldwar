@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { ELECTION, GOVERNMENTS, GOVERNMENT_TYPES, REFORM } from '../../data/government'
 import { EMPIRE_RULES } from '../../data/empire'
 import { LAW_SPECS } from '../../data/unitTypes'
@@ -19,7 +18,7 @@ import { JobsSection } from './government/Jobs'
 import { PoliciesSection } from './government/Policies'
 import { TalentSection } from './government/Talent'
 import { millions, people } from './government/words'
-import { govSection, type GovSection } from './government/section'
+import { useGame, type GovSection } from '../../store'
 
 type Section = GovSection
 
@@ -41,11 +40,8 @@ const SECTIONS: [Section, string][] = [
 export function GovernmentTab() {
   const view = usePlayerView()!
   const { game, player, econ } = view
-  const [section, setSectionState] = useState<Section>(govSection.current)
-  const setSection = (s: Section) => {
-    govSection.current = s
-    setSectionState(s)
-  }
+  const section = useGame((s) => s.govSection)
+  const setSection = useGame((s) => s.setGovSection)
   const filled = MINISTRIES.filter((id) => player.civics?.cabinet[id]).length
   const { approval } = groupReport(game, player)
   const job = employmentOf(player, econ)
