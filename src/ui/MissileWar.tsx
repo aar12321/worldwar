@@ -444,9 +444,6 @@ export function MissileWarTab() {
   const outgoing = flightsFor(game, player.id, 'outgoing')
   return (
     <div className="space-y-3" data-missile-war>
-      <p className="text-[13px] text-white/75">
-        Missiles are a war of their own. Radar sees them coming, interceptors and batteries shoot them down until the store runs dry, decoys and big salvos burn the rounds, and counterforce strikes and raids go after the launchers. Every strike raises the world's tension.
-      </p>
       <section className="inset-card p-3.5 space-y-3">
         <TensionLadder game={game} />
         <NextSteps limit={5} />
@@ -475,6 +472,9 @@ export function MissileWarTab() {
       <LedgerCard game={game} player={player} />
       <Planner game={game} player={player} />
       {launchSiteHint(game, player)}
+      <p className="text-[12px] text-white/60">
+        How the missile war works: radar sees salvos coming, interceptors and batteries shoot them down until the store runs dry, decoys and big salvos burn the rounds, and counterforce strikes and raids go after the launchers. Every strike raises the world's tension.
+      </p>
     </div>
   )
 }
