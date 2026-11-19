@@ -511,9 +511,14 @@ function Production({ game, player }: { game: GameState; player: Nation }) {
         <p className="text-[13px] text-[#ffd60a]">Raise the charter to level 1 to build missiles.</p>
       ) : (
         <div className="space-y-2">
-          {PROGRAM_KINDS.map((k) => (
+          {PROGRAM_KINDS.filter((k) => MISSILES[k].level <= level).map((k) => (
             <BuildRow key={k} kind={k as Exclude<MissileType, 'hypersonic'>} />
           ))}
+          {PROGRAM_KINDS.some((k) => MISSILES[k].level > level) && (
+            <p className="text-[12px] text-white/60">
+              Later: {PROGRAM_KINDS.filter((k) => MISSILES[k].level > level).map((k) => `${MISSILES[k].name.toLowerCase()}s at charter level ${MISSILES[k].level}`).join(', ')}.
+            </p>
+          )}
           <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
             <div className="text-[14px] font-semibold">Production line</div>
             {plant > 0 ? (
