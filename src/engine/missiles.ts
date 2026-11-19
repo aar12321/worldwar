@@ -39,7 +39,7 @@ export function takeMissiles(n: Nation, kind: MissileType, count: number): numbe
   return fired
 }
 
-/** The kinds a nation can use now: some are in store, or it can make or train them. The War Room and the program list these. */
+/** The kinds a nation can use now: some are in store, or it can make or train them. The Missile War tab and the program list these. */
 export function missileKinds(n: Nation): MissileType[] {
   return MISSILE_TYPES.filter((k) => missileStock(n, k) >= 1 || (k === 'hypersonic' ? canUseUnit(n, 'missile') : programLevel(n) >= MISSILES[k].level))
 }

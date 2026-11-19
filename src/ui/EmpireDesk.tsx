@@ -32,7 +32,7 @@ function unlocks(t: ReturnType<typeof tierSpec>): [string, string][] {
     ['Regional capitals', String(t.regionalCapitals)],
     ['World Bank loans', `up to ${t.loanMax}, ${t.loanMonths} months${t.loanPact ? ', with a pact' : ''}`],
     ['World Council', t.council ? `put resolutions (${t.council === 0.5 ? '1/2' : '2/3'} needed)` : 'no'],
-    ['Nuclear weapons', t.id >= NUCLEAR.tier ? 'yes (a program, in the War Room)' : 'no'],
+    ['Nuclear weapons', t.id >= NUCLEAR.tier ? 'yes (a program, in Military, Missile War)' : 'no'],
     ['Rivals band together', ['no', 'barely', 'a little', 'strongly', 'fiercely'][t.id - 1]],
   ]
 }

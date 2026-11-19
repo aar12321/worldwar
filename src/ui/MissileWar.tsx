@@ -13,6 +13,7 @@ import { useGame } from '../store'
 import { Pips } from './bits'
 import { usePlayerView } from './hooks'
 import { MissileSection } from './MissileSection'
+import { NuclearCard } from './NuclearCard'
 import { ALERT_COLOR, flightsFor, lookColor, stageOf, type Incoming, type Palette } from './missileFx'
 import { raidReach, nextSteps, salvoLine, warStatus, type Step } from './missileWarText'
 import { missileName } from './missileText'
@@ -82,9 +83,7 @@ export function SalvoTimeline({ game, flight, mine }: { game: GameState; flight:
 }
 
 function StepRow({ step }: { step: Step }) {
-  const view = usePlayerView()!
   const openMilitary = useGame((s) => s.openMilitary)
-  const openWarRoom = useGame((s) => s.openWarRoom)
   const tone = step.tone === 'urgent' ? 'border-[#ff453a]/70 bg-[#ff453a]/10' : 'border-white/10 bg-white/5'
   return (
     <li className={`rounded-xl border p-2.5 space-y-1.5 ${tone}`} data-step={step.id}>
@@ -94,14 +93,15 @@ function StepRow({ step }: { step: Step }) {
         <button
           className="btn btn-quiet px-3 py-1.5 text-[13px]"
           onClick={() => {
-            if (step.go === 'warroom') {
-              const foes = enemiesOf(view.game, view.player.id)
-              const target = step.target ?? Object.values(view.game.regions).find((r) => foes.includes(r.owner))?.id ?? null
-              openWarRoom(target)
+            if (step.go === 'strike') {
+              // Missiles are fired here, in the strike planner of this tab: aim it at the step's country and bring it into view.
+              if (step.target) useGame.setState({ selectedRegion: step.target })
+              openMilitary('missiles')
+              setTimeout(() => document.querySelector('[data-planner]')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 0)
             } else openMilitary(step.go === 'deploy' ? 'deploy' : step.go === 'war' ? 'wars' : step.go === 'program' ? 'program' : 'systems')
           }}
         >
-          {step.go === 'warroom' ? 'Open the War Room' : step.go === 'deploy' ? 'Open Deployment' : 'Open the program'}
+          {step.go === 'strike' ? 'Open the strike planner' : step.go === 'deploy' ? 'Open Deployment' : 'Open the program'}
         </button>
       )}
     </li>
@@ -298,7 +298,14 @@ function Planner({ game, player }: { game: GameState; player: Nation }) {
   const foes = enemiesOf(game, player.id)
   const regions = Object.values(game.regions).filter((r) => foes.includes(r.owner)).sort((a, b) => (a.owner < b.owner ? -1 : a.owner > b.owner ? 1 : b.line - a.line))
   const [pick, setPick] = useState<string>('')
-  const target = regions.find((r) => r.id === pick)?.id ?? regions[0]?.id
+  // A country chosen elsewhere (on the map, or by a next step or the advisor) aims the planner, until you pick another here.
+  const selected = useGame((s) => s.selectedRegion)
+  const [aimed, setAimed] = useState<string | null>(selected)
+  if (selected !== aimed) {
+    setAimed(selected)
+    if (selected && regions.some((r) => r.id === selected)) setPick(selected)
+  }
+  const target = regions.find((r) => r.id === pick)?.id ?? regions.find((r) => r.id === selected)?.id ?? regions[0]?.id
   const live = isLive(game)
   const view = usePlayerView()!
   if (!target) return <section className="inset-card p-3.5 text-[13px] text-white/70">You are not at war, so there is nothing to strike. Declare a war from the Wars tab.</section>
@@ -317,6 +324,8 @@ function Planner({ game, player }: { game: GameState; player: Nation }) {
       </label>
       <MissileSection game={game} player={player} target={target} orders={view.orders} live={live} />
       <RaidCard game={game} player={player} target={target} />
+      {/* The Superpower weapon is a missile too, so it is fired from here, never from the War Room. */}
+      <NuclearCard target={target} />
     </section>
   )
 }

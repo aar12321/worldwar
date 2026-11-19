@@ -1,29 +1,27 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import { TERRAIN } from '../data/terrain'
-import { COMMITS, STANCES, type Stance } from '../data/war'
+import { STANCES, type Stance } from '../data/war'
 import { planTrip, tripSchedule } from '../engine/armies'
 import { absDate, clockOf, isLive } from '../engine/calendar'
 import { computeEconomy } from '../engine/economy'
 import { capabilities, commandLevel, compareStances } from '../engine/commander'
-import { attackPool, compactUnits, shareOfPool } from '../engine/deploy'
+import { attackPool } from '../engine/deploy'
 import { forecastMemo, roughOdds } from '../engine/forecast'
 import { formatDivisions, maxAttacks, totalUnits } from '../engine/helpers'
 import { validateOrder } from '../engine/orders'
-import { missilesLeft } from '../engine/systems'
-import type { GameState, NationId, RegionId, UnitCounts } from '../engine/types'
+import type { NationId, RegionId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { CommandCenter } from './CommandCenter'
-import { DeployPanel } from './DeployPanel'
+import { choiceOrder, choicePlan, choiceUnits, suggestedChoice, type Choice } from './attackChoices'
+import { DeployPanel, type ChoiceOdds } from './DeployPanel'
 import { usePlayerView } from './hooks'
 import { MilitaryCompare } from './MilitaryCompare'
-import { MissileSection } from './MissileSection'
 import { Modal } from './Modal'
-import { NuclearCard } from './NuclearCard'
 import { Breakdown, OddsGauge } from './OddsGauge'
 import { speak } from './plain'
 import { TerritoryForces } from './TerritoryForces'
-import { defaultPick, sendingTerritories, territoryAttack, useTerritoryPrefs } from './territoryPrefs'
+import { sendingTerritories, territoryAttack, useTerritoryPrefs } from './territoryPrefs'
 
 const STANCE_KEYS = Object.keys(STANCES) as Stance[]
 const LABEL_TONE = { Likely: 'text-[#6eeb8a]', Even: 'text-[#ffd60a]', Unlikely: 'text-[#ff8a84]' }
@@ -44,18 +42,12 @@ export function WarRoom() {
   return target ? <WarRoomDialog key={target} target={target} /> : null
 }
 
-/** The smallest of the usual sizes that is likely to win, so the screen opens on a sensible plan. */
-function suggestedUnits(game: GameState, nationId: NationId, target: RegionId, pool: UnitCounts): UnitCounts {
-  const { map } = getWorld()
-  for (const share of [COMMITS.probe.share, COMMITS.main.share]) {
-    const units = shareOfPool(pool, share)
-    const f = forecastMemo(game, map, nationId, { target, stance: 'assault', units: compactUnits(units) }, 64)
-    if (f && f.winChance >= 0.75) return units
-  }
-  return shareOfPool(pool, COMMITS.main.share)
-}
+const CHOICE_KEYS: Record<string, Choice> = { n: 'none', p: 'probe', m: 'main', a: 'allin' }
 
-/** Plan one attack: exactly what to send, how to fight, and the chance it works, live as you change anything. */
+/**
+ * Plan one attack: how much of the military to send (None, Probe, Main force or All in), how to fight, and the chance it works, live as
+ * you change anything. An attack carries no missiles: strikes are in Military, Missile War.
+ */
 function WarRoomDialog({ target }: { target: RegionId }) {
   const attack = useGame((s) => s.attack)
   const open = useGame((s) => s.openWarRoom)
@@ -66,39 +58,38 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const player = view?.player
   const live = !!game && isLive(game)
   const pool = game && player ? attackPool(game, player.id, view?.orders ?? [], live) : null
-  const [units, setUnits] = useState<UnitCounts | null>(() => (view && pool ? suggestedUnits(view.game, view.player.id, target, pool) : null))
-  const [stance, setStance] = useState<Stance>('assault')
-  const [missiles, setMissiles] = useState(0)
-  const [terr, setTerr] = useState<Record<NationId, UnitCounts>>({})
-  const sendPrefs = useTerritoryPrefs((s) => s.send)
   const { map } = getWorld()
+  const coastal = !!map.regions[target]?.coastal
+  const [choice, setChoice] = useState<Choice>(() => (view && pool ? suggestedChoice(view.game, map, view.player.id, target, pool, coastal) : 'main'))
+  const [stance, setStance] = useState<Stance>('assault')
+  const [terr, setTerr] = useState<Record<NationId, Choice>>({})
+  const sendPrefs = useTerritoryPrefs((s) => s.send)
   const level = player ? commandLevel(game!, player.id) : 0
   const cap = capabilities(level)
-  const missileMax = game && player ? missilesLeft(player.military.units.missile, view.orders, player.id) : 0
-  const sendUnits = units ? compactUnits(units) : {}
-  const fired = Math.min(missiles, missileMax)
+  const units = pool ? choiceUnits(pool, choice, coastal) : null
+  const sent = units ? totalUnits(units) : 0
 
-  const forecast = useMemo(() => (game && player && units ? forecastMemo(game, map, player.id, { target, stance, units: sendUnits, missiles: fired }) : null), [game, player, units, stance, fired, target, map]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Every forecast here is the same call on the same plan (named units, no missiles), so a choice's row, the stance cards and the big number agree.
+  const forecast = useMemo(() => (game && player && units && sent >= 0.05 ? forecastMemo(game, map, player.id, choicePlan(target, stance, units)) : null), [game, player, pool, choice, stance, target, map]) // eslint-disable-line react-hooks/exhaustive-deps
   const forecasts = useMemo(() => {
-    if (!game || !player || !units) return null
-    return Object.fromEntries(STANCE_KEYS.map((st) => [st, forecastMemo(game, map, player.id, { target, stance: st, units: sendUnits, missiles: fired }, 128)])) as Record<Stance, ReturnType<typeof forecastMemo>>
-  }, [game, player, units, fired, target, map]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!game || !player || !units || sent < 0.05) return null
+    return Object.fromEntries(STANCE_KEYS.map((st) => [st, forecastMemo(game, map, player.id, choicePlan(target, st, units), 128)])) as Record<Stance, ReturnType<typeof forecastMemo>>
+  }, [game, player, pool, choice, target, map]) // eslint-disable-line react-hooks/exhaustive-deps
   const bestStance = useMemo(() => {
-    if (!cap.stance || !game || !player || !units || totalUnits(units) < 0.5) return null
-    return compareStances(game, map, player.id, { target, stance, units: sendUnits, missiles: fired }, 'win').best
-  }, [cap.stance, game, player, units, fired, target, map]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!cap.stance || !game || !player || !units || sent < 0.5) return null
+    return compareStances(game, map, player.id, choicePlan(target, stance, units), 'win').best
+  }, [cap.stance, game, player, pool, choice, target, map]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!view || !game || !player || !pool || !units || !game.regions[target]) return null
 
   const region = game.regions[target]
   const mr = map.regions[target]
   const owner = game.nations[region.owner]
-  const order = { type: 'attack' as const, nationId: player.id, target, stance, units: sendUnits, missiles: fired }
-  const err = validateOrder(game, map, order, view.orders)
+  const order = choiceOrder(player.id, target, stance, units)
+  const err = choice === 'none' ? 'Choose how much to send' : validateOrder(game, map, order, view.orders)
   const f = forecast
   const rough = f && !cap.exact ? roughOdds(game, player.id, target, f.winChance) : null
   const bill = computeEconomy(game, map, player.id).warBills.find((b) => b.enemy === owner.id)?.amount ?? 0
-  const sent = totalUnits(units)
   const lineNow = f?.lineBefore ?? region.line
   const lineMaxNow = f?.lineMax ?? lineNow
   const trip = live ? planTrip(game, map, player.id, target) : null
@@ -108,13 +99,24 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const share = sent / Math.max(0.1, totalUnits(pool))
   const away = Math.min(1, player.military.exposed + share)
 
+  /** A choice's odds, from the same forecast the big number uses (the selected row equals it exactly). */
+  const choiceOdds = (c: Choice): ChoiceOdds | null => {
+    const cf = c === choice ? f : forecastMemo(game, map, player.id, choicePlan(target, stance, choiceUnits(pool, c, coastal)))
+    if (!cf || totalUnits(choiceUnits(pool, c, coastal)) < 0.05) return null
+    const label = cap.exact ? cf.label : roughOdds(game, player.id, target, cf.winChance).label
+    const text = cap.exact ? `${label} · ${Math.round(cf.winChance * 100)}%` : `${label} · ${roughOdds(game, player.id, target, cf.winChance).text}`
+    return { text, tone: label === 'Likely' ? 'good' : label === 'Even' ? 'even' : 'bad', losses: cf.yourLosses }
+  }
+  const openMissileWar = () => {
+    open(null)
+    useGame.getState().openMilitary('missiles')
+  }
+
   const key = (e: KeyboardEvent) => {
     const el = e.target as HTMLElement
     if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || e.ctrlKey || e.metaKey || e.altKey) return
     const k = e.key.toLowerCase()
-    if (k === 'm') setUnits(shareOfPool(pool, 1))
-    else if (k === 'h') setUnits(shareOfPool(pool, 0.5))
-    else if (k === 'n') setUnits(shareOfPool(pool, 0))
+    if (CHOICE_KEYS[k]) setChoice(CHOICE_KEYS[k])
     else if (k === '1' || k === '2' || k === '3') setStance(STANCE_KEYS[Number(k) - 1])
     else return
     e.preventDefault()
@@ -140,17 +142,18 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           <button className="btn btn-red px-5" data-autofocus disabled={!!err} onClick={() => {
               // Territories fight first, each as an army of its own, then yours.
               for (const id of sendingTerritories(game, player.id, target)) if (sendPrefs[id]) {
-                const pickedUnits = terr[id] ?? defaultPick(attackPool(game, id, [], live))
+                const pickedUnits = choiceUnits(attackPool(game, id, [], live), terr[id] ?? 'main', coastal)
                 if (totalUnits(pickedUnits) >= 0.05) useGame.getState().issueOrder(territoryAttack(player.id, id, target, stance, pickedUnits))
               }
-              attack(target, 'main', stance, fired, undefined, sendUnits)
+              // No missiles, ever: the order names its units and nothing else.
+              attack(target, 'main', stance, undefined, undefined, order.units)
             }}>
             {live ? 'Launch army' : 'Launch attack'}
           </button>
         </>
       }
     >
-      {/* Keys work anywhere in the room that is not a text box: M max, H half, N none, 1 2 3 the stance. */}
+      {/* Keys work anywhere in the room that is not a text box: N none, P probe, M main force, A all in, 1 2 3 the stance. */}
       <div className="space-y-5" onKeyDown={key} data-war-room>
         <OddsGauge forecast={f} rough={rough} exact={cap.exact} />
 
@@ -177,20 +180,7 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </section>
         )}
 
-        <DeployPanel
-          game={game}
-          player={player}
-          pool={pool}
-          units={units}
-          setUnits={setUnits}
-          missiles={fired}
-          setMissiles={setMissiles}
-          missileMax={missileMax}
-          coastal={mr.coastal}
-          stanceCost={STANCES[stance].cost}
-          live={live}
-          shortcuts
-        />
+        <DeployPanel player={player} pool={pool} choice={choice} setChoice={setChoice} coastal={coastal} stanceCost={STANCES[stance].cost} live={live} odds={choiceOdds} />
         <TerritoryForces game={game} me={player.id} target={target} stance={stance} picks={terr} setPicks={setTerr} live={live} />
         {!live && away > 0.05 && <p className="text-[13px] text-white/70 -mt-3">Until the turn ends, the part of your army that fights here defends at half strength elsewhere, so rivals can hit you while it is out.</p>}
 
@@ -229,7 +219,8 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </div>
         </section>
 
-        {f && <Breakdown factors={f.factors} exact={cap.exact} fuzzDefence />}
+        {/* The War Room never sends missiles, so the line about them would only ever say "none fired". */}
+        {f && <Breakdown factors={f.factors.filter((x) => x.id !== 'missiles')} exact={cap.exact} fuzzDefence />}
 
         {f && (
           <section className="inset-card p-3.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[14px]">
@@ -253,6 +244,12 @@ function WarRoomDialog({ target }: { target: RegionId }) {
         )}
 
         {level >= 1 ? (
+          <details className="details-card" data-command-center>
+            <summary>
+              AI Battle Command <span className="ml-1 rounded-full bg-[#30d158]/20 px-2 py-0.5 text-[11px] font-semibold text-[#6eeb8a]">Level {level}</span>
+              <span className="block text-[12px] font-normal text-white/60">Plan it for me, advice and your best targets</span>
+            </summary>
+            <div className="pt-3">
           <CommandCenter
             game={game}
             player={player}
@@ -260,14 +257,15 @@ function WarRoomDialog({ target }: { target: RegionId }) {
             level={level}
             orders={view.orders}
             live={live}
-            current={{ units, missiles: fired, stance }}
+            current={{ choice, stance }}
             forecast={f}
             onApply={(d) => {
-              setUnits(d.units)
-              setMissiles(d.missiles)
+              setChoice(d.choice)
               setStance(d.stance)
             }}
           />
+            </div>
+          </details>
         ) : (
           <section className="inset-card p-3.5 space-y-1" aria-label="AI Battle Command">
             <h3 className="text-[15px] font-semibold">AI Battle Command</h3>
@@ -275,12 +273,21 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </section>
         )}
 
-        <MilitaryCompare game={game} mine={player.id} theirs={owner.id} />
+        <details className="details-card">
+          <summary>Compare the two militaries</summary>
+          <div className="pt-3">
+            <MilitaryCompare game={game} mine={player.id} theirs={owner.id} />
+          </div>
+        </details>
 
-        <MissileSection game={game} player={player} target={target} orders={view.orders} live={live} />
-
-        {/* Superpower weapon: its own section and component, so nothing above depends on it. */}
-        <NuclearCard target={target} />
+        {/* Missiles are never part of an attack: one link to where they are fired. */}
+        <p className="text-[13px] text-white/65" data-missile-link>
+          Missile strikes are in{' '}
+          <button type="button" className="underline underline-offset-2 text-white/85 hover:text-white" onClick={() => openMissileWar()}>
+            Military → Missile War
+          </button>
+          .
+        </p>
       </div>
     </Modal>
   )

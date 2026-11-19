@@ -563,7 +563,7 @@ function Capabilities({ player }: { player: Nation }) {
   const fx = programFx(player)
   const rows = capabilities(player)
   return (
-    <Section title="What your missiles get" sub="These numbers are what the War Room and the Missile War tab use for strikes and forecasts." id="capabilities">
+    <Section title="What your missiles get" sub="These numbers are what the Missile War tab uses for strikes and forecasts." id="capabilities">
       <div className="overflow-x-auto">
         <table className="w-full text-[13px] tabular-nums">
           <thead>
@@ -654,7 +654,7 @@ export function MissileProgramTab() {
           <Rivals game={game} player={player} />
         </div>
       </div>
-      <p className="text-[12px] text-white/55">Missiles are fired from the War Room and the Missile War tab. {MW.enabled ? 'Every test and strike moves the world up the tension ladder.' : ''}</p>
+      <p className="text-[12px] text-white/55">Missiles are fired from the Missile War tab. {MW.enabled ? 'Every test and strike moves the world up the tension ladder.' : ''}</p>
     </div>
   )
 }

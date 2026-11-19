@@ -7,8 +7,8 @@ import { usePlayerView } from './hooks'
 import { OrderButton } from './panel'
 
 /**
- * The Superpower weapon, in the War Room: build a stockpile of warheads over months, then fire one at the country you are looking
- * at. It sits in a section of its own so the rest of the War Room does not depend on it.
+ * The Superpower weapon, in Military, Missile War (the strike planner): build a stockpile of warheads over months, then fire one at the
+ * country the planner aims at. It is a missile, so it is never part of the War Room's attack plan.
  */
 export function NuclearCard({ target }: { target: RegionId }) {
   const view = usePlayerView()
