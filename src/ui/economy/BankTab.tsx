@@ -1,7 +1,7 @@
 import { BANKING } from '../../data/banking'
 import { SECTORS, SECTOR_IDS } from '../../data/business'
 import { tierOf } from '../../engine/empire'
-import { fundReturn } from '../../engine/bank'
+import { fundReturn, newBondRate } from '../../engine/bank'
 import type { SectorId } from '../../engine/types'
 import { useGame } from '../../store'
 import { signed, usePlayerView } from '../hooks'
@@ -42,7 +42,7 @@ export function BankTab() {
         <StatTile label="Currency" value={b.currency.toFixed(2)} sub={b.currency < 0.9 ? 'weak: cheap exports' : b.currency > 1.1 ? 'strong' : 'steady'} tone={b.currency < 0.8 ? 'bad' : undefined} />
         <StatTile label="You owe" value={player.debt.toFixed(0)} tone={player.debt > 0 ? 'warn' : undefined} sub={`${player.bonds.length} bond${player.bonds.length === 1 ? '' : 's'}`} />
         <StatTile label="Credit rating" value={credit.rating} tone={credit.locked || credit.rating === 'D' || credit.rating === 'CCC' ? 'bad' : undefined} sub={`can borrow ${credit.room.toFixed(0)}`} />
-        <StatTile label="Wealth fund" value={b.fund.toFixed(0)} sub={spec.wealthFund ? `${(fundReturn(game) * 1200).toFixed(1)}% a year` : 'Great power'} />
+        <StatTile label="Wealth fund" value={b.fund.toFixed(0)} sub={spec.wealthFund ? `${(fundReturn(game) * 1200).toFixed(1)}% a year` : 'needs a Great power'} />
       </Tiles>
 
       <Card title="Central bank" hint="A higher rate cools prices and weakens business; a lower one does the opposite." right={<Pending show={Math.abs(rate - b.rate) > 1e-9} />}>
@@ -52,7 +52,6 @@ export function BankTab() {
           <p className="text-[13px] text-white/70">A {spec.name} borrows at the world's rate, {world.rate.toFixed(1)}%. A Regional power (4 countries) runs its own central bank.</p>
         )}
         <div className="text-[14px] space-y-1">
-          <Line k="Inflation now" v={`${b.inflation.toFixed(1)}%`} />
           <Line k="Real income kept" v={pct(econ.realIncome, 1)} warn={econ.realIncome < 0.97} />
           {reserve && <Line k="Reserve currency income" v={signed(econ.seigniorage)} />}
         </div>
@@ -73,7 +72,7 @@ export function BankTab() {
       <Card title="Bonds" hint="Borrow for a fixed time at today's rate. When a bond comes due it is rolled over if lenders still lend, or paid from the treasury.">
         <div className="grid grid-cols-3 gap-2">
           {TERMS.filter(([m]) => spec.bondTerms.includes(m)).map(([months, name]) => (
-            <OrderButton key={months} order={bond(100, months)} label={`Borrow 100 · ${name}`} effect={`Sold at ${(Math.max(0.0001, credit.rate * (0.5 + (range ? rate : world.rate) / BANKING.rateScale)) * 100).toFixed(2)}% a month`} />
+            <OrderButton key={months} order={bond(100, months)} label={`Borrow 100 · ${name}`} effect={`Sold at ${(newBondRate(game, { ...player, bank: { ...b, rate } }, credit.rate) * 100).toFixed(2)}% a month`} />
           ))}
         </div>
         {player.bonds.length > 0 ? (
@@ -96,22 +95,25 @@ export function BankTab() {
           <OrderButton order={repay(Math.min(50, player.debt))} label="Repay 50" effect="Pays the dearest bond first" />
           <OrderButton order={repay(player.debt)} label="Repay all" cost={`${player.debt.toFixed(0)} money`} />
         </div>
+        {!war && b.warBonds <= 0 && <p className="text-[12px] text-white/60">War bonds, at a patriotic {(BANKING.warBondRate * 100).toFixed(2)}% a month, can be sold only while you are at war.</p>}
         {credit.locked && <p className="text-[13px] text-[#ff8a84]">You defaulted recently, so nobody will lend to you.</p>}
         {player.debt > 0 && econ.netCapital < 0 && <p className="text-[13px] text-[#ff8a84]">You spend more than you earn while in debt. Three months in the red means default: half of every bond is written off.</p>}
       </Card>
 
-      <Card title="War bonds" hint="People lend to their country in wartime at a patriotic rate. Each issue calms the streets a little.">
-        <div className="text-[14px] space-y-1">
-          <Line k="Sold so far this war" v={b.warBonds.toFixed(0)} />
-          <Line k="Room left" v={war ? warRoom.toFixed(0) : 'at war only'} />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <OrderButton order={bond(Math.max(20, Math.floor(econ.gross * 0.5)), BANKING.warBondTerm, true)} label="Sell war bonds" effect={`${(BANKING.warBondRate * 100).toFixed(2)}% a month for ${BANKING.warBondTerm} months, +${BANKING.warBondStability} stability`} />
-        </div>
-      </Card>
+      {(war || b.warBonds > 0) && (
+        <Card title="War bonds" hint="People lend to their country in wartime at a patriotic rate. Each issue calms the streets a little.">
+          <div className="text-[14px] space-y-1">
+            <Line k="Sold so far this war" v={b.warBonds.toFixed(0)} />
+            <Line k="Room left" v={war ? warRoom.toFixed(0) : 'at war only'} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <OrderButton order={bond(Math.max(20, Math.floor(econ.gross * 0.5)), BANKING.warBondTerm, true)} label="Sell war bonds" effect={`${(BANKING.warBondRate * 100).toFixed(2)}% a month for ${BANKING.warBondTerm} months, +${BANKING.warBondStability} stability`} />
+          </div>
+        </Card>
+      )}
 
-      <Card title="Directed credit" hint="Tell the banks which sector to lend to: it grows faster, but prices rise a little and bad loans cost money while the country is shaky." right={<Pending show={view.pendingPrograms.creditSector !== player.programs.creditSector} />}>
-        {spec.directedCredit ? (
+      {spec.directedCredit && (
+        <Card title="Directed credit" hint="Tell the banks which sector to lend to: it grows faster, but prices rise a little and bad loans cost money while the country is shaky." right={<Pending show={view.pendingPrograms.creditSector !== player.programs.creditSector} />}>
           <div className="grid grid-cols-2 gap-1.5">
             <button className={`btn text-left px-2.5 py-2 text-[13px] ${view.pendingPrograms.creditSector === null ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setPrograms({ creditSector: null })}>
               No directed credit
@@ -122,28 +124,30 @@ export function BankTab() {
               </button>
             ))}
           </div>
-        ) : (
-          <p className="text-[13px] text-white/70">Needs a Regional power (4 countries).</p>
-        )}
-      </Card>
+        </Card>
+      )}
 
-      <Card title="Wealth fund" hint="Savings invested in the world. They earn the world's rate plus a share of the stock exchange's moves, and lift your credit. A conqueror takes part of it.">
-        {spec.wealthFund ? (
-          <>
-            <div className="text-[14px] space-y-1">
-              <Line k="In the fund" v={b.fund.toFixed(0)} />
-              <Line k="Return this month" v={`${(fundReturn(game) * 100).toFixed(2)}%`} />
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <OrderButton order={{ type: 'wealthFund', nationId: player.id, amount: 100 }} label="Put in 100" />
-              <OrderButton order={{ type: 'wealthFund', nationId: player.id, amount: 400 }} label="Put in 400" />
-              <OrderButton order={{ type: 'wealthFund', nationId: player.id, amount: -Math.floor(b.fund * BANKING.fundWithdrawShare) }} label="Take out a quarter" effect={`${Math.round(BANKING.fundFee * 100)}% fee`} />
-            </div>
-          </>
-        ) : (
-          <p className="text-[13px] text-white/70">Needs a Great power (10 countries). You hold {econ.regionCount}.</p>
-        )}
-      </Card>
+      {spec.wealthFund && (
+        <Card title="Wealth fund" hint="Savings invested in the world. They earn the world's rate plus a share of the stock exchange's moves, and lift your credit. A conqueror takes part of it.">
+          <div className="text-[14px] space-y-1">
+            <Line k="Return this month" v={`${(fundReturn(game) * 100).toFixed(2)}%`} />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <OrderButton order={{ type: 'wealthFund', nationId: player.id, amount: 100 }} label="Put in 100" />
+            <OrderButton order={{ type: 'wealthFund', nationId: player.id, amount: 400 }} label="Put in 400" />
+            <OrderButton order={{ type: 'wealthFund', nationId: player.id, amount: -Math.floor(b.fund * BANKING.fundWithdrawShare) }} label="Take out a quarter" effect={`${Math.round(BANKING.fundFee * 100)}% fee`} />
+          </div>
+        </Card>
+      )}
+
+      {(!spec.directedCredit || !spec.wealthFund) && (
+        <Card title="Opens with a bigger empire" hint={`You hold ${econ.regionCount} ${econ.regionCount === 1 ? 'country' : 'countries'}. The Empire desk lists everything each size opens.`}>
+          <div className="text-[14px] space-y-1">
+            {!spec.directedCredit && <Line k="Directed credit: steer bank lending to one sector" v="Regional power (4)" />}
+            {!spec.wealthFund && <Line k="Wealth fund: savings that earn the world's rate" v="Great power (10)" />}
+          </div>
+        </Card>
+      )}
 
     </section>
   )
