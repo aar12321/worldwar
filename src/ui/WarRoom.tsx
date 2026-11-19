@@ -219,7 +219,8 @@ function WarRoomDialog({ target }: { target: RegionId }) {
           </div>
         </section>
 
-        {f && <Breakdown factors={f.factors} exact={cap.exact} fuzzDefence />}
+        {/* The War Room never sends missiles, so the line about them would only ever say "none fired". */}
+        {f && <Breakdown factors={f.factors.filter((x) => x.id !== 'missiles')} exact={cap.exact} fuzzDefence />}
 
         {f && (
           <section className="inset-card p-3.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[14px]">

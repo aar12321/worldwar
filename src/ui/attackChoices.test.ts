@@ -46,7 +46,7 @@ describe('the attack planner offers four choices, from COMMITS', () => {
     }
     // On a coast the warships go too.
     expect(choiceUnits(pool, 'allin', true).naval).toBe(3)
-    expect(unitsLine(choiceUnits(pool, 'allin', false))).toBe('18 infantry · 6 tanks · 4 artillery · 3 fighters · 2 strike aircraft')
+    expect(unitsLine(choiceUnits(pool, 'allin', false))).toBe('Infantry 18 · Tanks 6 · Artillery 4 · Fighters 3 · Strike Aircraft 2')
     expect(unitsLine(choiceUnits(pool, 'none', false))).toBe('nothing')
   })
 

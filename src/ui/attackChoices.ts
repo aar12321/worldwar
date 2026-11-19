@@ -34,9 +34,9 @@ export function choiceOrder(nationId: NationId, target: RegionId, stance: Stance
   return { type: 'attack', nationId, target, commit: 'main', stance, units: compactUnits(units) }
 }
 
-/** "6 infantry · 2 tanks · 1 artillery": what a force is made of, in one line. */
+/** "Infantry 6 · Tanks 2 · Artillery 1": what a force is made of, in one line. */
 export function unitsLine(units: Partial<UnitCounts>): string {
-  const parts = SENDABLE.filter((k) => (units[k] ?? 0) >= 0.05).map((k) => `${formatDivisions(units[k]!)} ${UNIT_SPECS[k].name.toLowerCase()}`)
+  const parts = SENDABLE.filter((k) => (units[k] ?? 0) >= 0.05).map((k) => `${UNIT_SPECS[k].name} ${formatDivisions(units[k]!)}`)
   return parts.length ? parts.join(' · ') : 'nothing'
 }
 
