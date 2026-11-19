@@ -4,7 +4,9 @@ import type { GameState, NationId, OpinionModifier, WorldMap } from '../engine/t
 import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
 import { sameFaction } from '../engine/factions'
 import { FACTION } from '../data/factions'
-import { RELATIONS } from '../data/relations'
+import { RELATIONS, TIES } from '../data/relations'
+import { difficultyOf } from '../data/difficulty'
+import { tieLines } from '../engine/ties'
 import { relationLines } from '../engine/relationParts'
 import { foreignMinisterOpinion } from '../engine/civics'
 
@@ -28,6 +30,13 @@ export function addOpinion(s: GameState, holder: NationId, target: NationId, lab
   } else {
     list.push({ label, value: clamp(value, -MODIFIER_CAP, MODIFIER_CAP), decay })
   }
+}
+
+/** Records a favour that can stack only up to `cap` in all (a positive line). Used with ties on, so repeating a gift cannot buy unlimited goodwill. */
+export function addOpinionCapped(s: GameState, holder: NationId, target: NationId, label: string, value: number, decay: number, cap: number) {
+  const have = (s.opinions[opinionKey(holder, target)] ?? []).find((m) => m.label === label)?.value ?? 0
+  const room = Math.max(0, cap - have)
+  if (Math.min(value, room) >= 0.5) addOpinion(s, holder, target, label, Math.min(value, room), decay)
 }
 
 export function storedOpinion(s: GameState, holder: NationId, target: NationId): OpinionModifier[] {
@@ -55,11 +64,15 @@ export function forgetNation(s: GameState, id: NationId) {
 
 /** Rivals also band together once the player has taken half the countries their victory needs. */
 export function coalitionActive(s: GameState, map?: WorldMap): boolean {
+  // With ties on, a difficulty without coalitions (Easy) never has one, whoever asks.
+  if (TIES.on && !difficultyOf(s.settings.difficulty).coalitions) return false
   return s.humans.some((id) => {
     const p = s.nations[id]
     if (!p?.alive) return false
     // A player with a dreadful reputation alarms the world whatever their size.
     if ((s.infamy[id] ?? 0) >= COALITION_INFAMY) return true
+    // With ties on, size alone alarms nobody until the player has started taking land: a nation that starts big is no threat yet.
+    if (TIES.on && countriesTaken(s, id) < TIES.fearAfterTaken) return false
     // Trying to hold the whole world alarms everyone long before it is done.
     if (s.settings.goal === 'world') return populationShare(s, id) >= 0.12 || countriesTaken(s, id) >= 6
     if (populationShare(s, id) >= s.settings.victoryShare * COALITION_THRESHOLD) return true
@@ -111,11 +124,13 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   }
   if (!h || holder === target) return { total: 0, parts }
   const persona = PERSONALITIES[h.personality ?? 'honorable']
-  push('Temperament', persona.temperament)
+  push('Temperament', TIES.on ? (TIES.temperament[h.personality ?? 'honorable'] ?? 0) : persona.temperament)
   if (atWar(s, holder, target)) push('At war', -50)
   if (isAllied(s, holder, target)) push('Allies', 35)
   else if (hasPact(s, holder, target)) push('Non-aggression pact', 10)
-  if (s.deals.some((d) => d.kind === 'trade' && ((d.from === holder && d.to === target) || (d.from === target && d.to === holder)))) push('Trade partners', 10)
+  const trading = s.deals.some((d) => d.kind === 'trade' && ((d.from === holder && d.to === target) || (d.from === target && d.to === holder)))
+  // With ties on, trade is a line that grows with the deal's worth and how long the trade has run (below).
+  if (trading && !TIES.on) push('Trade partners', 10)
   const theirEnemies = ctx.enemies ? (ctx.enemies.get(target) ?? []) : enemiesOf(s, target)
   const mine = ctx.enemies ? (ctx.enemies.get(holder) ?? []) : enemiesOf(s, holder)
   const shared = mine.filter((e) => theirEnemies.includes(e)).length
@@ -129,15 +144,23 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
     else if (tg && ((hg === 'democracy' && (tg === 'junta' || tg === 'one_party')) || (tg === 'democracy' && (hg === 'junta' || hg === 'one_party')))) push('Opposed systems of government', -2)
   }
   const borders = ctx.borders ?? nationNeighbors(s, map, holder).has(target)
-  if (borders) push('Border tensions', h.personality === 'expansionist' ? -14 : -6)
+  if (borders && !TIES.on) push('Border tensions', h.personality === 'expansionist' ? -14 : -6)
+  else if (borders) {
+    // A neighbor is a little uneasy about a shared border, an expansionist more so; a treaty or a shared bloc settles it, trade halves it.
+    const settled = isAllied(s, holder, target) || hasPact(s, holder, target) || sameFaction(s, holder, target)
+    const base = h.personality === 'expansionist' ? TIES.border.expansionist : TIES.border.base
+    if (!settled) push('Border tensions', base * (trading ? TIES.border.tradeShare : 1))
+  }
   if (hasCasusBelli(s, holder, target)) push('Grievance', -15)
-  const coalition = ctx.coalition ?? coalitionActive(s)
-  if (coalition && s.humans.includes(target) && borders) push('Fears your power', -20)
+  const coalition = ctx.coalition ?? coalitionActive(s, TIES.on ? map : undefined)
+  if (coalition && s.humans.includes(target) && borders) push('Fears your power', TIES.on ? TIES.fear : -20)
   // A reputation for aggression: the world is uneasy about a nation that starts wars and takes land, until it fades.
   push('Uneasy about its wars', -Math.min(30, (s.infamy?.[target] ?? 0) * 0.5))
   for (const m of storedOpinion(s, holder, target)) push(m.label, m.value)
   // Embassies, running programs, a joint war plan, long friendship and neglect: worked out from the state, not stored.
   if (s.relations) for (const l of relationLines(s, holder, target)) push(l.label, l.value)
+  // Ties: trade that grows with worth and time, their money in our businesses, a long peace (nothing with ties off).
+  for (const l of tieLines(s, holder, target, borders)) push(l.label, l.value)
   // A capable foreign minister wins a little goodwill everywhere (the government desk; nothing without one).
   push('Their foreign minister', foreignMinisterOpinion(s.nations[target]))
   const total = Math.round(clamp(parts.reduce((sum, p) => sum + p.value, 0), -100, 100))

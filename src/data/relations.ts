@@ -48,6 +48,53 @@ export const RELATIONS = {
   logCap: 160,
 }
 
+/**
+ * Ties (docs/RELATIONS_STATUS.md, "Ties and the starting mood"): economic and peaceful ties that count in every opinion, and the fixes that
+ * stop nations starting out wary of you for no reason. Each tie is a line worked out from the state with a ceiling, so it shows in
+ * "why they feel this way" and cannot run away. The same rules hold between two rivals. `on` is the switch the golden tests use.
+ */
+export const TIES = {
+  on: true,
+  /** Baseline opinion of everyone, by temperament (with ties off: -6, +6, 0, -2, +5). Mildly positive: hostility is earned. */
+  temperament: { expansionist: -3, trader: 5, turtle: 2, opportunist: 0, honorable: 4 } as Record<string, number>,
+  /** A neighbor's unease about a shared border (with ties off: -6, or -14 for an expansionist, for ever). */
+  border: { base: -2, expansionist: -6, tradeShare: 0.5 },
+  /** "Fears your power" only once you have taken this many countries (a big nation at the start is no threat yet), and only on difficulties with coalitions. */
+  fearAfterTaken: 2,
+  fear: -15,
+  /** A running trade deal: base, plus its monthly worth (at base market prices) times perValue up to valueCap, plus perMonth for each month of unbroken trade up to monthsCap. */
+  trade: { base: 4, perValue: 0.1, valueCap: 4, perMonth: 0.4, monthsCap: 6 },
+  /** Money of theirs invested in our businesses (outside a joint venture): +1 per `per` invested, up to `cap`. A new investment's thanks is `thanks`, and stacks up to `thanksCap`. */
+  invest: { per: 12, cap: 10, thanks: 3, thanksCap: 6 },
+  /** A joint venture's monthly warmth ceiling grows with the stake: base + stake / perStake, up to max. */
+  venture: { base: 8, perStake: 40, max: 12 },
+  /** Gifts through a Diplomacy offer: the total gift line one nation can hold toward another. */
+  giftCap: 30,
+  /** Long peace: after `after` months without war between two nations, +step a month up to cap. */
+  peace: { after: 12, step: 0.2, cap: 5 },
+  /** Two months without a trade deal ends an unbroken run of trade. */
+  tradeGrace: 2,
+}
+
+/** Trust (0 to 100, 50 untested): does this nation expect you to keep your word? Read-only; worked out from the record. */
+export const TRUST = {
+  base: 50,
+  treatyPerMonth: 0.5,
+  treatyCap: 15,
+  tradePerMonth: 0.6,
+  tradeCap: 10,
+  honored: 8,
+  embassy: 4,
+  bloc: 8,
+  peacePerMonth: 0.25,
+  peaceCap: 8,
+  infamy: 0.5,
+  infamyCap: 30,
+  broken: 0.6,
+  brokenCap: 40,
+  war: -40,
+}
+
 export type ActGroup = 'goodwill' | 'presence' | 'economy' | 'aid' | 'military' | 'plans' | 'repair' | 'favours'
 
 export const ACT_GROUPS: { id: ActGroup; name: string; blurb: string }[] = [

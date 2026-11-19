@@ -229,8 +229,9 @@ describe('live rooms: players come and go', () => {
     expect(d.s.me).toBe('r2')
     expect(same(room, [host, room.seats[1], d])).toBe(true)
     expect(dayOf(d)).toBe(dayOf(host))
-    // And their orders count.
-    expect(d.s.sendCommand({ type: 'build', nationId: 'r2', regionId: 'r2', building: 'farm' }).error).toBeNull()
+    // And their orders count. (A change of policy, which needs no money: what the AI left in the treasury depends on how it played the seat.)
+    const r2 = gameOf(d).nations.r2
+    expect(d.s.sendCommand({ type: 'setPolicy', nationId: 'r2', taxRate: Math.min(0.5, r2.taxRate + 0.01), draftRate: r2.draftRate, budget: r2.budget }).error).toBeNull()
     await room.run(600)
     expect(host.orders.at(-1)?.by).toBe('d')
   })

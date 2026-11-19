@@ -555,7 +555,7 @@ describe('the views', () => {
     friend(s, 'r3')
     run(s, rel({ act: 'visit', target: 'r3' }))
     const groups = groupReasons(opinionReport(s, map, 'r3', 'r0')).map((g) => g.group)
-    expect(groups).toContain('Treaties')
+    expect(groups).toContain('Treaties and peace')
     expect(groups).toContain('Visits and exchange')
     expect(groups).toContain('Government and temperament')
   })
@@ -582,7 +582,10 @@ describe('the views', () => {
     const p = previewRelate(s, map, rel({ act: 'visit', target: 'r3' }))
     expect(p.costs.map((c) => c.label)).toEqual(['money', 'influence'])
     expect(p.effects[0]).toMatch(/\+14 opinion/)
-    expect(p.risk).toBeTruthy()
+    // A friend gives no warning of a protocol incident; one who thinks poorly of you does.
+    expect(p.risk).toBeUndefined()
+    addOpinion(s, 'r4', 'r0', 'Test grudge', -12, 0)
+    expect(previewRelate(s, map, rel({ act: 'visit', target: 'r4' })).risk).toMatch(/protocol incident/)
     s.nations.r0.resources.capital = 1
     expect(previewRelate(s, map, rel({ act: 'visit', target: 'r3' })).why).toMatch(/Not enough money/)
   })

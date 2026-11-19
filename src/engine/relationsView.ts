@@ -7,6 +7,8 @@ import { militaryPower } from './economy'
 import { sameFaction } from './factions'
 import { relationLines, monthsQuiet } from './relationParts'
 import { armsPrice, cooldownLeft, embassyOf, favoursOwed, needLevel, programsBetween, relationCost, relationProblem, warmthFactor } from './relations'
+import { powerView, type PowerView } from './intel'
+import { tieLines, tradeWorth, trustReport, type TrustReport } from './ties'
 import type { GameState, NationId, RelateAct, RelateAid, RelateOrder, WorldMap } from './types'
 
 const nm = (s: GameState, id: NationId) => s.nations[id]?.name ?? id
@@ -92,7 +94,9 @@ export function previewRelate(s: GameState, map: WorldMap, o: RelateOrder, pendi
   switch (o.act) {
     case 'visit':
       effects.push(worth(spec!.boost))
-      risk = `If they think poorly of you (under ${VISIT.riskBelow}), ${Math.round(VISIT.incident * 100)}% risk of a protocol incident (${VISIT.incidentCost}).`
+      // The risk is only real while they think poorly of you; a warm host gives no warning.
+      if (s.humans.includes(o.target) || opinionReport(s, map, o.target, o.nationId).total < VISIT.riskBelow) risk = `They think poorly of you (under ${VISIT.riskBelow}): ${Math.round(VISIT.incident * 100)}% risk of a protocol incident (${VISIT.incidentCost}).`
+      else if (opinionReport(s, map, o.target, o.nationId).total >= VISIT.warmAbove) effects.push(`${Math.round(VISIT.warm * 100)}% chance of a warm reception (+${VISIT.warmBonus})`)
       break
     case 'aid': {
       const level = o.resource ? needLevel(s, o.target, o.resource) : 'ok'
@@ -160,25 +164,27 @@ export function previewRelate(s: GameState, map: WorldMap, o: RelateOrder, pendi
 
 // ---- why they feel this way ----------------------------------------------------------------------------------------------
 
-export type ReasonGroup = 'Shared enemies' | 'Trade' | 'Treaties' | 'Aid and gifts' | 'Visits and exchange' | 'Military cooperation' | 'Faction' | 'Border tension' | 'Government and temperament' | 'Bad acts' | 'Other'
+export type ReasonGroup = 'Treaties and peace' | 'Trade and investment' | 'Shared enemies' | 'Visits and exchange' | 'Aid and gifts' | 'Military cooperation' | 'Bloc' | 'Government and temperament' | 'Borders and power' | 'Grievances' | 'Other'
 
-const GIFT = new Set(['Rescued us', 'Aid in kind', 'Forgave our debt', 'Forgave our loan', 'Forgave our debts', 'Shared technology', 'Ceded us land', 'Invested in our businesses', 'Answered our call', 'Recognised our claims'])
-const EXCHANGE = new Set(['State visit', 'Warm reception', 'Cultural exchange', 'Festival guest', 'Embassy', 'Exchange students', 'Student exchange', 'Joint research', 'Trade mission', 'Trade routes', 'Preferential tariffs', 'Joint venture', 'Backed us at the Council', 'Mediated for us'])
-const MILITARY = new Set(['Joint exercises', 'Training mission', 'Shared intelligence', 'Basing rights', 'Joined our sanctions', 'Arms sale', 'Joint war plan', 'Fought beside us'])
-const TREATY = new Set(['Allies', 'Non-aggression pact', 'Treaty anniversary', 'Steadfast ally'])
-const TRADE = new Set(['Trade partners', 'Honored our deal', 'Broke a trade deal', 'Defaulted on a deal', 'Broke a contract', 'Defaulted on our loan'])
+const GIFT = new Set(['Rescued us', 'Aid in kind', 'Forgave our debt', 'Forgave our loan', 'Forgave our debts', 'Shared technology', 'Ceded us land', 'Answered our call', 'Recognised our claims', 'Generous gifts', 'Sent aid in our crisis', 'Lent us money', 'A World Bank loan', 'Paid compensation', 'Sheltered our people'])
+const EXCHANGE = new Set(['State visit', 'Warm reception', 'Cultural exchange', 'Festival guest', 'Embassy', 'Exchange students', 'Student exchange', 'Joint research', 'Backed us at the Council', 'Mediated for us', 'Mediated our dispute'])
+const MILITARY = new Set(['Joint exercises', 'Military attaché', 'Training mission', 'Shared intelligence', 'Basing rights', 'Joined our sanctions', 'Arms sale', 'Sells us arms', 'Joint war plan', 'Fought beside us', 'Fought beside us in the bloc', 'Answered our call to arms', 'Stood by us'])
+const TREATY = new Set(['Allies', 'Non-aggression pact', 'Treaty anniversary', 'Steadfast ally', 'Long peace', 'Guaranteed our independence'])
+const TRADE = new Set(['Trade partners', 'Trade mission', 'Trade routes', 'Preferential tariffs', 'Joint venture', 'Invests in our economy', 'Invested in our businesses', 'Honored our deal', 'Fair dealing', 'Broke a trade deal', 'Defaulted on a deal', 'Broke a contract', 'Defaulted on our loan', 'Seized our investment', 'Walked out of our venture'])
+const BORDER = new Set(['Border tensions', 'Fears your power', 'Uneasy about its wars'])
+const BLOC = new Set(['Faction partners'])
 
 export function reasonGroup(label: string, value: number): ReasonGroup {
   if (label === 'Common enemy') return 'Shared enemies'
-  if (TRADE.has(label)) return 'Trade'
-  if (TREATY.has(label)) return 'Treaties'
+  if (TRADE.has(label)) return 'Trade and investment'
+  if (TREATY.has(label)) return 'Treaties and peace'
   if (GIFT.has(label)) return 'Aid and gifts'
   if (EXCHANGE.has(label)) return 'Visits and exchange'
   if (MILITARY.has(label)) return 'Military cooperation'
-  if (label === 'Faction partners') return 'Faction'
-  if (label === 'Border tensions') return 'Border tension'
-  if (label === 'Temperament' || label === 'Same system of government' || label === 'Opposed systems of government') return 'Government and temperament'
-  if (value < 0) return 'Bad acts'
+  if (BLOC.has(label)) return 'Bloc'
+  if (BORDER.has(label)) return 'Borders and power'
+  if (label === 'Temperament' || label === 'Same system of government' || label === 'Opposed systems of government' || label === 'Their foreign minister') return 'Government and temperament'
+  if (value < 0) return 'Grievances'
   return 'Other'
 }
 
@@ -190,7 +196,7 @@ export interface ReasonSet {
 
 /** The reasons for an opinion, grouped the way a person would say them: shared enemies, trade, treaties, aid, visits, bad acts, borders, government, faction. */
 export function groupReasons(report: OpinionReport): ReasonSet[] {
-  const order: ReasonGroup[] = ['Treaties', 'Shared enemies', 'Trade', 'Visits and exchange', 'Aid and gifts', 'Military cooperation', 'Faction', 'Government and temperament', 'Border tension', 'Bad acts', 'Other']
+  const order: ReasonGroup[] = ['Treaties and peace', 'Trade and investment', 'Bloc', 'Shared enemies', 'Visits and exchange', 'Aid and gifts', 'Military cooperation', 'Government and temperament', 'Borders and power', 'Grievances', 'Other']
   const by = new Map<ReasonGroup, ReasonSet>()
   for (const p of report.parts) {
     const g = reasonGroup(p.label, p.value)
@@ -202,6 +208,11 @@ export function groupReasons(report: OpinionReport): ReasonSet[] {
   return order.filter((g) => by.has(g)).map((g) => by.get(g)!)
 }
 
+/** The few reasons that matter most, biggest first: the headline of a partner card. */
+export function topReasons(report: OpinionReport, n = 3): OpinionPart[] {
+  return [...report.parts].filter((p) => p.label !== 'Temperament' || Math.abs(p.value) >= 5).sort((a, b) => Math.abs(b.value) - Math.abs(a.value) || (a.label < b.label ? -1 : 1)).slice(0, n)
+}
+
 // ---- which way it is moving ---------------------------------------------------------------------------------------------
 
 export interface Mover {
@@ -211,13 +222,14 @@ export interface Mover {
 }
 
 /** The things moving a rival's opinion of a nation, each as the change they make each month, and the sum. It is an estimate of next month. */
-export function movement(s: GameState, holder: NationId, target: NationId): { total: number; movers: Mover[] } {
+export function movement(s: GameState, holder: NationId, target: NationId, borders = false): { total: number; movers: Mover[] } {
   const movers: Mover[] = []
   for (const m of storedOpinion(s, holder, target)) {
     const step = m.value > 0 ? -Math.min(m.decay, m.value) : Math.min(m.decay, -m.value)
     if (Math.abs(step) >= 0.05) movers.push({ label: m.label, value: step })
   }
   for (const l of relationLines(s, holder, target)) if (Math.abs(l.step) >= 0.05) movers.push({ label: l.label, value: l.step })
+  for (const l of tieLines(s, holder, target, borders)) if (Math.abs(l.step) >= 0.05) movers.push({ label: l.label, value: l.step })
   movers.sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
   return { total: movers.reduce((sum, m) => sum + m.value, 0), movers }
 }
@@ -304,15 +316,41 @@ export function partnerWants(s: GameState, id: NationId): Need[] {
 
 // ---- the partner list ----------------------------------------------------------------------------------------------------
 
+/** Where a nation stands with you, for grouping the list: war and alliance first, then by opinion. */
+export type RelTier = 'war' | 'ally' | 'friendly' | 'neutral' | 'wary' | 'hostile'
+
+export const TIER_TEXT: Record<RelTier, { name: string; blurb: string }> = {
+  war: { name: 'At war', blurb: 'Make peace in Diplomacy.' },
+  ally: { name: 'Allies', blurb: 'Your alliances.' },
+  friendly: { name: 'Friendly', blurb: 'Opinion of you 5 or more.' },
+  neutral: { name: 'Neutral', blurb: 'Neither warm nor cold.' },
+  wary: { name: 'Wary', blurb: 'Opinion -5 to -24: they keep their distance.' },
+  hostile: { name: 'Hostile', blurb: 'Opinion -25 or less: they would welcome your fall.' },
+}
+
+export const TIER_ORDER: RelTier[] = ['war', 'ally', 'friendly', 'neutral', 'wary', 'hostile']
+
+export function relTier(opinion: number, war: boolean, ally: boolean): RelTier {
+  if (war) return 'war'
+  if (ally) return 'ally'
+  if (opinion >= 5) return 'friendly'
+  if (opinion > -5) return 'neutral'
+  if (opinion > -25) return 'wary'
+  return 'hostile'
+}
+
 export interface PartnerRow {
   id: NationId
   opinion: number
   label: string
   /** The estimated change next month. */
   trend: number
+  tier: RelTier
   ally: boolean
   pact: boolean
   trade: boolean
+  /** Monthly worth of the trade deals running between you, at base market prices (0 with none). */
+  tradeValue: number
   embassy: boolean
   war: boolean
   neighbor: boolean
@@ -320,8 +358,26 @@ export interface PartnerRow {
   favoursOwedToMe: number
   favoursIOwe: number
   human: boolean
+  /** Their trust in you (null for another player). */
+  trust: TrustReport | null
+  /** Their strength as you know it. */
+  power: PowerView
+  /** Great-circle distance between the two capitals, in km. */
+  distance: number
   /** Warmth from rival to you cannot be read for another player. */
   report: OpinionReport | null
+}
+
+/** Great-circle distance between two capitals in km, from the map. */
+export function capitalDistance(s: GameState, map: WorldMap, a: NationId, b: NationId): number {
+  const ra = map.regions[s.nations[a]?.capital ?? a]
+  const rb = map.regions[s.nations[b]?.capital ?? b]
+  if (!ra || !rb) return 0
+  const rad = Math.PI / 180
+  const dLat = (rb.lat - ra.lat) * rad
+  const dLng = (rb.lng - ra.lng) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(ra.lat * rad) * Math.cos(rb.lat * rad) * Math.sin(dLng / 2) ** 2
+  return Math.round(2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h))))
 }
 
 /** Every living nation but you, as a row with its opinion of you and what it is doing. `ctx` keeps the opinion maths cheap for a long list. */
@@ -330,27 +386,35 @@ export function partnerRows(s: GameState, map: WorldMap, me: NationId, ctx: Opin
   const rows: PartnerRow[] = []
   for (const n of Object.values(s.nations)) {
     if (!n.alive || n.id === me) continue
-    const human = s.humans.includes(n.id) || n.isPlayer
-    const report = human ? null : opinionReport(s, map, n.id, me, ctx)
+    const human = !!(s.humans.includes(n.id) || n.isPlayer)
+    const neighbor = neighbors.has(n.id)
+    const report = human ? null : opinionReport(s, map, n.id, me, { ...ctx, borders: neighbor })
     const opinion = report?.total ?? 0
+    const war = s.wars.includes(pairKey(me, n.id))
+    const ally = isAllied(s, me, n.id)
+    const tradeValue = tradeWorth(s, me, n.id)
     rows.push({
       id: n.id,
       opinion,
       label: human ? 'Player' : opinionLabel(opinion),
-      trend: human ? 0 : movement(s, n.id, me).total,
-      ally: isAllied(s, me, n.id),
+      trend: human ? 0 : movement(s, n.id, me, neighbor).total,
+      tier: relTier(opinion, war, ally),
+      ally,
       pact: hasPact(s, me, n.id),
       trade: s.deals.some((d) => d.kind === 'trade' && ((d.from === me && d.to === n.id) || (d.to === me && d.from === n.id))),
+      tradeValue,
       embassy: !!embassyOf(s, me, n.id),
-      war: s.wars.includes(pairKey(me, n.id)),
-      neighbor: neighbors.has(n.id),
+      war,
+      neighbor,
       faction: sameFaction(s, me, n.id),
       favoursOwedToMe: favoursOwed(s, n.id, me),
       favoursIOwe: favoursOwed(s, me, n.id),
-      human: !!human,
+      human,
+      trust: human ? null : trustReport(s, n.id, me, { borders: neighbor }),
+      power: powerView(s, me, n.id, militaryPower(s, n.id)),
+      distance: capitalDistance(s, map, me, n.id),
       report,
     })
   }
   return rows
 }
-
