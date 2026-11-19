@@ -57,11 +57,13 @@ function Progress({ label, value, goal, text }: { label: string; value: number; 
 const EXPLORE: [string, AdviceTarget, string][] = [
   ['People and care', { desk: 'economy', tab: 'people' }, 'Twenty-two programs, campaigns and what moves stability'],
   ['Projects', { desk: 'economy', tab: 'projects' }, 'National projects and projects in your countries'],
-  ['Space program', { desk: 'economy', tab: 'space' }, 'Agency, rockets, missions, labs and outposts'],
+  ['Space program', { desk: 'economy', tab: 'space' }, 'Agency, rockets, missions, labs and colonies'],
+  ['Government', { desk: 'economy', tab: 'government' }, 'Cabinet, talent, jobs, policies and laws'],
   ['Deployment and theatres', { desk: 'military', tab: 'theatres' }, 'Forces on station, alert levels and the fronts'],
-  ['Missiles and systems', { desk: 'military', tab: 'systems' }, 'The missile program, stock and Frontier systems'],
+  ['Missile program', { desk: 'military', tab: 'program' }, 'Facilities, a chief designer, development and test launches'],
+  ['Frontier systems', { desk: 'military', tab: 'systems' }, 'Cyber, shield, AI, quantum and orbital systems'],
   ['World reaction', { desk: 'empire', tab: 'reaction' }, 'How the world answers a growing power'],
-  ['Factions', { desk: 'faction' }, 'Pool strength with other countries and vote on war'],
+  ['Bloc', { desk: 'faction' }, 'Your alliance bloc: joint operations, calls to arms and perks'],
   ['Diplomacy', { desk: 'diplomacy' }, 'Offers, treaties and every nation\'s opinion'],
 ]
 

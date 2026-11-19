@@ -47,7 +47,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
   | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' | 'puppets' | 'territories' }
-  | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' }
+  | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' | 'program' | 'missiles' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
   | { desk: 'faction'; /** A nation to pick in the invitation list. */ nation?: NationId }
@@ -223,7 +223,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
 
   // Borrowing
   if (!n.inDebt && econ.netCapital < 0 && econ.credit.room > 20 && money < -econ.netCapital * 8) {
-    add('soon', 45, { id: 'borrow', title: 'You could borrow to cover the gap', detail: `You can still borrow ${Math.floor(econ.credit.room)} at ${(econ.credit.rate * 100).toFixed(2)}% a month (rating ${econ.credit.rating}). Better to fix the budget, but bonds buy time.`, action: 'Open the treasury', target: { desk: 'economy', tab: 'budget' } })
+    add('soon', 45, { id: 'borrow', title: 'You could borrow to cover the gap', detail: `You can still borrow ${Math.floor(econ.credit.room)} at ${(econ.credit.rate * 100).toFixed(2)}% a month (rating ${econ.credit.rating}). Better to fix the budget, but bonds buy time.`, action: 'Open the Bank', target: { desk: 'economy', tab: 'bank' } })
   }
   if (n.debt > 0 && n.inDebt && n.redMonths >= 1) {
     add('now', 85, { id: 'default', title: 'You are close to defaulting', detail: `You have been in the red for ${n.redMonths} month${n.redMonths === 1 ? '' : 's'} with ${Math.round(n.debt)} in bonds outstanding. At 3 you default and nobody will lend to you for two years.`, action: 'Open the budget', target: { desk: 'economy', tab: 'budget' } })
