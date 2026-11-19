@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { TRAINING, UNIT_SPECS, WEAPONS, trainingCost, trainingRank, weaponCost } from '../data/unitTypes'
 import { nextWeaponLevel } from '../engine/arms'
 import { enemiesOf, formatDivisions, maxWars } from '../engine/helpers'
@@ -10,13 +10,13 @@ import { Pips } from './bits'
 import { fmt, usePlayerView } from './hooks'
 import { UnitIcon } from './icons'
 import { DeskTabs, OrderButton, PanelShell, TabHost } from './panel'
-import { NumberStepper, Term } from './widgets'
+import { NumberStepper } from './widgets'
 import { ACADEMY, GENERAL_TRAITS } from '../data/projects'
 import { tierOf } from '../engine/empire'
 import { academyCost } from '../engine/industry'
 import { AIRCRAFT_IDS, AIRCRAFT_NODES } from '../data/aircraft'
 import { activeDevs, devSlots, finishedDevs } from '../engine/aircraft'
-import { Bar } from './kit'
+import { Bar, StatTile, Tiles } from './kit'
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`
 
@@ -181,12 +181,12 @@ function Forces() {
   const commander = player.generals.find((g) => g.id === player.military.commanderId)
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-        <Total label="Strength" value={sheet.totalPower.toFixed(0)} />
-        <Total label={<Term word="Division">Divisions</Term>} value={formatDivisions(sheet.totalUnits)} sub={[sheet.inField > 0.05 ? `${formatDivisions(sheet.totalUnits - sheet.inField)} at home · ${formatDivisions(sheet.inField)} in the field` : '', player.military.deployment ? `${formatDivisions(sheet.onStation)} on station · ${formatDivisions(sheet.reserve)} reserve` : ''].filter(Boolean).join(' · ') || undefined} />
-        <Total label="Upkeep a month" value={`-${fmt(sheet.upkeep, 1)}`} />
-        <Total label="Food a month" value={`-${fmt(sheet.foodUse, 1)}`} />
-      </div>
+      <Tiles compact four>
+        <StatTile label="Strength" value={sheet.totalPower.toFixed(0)} />
+        <StatTile label="Divisions" value={formatDivisions(sheet.totalUnits)} sub={[sheet.inField > 0.05 ? `${formatDivisions(sheet.totalUnits - sheet.inField)} at home · ${formatDivisions(sheet.inField)} in the field` : '', player.military.deployment ? `${formatDivisions(sheet.onStation)} on station · ${formatDivisions(sheet.reserve)} reserve` : ''].filter(Boolean).join(' · ') || undefined} />
+        <StatTile label="Upkeep" value={`-${fmt(sheet.upkeep, 1)}`} sub="money a month" />
+        <StatTile label="Food" value={`-${fmt(sheet.foodUse, 1)}`} sub="a month" />
+      </Tiles>
       <p className={`text-[14px] ${sheet.combinedArms ? 'text-[#6eeb8a]' : 'text-white/70'}`}>
         {sheet.combinedArms
           ? `Combined arms: infantry, tanks and planes together add ${Math.round(sheet.combinedArmsBonus * 100)}% to attack.`
@@ -279,12 +279,3 @@ export function MilitaryPanel() {
 /** The Forces tab, named for the registry. */
 export { Forces as MilitaryForces }
 
-function Total({ label, value, sub }: { label: ReactNode; value: string; sub?: string }) {
-  return (
-    <div className="inset-card py-2.5">
-      <div className="label">{label}</div>
-      <div className="text-[20px] font-semibold tabular-nums">{value}</div>
-      {sub && <div className="text-[11px] text-white/65 px-1">{sub}</div>}
-    </div>
-  )
-}

@@ -1,20 +1,16 @@
 import { useMemo, useState } from 'react'
 import { plannedPosture } from '../ai/deployment'
-import { BORDER_LABEL, STATION } from '../data/deployment'
-import { bordersOf, type BorderKind, type BorderView } from '../engine/borders'
+import { STATION } from '../data/deployment'
+import { bordersOf } from '../engine/borders'
 import { airPatrolStop, borderCover, garrisonDivisions, interception, patrolCover } from '../engine/deployment'
 import { threatWatch, type Threat } from '../engine/threats'
-import { deploymentView, showDivisions } from '../engine/intel'
 import { forceUnits, formatDivisions, totalUnits } from '../engine/helpers'
 import type { Deployment, GameState, NationId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { usePlayerView } from './hooks'
-import { tensionColor } from './colors'
 import { OrderButton } from './panel'
-
-const STATE_CHIP: Record<BorderKind, string> = { open: 'chip chip-green', fortified: 'chip chip-blue', closed: 'chip', disputed: 'chip chip-red' }
-
+import { StatTile, Tiles } from './kit'
 
 interface Draft {
   coastal: number
@@ -55,6 +51,7 @@ function Editor({ game }: { game: GameState }) {
   const { map } = getWorld()
   const player = game.nations[game.playerId]
   const orders = useGame((s) => s.orders)
+  const openMilitary = useGame((s) => s.openMilitary)
   const live = player.military.deployment
   const [draft, setDraft] = useState<Draft>(() => fromDeployment(live))
   const force = forceUnits(game, player.id)
@@ -105,15 +102,17 @@ function Editor({ game }: { game: GameState }) {
 
   return (
     <div className="space-y-5">
-      <p className="text-[14px] text-white/80">
-        Every nation keeps forces on station: warships on patrol and in a submarine screen, fighters and drones in the air, and troops on each border. What stands on station <strong>cannot attack</strong> (only the reserve can), still costs its upkeep and oil, and still defends: a garrison fights at +{Math.round(STATION.postBonus * 100)}% on its own border and at half strength on any other front; patrols fight at +{Math.round(STATION.seaPostBonus * 100)}% against a landing from the sea or air.
-      </p>
-
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <Total label="On station" value={formatDivisions(postedDivisions)} sub="divisions" />
-        <Total label="Reserve" value={formatDivisions(reserveDivisions)} sub="free to attack" />
-        <Total label="Whole force" value={formatDivisions(totalUnits(force))} sub="home and abroad" />
-      </div>
+      <Tiles compact>
+        <StatTile label="On station" value={formatDivisions(postedDivisions)} sub="divisions" />
+        <StatTile label="Reserve" value={formatDivisions(reserveDivisions)} sub="free to attack" />
+        <StatTile label="Whole force" value={formatDivisions(totalUnits(force))} sub="home and abroad" />
+      </Tiles>
+      <details className="text-[13px] text-white/75">
+        <summary className="cursor-pointer">How forces on station work</summary>
+        <p className="mt-1.5">
+          Every nation keeps forces on station: warships on patrol and in a submarine screen, fighters and drones in the air, and troops on each border. What stands on station <strong>cannot attack</strong> (only the reserve can), still costs its upkeep and oil, and still defends: a garrison fights at +{Math.round(STATION.postBonus * 100)}% on its own border and at half strength on any other front; patrols fight at +{Math.round(STATION.seaPostBonus * 100)}% against a landing from the sea or air. One-click postures and the alert level are in Theatres.
+        </p>
+      </details>
 
       <section className="inset-card p-3.5 space-y-4" aria-label="Stations">
         <div className="flex items-center justify-between gap-3">
@@ -203,13 +202,16 @@ function Editor({ game }: { game: GameState }) {
 
       <ThreatWatch game={game} threats={threats} />
 
-      <section className="inset-card p-3.5 space-y-3" aria-label="Borders">
-        <div className="text-[16px] font-semibold">Borders</div>
-        {borders.length === 0 && <p className="text-[13px] text-white/70">You have no neighbors.</p>}
-        {borders.map((b) => (
-          <BorderRow key={b.other} game={game} b={b} />
-        ))}
-      </section>
+      {borders.length > 0 && (
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3 flex flex-wrap items-center justify-between gap-2 text-[13px]" aria-label="Borders">
+          <span className="text-white/80">
+            {borders.length} border{borders.length === 1 ? '' : 's'}, the hottest {game.nations[borders[0].other]?.name} at tension {borders[0].tension}. Each border's tension, what makes it, and closing a border are in Theatres.
+          </span>
+          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openMilitary('theatres')}>
+            Open Theatres
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -232,61 +234,5 @@ function ThreatWatch({ game, threats }: { game: GameState; threats: Threat[] }) 
         </div>
       ))}
     </section>
-  )
-}
-
-function BorderRow({ game, b }: { game: GameState; b: BorderView }) {
-  const player = game.playerId
-  const other = game.nations[b.other]
-  const view = deploymentView(game, player, b.other)
-  const theirs = b.land ? (view.exact ? b.theirDivisions : (view.border[player] ?? 0)) : 0
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 flex items-center gap-2 text-[14px] font-semibold">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: other.color }} />
-          <span className="truncate">{other.name}</span>
-          <span className={STATE_CHIP[b.state]}>{BORDER_LABEL[b.state]}</span>
-          <span className="chip">{b.land ? 'Land' : 'Sea'}</span>
-        </div>
-        <div className="tabular-nums text-[13px] text-white/80">{b.tension}</div>
-      </div>
-      <div className="h-2 rounded-full bg-white/10 overflow-hidden" role="img" aria-label={`Tension ${b.tension} of 100`}>
-        <div className="h-full" style={{ width: `${b.tension}%`, background: tensionColor(b.tension) }} />
-      </div>
-      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 text-[12px] text-white/65">
-        <span>{b.parts.map((p) => `${p.label} ${p.value > 0 ? '+' : ''}${p.value}`).join(' · ')}</span>
-      </div>
-      {b.land && (
-        <div className="text-[12px] text-white/75">
-          Yours: {formatDivisions(b.mineDivisions)} divisions, cover {pct(b.mineCover)}. Theirs: {theirs > 0 ? `${showDivisions(theirs, view.exact)} facing you` : view.posted ? 'none facing you' : view.exact ? 'no posture' : 'unknown'}
-          {view.exact ? '' : ' (a guess: send the agency for the exact numbers)'}.
-        </div>
-      )}
-      <div className="flex flex-wrap gap-2">
-        {b.closedByMe ? (
-          <OrderButton order={{ type: 'setBorder', nationId: player, neighbor: b.other, closed: false }} label="Reopen the border" tone="btn-quiet" />
-        ) : (
-          <OrderButton
-            order={{ type: 'setBorder', nationId: player, neighbor: b.other, closed: true }}
-            label="Close the border"
-            cost={`${STATION.closeCost} influence`}
-            effect="Fewer provocations and stronger cover, but it adds to the tension and they will not like it."
-            tone="btn-quiet"
-          />
-        )}
-        {b.closedByThem && <span className="chip">They closed it too</span>}
-      </div>
-    </div>
-  )
-}
-
-function Total({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="inset-card py-2.5">
-      <div className="label">{label}</div>
-      <div className="text-[20px] font-semibold tabular-nums">{value}</div>
-      {sub && <div className="text-[11px] text-white/65 px-1">{sub}</div>}
-    </div>
   )
 }

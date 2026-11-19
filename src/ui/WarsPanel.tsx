@@ -32,7 +32,7 @@ export function WarsTab() {
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <Tiles>
+      <Tiles compact four>
         <StatTile label="Wars" value={`${enemies.length} of ${limit}`} sub={open > 0 ? `${open} more possible` : 'at the limit'} tone={enemies.length >= limit ? 'warn' : undefined} />
         <StatTile label="War bills" value={`−${econ.warBillTotal.toFixed(0)}`} sub="money a month" tone={econ.warBillTotal > 0 ? 'bad' : undefined} />
         <StatTile label="Weariness" value={player.warWeariness.toFixed(0)} sub="lowers stability" tone={player.warWeariness > 15 ? 'warn' : undefined} />
