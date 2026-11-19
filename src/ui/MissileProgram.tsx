@@ -142,7 +142,7 @@ export function MissileProgramCard() {
           <BuildRow key={k} kind={k as Exclude<MissileType, 'hypersonic'>} />
         ))}
       </div>
-      <p className="text-[12px] text-white/60">Missiles are fired from the War Room, at a country you are at war with. Strong shields stop a share of them, so the cheap ones are best used in numbers.</p>
+      <p className="text-[12px] text-white/60">Missiles are fired from Military, Missile War, at a country you are at war with. Strong shields stop a share of them, so the cheap ones are best used in numbers.</p>
     </section>
   )
 }

@@ -3,7 +3,7 @@ import { clockOf } from '../engine/calendar'
 import { getsThrough, incomingMissiles } from '../engine/missiles'
 import type { GameState, MissileFlight, MissileType, NationId } from '../engine/types'
 
-/** Plain words and numbers for missiles, shared by the War Room, the program card, the globe and the toasts. Pure, so they are tested. */
+/** Plain words and numbers for missiles, shared by the Missile War tab, the program card, the globe and the toasts. Pure, so they are tested. */
 
 /** The two ends of a missile's arc on the globe. Each kind has its own look, so a glance tells a cruise swarm from a ballistic salvo. */
 export const MISSILE_ARC: Record<MissileType, [string, string]> = {
