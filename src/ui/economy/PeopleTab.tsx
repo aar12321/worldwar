@@ -7,12 +7,13 @@ import type { ImmigrationPolicy, SchoolFocus, SchoolStage, SkillKey, SpendingKey
 import { SKILL_KEYS } from '../../engine/types'
 import { useGame, type PeopleSection } from '../../store'
 import { fmt, signed, usePlayerView } from '../hooks'
-import { Bar, CoverageChip, LevelPicker, Pending, StackedBar, StatTile, Tiles } from '../kit'
+import { Bar, LevelPicker, Pending, StackedBar, StatTile, Tiles } from '../kit'
 import { pct } from '../format'
 import { Tabs } from '../panel'
 import { Card, Line } from './parts'
 import { CampaignCard, PolicyCard } from './people/PolicyCard'
 import { StabilityWhy } from './people/StabilityWhy'
+import { openGovernment } from './government/section'
 
 const SKILL_COLORS: Record<SkillKey, string> = { basic: '#8e8e93', skilled: '#0a84ff', engineers: '#ff9f0a', doctors: '#30d158', scientists: '#bf5af2' }
 const GROUP_COLORS: Record<SocialGroup, string> = { health: '#30d158', learning: '#bf5af2', work: '#ff9f0a', family: '#ff6482', safety: '#0a84ff' }
@@ -152,19 +153,14 @@ function WhoWorks() {
   const { player, econ } = usePlayerView()!
   const p = player.people
   return (
-    <Card title="Who works" hint="The schools decide the mix. Factories need engineers, universities need scientists, hospitals need doctors.">
+    <Card title="Who works" hint="The schools decide the mix. Factories need engineers, universities need scientists, hospitals need doctors." right={<button className="btn btn-quiet shrink-0" onClick={() => openGovernment('talent')}>Who needs them</button>}>
       <StackedBar label="Workforce by skill" parts={SKILL_KEYS.map((k) => ({ key: k, value: p.skills[k], color: SKILL_COLORS[k], name: SKILL_LABELS[k] }))} />
-      <div className="flex flex-wrap gap-1.5">
-        <CoverageChip label="Engineers" value={econ.coverage.engineers} />
-        <CoverageChip label="Scientists" value={econ.coverage.scientists} />
-        <CoverageChip label="Doctors" value={econ.coverage.doctors} />
-        <CoverageChip label="Skilled" value={econ.coverage.skilled} />
-      </div>
       <div className="text-[14px] space-y-1">
         <Line k="Factories run at" v={pct(econ.factoryStaff)} warn={econ.factoryStaff < 1} />
         <Line k="Universities run at" v={pct(econ.researchStaff)} warn={econ.researchStaff < 1} />
       </div>
-      {econ.coverage.engineers < 0.95 && <p className="text-[13px] text-[#ffb340]">Short of engineers: train more with an Engineering focus, or build fewer factories for now.</p>}
+      {econ.coverage.engineers < 0.95 && <p className="text-[13px] text-[#ffb340]">Short of engineers: train more with an Engineering focus (Learning), or build fewer factories for now.</p>}
+      <p className="text-[12px] text-white/60">Every profession, how well it is staffed and who uses it (factories, space, missiles, ministries) is in Government, Talent.</p>
     </Card>
   )
 }

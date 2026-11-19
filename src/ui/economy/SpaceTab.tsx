@@ -13,6 +13,7 @@ import { MissionsSection } from './space/Missions'
 import { Chip, QuickOrder } from './space/shared'
 import { monthsText, money, percent, spaceOrder } from './space/words'
 import { OrderButton } from '../panel'
+import { openGovernment } from './government/section'
 
 type Section = 'agency' | 'rockets' | 'missions' | 'labs' | 'colonies'
 const SECTIONS: readonly (readonly [Section, string])[] = [
@@ -106,9 +107,14 @@ function AgencySection() {
         </div>
         {hireWhy && <p className="text-[13px] text-[#ffd60a]">{hireWhy}</p>}
         <p className="text-[13px] text-white/70">
-          Your people can spare {cap} specialists{bonus.talent > 0 ? ` (discoveries add ${percent(bonus.talent)})` : ''}. Factories are staffed at {percent(Math.min(covers, 1.2))}
-          {covers < 0.95 ? `: the agency is taking engineers they need, and they slow down a little. Schooling and engineering focus bring more.` : '.'}
+          Your people can spare {cap} specialists{bonus.talent > 0 ? ` (discoveries add ${percent(bonus.talent)})` : ''}. Engineers cover {percent(Math.min(covers, 1.2))} of what the nation asks of them, so factories run at {percent(econ.factoryStaff)}
+          {covers < 0.95 ? `: the agency is taking engineers they need. Schooling and an Engineering focus bring more.` : '.'}
         </p>
+        <div>
+          <button className="btn btn-quiet text-[13px] px-2.5 py-1" onClick={() => openGovernment('talent')}>
+            Who else wants engineers
+          </button>
+        </div>
       </Card>
 
       <Card title="Launch site" hint={`A rocket is built and launched from a pad. Each level adds a place for work; the national space launch complex (Economy, Projects) adds one more and lets the biggest pad be built.`}>
