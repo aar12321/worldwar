@@ -12,7 +12,7 @@ import { usePlayerView } from '../hooks'
 import { pct } from '../format'
 import { StatTile, Tiles } from '../kit'
 import { OrderButton, Tabs } from '../panel'
-import { Card, Line } from './parts'
+import { Card, Fold, Line } from './parts'
 import { CabinetSection } from './government/Cabinet'
 import { GroupsSection } from './government/Groups'
 import { JobsSection } from './government/Jobs'
@@ -170,26 +170,28 @@ function ConstitutionSection() {
       <Card title={gov.name} hint={gov.blurb} right={<span className="chip">Your government</span>}>
         {election !== null && (
           <p className="text-[14px]">
-            Next election in {election} months. You need stability of at least {need}% to win it (now {Math.round(player.stability)}%). Pensions and housing lower the bar; unemployment raises it.
+            Next election {election === 0 ? "this month" : `in ${election} ${election === 1 ? "month" : "months"}`}. You need stability of at least {need}% to win it (now {Math.round(player.stability)}%). Pensions and housing lower the bar; unemployment raises it.
           </p>
         )}
-        <div className="grid gap-2">
-          {GOVERNMENT_TYPES.filter((g) => g !== player.government).map((g) => (
-            <div key={g} className="rounded-xl bg-white/5 p-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[15px] font-semibold">{GOVERNMENTS[g].name}</div>
-                <div className="text-[13px] text-white/70">{GOVERNMENTS[g].blurb}</div>
+        <Fold title={`Change the form of government (${GOVERNMENT_TYPES.length - 1} others)`} value={`${REFORM.cost} influence`}>
+          <div className="grid gap-2 pt-1">
+            {GOVERNMENT_TYPES.filter((g) => g !== player.government).map((g) => (
+              <div key={g} className="rounded-xl bg-white/5 p-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[15px] font-semibold">{GOVERNMENTS[g].name}</div>
+                  <div className="text-[13px] text-white/70">{GOVERNMENTS[g].blurb}</div>
+                </div>
+                <OrderButton
+                  order={{ type: 'setGovernment', nationId: player.id, government: g }}
+                  label="Change"
+                  cost={`${REFORM.cost} influence`}
+                  effect={`Stability -${REFORM.turmoil} at once`}
+                  className="shrink-0"
+                />
               </div>
-              <OrderButton
-                order={{ type: 'setGovernment', nationId: player.id, government: g }}
-                label="Change"
-                cost={`${REFORM.cost} influence`}
-                effect={`Stability -${REFORM.turmoil} at once`}
-                className="shrink-0"
-              />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </Fold>
       </Card>
 
       <div className="space-y-2.5">
@@ -204,7 +206,10 @@ function ConstitutionSection() {
             Laws {player.laws.length} of {slots}
           </span>
         </div>
-        {(Object.keys(LAW_SPECS) as LawId[]).filter((law) => !LAW_SPECS[law].retired).map((law) => {
+        {(Object.keys(LAW_SPECS) as LawId[])
+          .filter((law) => !LAW_SPECS[law].retired)
+          .sort((a, b) => Number(player.laws.includes(b)) - Number(player.laws.includes(a)))
+          .map((law) => {
           const active = player.laws.includes(law)
           const clash = active ? null : lawConflict(player, law)
           return (
