@@ -40,7 +40,7 @@ export function BusinessTab() {
         </div>
       </Card>
 
-      <Card title="Sectors" hint="Each grows by itself. Open one to fund it, subsidize it or bring it into state hands." right={<span className="text-[12px] text-white/60 whitespace-nowrap">{player.stateOwned.length} state-owned · {player.subsidies.length} subsidized</span>}>
+      <Card title="Sectors" hint={`Each grows by itself. Open one to fund it, subsidize it or bring it into state hands. ${player.stateOwned.length} state-owned, ${player.subsidies.length} subsidized.`}>
         <div className="space-y-1.5">
           {SECTOR_IDS.map((id) => (
             <SectorRow key={id} id={id} cap={cap} />
@@ -105,7 +105,10 @@ function SectorRow({ id, cap }: { id: SectorId; cap: number }) {
     <div className="rounded-xl bg-white/5">
       <button className="w-full text-left p-2.5 space-y-1.5 min-h-[44px]" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[15px] font-semibold min-w-0 truncate">{spec.name}</span>
+          <span className="text-[15px] font-semibold min-w-0 truncate inline-flex items-center gap-2">
+            <span aria-hidden className={`chev ${open ? 'chev-open' : ''}`} />
+            {spec.name}
+          </span>
           <span className="flex items-center gap-1.5 shrink-0">
             {owned && <span className="chip text-[12px]">State</span>}
             {subsidized && <span className="chip text-[12px]">Subsidized</span>}

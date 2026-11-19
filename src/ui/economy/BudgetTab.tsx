@@ -38,17 +38,15 @@ export function BudgetTab() {
   return (
     <section className="econ-grid">
       <Tiles compact>
-        <StatTile label="Income a month" value={signed(sum(income))} />
-        <StatTile label="Spending a month" value={signed(sum(costs))} />
-        <StatTile label="Left over" value={signed(econ.netCapital)} tone={econ.netCapital < 0 ? 'bad' : 'good'} sub={econ.netCapital < 0 && treasury > 0 ? `the treasury lasts about ${Math.floor(treasury / -econ.netCapital)} months` : 'a month'} />
-        <StatTile label="Treasury" value={Math.round(treasury)} tone={treasury < 0 ? 'bad' : undefined} sub={committed.capital > 0 ? `after ${Math.round(committed.capital)} on this month's orders` : 'money in hand'} />
+        <StatTile label="Left over a month" value={signed(econ.netCapital)} tone={econ.netCapital < 0 ? 'bad' : 'good'} sub={`${signed(sum(income))} in, ${signed(sum(costs))} out`} />
+        <StatTile label="Treasury" value={Math.round(treasury)} tone={treasury < 0 ? 'bad' : undefined} sub={econ.netCapital < 0 && treasury > 0 ? `lasts about ${Math.floor(treasury / -econ.netCapital)} months` : committed.capital > 0 ? `after ${Math.round(committed.capital)} on this month's orders` : 'money in hand'} />
+        <StatTile label="Food a month" value={signed(econ.netFood)} tone={econ.netFood < 0 ? 'bad' : undefined} sub={`${Math.round(player.resources.food)} in store`} />
       </Tiles>
 
       <Card title="Taxes and the draft" hint="They change when the month ends." right={<Pending show={Math.abs(tax - player.taxRate) > 1e-9 || Math.abs(draft - player.draftRate) > 1e-9} />}>
         <SliderRow label="Income tax" value={tax} min={TAX_LIMITS.min} max={TAX_LIMITS.max} onChange={(v) => setPolicy({ taxRate: v })} neutral={0.2} hint="20% is neutral. Higher raises money but people resent it; lower pleases them but earns less." />
         <SliderRow label="Draft" value={draft} min={DRAFT_LIMITS.min} max={maxDraft} onChange={(v) => setPolicy({ draftRate: v })} hint={`Turns workers into soldiers you can train. Fewer workers means less money and food.${maxDraft < DRAFT_LIMITS.maxWithConscription ? ` Above ${Math.round(DRAFT_LIMITS.max * 100)}% needs the Conscription law (Government, Laws).` : ''}`} />
         <div className="text-[14px] space-y-1">
-          <Line k="Food each month" v={signed(econ.netFood)} warn={econ.netFood < 0} />
           <Line k="New soldiers each month" v={`${signed(econ.militaryRegen, 0)}k`} />
           <Line k="Jobs filled" v={`${Math.round(econ.laborRatio * 100)}%`} warn={econ.laborRatio < 0.9} />
         </div>

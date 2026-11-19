@@ -45,7 +45,7 @@ export function ProjectCard(p: ProjectCardProps) {
   const speed = Math.max(0.05, p.speed)
   const realMonths = (progress: number) => Math.max(0, Math.ceil((p.months - progress) / speed - 1e-9))
   const left = realMonths(building ? (p.state?.progress ?? 0) : 0)
-  const slow = speed < 0.98 ? ' (slowed: short of engineers or low public works)' : speed > 1.02 ? ' (sped up by public works)' : ''
+  const slow = speed < 0.98 ? ' (behind plan: short of engineers or low public works)' : speed > 1.02 ? ' (ahead of plan: spare engineers or high public works)' : ''
 
   return (
     <div className={`inset-card p-3.5 space-y-2 ${p.level > 0 ? 'ring-1 ring-[#30d158]/25' : ''}`}>

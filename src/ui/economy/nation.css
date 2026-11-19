@@ -53,3 +53,18 @@
 .fold-body > * + * {
   margin-top: 4px;
 }
+
+/* A small chevron for rows that open (Business sectors). */
+.chev {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+.chev-open {
+  transform: rotate(45deg);
+}
