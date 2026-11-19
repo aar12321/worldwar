@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { NUCLEAR } from '../data/nuclear'
 import { isMonthEndOrder, undoable } from '../engine/orders'
 import type { GameState, Order } from '../engine/types'
+import { attackPool } from '../engine/deploy'
+import { getWorld } from '../map/world'
 import { useGame } from '../store'
+import { choiceUnits, choiceOrder } from './attackChoices'
 
 /**
  * Undo (the toast button, Ctrl+Z) only takes back what shows nothing and that the world has not seen. A warhead or salvo in the air, an
@@ -124,5 +127,28 @@ describe('Undo in the store', () => {
     useGame.getState().issueOrder({ type: 'build', nationId: me, regionId: me, building: 'farm' })
     useGame.getState().issueBatch([{ type: 'nuke', nationId: me, target: 'poland' }])
     expect(useGame.getState().undoStack).toHaveLength(0)
+  })
+
+  it('the War Room launches with the units of its choice and never a missile, in a live game and in a turn game', () => {
+    for (const mode of ['live', 'turns'] as const) {
+      const g = liveGame(mode, 'germany', 'poland')
+      const me = g.playerId
+      for (const r of Object.values(g.regions)) if (r.owner === me) r.buildings.barracks = 1
+      useGame.setState({ game: g })
+      const coastal = getWorld().map.regions.poland.coastal
+      const units = choiceUnits(attackPool(g, me, [], mode === 'live'), 'main', coastal)
+      // Exactly the call the War Room's Launch button makes.
+      const order = choiceOrder(me, 'poland', 'assault', units)
+      expect(useGame.getState().attack('poland', 'main', 'assault', undefined, undefined, order.units)).toBe(true)
+      const after = useGame.getState().game!
+      expect(after.nations[me].military.units.missile).toBe(10)
+      if (mode === 'live') {
+        const army = (after.armies ?? []).find((a) => a.nationId === me)!
+        expect(army.units.missile).toBe(0)
+        expect(army.units.infantry).toBeCloseTo(units.infantry, 6)
+      } else {
+        expect(after.battles.at(-1)!.attacker.units.missile).toBe(0)
+      }
+    }
   })
 })

@@ -4,7 +4,9 @@ import { daysInMonth } from '../engine/calendar'
 import { humanOrder } from './liveRoom'
 import { monthOrdersOf, stepRoomDay } from './liveRoom'
 import { liveFingerprint } from './fingerprint'
-import { gameOf, liveRoom, same } from './liveHarness'
+import { gameOf, liveRoom, patchAll, same } from './liveHarness'
+import { attackPool } from '../engine/deploy'
+import { choiceOrder, choiceUnits } from '../ui/attackChoices'
 
 const build = (nation: string, region = nation): Order => ({ type: 'build', nationId: nation, regionId: region, building: 'farm' })
 
@@ -115,5 +117,37 @@ describe('live rooms: orders', () => {
     expect(liveFingerprint(a)).not.toBe(liveFingerprint(b))
     // The AI did something with r1's money that an idle player did not.
     expect(JSON.stringify(a.nations.r1)).not.toBe(JSON.stringify(b.nations.r1))
+  })
+
+  it('a War Room attack from a guest reaches the host with its named units and no missiles; an older order with missiles still works', async () => {
+    const room = await liveRoom(2)
+    const [host, guest] = room.seats
+    patchAll(room, (g) => {
+      g.nations.r1.resources.pp = 500
+      g.nations.r1.military.units.infantry = 14
+      g.nations.r1.military.units.armor = 4
+      g.nations.r1.military.units.missile = 6
+    })
+    expect(guest.s.sendCommand({ type: 'declareWar', nationId: 'r1', target: 'r2' }).error).toBeNull()
+    await room.run(600)
+    const pool = attackPool(gameOf(guest), 'r1', [], true)
+    const units = choiceUnits(pool, 'main', false)
+    const order = choiceOrder('r1', 'r2', 'assault', units)
+    expect(guest.s.sendCommand(order).error).toBeNull()
+    await room.run(600)
+    expect(guest.acks.at(-1)).toMatchObject({ ok: true })
+    const army = (gameOf(host).armies ?? []).find((a) => a.nationId === 'r1')!
+    expect(army.units.missile).toBe(0)
+    expect(army.units.infantry).toBeCloseTo(units.infantry, 6)
+    expect(army.units.armor).toBeCloseTo(units.armor, 6)
+    expect(gameOf(host).nations.r1.military.units.missile).toBe(6)
+    expect(same(room)).toBe(true)
+    // An older screen or a save may still name missiles: the host accepts it and fires exactly those.
+    expect(guest.s.sendCommand({ type: 'attack', nationId: 'r1', target: 'r2', commit: 'probe', stance: 'assault', missiles: 2 }).error).toBeNull()
+    await room.run(600)
+    expect(guest.acks.at(-1)).toMatchObject({ ok: true })
+    expect((gameOf(host).armies ?? []).filter((a) => a.nationId === 'r1').map((a) => a.units.missile)).toEqual([0, 2])
+    expect(gameOf(host).nations.r1.military.units.missile).toBe(4)
+    expect(same(room)).toBe(true)
   })
 })
