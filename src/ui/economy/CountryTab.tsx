@@ -18,7 +18,7 @@ import { usePlayerView } from '../hooks'
 import { OrderButton } from '../panel'
 import { DataList } from '../DataList'
 import type { FilterSpec, SortSpec } from '../listUtils'
-import { Card } from './parts'
+import { Card, Fold } from './parts'
 
 /** Upgrade every country at once: one kind of building, every city, or a little of everything, with the exact cost shown first. */
 function BulkUpgrade({ owned }: { owned: string[] }) {
@@ -36,7 +36,7 @@ function BulkUpgrade({ owned }: { owned: string[] }) {
   )
   const reasons = [plan.skipped.atMax > 0 && `${plan.skipped.atMax} already at their highest level`, plan.skipped.noMoney > 0 && `${plan.skipped.noMoney} not affordable`].filter(Boolean)
   return (
-    <div className="rounded-xl bg-white/5 p-3 space-y-2.5">
+    <div className="space-y-2.5 pt-1">
       <div>
         <div className="text-[15px] font-semibold">Upgrade everything at once</div>
         <p className="text-[12px] text-white/65">Spreads the money evenly: the lowest-level countries go first, and one level is added everywhere before a second is added anywhere.</p>
@@ -158,8 +158,10 @@ function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
           {owned.length} countries{unsettled > 0 ? ` · ${unsettled} still settling` : ''}. A governor upgrades a country each month and never spends your last {EMPIRE.governorReserve} money.
         </span>
       </div>
-      <BulkUpgrade owned={owned} />
-      <GovernorForAll owned={owned} />
+      <Fold title="Every country at once: upgrades and governors">
+        <BulkUpgrade owned={owned} />
+        <GovernorForAll owned={owned} />
+      </Fold>
       <DataList
         rows={owned}
         rowKey={(id) => id}
@@ -198,9 +200,12 @@ export function CountryTab() {
   return (
     <section className="econ-grid">
       {owned.length > 1 && <Empire owned={owned} regionId={regionId} />}
-      <div className="span-all flex flex-wrap items-center gap-2 text-[14px]">
+      <div className="span-all flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="text-[18px] font-semibold tracking-tight">{map.regions[regionId].name}</h2>
+        {regionId === player.capital && <span className="text-[12px] text-white/60">capital</span>}
         <span className="chip">{TRAITS[trait].name}</span>
-        <span className="text-white/70">{TRAITS[trait].blurb}</span>
+        <span className="text-[14px] text-white/70">{TRAITS[trait].blurb}</span>
+        {region.integration < 1 && <span className="text-[13px] text-[#ffd60a]">Settling: {Math.round(integrationFactor(region) * 100)}% output</span>}
       </div>
 
       <div className="space-y-2.5">
@@ -285,7 +290,7 @@ function GovernorForAll({ owned }: { owned: string[] }) {
   const playerId = usePlayerView()!.player.id
   const [plan, setPlan] = useState<Governor | ''>('')
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-3 py-2">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2.5 mt-2.5">
       <span className="text-[13px] text-white/80">Set a governor for every country</span>
       <span className="flex items-center gap-2">
         <select className="field px-2 py-1.5 text-[13px]" aria-label="Governor for every country" value={plan} onChange={(e) => setPlan(e.target.value as Governor | '')}>
