@@ -33,7 +33,7 @@ export function ProjectsTab() {
       <Tiles compact>
         <StatTile label="National projects" value={`${running} of ${spec.projectSlots}`} sub="being built at once" tone={running >= spec.projectSlots ? 'warn' : undefined} />
         <StatTile label="In your countries" value={`${runningLocal} of ${spec.localSlots}`} sub="being built at once" tone={runningLocal >= spec.localSlots ? 'warn' : undefined} />
-        <StatTile label="Projects a month" value={signed(-(econ.projects.building + econ.projects.upkeep))} sub={`${econ.projects.building.toFixed(1)} building, ${econ.projects.upkeep.toFixed(1)} upkeep (${PROJECT_RULES.maintenance * 100}% of what was put in)`} />
+        <StatTile label="Projects a month" value={signed(-(econ.projects.building + econ.projects.upkeep))} sub={`${econ.projects.building.toFixed(1)} building, ${econ.projects.upkeep.toFixed(1)} upkeep`} />
       </Tiles>
       <div className="span-all">
         <Tabs

@@ -127,13 +127,16 @@ function Bonuses() {
 export function TechTree() {
   const view = usePlayerView()
   const setPanel = useGame((s) => s.setPanel)
-  // Seven branches stacked are nineteen screens on a phone: a filter shows one branch, or only what can be researched now.
+  // Seven branches stacked are nineteen screens on a phone: a filter shows one branch, or only the next step in each branch.
   const [show, setShow] = useState<'all' | 'ready' | TechBranch>('all')
   if (!view) return null
-  const { game, player, committed, econ, orders } = view
-  const ready = (t: Tech) => !player.techs.includes(t.id) && (orders.some((o) => o.type === 'research' && o.techId === t.id) || !validateOrder(game, getWorld().map, { type: 'research', nationId: player.id, techId: t.id }, orders))
+  const { player, committed, econ, orders } = view
+  // The next step in each branch: not yours yet, and everything it needs is yours (or queued). Affordable or not, so the list is
+  // never empty just because research is short this month; each card says what it costs and whether you can pay now.
+  const queued = orders.flatMap((o) => (o.type === 'research' ? [o.techId] : []))
+  const ready = (t: Tech) => !player.techs.includes(t.id) && t.requires.every((r) => player.techs.includes(r) || queued.includes(r))
   const branches = show === 'all' || show === 'ready' ? BRANCHES : BRANCHES.filter((b) => b === show)
-  const filters: ['all' | 'ready' | TechBranch, string][] = [['all', 'All'], ['ready', `Can research now (${TECHS.filter(ready).length})`], ...BRANCHES.map((b) => [b, BRANCH_LABELS[b]] as [TechBranch, string])]
+  const filters: ['all' | 'ready' | TechBranch, string][] = [['all', 'All'], ['ready', `Next steps (${TECHS.filter(ready).length})`], ...BRANCHES.map((b) => [b, BRANCH_LABELS[b]] as [TechBranch, string])]
   return (
     <div data-section="tech" aria-label="Research" className="drawer drawer-wide surface">
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-none">

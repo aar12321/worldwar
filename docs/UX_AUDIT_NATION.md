@@ -31,8 +31,8 @@ tab at 1440x900 and 390x844, printing each page's height.
 
 The numbers are the scrolled page height in pixels (from `nation-shots.mjs`). See the table at the end, filled from the runs.
 
-- **Budget**: four tiles first (income, spending, left over with how long the treasury lasts, treasury after this month's
-  orders); taxes and draft next; the 25 money lines grouped into Income, Military, People and care, Building, Running the
+- **Budget**: three tiles first (left over a month with what comes in and goes out; the treasury after this month's orders, or
+  how long it lasts when the month runs at a loss; food a month and in store); taxes and draft next; the 25 money lines grouped into Income, Military, People and care, Building, Running the
   state, Debt and business, each a fold with its subtotal and a "Set in ..." button. Costs are no longer all red; only the
   bottom line warns.
 - **Business**: six cards of buttons became one Sectors card. Each row shows size, State and Subsidized; tapping it opens the
@@ -49,7 +49,9 @@ The numbers are the scrolled page height in pixels (from `nation-shots.mjs`). Se
   "How shares work".
 - **Government, Laws**: laws in force first; the other forms of government fold away.
 - **Research**: "What your technology gives you" was open by default and pushed the tree down a screen; it is closed, with a
-  count. The header shows research a month beside what is available.
+  count. The header shows research a month beside what is available. A filter shows one branch, or only what can be researched
+  now (all seven branches stacked were 19 screens on a phone).
+- **Projects tiles**: building costs and upkeep are one tile ("Projects a month", split in its subtitle), so the row is three.
 
 ## Logic issues fixed (all on screen; no engine rule changed)
 
