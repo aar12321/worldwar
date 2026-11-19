@@ -14,6 +14,9 @@ export function StabilityWhy() {
   const max = Math.max(5, ...rows.map(([, v]) => Math.abs(v)))
   const target = Math.round(econ.stabilityTarget)
   const now = Math.round(player.stability)
+  // The engine clamps the sum to 0..100 (economy.ts, stabilityTarget), so the lines can add up to more than where it heads.
+  const raw = econ.stabilityParts.reduce((a, p) => a + p.value, 0)
+  const capped = raw > 100 ? 100 : raw < 0 ? 0 : null
   return (
     <Card title="Why stability is heading for" hint="Every cause, in points. Add the lines to the starting calm and you get where it is heading. Pull the biggest lever first." right={<span className="text-[20px] font-semibold tabular-nums">{target}%</span>}>
       <div className="space-y-1.5 text-[13px]">
@@ -34,6 +37,12 @@ export function StabilityWhy() {
           </div>
         ))}
         {rows.length === 0 && <p className="text-white/60">Nothing is pushing stability either way.</p>}
+        {capped !== null && (
+          <div className="flex justify-between text-white/70">
+            <span>The lines add up to {raw.toFixed(0)}; stability {capped ? 'tops out at 100%' : 'cannot fall below 0%'}</span>
+            <span className="tabular-nums">{capped}</span>
+          </div>
+        )}
         <div className="flex justify-between border-t border-white/10 pt-1.5 font-semibold">
           <span>Heading for (now {now}%)</span>
           <span className="tabular-nums">{target}%</span>
