@@ -170,7 +170,7 @@ function ConstitutionSection() {
       <Card title={gov.name} hint={gov.blurb} right={<span className="chip">Your government</span>}>
         {election !== null && (
           <p className="text-[14px]">
-            Next election {election === 0 ? "this month" : `in ${election} ${election === 1 ? "month" : "months"}`}. You need stability of at least {need}% to win it (now {Math.round(player.stability)}%). Pensions and housing lower the bar; unemployment raises it.
+            Next election {election === 0 ? 'this month' : `in ${election} ${election === 1 ? 'month' : 'months'}`}. You need stability of at least {need}% to win it (now {Math.round(player.stability)}%). Pensions and housing lower the bar; unemployment raises it.
           </p>
         )}
         <Fold title={`Change the form of government (${GOVERNMENT_TYPES.length - 1} others)`} value={`${REFORM.cost} influence`}>
