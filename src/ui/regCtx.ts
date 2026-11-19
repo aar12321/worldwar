@@ -4,14 +4,19 @@ import { factionOf, votesWaiting } from '../engine/factions'
 import { blocDue } from '../engine/bloc'
 import type { GameState, Order } from '../engine/types'
 import { isLive } from '../engine/calendar'
+import { getWorld } from '../map/world'
+import { offerIsMoot } from './diplomacyList'
 import { useGame } from '../store'
 import { useAdvice, useSlowGame } from './hooks'
 import { NO_CTX } from './shortcuts'
 import type { RegCtx } from './registry'
 
-/** Offers waiting for your answer: not yet answered by an order of yours. */
+/** Offers waiting for your answer: not yet answered by an order of yours, and still possible to accept (see `offerIsMoot`). */
 export function offersWaiting(game: GameState, orders: readonly Order[]): number {
-  return game.proposals.filter((p) => p.to === game.playerId && !orders.some((o) => o.type === 'respond' && o.proposalId === p.id)).length
+  const mine = game.proposals.filter((p) => p.to === game.playerId && !orders.some((o) => o.type === 'respond' && o.proposalId === p.id))
+  if (mine.length === 0) return 0
+  const { map } = getWorld()
+  return mine.filter((p) => !offerIsMoot(game, map, p, orders)).length
 }
 
 /** The registry context for a game, without the advisor's count (the key handler does not need it). */

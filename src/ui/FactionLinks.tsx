@@ -68,6 +68,31 @@ export function FactionNotices({ game, me }: { game: GameState; me: NationId }) 
 }
 
 /**
+ * The same invitations and requests as `FactionNotices`, in one line for the Diplomacy desk: they are answered on the Bloc desk, so
+ * the buttons live there once.
+ */
+export function FactionNoticeLine({ game, me }: { game: GameState; me: NationId }) {
+  const openFaction = useGame((s) => s.openFaction)
+  const mine = factionOf(game, me)
+  const factions = game.factions ?? []
+  const invited = mine ? [] : factions.filter((g) => g.invites.some((i) => i.nation === me && i.expires >= game.turn))
+  const askers = mine ? (mine.requests ?? []).filter((r) => r.expires >= game.turn && game.nations[r.nation]?.alive && !factionOf(game, r.nation)) : []
+  const parts = [
+    ...invited.map((g) => `${g.name} invites you to join`),
+    ...askers.map((r) => `${game.nations[r.nation]?.name} asks to join ${mine!.name}`),
+  ]
+  if (!parts.length) return null
+  return (
+    <div className="rounded-lg border border-[#ffd60a]/50 bg-[#ffd60a]/6 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[13px]" data-testid="faction-notice-line">
+      <span className="min-w-0">{parts.join(' · ')}</span>
+      <button className="btn btn-primary px-3 py-1.5 text-[13px]" onClick={() => openFaction()}>
+        Answer on the {WD} desk
+      </button>
+    </div>
+  )
+}
+
+/**
  * The faction row of a country's card in the Diplomacy desk: where they stand, and the one next step that fits you:
  * invite them (you have a faction), ask to join theirs, or found one together. Every button carries its cost and effect.
  */

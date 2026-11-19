@@ -23,6 +23,7 @@ import { invitablePartners } from './partners'
 import { homePower, militaryPower, militarySheet } from './militaryStats'
 import { fundMissilesCost, launchSite, missileStock, programLevel, recentAttackers } from './missiles'
 import { validateOrder } from './orders'
+import { offerIsMoot } from './offers'
 import { spaceAdvice } from './space'
 import { monthsToElection } from './politics'
 import { ACADEMY, PROJECT_LEVELS, PROJECTS, programCost } from '../data/projects'
@@ -331,7 +332,8 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
 
   // Offers on the table
   const answered = new Set(pending.filter((o) => o.type === 'respond').map((o) => (o as { proposalId: string }).proposalId))
-  const offers = s.proposals.filter((p) => p.to === nationId && !answered.has(p.id))
+  // An offer the world has overtaken (a pact from someone now your ally) is not waiting on you: the Diplomacy desk files it away.
+  const offers = s.proposals.filter((p) => p.to === nationId && !answered.has(p.id) && !offerIsMoot(s, map, p, pending))
   if (offers.length > 0) {
     const first = offers[0]
     add('now', 30, {

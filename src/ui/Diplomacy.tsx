@@ -23,16 +23,19 @@ import { LIBERATE_TEXT } from '../data/puppets'
 import { liberablePuppets } from '../engine/puppets'
 import { TERRITORY, TERRITORY_TEXT } from '../data/territories'
 import { annexTerritoryCost, territoryProblem, territoryValue } from '../engine/territories'
-import { WarPicture } from './WarPicture'
-import { MAX_REPARATIONS, liberateValue, netWarScore, puppetValue, REPARATION_MONTHS, regionValue, termsCost } from '../engine/warscore'
+import { MAX_REPARATIONS, liberateValue, netWarScore, puppetValue, REPARATION_MONTHS, regionValue, termsCost, warStanding } from '../engine/warscore'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { useHumanName, usePlayerView } from './hooks'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import { Ledger } from './Ledger'
-import { FactionNotices, FactionRow } from './FactionLinks'
+import { FactionNoticeLine, FactionRow } from './FactionLinks'
 import { factionChip } from './pickerItems'
-import { closeNations } from './diplomacyList'
+import { closeNations, offerIsMoot } from './diplomacyList'
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+/** The engine's alliance groups are named "X bloc"; the Bloc desk's blocs are something else, so here they are alliances. */
+const allianceName = (name: string) => name.replace(/ bloc$/, ' alliance')
 
 const opinionColor = (v: number) => (v >= 25 ? '#34d399' : v >= 5 ? '#a7f3d0' : v > -5 ? '#94a3b8' : v > -25 ? '#fbbf24' : '#fb7185')
 
@@ -93,28 +96,28 @@ function OpinionMeter({ report }: { report: OpinionReport }) {
   )
 }
 
-function WarScoreBar({ target }: { target: NationId }) {
+/** The war in one line: the score and who is winning. The breakdown, the fronts and the odds are in Military, Wars. */
+function WarLine({ target }: { target: NationId }) {
   const view = usePlayerView()!
+  const openMilitary = useGame((s) => s.openMilitary)
+  const { map } = getWorld()
   const net = netWarScore(view.game, view.player.id, target)
-  const color = net >= 0 ? '#22d3ee' : '#f472b6'
+  const standing = warStanding(view.game, map, view.player.id, target)
   return (
-    <div>
-      <div className="flex justify-between text-[12px]">
-        <span className="text-white/70">War score</span>
-        <span style={{ color }}>
-          {net > 0 ? '+' : ''}
-          {net}
-        </span>
-      </div>
-      <SignedBar value={net} color={color} />
-      <div className="mt-2">
-        <WarPicture enemyId={target} />
-      </div>
+    <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]" data-war-line>
+      <span className="text-white/80">
+        War score <b className="tabular-nums" style={{ color: net >= 0 ? '#22d3ee' : '#f472b6' }}>{net > 0 ? '+' : ''}{net}</b> · {STANDING_TEXT[standing.verdict]}
+      </span>
+      <button className="btn btn-quiet px-3 py-1 text-[13px]" onClick={() => openMilitary('wars')} title="The score's breakdown, every front and your odds">
+        Fronts and odds in Wars →
+      </button>
     </div>
   )
 }
 
-function InboxCard({ p }: { p: Proposal }) {
+const STANDING_TEXT = { winning: 'winning', ahead: 'slightly ahead', even: 'even', behind: 'slightly behind', losing: 'losing' } as const
+
+function InboxCard({ p, moot = false }: { p: Proposal; moot?: boolean }) {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
   const removeOrder = useGame((s) => s.removeOrder)
@@ -141,15 +144,17 @@ function InboxCard({ p }: { p: Proposal }) {
       <div className="flex items-center justify-between gap-2">
         <span className={`text-[12px] ${left <= 0 ? 'text-[#ff8a84]' : 'text-white/55'}`}>{left <= 0 ? 'Last month to answer' : `${left + 1} months to answer`}</span>
         <div className="flex gap-2">
-          <button className={`btn ${answer === true ? 'bg-[#30d158]/25 border-[#30d158]/70 text-[#6eeb8a]' : ''}`} disabled={!!acceptErr && answer !== true} title={acceptErr ?? (isLive(game) ? 'Accept now' : 'Accept at the end of this month')} onClick={() => answerWith(true)}>
-            {answer === true ? 'Accepting' : 'Accept'}
-          </button>
+          {!moot && (
+            <button className={`btn ${answer === true ? 'bg-[#30d158]/25 border-[#30d158]/70 text-[#6eeb8a]' : ''}`} disabled={!!acceptErr && answer !== true} title={acceptErr ?? (isLive(game) ? 'Accept now' : 'Accept at the end of this month')} onClick={() => answerWith(true)}>
+              {answer === true ? 'Accepting' : 'Accept'}
+            </button>
+          )}
           <button className={`btn btn-red ${answer === false ? 'bg-[#ff453a]/25' : ''}`} onClick={() => answerWith(false)}>
-            {answer === false ? 'Declining' : 'Decline'}
+            {answer === false ? (moot ? 'Clearing' : 'Declining') : moot ? 'Clear' : 'Decline'}
           </button>
         </div>
       </div>
-      {acceptErr && answer !== true && <p className="text-[12px] text-[#ff8a84]">Cannot accept: {acceptErr}</p>}
+      {acceptErr && answer !== true && <p className={`text-[12px] ${moot ? 'text-white/60' : 'text-[#ff8a84]'}`}>{moot ? `No longer possible: ${acceptErr}. Clearing it declines it politely.` : `Cannot accept: ${acceptErr}`}</p>}
     </motion.div>
   )
 }
@@ -494,6 +499,8 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const status = n.territoryOf ? `Territory of ${game.nations[n.territoryOf]?.name ?? 'someone'}${n.territoryOf === player.id ? ' · yours' : ''}` : n.overlord ? `Puppet of ${game.nations[n.overlord]?.name ?? 'someone'}${n.overlord === player.id && n.loyalty !== undefined ? ` · loyalty ${Math.round(n.loyalty)}` : ''}` : war ? 'At war' : allied ? 'Ally' : pact ? `Pact until ${turnDate(game.pacts[pairKey(player.id, id)])}` : 'At peace'
   const statusColor = war ? 'text-[#ff8a84]' : allied ? 'text-[#64d2ff]' : pact ? 'text-[#6eeb8a]' : 'text-white/70'
   const toggle = (m: 'trade' | 'peace' | 'money') => setMode((cur) => (cur === m ? 'none' : m))
+  // Treaties, trade, money, war and the bloc fold away, so the list reads as a list. A row you came to opens unfolded.
+  const [open, setOpen] = useState(focused)
   return (
     <div
       ref={ref}
@@ -519,7 +526,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
             {persona.name}
           </span>
         )}
-        {bloc && <span className="chip chip-blue">{bloc.name}</span>}
+        {bloc && <span className="chip chip-blue" title={`Tied by alliances: ${bloc.members.map((m) => game.nations[m]?.name).join(', ')}. Not the same as a bloc of the Bloc desk.`}>{allianceName(bloc.name)}</span>}
         {n.territoryOf && <span className="chip chip-blue" title={`Held for ever by ${game.nations[n.territoryOf]?.name}: ${Math.round(TERRITORY.cut * 100)}% of its revenue goes to its master, it fights in every war and sits in its master's faction.`}>Territory of {game.nations[n.territoryOf]?.name}</span>}
         {inFaction && <span className={`chip ${inFaction.tone === 'good' ? 'chip-green' : ''}`} title="Their faction">{inFaction.text}</span>}
         <span>
@@ -533,8 +540,19 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
         </div>
       )}
       <OpinionMeter report={report} />
-      {war && <WarScoreBar target={id} />}
-      <FactionRow id={id} />
+      {war && <WarLine target={id} />}
+      {!war && (
+        <div className="flex flex-wrap gap-1.5">
+          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" aria-expanded={open} onClick={() => setOpen((v) => !v)} data-row-actions>
+            {open ? 'Hide actions' : 'Treaties, trade and more'} <span aria-hidden>{open ? '▴' : '▾'}</span>
+          </button>
+          <button className="btn px-3 py-1.5 text-[13px]" onClick={() => openRelations(id)} title="Visits, embassies, aid, ventures, joint war plans and favours">
+            Build relations →
+          </button>
+        </div>
+      )}
+      {(war || open) && <>
+      {!war && <FactionRow id={id} />}
       <div className="flex flex-wrap gap-1.5">
         {war ? (
           <button className={`btn btn-primary ${mode === 'peace' ? 'bg-[#0a84ff]/25' : ''}`} onClick={() => toggle('peace')}>
@@ -542,9 +560,6 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           </button>
         ) : (
           <>
-            <button className="btn" onClick={() => openRelations(id)} title="Visits, embassies, aid, ventures, joint war plans and favours">
-              Build relations →
-            </button>
             <button className={`btn btn-primary ${mode === 'trade' ? 'bg-[#0a84ff]/25' : ''}`} onClick={() => toggle('trade')}>
               Trade
             </button>
@@ -635,8 +650,9 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           ))}
         </div>
       )}
+      </>}
       <AnimatePresence initial={false}>
-        {mode !== 'none' && (
+        {mode !== 'none' && (war || open) && (
           <motion.div key={mode} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
             {mode === 'trade' ? <TradeComposer target={id} /> : mode === 'money' ? <MoneyComposer target={id} /> : <PeaceComposer target={id} />}
           </motion.div>
@@ -708,7 +724,11 @@ export function DiplomacyPanel() {
   if (!view || !ctx || !game) return null
   const { player } = view
   const me = player.id
-  const inbox = game.proposals.filter((p) => p.to === me)
+  const { map } = getWorld()
+  const inboxAll = game.proposals.filter((p) => p.to === me)
+  const moot = new Set(inboxAll.filter((p) => offerIsMoot(game, map, p, view.orders)).map((p) => p.id))
+  const inbox = inboxAll.filter((p) => !moot.has(p.id))
+  const stale = inboxAll.filter((p) => moot.has(p.id))
   // Offers that stay in the game after a month ended are ones to another player, who has not answered yet.
   const sent = game.proposals.filter((p) => p.from === me)
   const deals = game.deals.filter((d) => d.from === me || d.to === me)
@@ -724,13 +744,37 @@ export function DiplomacyPanel() {
     .slice(0, 6)
 
   return (
-    <PanelShell title="Diplomacy" kicker={`${enemiesOf(game, me).length} wars · ${alliesOf(game, me).length} allies · ${inbox.length} waiting on you. ${isLive(game) ? 'Rivals answer offers the same day.' : game.multiplayer ? 'AI nations answer when the month ends; players see offers when the next month begins.' : 'Offers are answered when the month ends.'}`} panel="diplomacy" wide={!focus && tab === 'ledger'} tabs={<Tabs value={focus ? 'nations' : tab} onChange={(t) => { if (focus) openDiplomacy(null); setTab(t) }} options={[['nations', 'Nations'], ['ledger', 'Ledger']] as const} />}>
+    <PanelShell title="Diplomacy" kicker={`${count(enemiesOf(game, me).length, 'war', 'wars')} · ${count(alliesOf(game, me).length, 'ally', 'allies')} · ${inbox.length} waiting on you. ${isLive(game) ? 'Rivals answer offers the same day.' : game.multiplayer ? 'AI nations answer when the month ends; players see offers when the next month begins.' : 'Offers are answered when the month ends.'}`} panel="diplomacy" wide={!focus && tab === 'ledger'} tabs={<Tabs value={focus ? 'nations' : tab} onChange={(t) => { if (focus) openDiplomacy(null); setTab(t) }} options={[['nations', 'Nations'], ['ledger', 'Ledger']] as const} />}>
       {!focus && tab === 'ledger' && <Ledger game={game} onOpen={(id) => { setTab('nations'); openDiplomacy(id) }} />}
       {(focus || tab === 'nations') && <>
       {ctx.coalition && (
         <div className="rounded-lg border border-[#ff453a]/50 bg-[#ff453a]/10 p-3 text-[13px] text-[#ff8a84]">
           Your growing power alarms the world. Neighbors now distrust you and are quicker to band together against you.
         </div>
+      )}
+      <AnimatePresence initial={false}>
+        {inbox.length > 0 && (
+          <motion.section key="inbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
+            <div className="label text-[#ffd60a]">Awaiting your answer</div>
+            <AnimatePresence initial={false}>
+              {inbox.map((p) => (
+                <InboxCard key={p.id} p={p} />
+              ))}
+            </AnimatePresence>
+          </motion.section>
+        )}
+      </AnimatePresence>
+      {stale.length > 0 && (
+        <details className="details-card" data-stale-offers={stale.length}>
+          <summary>
+            {stale.length === 1 ? 'An offer that is no longer possible' : `${stale.length} offers that are no longer possible`}
+          </summary>
+          <div className="space-y-2 pt-2">
+            {stale.map((p) => (
+              <InboxCard key={p.id} p={p} moot />
+            ))}
+          </div>
+        </details>
       )}
       <CrisisCards game={game} me={me} />
       {sent.length > 0 && (
@@ -746,35 +790,26 @@ export function DiplomacyPanel() {
           ))}
         </section>
       )}
-      <FactionNotices game={game} me={me} />
-      <AnimatePresence initial={false}>
-        {inbox.length > 0 && (
-          <motion.section key="inbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
-            <div className="label text-[#ffd60a]">Awaiting your answer</div>
-            <AnimatePresence initial={false}>
-              {inbox.map((p) => (
-                <InboxCard key={p.id} p={p} />
-              ))}
-            </AnimatePresence>
-          </motion.section>
-        )}
-      </AnimatePresence>
+      <FactionNoticeLine game={game} me={me} />
       {blocs.length > 0 && (
-        <section className="space-y-2">
-          <div className="label">Alliance blocs in the world</div>
+        <details className="details-card">
+          <summary>Alliance groups in the world ({blocs.length})</summary>
+          <div className="space-y-2 pt-2">
+          <p className="text-[12px] text-white/60">Nations tied together by alliances. These are not the blocs of the Bloc desk.</p>
           {blocs.slice(0, 6).map((b) => {
             const mineBloc = b.members.includes(me)
             return (
               <div key={b.leader} className={`rounded-lg border p-2.5 text-[13px] ${mineBloc ? 'border-[#0a84ff]/50 bg-[#0a84ff]/8' : 'border-white/12 bg-white/5'}`}>
                 <div className="flex justify-between gap-2">
-                  <span className="font-semibold">{b.name}{mineBloc ? ' (yours)' : ''}</span>
+                  <span className="font-semibold">{allianceName(b.name)}{mineBloc ? ' (yours)' : ''}</span>
                   <span className="text-white/70 tabular-nums">strength {b.power.toFixed(0)}</span>
                 </div>
                 <div className="text-white/75 mt-0.5">{b.members.map((id) => game.nations[id]?.name).join(', ')}</div>
               </div>
             )
           })}
-        </section>
+          </div>
+        </details>
       )}
       {mine.length > 0 && (
         <section className="space-y-1.5">
@@ -809,14 +844,16 @@ export function DiplomacyPanel() {
         </section>
       )}
       {world.length > 0 && (
-        <section className="space-y-1.5">
-          <div className="label">Around the world</div>
-          {world.slice(-8).map((d, i) => (
-            <p key={i} className="text-[12px] text-white/70 border-l-2 border-white/8 pl-2">
-              {d.text}
-            </p>
-          ))}
-        </section>
+        <details className="details-card">
+          <summary>Around the world ({Math.min(8, world.length)})</summary>
+          <div className="space-y-1.5 pt-2">
+            {world.slice(-8).map((d, i) => (
+              <p key={i} className="text-[12px] text-white/70 border-l-2 border-white/8 pl-2">
+                {d.text}
+              </p>
+            ))}
+          </div>
+        </details>
       )}
       </>}
     </PanelShell>

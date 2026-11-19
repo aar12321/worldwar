@@ -1,4 +1,5 @@
-import { Term } from './widgets'
+import { EmptyState, Term } from './widgets'
+import { StatTile, Tiles } from './kit'
 import { useMemo, useState } from 'react'
 import { computeEconomy } from '../engine/economy'
 import { enemiesOf, maxWars, pairKey } from '../engine/helpers'
@@ -14,7 +15,7 @@ import { usePlayerView } from './hooks'
 import { LineBar } from './WarRoom'
 import { WarPicture } from './WarPicture'
 
-/** Every war you are in (up to three): what it costs, how it is going, and where the front is. */
+/** Every war you are in: what it costs, how it is going, and where the front is. The one home for a war's detail. */
 export function WarsTab() {
   const view = usePlayerView()
   const { map } = getWorld()
@@ -25,41 +26,30 @@ export function WarsTab() {
   if (!view) return null
   const { game, player, econ } = view
   const enemies = enemiesOf(game, player.id).sort()
-  const slots = Array.from({ length: Math.max(maxWars(game, player.id), enemies.length) }, (_, i) => enemies[i] ?? null)
+  const limit = maxWars(game, player.id)
+  const open = Math.max(0, limit - enemies.length)
   const bills = new Map(computeEconomy(game, map, player.id).warBills.map((b) => [b.enemy, b.amount]))
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <p className="text-[14px] text-white/70">Each war costs money every month and tires your people. Win battles to push a country's <Term word="Defense Line">Defense Line</Term> to zero and it is yours.</p>
-      <div className="inset-card p-3.5 grid grid-cols-3 gap-2 text-center">
-        <div>
-          <div className="label">War bills</div>
-          <div className="text-[18px] font-semibold tabular-nums">−{econ.warBillTotal.toFixed(0)}</div>
-          <div className="text-[12px] text-white/65">per month</div>
-        </div>
-        <div>
-          <div className="label">Weariness</div>
-          <div className="text-[18px] font-semibold tabular-nums">{player.warWeariness.toFixed(0)}</div>
-          <div className="text-[12px] text-white/65">lowers stability</div>
-        </div>
-        <div>
-          <div className="label">Held land</div>
-          <div className="text-[18px] font-semibold tabular-nums">{econ.occupied}</div>
-          <div className="text-[12px] text-white/65">still settling</div>
-        </div>
-      </div>
-
-      {slots.map((enemyId, i) => {
-        if (!enemyId) {
-          return (
-            <div key={i} className="rounded-2xl border border-dashed border-white/20 p-4 text-[14px] text-white/65">
-              <span className="label block mb-1">War slot {i + 1}</span>
-              Open. Pick a neighbor on the globe and declare war.
-            </div>
-          )
-        }
-        return <EnemyCard key={enemyId} enemyId={enemyId} reachable={reachable} bill={bills.get(enemyId) ?? 0} />
-      })}
+      <Tiles>
+        <StatTile label="Wars" value={`${enemies.length} of ${limit}`} sub={open > 0 ? `${open} more possible` : 'at the limit'} tone={enemies.length >= limit ? 'warn' : undefined} />
+        <StatTile label="War bills" value={`−${econ.warBillTotal.toFixed(0)}`} sub="money a month" tone={econ.warBillTotal > 0 ? 'bad' : undefined} />
+        <StatTile label="Weariness" value={player.warWeariness.toFixed(0)} sub="lowers stability" tone={player.warWeariness > 15 ? 'warn' : undefined} />
+        <StatTile label="Held land" value={econ.occupied} sub="still settling" />
+      </Tiles>
+      <p className="text-[13px] text-white/70">
+        Each war costs money every month and tires your people. Win battles to push a country's <Term word="Defense Line">Defense Line</Term> to zero and it is yours. Fronts are listed most winnable first.
+      </p>
+      {enemies.length === 0 && (
+        <EmptyState
+          title="You are at peace"
+          body={`You can fight up to ${limit} wars at once. Click a neighbor on the globe and press Declare war, or build a case against them first in Diplomacy.`}
+        />
+      )}
+      {enemies.map((enemyId) => (
+        <EnemyCard key={enemyId} enemyId={enemyId} reachable={reachable} bill={bills.get(enemyId) ?? 0} />
+      ))}
     </div>
   )
 }
@@ -107,7 +97,7 @@ function EnemyCard({ enemyId, reachable, bill }: { enemyId: NationId; reachable:
           </div>
           <div className="text-[13px] text-white/70 mt-0.5">
             {months} {months === 1 ? 'month' : 'months'} · war score {score > 0 ? '+' : ''}
-            {score} · costs {bill.toFixed(1)}/month
+            {score} · costs {bill.toFixed(1)} money a month
           </div>
         </div>
         <button className="btn btn-primary" onClick={() => openDiplomacy(enemyId, { peace: true })}>
