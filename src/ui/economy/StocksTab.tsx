@@ -5,7 +5,8 @@ import type { Directive } from '../../engine/types'
 import { useGame } from '../../store'
 import { fmt, signed, usePlayerView } from '../hooks'
 import { OrderButton } from '../panel'
-import { Card } from './parts'
+import { Card, Fold } from './parts'
+import { StatTile, Tiles } from '../kit'
 
 const pct = (a: number, b: number) => (b > 0 ? ((a - b) / b) * 100 : 0)
 const DIRECTIVE_IDS = Object.keys(DIRECTIVES) as Directive[]
@@ -41,27 +42,17 @@ export function StocksTab() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-        <div className="inset-card py-2.5">
-          <div className="label">World index</div>
-          <div className="text-[20px] font-semibold tabular-nums">{fmt(st.index, 0)}</div>
-        </div>
-        <div className="inset-card py-2.5">
-          <div className="label">Mood</div>
-          <div className={`text-[20px] font-semibold ${mood === 'Panic' ? 'text-[#ff6961]' : mood === 'Rally' ? 'text-[#6eeb8a]' : ''}`}>{mood}</div>
-        </div>
-        <div className="inset-card py-2.5">
-          <div className="label">Your shares</div>
-          <div className="text-[20px] font-semibold tabular-nums">{fmt(mine.value, 0)}</div>
-        </div>
-        <div className="inset-card py-2.5">
-          <div className="label">Dividends a month</div>
-          <div className="text-[20px] font-semibold tabular-nums text-[#6eeb8a]">{signed(mine.dividends)}</div>
-        </div>
-      </div>
-      <p className="text-[13px] text-white/70">
-        You can only invest in companies in countries you hold, and a very developed country has no more than two. Buy shares to take a stake: {Math.round(TIERS[0].at * 100)}% makes you an investor, {Math.round(TIERS[1].at * 100)}% gets you a board seat, {Math.round(TIERS[2].at * 100)}% is control. With a board seat you can tell the company what to do, and it does that for the nation. Big trades move the price against you, and a trade costs a {STOCKS.fee * 100}% fee. If another nation takes the country, it takes your shares too.
-      </p>
+      <Tiles compact>
+        <StatTile label="World index" value={fmt(st.index, 0)} />
+        <StatTile label="Mood" value={mood} tone={mood === 'Panic' ? 'bad' : mood === 'Rally' ? 'good' : undefined} />
+        <StatTile label="Your shares" value={fmt(mine.value, 0)} sub={`in ${ids.filter((id) => stake(game, player.id, id) > 0).length} of ${ids.length} companies you can buy`} />
+        <StatTile label="Dividends a month" value={signed(mine.dividends)} tone={mine.dividends > 0 ? 'good' : undefined} />
+      </Tiles>
+      <Fold title="How shares work">
+        <p className="text-[13px] text-white/70">
+          You can only invest in companies in countries you hold, and a very developed country has no more than two. Buy shares to take a stake: {Math.round(TIERS[0].at * 100)}% makes you an investor, {Math.round(TIERS[1].at * 100)}% gets you a board seat, {Math.round(TIERS[2].at * 100)}% is control. With a board seat you can tell the company what to do, and it does that for the nation. Big trades move the price against you, and a trade costs a {STOCKS.fee * 100}% fee. If another nation takes the country, it takes your shares too.
+        </p>
+      </Fold>
       {ids.length === 0 && (
         <Card title="Companies in your territory" hint="None of the countries you hold are developed enough to have a company. Take a developed country, and its companies come with it." />
       )}
