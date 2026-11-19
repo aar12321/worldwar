@@ -61,12 +61,15 @@ await withGame({ nation: 'poland', seed: 3, mode, outDir }, async (g) => {
       if (!m) continue
       heights.push(`${name} ${label}: ${(m.scroll / m.client).toFixed(1)} screens (${m.scroll}px of ${m.client}px)`)
       console.log(heights.at(-1))
-      const extra = Math.min(9000, m.scroll - m.client)
+      const extra = Math.min(5000, m.scroll - m.client)
+      // The globe is hidden for the tall shot: drawing it in software at that size is what makes the screenshot time out.
+      await g.page.addStyleTag({ content: 'canvas { visibility: hidden !important }' }).then((h) => h.evaluate((el) => el.setAttribute('data-shot-hide', ''))).catch(() => {})
       if (extra > 0) {
         await g.page.setViewportSize({ width: vp.width, height: vp.height + extra })
         await g.page.waitForTimeout(400)
       }
-      await g.page.screenshot({ path: join(g.outDir, `${label === 'phone' ? 'phone' : 'desk'}full-${name}.png`) })
+      await g.page.screenshot({ path: join(g.outDir, `${label === 'phone' ? 'phone' : 'desk'}full-${name}.png`), timeout: 120_000 }).catch((e) => console.log(`full shot of ${name} ${label} failed: ${e.message.split('\n')[0]}`))
+      await g.page.evaluate(() => document.querySelectorAll('[data-shot-hide]').forEach((el) => el.remove()))
     }
     await g.page.setViewportSize(VIEWPORTS.desktop)
   }

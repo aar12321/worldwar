@@ -1,4 +1,6 @@
 import { NUCLEAR } from '../data/nuclear'
+import { PUPPET } from '../data/puppets'
+import { TERRITORY } from '../data/territories'
 import { COUNCIL, EMPIRE_RULES, OCCUPATION, RESOLUTIONS, TIERS, tierSpec } from '../data/empire'
 import { projectedVote } from '../engine/council'
 import { capitalDistance, capitalsOf, empireCount, tierOf } from '../engine/empire'
@@ -9,7 +11,7 @@ import { useGame } from '../store'
 import { usePlayerView } from './hooks'
 import { Bar, LevelPicker, Pending, StatTile, Tiles } from './kit'
 import { pct } from './format'
-import { Card, Line } from './economy/parts'
+import { Card, GoTo, Line } from './economy/parts'
 import { DeskTabs, OrderButton, PanelShell, TabHost } from './panel'
 import { useState } from 'react'
 import { Spark } from './Charts'
@@ -90,7 +92,7 @@ function Overview() {
   const after = next ? unlocks(next) : null
   return (
     <section className="econ-grid">
-      <Card title={spec.name} hint={next ? `${next.countries - count} more ${next.countries - count === 1 ? 'country' : 'countries'} to become a ${next.name}. Countries count in full; each puppet's count half.` : 'You rule the world as no one has before.'}>
+      <Card title={spec.name} hint={next ? `${next.countries - count} more ${next.countries - count === 1 ? 'country' : 'countries'} to become a ${next.name}. Your own countries count in full, a territory's count ${TERRITORY.countWeight}, and a puppet's count ${PUPPET.countLow} to ${PUPPET.countHigh} as its loyalty runs from low to high.` : 'You rule the world as no one has before.'}>
         {next && <Bar value={Math.min(1, (count - spec.countries) / Math.max(1, next.countries - spec.countries))} color="#0a84ff" label="Progress to the next tier" />}
         <div className="flex flex-wrap gap-2 text-[13px]">
           {TIERS.map((t) => (
@@ -266,14 +268,12 @@ function World() {
         )}
       </Card>
 
-      <Card title="World Bank loans" hint="Lend money to a nation from the Diplomacy desk. The size and length depend on your tier; a Superpower can attach a non-aggression pact.">
-        <div className="text-[14px] space-y-1">
-          <Line k="Most you can lend" v={String(spec.loanMax)} />
-          <Line k="Longest loan" v={`${spec.loanMonths} months`} />
-          <Line k="With a pact" v={spec.loanPact ? 'yes' : 'Superpower'} />
-        </div>
+      <Card title="World Bank loans" hint="You lend from a nation's page in Diplomacy." right={<GoTo to={{ desk: 'diplomacy' }}>Diplomacy</GoTo>}>
+        <p className="text-[14px]">
+          Up to {spec.loanMax} for {spec.loanMonths} months{spec.loanPact ? ', with a non-aggression pact attached if you like' : '. A Superpower can attach a non-aggression pact'}.
+        </p>
       </Card>
-      {game.accord && game.accord.until >= game.turn && <p className="text-[13px] text-[#6eeb8a]">A trade accord is in force until {game.accord.until - game.turn} months from now.</p>}
+      {game.accord && game.accord.until >= game.turn && <p className="text-[13px] text-[#6eeb8a] span-all">A trade accord is in force for {game.accord.until - game.turn === 0 ? 'the rest of this month' : `${game.accord.until - game.turn} more ${game.accord.until - game.turn === 1 ? 'month' : 'months'}`}.</p>}
     </section>
   )
 }
