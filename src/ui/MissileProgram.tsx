@@ -1,17 +1,15 @@
 import { useState } from 'react'
 import { MISSILES, MISSILE_PROGRAM } from '../data/missiles'
-import { buildRoom, buildRoomFor, fundMissilesCost, missileStock, programLevel, reachKm, buildMissilesCost } from '../engine/missiles'
+import { buildRoomFor, missileStock, programLevel, reachKm, buildMissilesCost } from '../engine/missiles'
 import type { MissileType } from '../engine/types'
-import { Pips } from './bits'
 import { usePlayerView } from './hooks'
 import { CountPicker } from './MissileSection'
 import { MISSILE_SWATCH, PROGRAM_KINDS, buildCostText, clampCount, effectText } from './missileText'
-import { NextSteps } from './MissileWar'
 import { OrderButton } from './panel'
 import { useGame } from '../store'
 
 /** One kind the program builds: what is in store, what one costs, and buttons to build one or a chosen number. */
-function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> }) {
+export function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> }) {
   const view = usePlayerView()!
   const { game, player } = view
   const [count, setCount] = useState(3)
@@ -61,88 +59,29 @@ function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> }) {
   )
 }
 
-/** The way to the full program: facilities, talent, development and test launches live in their own tab. */
-function ProgramLink() {
-  const openMilitary = useGame((s) => s.openMilitary)
-  return (
-    <div className="rounded-xl border border-[#0a84ff]/40 bg-[#0a84ff]/10 p-2.5 flex flex-wrap items-center justify-between gap-2">
-      <span className="text-[13px] text-white/85">Facilities, talent, the chief designer, the development tree and test launches are in the Missile Program tab.</span>
-      <button className="btn btn-primary px-3 py-1.5 text-[13px]" onClick={() => openMilitary('program')}>
-        Open the Missile Program
-      </button>
-    </div>
-  )
-}
-
 /**
- * The missile program, in the Military desk. A level is a team of engineers and test ranges, so raising it costs money and
- * research, opens the next kind of missile and widens how many the program can turn out in a month.
+ * The missile program, as a summary for the Systems tab. The program itself (charter, facilities, talent, development, tests, and
+ * building missiles) lives in one place: the Missile Program tab. This card says where it stands and opens it.
  */
 export function MissileProgramCard() {
   const view = usePlayerView()
+  const openMilitary = useGame((s) => s.openMilitary)
   if (!view) return null
-  const { game, player } = view
+  const { player } = view
   const level = programLevel(player)
   const max = MISSILE_PROGRAM.maxLevel
-  const room = buildRoom(player, game.turn)
-  const capacity = MISSILE_PROGRAM.capacity[level]
-  const cost = fundMissilesCost(player)
-  const nextKind = level < max ? PROGRAM_KINDS.find((k) => MISSILES[k].level === level + 1) : undefined
+  const stock = PROGRAM_KINDS.reduce((sum, k) => sum + missileStock(player, k), 0)
   return (
-    <section className="inset-card p-3.5 space-y-3" aria-label="Missile program" data-program-level={level}>
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[17px] font-semibold tracking-tight">Missile program</div>
-          <p className="text-[13px] text-white/70">{MISSILE_PROGRAM.names[level]}</p>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="label">Level</div>
-          <div className="text-[22px] font-semibold tabular-nums">
-            {level}
-            <span className="text-white/50 text-[14px]"> / {max}</span>
-          </div>
-        </div>
+    <section className="inset-card p-3.5 flex flex-wrap items-center justify-between gap-3" aria-label="Missile program" data-program-level={level}>
+      <div className="min-w-0">
+        <div className="text-[16px] font-semibold tracking-tight">Missile program</div>
+        <p className="text-[13px] text-white/70">
+          Charter level {level} of {max} · {stock} missile{stock === 1 ? '' : 's'} in store. The charter, facilities, talent, development, test launches and building missiles are all in the Missile Program tab.
+        </p>
       </div>
-      <Pips value={level} max={max} />
-      <ProgramLink />
-      <NextSteps limit={4} />
-      <p className="text-[13px] text-white/80">
-        A level is a team of engineers and test ranges, and the talent for them is the expensive part. Raising the program costs money and research once. It opens the next kind of missile and lets the factories turn out more of them each month. Then every missile costs money and steel (a ballistic one also burns oil), paid when you build it. Hypersonic missiles are different: they come from technology and the training queue, not from here.
-      </p>
-      <div className="grid grid-cols-3 gap-2 text-center">
-        {MISSILE_PROGRAM.capacity.slice(1).map((c, i) => (
-          <div key={i} className={`rounded-xl py-2 ${level === i + 1 ? 'bg-[#0a84ff]/25 border border-[#0a84ff]' : 'bg-white/6 border border-transparent'}`}>
-            <div className="label">Level {i + 1}</div>
-            <div className="text-[13px] font-semibold">{MISSILES[PROGRAM_KINDS[i]].name.replace(' missile', '')}</div>
-            <div className="text-[12px] text-white/65 tabular-nums">{c} a month</div>
-          </div>
-        ))}
-      </div>
-      {level < max ? (
-        <OrderButton
-          order={{ type: 'fundMissiles', nationId: player.id }}
-          label={`Raise to level ${level + 1}`}
-          cost={`${cost.capital} money · ${cost.tp} research`}
-          effect={nextKind ? `Unlocks ${MISSILES[nextKind].name.toLowerCase()}s and builds up to ${MISSILE_PROGRAM.capacity[level + 1]} a month.` : undefined}
-          tone="btn-primary"
-          className="w-full"
-        />
-      ) : (
-        <p className="text-[13px] text-[#6eeb8a]">The program is at its best.</p>
-      )}
-      <div className="flex items-baseline justify-between gap-3 text-[14px]">
-        <span className="text-white/75">Room to build this month</span>
-        <span className="tabular-nums font-semibold" data-room={room}>
-          {room} of {capacity}
-        </span>
-      </div>
-      {level === 0 && <p className="text-[13px] text-[#ffd60a]">No program yet. Raise it to level 1 to build cruise missiles.</p>}
-      <div className="space-y-2">
-        {PROGRAM_KINDS.map((k) => (
-          <BuildRow key={k} kind={k as Exclude<MissileType, 'hypersonic'>} />
-        ))}
-      </div>
-      <p className="text-[12px] text-white/60">Missiles are fired from the War Room, at a country you are at war with. Strong shields stop a share of them, so the cheap ones are best used in numbers.</p>
+      <button className="btn btn-primary px-3 py-1.5 text-[13px] shrink-0" onClick={() => openMilitary('program')}>
+        Open the Missile Program
+      </button>
     </section>
   )
 }

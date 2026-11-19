@@ -47,7 +47,7 @@ export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'famil
 export type AdviceTarget =
   | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
   | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' | 'puppets' | 'territories' }
-  | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' }
+  | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'program' | 'missiles' | 'agencies' | 'systems' | 'armies' }
   | { desk: 'research' }
   | { desk: 'diplomacy'; nation?: NationId }
   | { desk: 'faction'; /** A nation to pick in the invitation list. */ nation?: NationId }
@@ -155,7 +155,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
                 ? `You have none left. Build more from the program, or raise it to level ${level + 1} for ${cost.capital} money and ${cost.tp} research.`
                 : `You have none left. Build more from the program.`,
         action: level === 0 || afford ? 'Open the program' : 'Build missiles',
-        target: { desk: 'military', tab: 'systems' },
+        target: { desk: 'military', tab: 'program' },
       })
     }
   }
