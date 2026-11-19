@@ -153,14 +153,13 @@ function WhoWorks() {
   const { player, econ } = usePlayerView()!
   const p = player.people
   return (
-    <Card title="Who works" hint="The schools decide the mix. Factories need engineers, universities need scientists, hospitals need doctors." right={<button className="btn btn-quiet shrink-0" onClick={() => openGovernment('talent')}>Who needs them</button>}>
+    <Card title="Who works" hint="The schools decide the mix. Factories need engineers, universities need scientists, hospitals need doctors." right={<button className="btn btn-quiet shrink-0" onClick={() => openGovernment('talent')}>Talent: who needs them</button>}>
       <StackedBar label="Workforce by skill" parts={SKILL_KEYS.map((k) => ({ key: k, value: p.skills[k], color: SKILL_COLORS[k], name: SKILL_LABELS[k] }))} />
       <div className="text-[14px] space-y-1">
         <Line k="Factories run at" v={pct(econ.factoryStaff)} warn={econ.factoryStaff < 1} />
         <Line k="Universities run at" v={pct(econ.researchStaff)} warn={econ.researchStaff < 1} />
       </div>
       {econ.coverage.engineers < 0.95 && <p className="text-[13px] text-[#ffb340]">Short of engineers: train more with an Engineering focus (Learning), or build fewer factories for now.</p>}
-      <p className="text-[12px] text-white/60">Every profession, how well it is staffed and who uses it (factories, space, missiles, ministries) is in Government, Talent.</p>
     </Card>
   )
 }
