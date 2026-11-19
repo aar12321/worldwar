@@ -135,11 +135,12 @@ describe('the advisor after a missile strike', () => {
     expect(a.detail).toMatch(/120 money, 10 research/)
   })
 
-  it('with missiles in range, it sends you to the War Room to answer', () => {
+  it('with missiles in range, it sends you to Missile War to answer (never to the War Room: an attack carries no missiles)', () => {
     const s = struck()
     s.nations.r0.arsenal = { cruise: 4 }
     const a = advise(s, map, 'r0', [], 20).find((x) => x.id === 'struck-r1')!
-    expect(a.target).toEqual({ desk: 'warRoom', region: 'r1' })
+    expect(a.target).toEqual({ desk: 'military', tab: 'missiles', region: 'r1' })
+    expect(a.detail).toMatch(/Missile War/)
     expect(a.detail).toMatch(/4 cruise missiles/)
   })
 

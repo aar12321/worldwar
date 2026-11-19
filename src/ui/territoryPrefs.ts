@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { COMMITS, type Stance } from '../data/war'
-import { compactUnits, shareOfPool } from '../engine/deploy'
+import type { Stance } from '../data/war'
+import { compactUnits } from '../engine/deploy'
 import { atWar, territoriesOf } from '../engine/helpers'
 import { canAttackRegion } from '../engine/warfare'
 import type { GameState, NationId, Order, RegionId, UnitCounts } from '../engine/types'
@@ -49,6 +49,3 @@ export function territoryAttack(me: NationId, territory: NationId, target: Regio
   return { type: 'commandTerritory', nationId: me, territory, order: { type: 'attack', nationId: territory, target, stance, units: compactUnits(units) } }
 }
 
-
-/** The force a territory sends when nothing else is chosen: the usual main force of what it has free. */
-export const defaultPick = (pool: UnitCounts): UnitCounts => shareOfPool(pool, COMMITS.main.share)

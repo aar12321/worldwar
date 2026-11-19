@@ -146,6 +146,22 @@ describe('auto-command', () => {
     }
     expect(used).toBeLessThanOrEqual(pool * 0.7 + 0.5)
     expect(new Set(month.map((m) => m.target)).size).toBe(month.length)
+    // The nation holds missiles, but an attack the player's AI plans never carries one: they are fired from Missile War.
+    for (const m of month) expect('missiles' in m.order).toBe(false)
+  })
+
+  it('the planner fires missiles with an attack only when asked to (an option off for the player), and never advises it', () => {
+    const { s, map } = hub()
+    for (const o of ['win', 'fast', 'defend'] as const) {
+      const p = planAttack(s, map, 'r0', 'r1', { objective: o, stance: 'assault' })!
+      expect(p.plan.missiles ?? 0).toBe(0)
+    }
+    // The option still works, so the search is unchanged behind it.
+    s.regions.r1.line = 9
+    const armed = planAttack(s, map, 'r0', 'r1', { objective: 'fast', stance: 'assault', missiles: true })!
+    expect(armed.plan.missiles ?? 0).toBeGreaterThan(0)
+    const words = advise(s, map, 'r0', { target: 'r1', stance: 'assault', commit: 'main' }, 3, null).map((a) => a.text).join(' ')
+    expect(words).not.toMatch(/missile/i)
   })
 
   it('never plans more than the nation may attack, counting what is queued', () => {

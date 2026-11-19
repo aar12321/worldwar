@@ -1212,6 +1212,7 @@ export const useGame = create<GameStore>((set, get) => ({
         break
       case 'military':
         get().openMilitary(target.tab)
+        if (target.region) set({ selectedRegion: target.region })
         break
       case 'research':
         set({ panel: 'tech', diploFocus: null })
@@ -1434,12 +1435,13 @@ export const useGame = create<GameStore>((set, get) => ({
     set({ aircraftOpen: open })
   },
 
+  // `missiles` stays for old callers; the War Room never passes it, and the order then has no missiles field at all.
   attack(target, commit = 'main', stance = 'assault', missiles, share, units) {
     const { game, settings, online } = get()
     if (!game) return false
     const { map } = getWorld()
     if (session && online?.status === 'playing' && isLive(game)) {
-      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}), ...(units ? { units } : {}) })
+      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, ...(missiles ? { missiles } : {}), ...(share !== undefined ? { share } : {}), ...(units ? { units } : {}) })
       if (ok) set({ warRoom: null, aircraftOpen: false })
       return ok
     }
@@ -1449,7 +1451,7 @@ export const useGame = create<GameStore>((set, get) => ({
         get().toast(`Your military can plan ${maxAttacks(game, game.playerId)} attacks a month`, 'error')
         return false
       }
-      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}), ...(units ? { units } : {}) })
+      const ok = get().issueOrder({ type: 'attack', nationId: game.playerId, target, commit, stance, ...(missiles ? { missiles } : {}), ...(share !== undefined ? { share } : {}), ...(units ? { units } : {}) })
       if (ok) {
         set({ warRoom: null, aircraftOpen: false })
         get().toast(`Attack on ${map.regions[target].name} planned. It plays out when the month ends.`, 'info', 4500)
@@ -1457,7 +1459,7 @@ export const useGame = create<GameStore>((set, get) => ({
       return ok
     }
     const next = structuredClone(game)
-    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, missiles, ...(share !== undefined ? { share } : {}), ...(units ? { units } : {}) }, get().orders)
+    const result = applyOrderNow(next, map, { type: 'attack', nationId: game.playerId, target, commit, stance, ...(missiles ? { missiles } : {}), ...(share !== undefined ? { share } : {}), ...(units ? { units } : {}) }, get().orders)
     // In a live game the army sets out and fights when it arrives.
     if (result.army) {
       const a = result.army
