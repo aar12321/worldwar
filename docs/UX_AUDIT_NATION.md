@@ -29,7 +29,26 @@ tab at 1440x900 and 390x844, printing each page's height.
 
 ## What was trimmed (page heights, before and after, at 1440x900 and 390x844)
 
-The numbers are the scrolled page height in pixels (from `nation-shots.mjs`). See the table at the end, filled from the runs.
+Scrolled page height in pixels, Poland after three months (turn mode), from `nation-shots.mjs` before (commit 200f726) and
+after (this branch merged with main). The window is 575 px tall on a desktop and 332 px on a phone.
+
+| Page | Desktop before | Desktop after | Phone before | Phone after |
+|---|---:|---:|---:|---:|
+| Country | 1161 | 1166 | 2141 | 2142 |
+| People | 992 | 992 | 1626 | 1617 |
+| Budget | 575 | 575 | 954 | 1047 (gains its tiles) |
+| Bank | 827 | 716 | 1722 | 1372 |
+| Business | 1359 | 723 | 2894 | 1352 |
+| Projects | 2570 | 1251 | 4747 | 2230 |
+| Space | 817 | 874 | 1646 | 1720 (gains the Talent link) |
+| Market | 973 | 812 | 1849 | 1518 |
+| Stocks | 626 | 677 | 1070 | 890 |
+| Government | 861 | 844 | 1314 | 1258 |
+| Empire World | 575 | 575 | 531 | 482 |
+| Research (All) | 2873 | 2858 | 7360 | 7459 (Next steps: 1907) |
+
+Country is the same height for a one-country nation (its folds open only with an empire list); Budget and Space grew a little
+because they now lead with tiles or a link.
 
 - **Budget**: three tiles first (left over a month with what comes in and goes out; the treasury after this month's orders, or
   how long it lasts when the month runs at a loss; food a month and in store); taxes and draft next; the 25 money lines grouped into Income, Military, People and care, Building, Running the
@@ -49,8 +68,8 @@ The numbers are the scrolled page height in pixels (from `nation-shots.mjs`). Se
   "How shares work".
 - **Government, Laws**: laws in force first; the other forms of government fold away.
 - **Research**: "What your technology gives you" was open by default and pushed the tree down a screen; it is closed, with a
-  count. The header shows research a month beside what is available. A filter shows one branch, or only what can be researched
-  now (all seven branches stacked were 19 screens on a phone).
+  count. The header shows research a month beside what is available. A filter shows one branch, or the next step in each branch
+  (all seven branches stacked were 19 screens on a phone; Next steps is 1,907 px there).
 - **Projects tiles**: building costs and upkeep are one tile ("Projects a month", split in its subtitle), so the row is three.
 
 ## Logic issues fixed (all on screen; no engine rule changed)
