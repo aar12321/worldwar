@@ -69,6 +69,8 @@ export interface DiceRule {
   base: number
   need: number
   spread: number
+  /** Why the bar is where it is, when it is raised (for the screens only). */
+  why?: string
 }
 
 /** The chance a dice rule says yes: 1 when it does even on the worst draw, 0 when not even on the best, otherwise the share of draws that do. */
@@ -122,7 +124,7 @@ export function peaceRule(s: GameState, map: WorldMap, botId: NationId, from: Na
     { label: 'What you give', value: concession },
     { label: 'What you demand', value: -(demand * 0.8) },
     { label: 'Their opinion of you', value: op * 0.15 },
-    { label: `Temperament (${me.personality ?? 'honorable'})`, value: bias },
+    { label: `Temperament (${PERSONALITIES[me.personality ?? 'honorable'].name})`, value: bias },
     { label: 'The war has only just begun', value: -(fresh ? 12 : 0) },
     { label: 'Pride', value: -8 },
     { label: 'Their friends at war with yours', value: -Math.min(10, others * 2.5) },
@@ -181,7 +183,8 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
     case 'peace': {
       const r = peaceRule(s, map, botId, p.from, p.terms, op, ratio)
       const d = r.decide(r.base + noise)
-      return { ...verdict(d.accept, d.reason), dice: { base: r.base, need: r.need, spread: NOISE }, factors: r.factors }
+      const why = p.terms.territory ? 'to become a territory' : p.terms.puppet ? 'to become a puppet' : p.terms.liberate !== undefined ? 'to free a puppet' : undefined
+      return { ...verdict(d.accept, d.reason), dice: { base: r.base, need: r.need, spread: NOISE, ...(why ? { why } : {}) }, factors: r.factors }
     }
     case 'pact': {
       let score = (ratio - 0.8) * 30 + op * 0.5 + persona.pactBias + (borders ? 0 : 6) - 6 + noise

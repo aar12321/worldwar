@@ -22,6 +22,22 @@ One loop: **the bloc picks a target, everyone brings their own forces, they hit 
 
 Nothing is pooled: every army and treasury stays its owner's. Leaving costs goodwill only.
 
+## Who would join (`joinCallOutlook`, `callOutlooks`, `src/ai/blocs.ts`)
+
+Every call to arms shows, for each member that has still to answer, whether it is likely to join, with the reason; the details fold away. It is read from the rules that decide, not a guess:
+
+- A rival's answer (`botJoinsCall`) is now `joinCallRule` plus the dice: the refusals it cannot get past (`joinProblem`, a person's nation in its grace months or already fighting enough wars) or its score before the dice (opinion of the enemy and of the caller, loyalty, appetite for war, the bloc's strength against the enemy, its own wars) and the bar (2, with a draw from -5 to +5). The outlook reads the same numbers, so likely means it joins on every draw, unlikely on none, and "may" shows the real chance. The terms add up in the same order as before (the goldens did not move).
+- Mutual Defence: a rival member joins as the call goes out (shown likely, "Mutual Defence"); then the others answer.
+- Easy rivals never answer a bloc's call (unlikely, and it says so).
+- A yes that starts no war is not a join: an enemy at its limit of wars (`joinWarBlocked`, the test `declareWar` uses) takes nobody more. Mutual Defence members fill the enemy's free wars first, in the bloc's order, as `openCall` does; once it has none, everyone else is shown unlikely.
+- Players: "Your friend decides".
+
+Where: each call card on the Overview (the members still to answer; the viewer is left out, since it has its own Join and Decline), under the leader's "Call the bloc to arms" in The bloc's wars (the members not yet fighting), and in Diplomacy under Declare war ("If you go to war, Vistula Pact: 2 likely, 1 may to join", folded, one line per member inside), since a member's new war calls the bloc in at the month's end.
+
+Tests: `acceptOdds.test.ts` (80 random worlds: every member's outlook against `botJoinsCall` on 60 real draws, read exactly; the leader's call through the real orders, with Mutual Defence members at war at once and each rival's answer as shown; an enemy at its limit of wars).
+
+Not verified: when more members may join than the enemy has free wars, the lines cannot say which answer first (the first to answer go to war). The odds are as things stand now; a rival answers in its own month (or the next day, live), on the world then.
+
 ## Rules and where they live
 
 - `src/data/blocs.ts`: every number (`BLOC`), the perks, roles and objectives with their texts. `BLOC.on` switches the whole layer.

@@ -16,6 +16,7 @@ import { InviteBox, NationPicker } from './Faction'
 import { UnitIcon } from './icons'
 import { Bar, StatTile, Tiles } from './kit'
 import { LocateButton } from './Locate'
+import { CallOddsList } from './OddsLine'
 import { OrderButton, PanelShell, Tabs } from './panel'
 import type { PickerItem } from './pickerItems'
 import { usePlayerView } from './hooks'
@@ -138,6 +139,8 @@ function Calls({ g, f, me, orders }: { g: GameState; f: Faction; me: NationId; o
                 )
               })}
             </div>
+            {/* Who has still to answer, and how they will: read off the rules the rivals answer by. */}
+            <CallOddsList g={g} map={getWorld().map} f={f} by={c.by} target={c.target} opening={false} skip={f.members.filter((m) => m === me || !!c.answers[m] || joined.includes(m))} />
             {!mine && (answered === 'join' || atWar(g, me, c.target) ? (
               <p className="text-[13px] text-[#9ff0b5]">You are at war with {nm(g, c.target)} beside {nm(g, c.by)}. Pledge divisions to an operation on the Operations tab.</p>
             ) : queued ? (
@@ -271,7 +274,10 @@ function WarsAndCall({ g, f, me, orders }: { g: GameState; f: Faction; me: Natio
             </div>
             <div className="text-[12.5px] text-white/75">Fighting: {fighting.map((m) => nm(g, m)).join(', ')}</div>
             {leader && atWar(g, me, e) && fighting.length < f.members.length && !blocOf(f).calls.some((c) => c.target === e) && !orders.some((o) => o.type === 'blocCall' && o.target === e) && (
-              <OrderButton order={order} label={`Call the bloc to arms against ${nm(g, e)}`} cost={`${BLOC.callInfluence} influence`} effect="Members join with one click" />
+              <>
+                <OrderButton order={order} label={`Call the bloc to arms against ${nm(g, e)}`} cost={`${BLOC.callInfluence} influence`} effect="Members join with one click" />
+                <CallOddsList g={g} map={getWorld().map} f={f} by={me} target={e} opening skip={fighting} />
+              </>
             )}
           </div>
         )

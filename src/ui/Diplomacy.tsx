@@ -6,7 +6,7 @@ import { coalitionActive, nationNeighbors, opinionLabel, opinionReport, type Opi
 import { PERSONALITIES } from '../data/personalities'
 import { COSTS, DIPLOMACY, MARKET, PROPOSAL_COSTS, PROPOSAL_LABELS, TRADE_LIMITS } from '../data/unitTypes'
 import { blocOf, blocsOf } from '../engine/blocs'
-import { PACT_TURNS, describeProposal, generalPeaceTies, loanPayment } from '../engine/diplomacy'
+import { PACT_TURNS, describeProposal, generalPeaceTies, joinWarBlocked, loanPayment } from '../engine/diplomacy'
 import { militaryPower } from '../engine/economy'
 import { alliesOf, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, justificationOf, pairKey, puppetsOf, regionsOf, turnDate } from '../engine/helpers'
 import { annexCost, warCost } from '../engine/orders'
@@ -37,7 +37,11 @@ import { closeNations, offerIsMoot } from './diplomacyList'
 import { offerOutlook } from '../ai/diplomat'
 import { trustLean } from '../engine/ties'
 import type { ProposalDraft } from '../engine/types'
-import { OUTLOOK_TEXT } from './pickerItems'
+import { CallOddsList, OddsLine } from './OddsLine'
+import { TONE_TEXT, verdictOf } from './oddsText'
+import { callOutlooks } from '../ai/blocs'
+import { BLOC } from '../data/blocs'
+import { factionOf } from '../engine/factions'
 import type { DiploCompose } from '../store'
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -228,32 +232,64 @@ function AmountInput({ value, onChange }: { value: number; onChange: (v: number)
   )
 }
 
-const TONE_TEXT = { good: 'text-[#6eeb8a]', warn: 'text-[#ffd60a]', bad: 'text-[#ff8a84]', none: 'text-white/60' } as const
-
 /**
- * How a rival would answer an offer, read off its own rule (`offerOutlook`), with the part trust plays. Nothing for another player, who decides
- * for themselves, or for an offer that cannot be made.
+ * How a rival would answer an offer, read off its own rule (`offerOutlook`), with the part trust plays and, for a score (peace, a call to
+ * arms), its terms folded away. Nothing for an offer that cannot be made. Another player decides for themselves: nothing, or with
+ * `friend`, "Your friend decides". `blocked`: a yes that would come to nothing, said instead.
  */
-function OfferOdds({ target, draft, label }: { target: NationId; draft: ProposalDraft | null; label?: string }) {
+function OfferOdds({ target, draft, label, friend, blocked }: { target: NationId; draft: ProposalDraft | null; label?: string; friend?: boolean; blocked?: string | null }) {
   const view = usePlayerView()!
   const { game, player } = view
   const { map } = getWorld()
   const human = game.humans.includes(target) || !!game.nations[target]?.isPlayer
   // Keyed by the terms' text, so a new object with the same terms does not ask again.
   const key = draft ? JSON.stringify(draft) : ''
-  const o = useMemo(() => (human || !key ? null : offerOutlook(game, map, target, player.id, JSON.parse(key) as ProposalDraft)), [game, map, target, player.id, human, key])
+  const o = useMemo(() => (human || !key || blocked ? null : offerOutlook(game, map, target, player.id, JSON.parse(key) as ProposalDraft)), [game, map, target, player.id, human, key, blocked])
+  if (human) return friend && key ? <OddsLine label={label} text="Your friend decides" tone="none" kind="human" /> : null
+  if (blocked) return <OddsLine label={label} text="Comes to nothing" tone="bad" reason={blocked} quote={false} kind="unlikely" />
   if (!o) return null
-  const t = OUTLOOK_TEXT[o.outlook]
+  const v = verdictOf(o.outlook, o.chance, 'accept')
   // Untested trust weighs nothing: saying so on every line is noise.
   const lean = o.trust ? trustLean(o.trust) : null
-  const showLean = lean && lean.tone !== 'none'
+  return <OddsLine label={label} text={v.text} tone={v.tone} reason={o.reason} extra={lean && lean.tone !== 'none' ? lean : null} factors={o.factors} dice={o.dice} kind={o.outlook} />
+}
+
+/**
+ * Declaring war as a member of a bloc calls the others in when the month ends: who would join, read off the rules the rivals answer by.
+ * Folded to one line; nothing outside a bloc or when the target is in it.
+ */
+function BlocWarOdds({ target }: { target: NationId }) {
+  const { game, player } = usePlayerView()!
+  const { map } = getWorld()
+  const f = BLOC.on ? factionOf(game, player.id) : null
+  const rows = useMemo(() => (f && f.members.length > 1 && !f.members.includes(target) ? callOutlooks(game, map, f, player.id, target, true).members : []), [game, map, f, player.id, target])
+  if (!f || !rows.length) return null
+  const count = (k: string) => rows.filter((r) => r.o.outlook === k).length
+  const parts = [
+    { n: count('likely'), text: 'likely', tone: 'good' as const },
+    { n: count('unsure'), text: 'may', tone: 'warn' as const },
+    { n: count('unlikely'), text: 'unlikely', tone: 'bad' as const },
+  ].filter((p) => p.n > 0)
+  const friends = count('human')
   return (
-    <p className="text-[12px] leading-snug" data-offer-odds={o.outlook}>
-      {label && <span className="text-white/75">{label}: </span>}
-      <span className={TONE_TEXT[t.tone]}>{t.text}</span>
-      <span className="text-white/60"> · “{o.reason}”</span>
-      {showLean && <span className={TONE_TEXT[lean.tone]}> · {lean.text}</span>}
-    </p>
+    <details className="group/bloc text-[12px] leading-snug" data-testid="bloc-war-odds">
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <span className="text-white/75">If you go to war, {f.name}: </span>
+        {parts.map((p, i) => (
+          <span key={p.text} className={TONE_TEXT[p.tone]}>
+            {i > 0 ? ', ' : ''}
+            {p.n} {p.text}
+          </span>
+        ))}
+        {parts.length > 0 && <span className="text-white/75"> to join</span>}
+        {friends > 0 && <span className="text-white/60">{parts.length ? '; ' : ''}{friends === 1 ? 'your friend decides' : 'your friends decide'}</span>}
+        <span className="text-white/45 group-open/bloc:hidden"> · who ▾</span>
+        <span className="text-white/45 hidden group-open/bloc:inline"> · ▴</span>
+      </summary>
+      <div className="mt-1 ml-3">
+        <CallOddsList g={game} map={map} f={f} by={player.id} target={target} opening />
+      </div>
+    </details>
   )
 }
 
@@ -432,6 +468,7 @@ function PeaceComposer({ target }: { target: NationId }) {
           </span>
         </label>
       )}
+      <OfferOdds target={target} draft={{ kind: 'peace', terms }} friend />
       <OrderButton
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
         label={live.length === 0 && reparations === 0 && !puppet && !territory && !terms.liberate && !terms.general ? 'Offer peace with no terms' : 'Send terms'}
@@ -655,6 +692,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
           </>
         )}
       </div>
+      {!war && !allied && <BlocWarOdds target={id} />}
       {!war && !allied && (
         <div ref={treatyRef} className={`space-y-1.5 ${compose === 'treaty' ? 'rounded-lg ring-1 ring-[#0a84ff]/70 p-2' : ''}`} data-compose-part="treaty">
         <div className="flex flex-wrap gap-1.5">
@@ -704,15 +742,20 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
         </div>
       )}
       {callable.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap gap-1.5">
+            {callable.map((e) => (
+              <OrderButton
+                key={e}
+                order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'callToArms', enemy: e } }}
+                label={`Call into the war with ${game.nations[e].name}`}
+                cost={`${PROPOSAL_COSTS.callToArms} influence`}
+                tone="btn-magenta"
+              />
+            ))}
+          </div>
           {callable.map((e) => (
-            <OrderButton
-              key={e}
-              order={{ type: 'propose', nationId: player.id, target: id, proposal: { kind: 'callToArms', enemy: e } }}
-              label={`Call into the war with ${game.nations[e].name}`}
-              cost={`${PROPOSAL_COSTS.callToArms} influence`}
-              tone="btn-magenta"
-            />
+            <OfferOdds key={e} target={id} draft={{ kind: 'callToArms', enemy: e }} label={callable.length > 1 ? `Against ${game.nations[e].name}` : 'Call to arms'} friend blocked={joinWarBlocked(game, id, e)} />
           ))}
         </div>
       )}
