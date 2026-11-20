@@ -102,6 +102,15 @@ describe('rivals offer ceasefires and queue interceptor rounds, within bounds', 
         // Lines: a batch a month at most per nation, and never more than the queue holds.
         expect(r.lines).toBeLessThanOrEqual(r.lineNations * 24)
         expect(r.rounds).toBeLessThanOrEqual(r.lines * 20)
+        // At most an offer a month from each rival, and to the player well under one a month in all.
+        expect(r.toPlayer).toBeLessThanOrEqual(12)
+        if (stress) {
+          // Programs with a plant and works, their stores emptied, at war with armed enemies: some queue rounds.
+          expect(r.lines).toBeGreaterThanOrEqual(1)
+        } else {
+          // No rival program has a plant and works within two years of a natural world.
+          expect(r.lines).toBe(0)
+        }
       }, 900_000)
     }
   }
