@@ -68,5 +68,5 @@ New pins: Normal world `48f1aff68a4fa`, Hard world `144ef130064a5b`, small war `
 
 - A real two-browser online game was not played: online safety rests on every change being a normal order (`civics`) checked by `validateOrder` on whoever applies it, candidates derived from the seed (no client-only state), the turn/live parity test and the fuzz.
 - Balance is measured on one nation for two years; the numbers are first-pass and all in `data/civics.ts`.
-- The desk's stability line is not under the care ceiling (it is its own line, "Cabinet and reforms", bounded by the group cap and the small per-minister numbers: at most about +12 with an ideal cabinet, a Vast service, the calmest reforms and every group at its cap).
+- The desk's stability line ("Cabinet and reforms", up to about +12 with an ideal cabinet, a Vast service, the calmest reforms and every group at its cap) now shares the one soft ceiling on care (18) with programs and projects when it adds: `deskStability` in `engine/society.ts`, behind `SOCIAL_RULES.deskShares`; what it takes away counts in full. Golden proof in docs/UX_AUDIT_NATION.md.
 - The candidate draw changes only once a year; a ministry emptied by a scandal may have only weak candidates until then.
