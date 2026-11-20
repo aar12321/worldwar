@@ -1,4 +1,5 @@
 import { GROUP_SPECS, GROUPS_RULES, PIPELINE } from '../../../data/civics'
+import { SOCIAL_RULES } from '../../../data/society'
 import { civicsEffects, groupReport } from '../../../engine/civics'
 import { usePlayerView } from '../../hooks'
 import { Bar } from '../../kit'
@@ -6,9 +7,11 @@ import { Card, Line } from '../parts'
 
 /** How business, labour, the military, tradition and the provinces feel, why, and what it does. */
 export function GroupsSection() {
-  const { game, player } = usePlayerView()!
+  const { game, player, econ } = usePlayerView()!
   const { groups, approval } = groupReport(game, player)
   const eff = civicsEffects(player)
+  // The line the economy adds (economy.ts, deskStability): the desk's gain shares the ceiling on care.
+  const counted = econ.stabilityParts.find((p) => p.label === 'Cabinet and reforms')?.value ?? null
   return (
     <>
       <Card
@@ -42,8 +45,11 @@ export function GroupsSection() {
         <div className="text-[14px] space-y-1">
           {eff.parts.length ? eff.parts.map((p) => <Line key={p.label} k={p.label} v={`${p.value >= 0 ? '+' : ''}${p.value.toFixed(1)}`} warn={p.value < 0} />) : <p className="text-white/60">Nothing yet: appoint ministers or pass a reform.</p>}
           {eff.parts.length > 0 && <Line k="Total" v={`${eff.stability >= 0 ? '+' : ''}${eff.stability.toFixed(1)}`} strong />}
+          {counted !== null && Math.abs(counted - eff.stability) >= 0.05 && <Line k="Counted, under the ceiling on care" v={`${counted >= 0 ? '+' : ''}${counted.toFixed(1)}`} />}
         </div>
-        <p className="text-[12px] text-white/55">A group's feeling from choices counts up to {GROUPS_RULES.choiceCap} points either way.</p>
+        <p className="text-[12px] text-white/55">
+          A group's feeling from choices counts up to {GROUPS_RULES.choiceCap} points either way. What the desk adds shares one ceiling of {SOCIAL_RULES.stabilityCap} points with programs and projects for the people, so on top of generous care it adds less; what it takes away counts in full.
+        </p>
       </Card>
     </>
   )

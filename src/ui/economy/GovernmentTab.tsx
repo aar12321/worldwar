@@ -87,6 +87,7 @@ function CommandSection({ go }: { go: (s: Section) => void }) {
   const rows = talentReport(player, econ)
   const { groups } = groupReport(game, player)
   const eff = civicsEffects(player)
+  const desk = econ.stabilityParts.find((p) => p.label === 'Cabinet and reforms')?.value ?? eff.stability
   const election = monthsToElection(game, player.id)
   const salaries = -(econ.lines.find((l) => l.label === 'Cabinet salaries')?.amount ?? 0)
   const open = (s: Section, label: string) => (
@@ -109,8 +110,9 @@ function CommandSection({ go }: { go: (s: Section) => void }) {
           })}
         </div>
         <div className="text-[13px] text-white/70">
-          Stability from the desk {eff.stability >= 0 ? '+' : ''}
-          {eff.stability.toFixed(1)} · salaries {salaries.toFixed(1)} a month
+          Stability from the desk {desk >= 0 ? '+' : ''}
+          {desk.toFixed(1)}
+          {Math.abs(desk - eff.stability) >= 0.05 ? ` (${eff.stability.toFixed(1)} before the ceiling on care)` : ''} · salaries {salaries.toFixed(1)} a month
         </div>
       </Card>
       <Card title="Laws and elections" hint={`${GOVERNMENTS[player.government].name}. ${election !== null ? 'Pensions and housing lower the bar to win an election; unemployment raises it.' : 'It holds no elections.'}`} right={open('constitution', 'Laws')}>
