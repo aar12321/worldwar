@@ -3,7 +3,7 @@ import { PUPPET } from '../data/puppets'
 import { TERRITORY } from '../data/territories'
 import { COUNCIL, EMPIRE_RULES, OCCUPATION, RESOLUTIONS, TIERS, tierSpec } from '../data/empire'
 import { projectedVote } from '../engine/council'
-import { capitalDistance, capitalsOf, empireCount, tierOf } from '../engine/empire'
+import { capitalDistance, capitalsOf, empireCount, tierFor, tierOf } from '../engine/empire'
 import { computeEconomy } from '../engine/economy'
 import type { OccupationPolicy, ResolutionKind } from '../engine/types'
 import { getWorld } from '../map/world'
@@ -88,11 +88,13 @@ function Overview() {
   const count = empireCount(game, player.id)
   const spec = tierOf(player)
   const next = TIERS.find((t) => t.id === spec.id + 1)
+  // The tier is set at the month end (updateTiers): land taken this month counts from then.
+  const coming = tierFor(count, player.tier ?? 1)
   const now = unlocks(spec)
   const after = next ? unlocks(next) : null
   return (
     <section className="econ-grid">
-      <Card title={spec.name} hint={next ? `${next.countries - count} more ${next.countries - count === 1 ? 'country' : 'countries'} to become a ${next.name}. Your own countries count in full, a territory's count ${TERRITORY.countWeight}, and a puppet's count ${PUPPET.countLow} to ${PUPPET.countHigh} as its loyalty runs from low to high.` : 'You rule the world as no one has before.'}>
+      <Card title={spec.name} hint={next ? `${coming > spec.id ? `You count ${count} countries: from the month end you are a ${tierSpec(coming).name}.` : `${next.countries - count} more ${next.countries - count === 1 ? 'country' : 'countries'} to become a ${next.name}.`} Your own countries count in full, a territory's count ${TERRITORY.countWeight}, and a puppet's count ${PUPPET.countLow} to ${PUPPET.countHigh} as its loyalty runs from low to high.` : 'You rule the world as no one has before.'}>
         {next && <Bar value={Math.min(1, (count - spec.countries) / Math.max(1, next.countries - spec.countries))} color="#0a84ff" label="Progress to the next tier" />}
         <div className="flex flex-wrap gap-2 text-[13px]">
           {TIERS.map((t) => (

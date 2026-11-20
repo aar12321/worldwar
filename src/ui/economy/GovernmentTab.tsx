@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { ELECTION, GOVERNMENTS, GOVERNMENT_TYPES, REFORM } from '../../data/government'
 import { EMPIRE_RULES } from '../../data/empire'
 import { LAW_SPECS } from '../../data/unitTypes'
@@ -19,7 +18,7 @@ import { JobsSection } from './government/Jobs'
 import { PoliciesSection } from './government/Policies'
 import { TalentSection } from './government/Talent'
 import { millions, people } from './government/words'
-import { govSection, type GovSection } from './government/section'
+import { useGame, type GovSection } from '../../store'
 
 type Section = GovSection
 
@@ -41,11 +40,8 @@ const SECTIONS: [Section, string][] = [
 export function GovernmentTab() {
   const view = usePlayerView()!
   const { game, player, econ } = view
-  const [section, setSectionState] = useState<Section>(govSection.current)
-  const setSection = (s: Section) => {
-    govSection.current = s
-    setSectionState(s)
-  }
+  const section = useGame((s) => s.govSection)
+  const setSection = useGame((s) => s.setGovSection)
   const filled = MINISTRIES.filter((id) => player.civics?.cabinet[id]).length
   const { approval } = groupReport(game, player)
   const job = employmentOf(player, econ)
@@ -91,6 +87,7 @@ function CommandSection({ go }: { go: (s: Section) => void }) {
   const rows = talentReport(player, econ)
   const { groups } = groupReport(game, player)
   const eff = civicsEffects(player)
+  const desk = econ.stabilityParts.find((p) => p.label === 'Cabinet and reforms')?.value ?? eff.stability
   const election = monthsToElection(game, player.id)
   const salaries = -(econ.lines.find((l) => l.label === 'Cabinet salaries')?.amount ?? 0)
   const open = (s: Section, label: string) => (
@@ -113,8 +110,9 @@ function CommandSection({ go }: { go: (s: Section) => void }) {
           })}
         </div>
         <div className="text-[13px] text-white/70">
-          Stability from the desk {eff.stability >= 0 ? '+' : ''}
-          {eff.stability.toFixed(1)} · salaries {salaries.toFixed(1)} a month
+          Stability from the desk {desk >= 0 ? '+' : ''}
+          {desk.toFixed(1)}
+          {Math.abs(desk - eff.stability) >= 0.05 ? ` (${eff.stability.toFixed(1)} before the ceiling on care)` : ''} · salaries {salaries.toFixed(1)} a month
         </div>
       </Card>
       <Card title="Laws and elections" hint={`${GOVERNMENTS[player.government].name}. ${election !== null ? 'Pensions and housing lower the bar to win an election; unemployment raises it.' : 'It holds no elections.'}`} right={open('constitution', 'Laws')}>

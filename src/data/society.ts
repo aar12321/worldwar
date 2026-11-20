@@ -71,6 +71,12 @@ export const SOCIAL_RULES = {
   cutStability: 2,
   /** The most stability all programs and projects can add together: 18 at the very most, approached but never reached. */
   stabilityCap: 18,
+  /**
+   * The government desk's stability (ministers, civil service, reforms, the groups' feelings) shares that one ceiling when it adds:
+   * an ideal cabinet on top of full care programs could otherwise add about 12 more. What the desk takes away is never capped.
+   * Off, the desk's line is added on its own as it was (the golden proof switches it off).
+   */
+  deskShares: true,
   /** The most that programs, projects and campaigns together can take off hunger, plague and rebellion: a share of the trouble, never all of it. */
   shareCap: 0.9,
 }

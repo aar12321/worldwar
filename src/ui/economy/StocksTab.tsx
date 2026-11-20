@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { DIRECTIVES, SPECIALTY, STOCKS, TIERS } from '../../data/companies'
 import { SECTORS } from '../../data/business'
 import { companiesOf, describeDirective, directiveOf, homeOwner, portfolio, stake, stakeShare, strengthOf, tierOf, tradeValue } from '../../engine/stocks'
@@ -56,75 +57,9 @@ export function StocksTab() {
       {ids.length === 0 && (
         <Card title="Companies in your territory" hint="None of the countries you hold are developed enough to have a company. Take a developed country, and its companies come with it." />
       )}
-      {ids.map((id) => {
-        const info = st.meta[id]
-        const price = st.price[id]
-        const held = stake(game, player.id, id)
-        const share = stakeShare(game, player.id, id)
-        const tier = tierOf(share)
-        const strength = strengthOf(share)
-        const directive = directiveOf(game, id)
-        const change = pct(price, st.last[id])
-        const buyTo = (at: number) => Math.min(STOCKS.float - held, Math.ceil(at * STOCKS.float - 1e-9) - held)
-        return (
-          <Card
-            key={id}
-            title={info.name}
-            hint={`${SECTORS[info.sector].name} · based in ${info.country}`}
-            right={
-              <div className="text-right tabular-nums shrink-0">
-                <div className="text-[16px] font-semibold">{fmt(price, 2)}</div>
-                <div className={`text-[12px] ${change >= 0 ? 'text-[#6eeb8a]' : 'text-[#ff6961]'}`}>
-                  {change >= 0 ? '+' : ''}
-                  {change.toFixed(1)}%
-                </div>
-              </div>
-            }
-          >
-            <div className="text-[13px]">
-              You hold <strong>{(share * 100).toFixed(share < 0.1 && share > 0 ? 1 : 0)}%</strong> · {held} of {STOCKS.float} shares · worth {fmt(held * price, 0)}
-              {tier >= 0 && <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[12px]">{TIERS[tier].name}</span>}
-            </div>
-            <StakeBar share={share} />
-            <p className="text-[12px] text-white/65">{tier >= 0 ? TIERS[tier].blurb : `At ${Math.round(TIERS[0].at * 100)}% you are an investor; at ${Math.round(TIERS[1].at * 100)}% you get a board seat and a say.`}</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              {[50, 100].map((n) => (
-                <OrderButton key={n} order={{ type: 'buyShares', nationId: player.id, company: id, shares: n }} label={`Buy ${n / 10}%`} cost={fmt(tradeValue(game, id, n, 'buy'), 0)} />
-              ))}
-              {[1, 2].map((i) => {
-                const n = buyTo(TIERS[i].at)
-                return held / STOCKS.float >= TIERS[i].at || n < 1 ? null : (
-                  <OrderButton
-                    key={i}
-                    order={{ type: 'buyShares', nationId: player.id, company: id, shares: n }}
-                    label={i === 1 ? 'To a board seat' : 'To control'}
-                    cost={fmt(tradeValue(game, id, n, 'buy'), 0)}
-                    effect={`Buy ${n} shares to reach ${Math.round(TIERS[i].at * 100)}%.`}
-                  />
-                )
-              })}
-              {held > 0 && <OrderButton order={{ type: 'sellShares', nationId: player.id, company: id, shares: Math.max(1, Math.min(held, 100)) }} label={`Sell ${Math.min(held, 100) / 10}%`} cost={`+${fmt(tradeValue(game, id, Math.min(held, 100), 'sell'), 0)}`} tone="btn-quiet" />}
-              {held > 100 && <OrderButton order={{ type: 'sellShares', nationId: player.id, company: id, shares: held }} label="Sell all" cost={`+${fmt(tradeValue(game, id, held, 'sell'), 0)}`} tone="btn-quiet" />}
-            </div>
-            <div className="pt-1">
-              <div className="label mb-1.5">What it does {strength > 0 ? `(${strength === 0.5 ? 'half' : strength === 1 ? 'full' : 'a quarter more than full'} strength)` : ''}</div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                {DIRECTIVE_IDS.map((d) => (
-                  <OrderButton
-                    key={d}
-                    order={{ type: 'setDirective', nationId: player.id, company: id, directive: d }}
-                    label={d === 'focus' ? `Specialize: ${SPECIALTY[info.sector].name}` : DIRECTIVES[d].name}
-                    cost={directive === d && (strength > 0 || d === 'payout') ? 'in force' : undefined}
-                    effect={describeDirective(game, id, d, Math.max(share, TIERS[1].at))}
-                    className={directive === d && (strength > 0 || d === 'payout') ? 'outline outline-2 -outline-offset-2 outline-[#6eeb8a]' : ''}
-                  />
-                ))}
-              </div>
-              {strength <= 0 && held > 0 && <p className="text-[12px] text-white/60 mt-1.5">Until you hold {Math.round(TIERS[1].at * 100)}%, it just pays dividends.</p>}
-            </div>
-          </Card>
-        )
-      })}
+      {ids.map((id) => (
+        <CompanyCard key={id} id={id} />
+      ))}
       {abroad.length > 0 && (
         <details className="inset-card p-3.5">
           <summary className="cursor-pointer text-[15px] font-semibold">Companies in other countries ({abroad.length})</summary>
@@ -165,5 +100,95 @@ export function StocksTab() {
       )}
       <p className="text-[12px] text-white/55">All companies are made up. They only follow how their home countries do in this game.</p>
     </div>
+  )
+}
+
+/**
+ * One company you can buy. Closed, it is one line (name, your share, the price); open, the stake, the trades and the board's orders.
+ * Companies you hold a stake in start open, so a big empire's twenty companies do not each take a screen.
+ */
+function CompanyCard({ id }: { id: string }) {
+  const { game, player } = usePlayerView()!
+  const st = game.stocks
+  const [open, setOpen] = useState(() => stake(game, player.id, id) > 0)
+  const info = st.meta[id]
+  const price = st.price[id]
+  const held = stake(game, player.id, id)
+  const share = stakeShare(game, player.id, id)
+  const tier = tierOf(share)
+  const strength = strengthOf(share)
+  const directive = directiveOf(game, id)
+  const change = pct(price, st.last[id])
+  const buyTo = (at: number) => Math.min(STOCKS.float - held, Math.ceil(at * STOCKS.float - 1e-9) - held)
+  const pctHeld = (share * 100).toFixed(share < 0.1 && share > 0 ? 1 : 0)
+  return (
+    <section className="inset-card p-3.5 space-y-2.5">
+      <button className="w-full flex items-start justify-between gap-3 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="min-w-0">
+          <span className="block text-[16px] font-semibold tracking-tight">
+            <span className={`inline-block mr-1.5 text-white/50 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>
+              ›
+            </span>
+            {info.name}
+          </span>
+          <span className="block text-[13px] text-white/70 mt-0.5">
+            {SECTORS[info.sector].name} · based in {info.country}
+            {held > 0 ? ` · you hold ${pctHeld}%${tier >= 0 ? `, ${TIERS[tier].name.toLowerCase()}` : ''}` : ''}
+          </span>
+        </span>
+        <span className="text-right tabular-nums shrink-0">
+          <span className="block text-[16px] font-semibold">{fmt(price, 2)}</span>
+          <span className={`block text-[12px] ${change >= 0 ? 'text-[#6eeb8a]' : 'text-[#ff6961]'}`}>
+            {change >= 0 ? '+' : ''}
+            {change.toFixed(1)}%
+          </span>
+        </span>
+      </button>
+      {open && (
+        <>
+          <div className="text-[13px]">
+            You hold <strong>{pctHeld}%</strong> · {held} of {STOCKS.float} shares · worth {fmt(held * price, 0)}
+            {tier >= 0 && <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[12px]">{TIERS[tier].name}</span>}
+          </div>
+          <StakeBar share={share} />
+          <p className="text-[12px] text-white/65">{tier >= 0 ? TIERS[tier].blurb : `At ${Math.round(TIERS[0].at * 100)}% you are an investor; at ${Math.round(TIERS[1].at * 100)}% you get a board seat and a say.`}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            {[50, 100].map((n) => (
+              <OrderButton key={n} order={{ type: 'buyShares', nationId: player.id, company: id, shares: n }} label={`Buy ${n / 10}%`} cost={fmt(tradeValue(game, id, n, 'buy'), 0)} />
+            ))}
+            {[1, 2].map((i) => {
+              const n = buyTo(TIERS[i].at)
+              return held / STOCKS.float >= TIERS[i].at || n < 1 ? null : (
+                <OrderButton
+                  key={i}
+                  order={{ type: 'buyShares', nationId: player.id, company: id, shares: n }}
+                  label={i === 1 ? 'To a board seat' : 'To control'}
+                  cost={fmt(tradeValue(game, id, n, 'buy'), 0)}
+                  effect={`Buy ${n} shares to reach ${Math.round(TIERS[i].at * 100)}%.`}
+                />
+              )
+            })}
+            {held > 0 && <OrderButton order={{ type: 'sellShares', nationId: player.id, company: id, shares: Math.max(1, Math.min(held, 100)) }} label={`Sell ${Math.min(held, 100) / 10}%`} cost={`+${fmt(tradeValue(game, id, Math.min(held, 100), 'sell'), 0)}`} tone="btn-quiet" />}
+            {held > 100 && <OrderButton order={{ type: 'sellShares', nationId: player.id, company: id, shares: held }} label="Sell all" cost={`+${fmt(tradeValue(game, id, held, 'sell'), 0)}`} tone="btn-quiet" />}
+          </div>
+          <div className="pt-1">
+            <div className="label mb-1.5">What it does {strength > 0 ? `(${strength === 0.5 ? 'half' : strength === 1 ? 'full' : 'a quarter more than full'} strength)` : ''}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+              {DIRECTIVE_IDS.map((d) => (
+                <OrderButton
+                  key={d}
+                  order={{ type: 'setDirective', nationId: player.id, company: id, directive: d }}
+                  label={d === 'focus' ? `Specialize: ${SPECIALTY[info.sector].name}` : DIRECTIVES[d].name}
+                  cost={directive === d && (strength > 0 || d === 'payout') ? 'in force' : undefined}
+                  effect={describeDirective(game, id, d, Math.max(share, TIERS[1].at))}
+                  className={directive === d && (strength > 0 || d === 'payout') ? 'outline outline-2 -outline-offset-2 outline-[#6eeb8a]' : ''}
+                />
+              ))}
+            </div>
+            {strength <= 0 && held > 0 && <p className="text-[12px] text-white/60 mt-1.5">Until you hold {Math.round(TIERS[1].at * 100)}%, it just pays dividends.</p>}
+          </div>
+        </>
+      )}
+    </section>
   )
 }

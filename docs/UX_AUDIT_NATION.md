@@ -6,12 +6,16 @@ Military, Diplomacy, Bloc, the HUD, the rail and Help belong to another audit; R
 redesigned elsewhere and were not touched.
 
 Rule followed: consolidate, do not delete. Every control that was on a page is still in the game; where a number appeared in two
-places, one place keeps it and the other links there or keeps a single summary line. No engine rule changed, so the golden hashes
-did not move. The engine files touched are the advisor's *targets* (where a button goes) and its type, nothing it computes.
+places, one place keeps it and the other links there or keeps a single summary line. The first pass changed no engine rule (the
+engine files touched were the advisor's *targets* and its type). The second pass changed one rule, behind a flag and with a golden
+proof: the government desk's stability now shares the soft ceiling on care (below, "Second pass", item 5).
 
-Screenshots: `node scripts/nation-shots.mjs --out <dir> [--mode live] [--only economy-budget,tech]` opens Poland (seed 3), plays
-three months, binds a territory and a puppet so their tabs show, hides the globe, and saves the top and the whole page of every
-tab at 1440x900 and 390x844, printing each page's height.
+Screenshots: `node scripts/nation-shots.mjs --out <dir> [--mode live] [--only economy-budget,tech] [--empire] [--top]` opens Poland
+(seed 3), plays three months, binds a territory and a puppet so their tabs show, hides the globe, and saves the top and the whole
+page of every tab at 1440x900 and 390x844, printing each page's height. `--empire` makes it a large empire: eighteen nations nearby
+are conquered through the engine's own `transferRegion` (19 countries, half settled), a puppet and a territory are bound and a war
+with Russia starts, and the puppet's "Set it free" is opened, shot, confirmed and shot again (`free` in `--only`). `--top` skips
+the whole-page shots (they are what takes long on a loaded machine). Every HTTP response of 400 or more is printed with its URL.
 
 ## What was duplicated, and where it lives now
 
@@ -105,15 +109,54 @@ because they now lead with tiles or a link.
 - Tiles: Budget, Projects and Stocks use the kit's `Tiles compact` like People, Government and Bank.
 - Locked features say what opens them in one place per page, with the tier name and the number of countries.
 
+## Second pass: the known gaps
+
+Seen with `--empire` (19 countries, a puppet, a territory, at war) in turn and live mode, both sizes.
+
+1. **Country, Upgrades**: eight cards became one list, a row a building (name, level, what a level does, the price on the button;
+   the description is the row's tooltip). City cards lost the repeated "More workers, and a stronger focus" line (the section
+   says it). Phone page 2,142 to 1,897 px with the empire fold; the upgrades went from about 1,050 px to 560.
+2. **Country, a large empire**: the list of nineteen countries pushed the country's own page three screens down (paging does not
+   help, it loads more as it scrolls). A "Showing" picker switches the country in one tap, and the list (governors, settling,
+   filters) is a fold, open up to six countries. Desktop 2,000 to 828 px, phone 3,497 to 1,897.
+3. **Space timers**: Space does not use the projects' `projectSpeed`; it has its own pace, and the tab ignored it. Rocket
+   development runs at `rocketDevRate` (discoveries times engineers on staff against what the class asks, 30% at worst), rockets
+   on the line at `rocketBuildRate` (faster with discoveries), a lab bench at `benchRate` (lab level times scientist staffing:
+   the tab divided by the lab level only). Pads, labs, outposts, mines and flights move one month a month, as shown. The month end
+   now adds these functions (same sums; goldens unchanged), and the tab counts months with `monthsToFinish` (it adds the rate the
+   way the month end does, so it is exact) and shows money as the monthly bill times those months. `spaceTimers.test.ts` runs
+   the real month end and checks the shown months and total for each kind at several staffing levels.
+4. **Election advice**: the Government section is in the store (`govSection`), advice targets take `gov`, and
+   `openGovernment(section)` goes through `goTo`, so a link works even with the tab already open. The election card says "Open
+   Laws" and opens Government on Laws (`govLink.test.ts`, `advisor.test.ts`).
+5. **Stability: one ceiling** (engine, behind `SOCIAL_RULES.deskShares`). The desk's stability added on its own line, so an ideal
+   cabinet with reforms could add about +12 on top of care already near its soft cap of 18. Now `deskStability` puts what the desk
+   adds on top of programs and projects under the same `softCap`; what it takes away counts in full. The Government overview and
+   Groups show the counted value beside the raw one, and the People breakdown says the three share one ceiling
+   (`careCap.test.ts`). Goldens: Normal `66d50a51fed96`, Hard `2008f877453d` (the small war did not move); with the flag off
+   (`withoutDeskShare`, also inside `withoutDealings` and `withoutTies`, so every older layer test keeps its proof) the pins
+   before it return exactly: `a0f8d651bfe97`, `1879299a3721df`, `19d872c4a61078` on this branch, and after merging main's
+   dealings layer `a0f8d651bfe97`, `1909d086a0093`, `19d872c4a61078`.
+6. **The 403 on every page** was ours: the Inter font (`@fontsource-variable/inter/.../inter-latin-wght-normal.woff2`) requested
+   from `/@fs/home/user/worldwar/node_modules/...`. In a worktree whose `node_modules` links to the main checkout, the real path is
+   outside Vite's allowed root and Vite answered 403. `vite.config.ts` now allows the link's real folder. Not a proxy block.
+7. **Stocks with a big empire**: twenty full company cards (7,100 px on a desktop, 12,000 on a phone). Each company is one line
+   (name, sector, your share, price) that opens onto the stake, trades and board orders; companies you hold open by themselves.
+   2,170 px on both sizes.
+8. **Tier between a conquest and the month end**: the tier is set at the month end, so the Empire overview said "-15 more
+   countries to become a Regional power" and the Bank said "You hold 19 countries" beside "opens as a Regional power (4)". Both
+   now name the tier the month end brings; the Bank counts as the tier does (`empireCount`) and takes tier names and sizes from
+   `TIERS`.
+9. **Set it free**: the confirmation reads well at both sizes; after it, the undo toast said "Done: Set Slovakia free?". Confirm
+   buttons drop the question mark.
+10. **War-time Bank**: War bonds is its own card at war (sold so far, room left, one button); looked right at both sizes.
+
 ## Left for later (not changed)
 
-- **Country, Upgrades**: eight upgrade cards are tall on a phone (the effect text sits inside each button). A compact row per
-  building would halve it.
-- **Space**: rocket development, pad building and lab progress may also run at a speed other than one a month; not checked.
-- **Government sections** are kept in a module variable, not the store, so the advisor's election card opens the Overview
-  (which now shows the election tile), not Laws.
 - **Missile Program talent**: its engineers view is on the Military desk (another audit); it should link to Government, Talent
   the same way Space does.
 - **People tile "Out of work"** and Government's unemployment are the same number in two desks; kept, as a single tile.
 - **Empire World tiles** (world rate, world inflation) repeat the Bank tiles' subtitles; kept as world context.
 - The HUD's money breakdown (other audit) may want the Budget's grouping.
+- After a confirmed order two undo controls show at once: the toast's Undo and the floating Undo pill (HUD, other audit).
+- The empire list's filter and sort selects each take a full row on a phone (the shared `DataList`, used by other desks).

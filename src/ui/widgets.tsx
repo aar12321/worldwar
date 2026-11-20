@@ -248,7 +248,8 @@ export function ConfirmButton({
   skipAsking?: boolean
 }) {
   const askConfirm = useGame((s) => s.askConfirm)
-  const run = () => runWithUndo(title, onConfirm)
+  // The toast reads "Done: Set Slovakia free", not the question the dialog asked.
+  const run = () => runWithUndo(title.replace(/\?$/, ''), onConfirm)
   return (
     <button className={`btn ${danger ? 'btn-red' : 'btn-primary'} ${className}`} disabled={disabled} onClick={() => (skipAsking ? run() : askConfirm({ title, text, label: confirmLabel, danger, run }))}>
       {label}
