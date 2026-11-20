@@ -317,22 +317,25 @@ export function partnerWants(s: GameState, id: NationId): Need[] {
 // ---- the partner list ----------------------------------------------------------------------------------------------------
 
 /** Where a nation stands with you, for grouping the list: war and alliance first, then by opinion. */
-export type RelTier = 'war' | 'ally' | 'friendly' | 'neutral' | 'wary' | 'hostile'
+export type RelTier = 'war' | 'ally' | 'player' | 'friendly' | 'neutral' | 'wary' | 'hostile'
 
 export const TIER_TEXT: Record<RelTier, { name: string; blurb: string }> = {
   war: { name: 'At war', blurb: 'Make peace in Diplomacy.' },
   ally: { name: 'Allies', blurb: 'Your alliances.' },
+  player: { name: 'Players', blurb: 'Other people in this game. They hold no opinion of you: they decide for themselves.' },
   friendly: { name: 'Friendly', blurb: 'Opinion of you 5 or more.' },
   neutral: { name: 'Neutral', blurb: 'Neither warm nor cold.' },
   wary: { name: 'Wary', blurb: 'Opinion -5 to -24: they keep their distance.' },
   hostile: { name: 'Hostile', blurb: 'Opinion -25 or less: they would welcome your fall.' },
 }
 
-export const TIER_ORDER: RelTier[] = ['war', 'ally', 'friendly', 'neutral', 'wary', 'hostile']
+export const TIER_ORDER: RelTier[] = ['war', 'ally', 'player', 'friendly', 'neutral', 'wary', 'hostile']
 
-export function relTier(opinion: number, war: boolean, ally: boolean): RelTier {
+export function relTier(opinion: number, war: boolean, ally: boolean, human = false): RelTier {
   if (war) return 'war'
   if (ally) return 'ally'
+  // Another player holds no opinion: counting them as Neutral (opinion 0) misread the tiers.
+  if (human) return 'player'
   if (opinion >= 5) return 'friendly'
   if (opinion > -5) return 'neutral'
   if (opinion > -25) return 'wary'
@@ -398,7 +401,7 @@ export function partnerRows(s: GameState, map: WorldMap, me: NationId, ctx: Opin
       opinion,
       label: human ? 'Player' : opinionLabel(opinion),
       trend: human ? 0 : movement(s, n.id, me, neighbor).total,
-      tier: relTier(opinion, war, ally),
+      tier: relTier(opinion, war, ally, human),
       ally,
       pact: hasPact(s, me, n.id),
       trade: s.deals.some((d) => d.kind === 'trade' && ((d.from === me && d.to === n.id) || (d.to === me && d.from === n.id))),

@@ -6,7 +6,7 @@ import { ACT_GROUPS, ACTS, AID, FAVOUR_ASKS, PARTNER_PINS_KEY, RELATIONS, type A
 import { TECH_BY_ID } from '../data/techTree'
 import { isLive } from '../engine/calendar'
 import { factionOf } from '../engine/factions'
-import { enemiesOf, hasPact, isAllied, pairKey, turnDate } from '../engine/helpers'
+import { atWar, enemiesOf, hasPact, isAllied, pairKey, turnDate } from '../engine/helpers'
 import { showPower } from '../engine/intel'
 import { embassyOf, favoursOwed, plansBetween, programsBetween } from '../engine/relations'
 import { groupReasons, movement, partnerNeeds, partnerRows, partnerWants, previewRelate, relationHealth, TIER_ORDER, TIER_TEXT, topReasons, type PartnerRow, type RelTier } from '../engine/relationsView'
@@ -14,7 +14,7 @@ import { trustReport, type TrustReport } from '../engine/ties'
 import type { GameState, NationId, RelateAct, RelateAid, RelateOrder } from '../engine/types'
 import { canAttackRegion } from '../engine/warfare'
 import { getWorld } from '../map/world'
-import { useGame } from '../store'
+import { useGame, type DiploCompose } from '../store'
 import { usePlayerView } from './hooks'
 import { LocateButton } from './Locate'
 import { OrderButton, PanelShell, Tabs } from './panel'
@@ -30,7 +30,7 @@ const BAD = '#ff8a84'
 const opinionColor = (v: number) => (v >= 25 ? '#34d399' : v >= 5 ? '#a7f3d0' : v > -5 ? '#94a3b8' : v > -25 ? '#fbbf24' : '#fb7185')
 const trustColor = (v: number) => (v >= 57 ? '#34d399' : v >= 43 ? '#94a3b8' : v >= 25 ? '#fbbf24' : '#fb7185')
 const sign = (v: number, digits = 0) => `${v > 0 ? '+' : ''}${v.toFixed(digits)}`
-const TIER_COLOR: Record<RelTier, string> = { war: '#ff453a', ally: '#0a84ff', friendly: '#34d399', neutral: '#94a3b8', wary: '#fbbf24', hostile: '#fb7185' }
+const TIER_COLOR: Record<RelTier, string> = { war: '#ff453a', ally: '#0a84ff', player: '#64d2ff', friendly: '#34d399', neutral: '#94a3b8', wary: '#fbbf24', hostile: '#fb7185' }
 
 function loadPins(): string[] {
   try {
@@ -149,7 +149,6 @@ function GroupBox({ group, available, total, children, open }: { group: ActGroup
 /** Every relationship action for one nation, in groups, with what is open now counted, and the best few suggested first. */
 function Actions({ id, focusAct }: { id: NationId; focusAct: RelateAct | null }) {
   const view = usePlayerView()!
-  const openDiplomacy = useGame((s) => s.openDiplomacy)
   const { game, player } = view
   const me = player.id
   const them = game.nations[id]
@@ -339,12 +338,7 @@ function Actions({ id, focusAct }: { id: NationId; focusAct: RelateAct | null })
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-[13px] text-white/75 min-w-0">Trade deals, investment, loans, pacts and alliances are agreed in Diplomacy.</p>
-        <button className="btn" onClick={() => openDiplomacy(id)}>
-          Open in Diplomacy →
-        </button>
-      </div>
+      <DiplomacyLinks id={id} />
       {suggested.length > 0 && (
         <section className="space-y-2" aria-label="Suggested">
           <div className="label">Suggested now</div>
@@ -362,6 +356,38 @@ function Actions({ id, focusAct }: { id: NationId; focusAct: RelateAct | null })
           </GroupBox>
         ))}
       </section>
+    </div>
+  )
+}
+
+/**
+ * The ways into Diplomacy for one nation, each opening its own composer there: a trade deal, an investment, a loan, the treaties, or peace
+ * while at war (when the others cannot be made).
+ */
+function DiplomacyLinks({ id }: { id: NationId }) {
+  const view = usePlayerView()!
+  const openDiplomacy = useGame((s) => s.openDiplomacy)
+  const { game, player } = view
+  const war = atWar(game, player.id, id)
+  const allied = isAllied(game, player.id, id)
+  const links: [DiploCompose, string, string][] = war
+    ? [['peace', 'Negotiate peace →', 'Opens the peace composer in Diplomacy']]
+    : [
+        ['trade', 'Trade deal →', 'Opens the trade composer in Diplomacy'],
+        ['invest', 'Invest →', 'Opens investment in their business in Diplomacy'],
+        ['loan', 'Loan →', 'Opens the loan composer in Diplomacy'],
+        ...(!allied ? [['treaty', 'Pact or alliance →', 'Opens the treaties in Diplomacy, with how they would answer'] as [DiploCompose, string, string]] : []),
+      ]
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 space-y-2" data-diplomacy-links>
+      <p className="text-[13px] text-white/75">{war ? 'Peace is made in Diplomacy.' : 'Trade deals, investment, loans and treaties are agreed in Diplomacy.'}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {links.map(([c, label, title]) => (
+          <button key={c} className="btn px-3 py-1.5 text-[13px]" data-compose={c} title={title} onClick={() => openDiplomacy(id, { compose: c })}>
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -450,7 +476,10 @@ function PartnerCard({ id, pinned, togglePin, onBack }: { id: NationId; pinned: 
         )}
       </div>
       {human ? (
-        <p className="text-[13px] text-white/70">Another player runs this nation. They decide for themselves: send them an offer in Diplomacy.</p>
+        <>
+          <p className="text-[13px] text-white/70">Another player runs this nation. They hold no opinion of you and answer every offer themselves, on their own screen.</p>
+          <DiplomacyLinks id={id} />
+        </>
       ) : (
         <>
           <div className="rounded-xl border border-white/12 bg-white/5 p-3.5 space-y-3" data-headline>
@@ -599,9 +628,10 @@ function PartnerCard({ id, pinned, togglePin, onBack }: { id: NationId; pinned: 
 
 // ---- the list -------------------------------------------------------------------------------------------------------------
 
-type Filter = 'all' | 'pinned' | 'allies' | 'friendly' | 'neutral' | 'wary' | 'hostile' | 'war' | 'bloc' | 'trade' | 'neighbors'
+type Filter = 'all' | 'pinned' | 'players' | 'allies' | 'friendly' | 'neutral' | 'wary' | 'hostile' | 'war' | 'bloc' | 'trade' | 'neighbors'
 const FILTERS: [Filter, string][] = [
   ['all', 'All'],
+  ['players', 'Players'],
   ['allies', 'Allies'],
   ['friendly', 'Friendly'],
   ['neutral', 'Neutral'],
@@ -629,6 +659,8 @@ function matches(r: PartnerRow, f: Filter, pins: string[]): boolean {
   switch (f) {
     case 'pinned':
       return pins.includes(r.id)
+    case 'players':
+      return r.human
     case 'allies':
       return r.ally
     case 'friendly':
@@ -783,7 +815,7 @@ function Overview({ rows, game, setFilter, open, requests }: { rows: PartnerRow[
   return (
     <div className="space-y-4" data-overview>
       <div className="grid grid-cols-3 xl:grid-cols-6 gap-2">
-        {TIER_ORDER.map((t) => (
+        {TIER_ORDER.filter((t) => t !== 'player').map((t) => (
           <button key={t} className={`rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.07] p-3 text-left ${count(t) ? '' : 'opacity-45'}`} onClick={() => setFilter(t === 'ally' ? 'allies' : t)} disabled={!count(t)} aria-label={`${TIER_TEXT[t].name}: ${count(t)}. Show them`}>
             <div className="text-[22px] font-semibold tabular-nums" style={{ color: TIER_COLOR[t] }}>
               {count(t)}

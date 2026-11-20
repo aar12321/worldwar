@@ -7,7 +7,7 @@ import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { PRESENCE } from '../../data/presence'
-import { RELATIONS, TIES } from '../../data/relations'
+import { DEALINGS, RELATIONS, TIES } from '../../data/relations'
 import { MPROG } from '../../data/missileProgram'
 import { CIVICS } from '../../data/civics'
 import { BLOC } from '../../data/blocs'
@@ -59,9 +59,24 @@ function withoutTies<T>(fn: () => T): T {
   const on = TIES.on
   TIES.on = false
   try {
-    return fn()
+    return withoutDealings(fn)
   } finally {
     TIES.on = on
+  }
+}
+
+/**
+ * Runs `fn` with dealings (docs/RELATIONS_STATUS.md, "Gaps closed": moot offers withdrawn, trust in a rival's answer, investment thanks under
+ * the desk's caps, the long peace of old saves, ceasefires between players) switched off. Dealings came after ties, so `withoutTies` switches
+ * them off too, and every older layer's proof keeps running against its own world.
+ */
+function withoutDealings<T>(fn: () => T): T {
+  const on = DEALINGS.on
+  DEALINGS.on = false
+  try {
+    return fn()
+  } finally {
+    DEALINGS.on = on
   }
 }
 
@@ -304,7 +319,17 @@ describe('turn mode resolves exactly as pinned', () => {
     }))
   }, 400_000)
 
-  it('ties are the only thing that moved the current pins: with them switched off the pins from before them return', () => {
+  it('dealings are the only thing that moved the current pins: with them switched off the pins from before them return', () => {
+    withoutDealings(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('a0f8d651bfe97')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1879299a3721df')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('19d872c4a61078')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    })
+  }, 400_000)
+
+  it('ties are the only thing that moved the pins before dealings: with them switched off the pins from before them return', () => {
     withoutTies(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('10cf7a356e2bea')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('11d73d1672f834')
