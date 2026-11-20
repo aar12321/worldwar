@@ -97,7 +97,13 @@ await withGame({ nation: 'poland', seed: 3, mode, outDir }, async (g) => {
       }
     }
     await g.page.setViewportSize(VIEWPORTS.desktop)
+    // Errors as they come, so a run cut short still says what it saw.
+    if (g.errors.length > seen) console.log(`errors on ${name}:`, JSON.stringify(g.errors.slice(seen, seen + 5)))
+    seen = g.errors.length
   }
+  let seen = 0
+  if (g.errors.length) console.log('errors while loading:', JSON.stringify(g.errors.slice(0, 5)))
+  seen = g.errors.length
   for (const [desk, tab] of TARGETS) {
     const name = tab ? `${desk}-${tab}` : desk
     if (only && !only.includes(name) && !only.includes(desk)) continue

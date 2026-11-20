@@ -123,12 +123,17 @@ const EmpireRow = memo(function EmpireRow({ id, name, detail, selected, isCapita
   )
 })
 
+/** Up to this many countries, the empire list is open; past it, it folds so the country's own page is not pushed screens down. */
+const LIST_OPEN = 6
+
 /** Every country you hold, in one list: its trait, how settled it is, and a governor who develops it for you. */
 function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
   const view = usePlayerView()!
   const { game, player } = view
   const { map } = getWorld()
   const unsettled = owned.filter((id) => game.regions[id].integration < 1).length
+  const setPicked = useGame((s) => s.setEconomyRegion)
+  const byName = useMemo(() => [...owned].sort((a, b) => (a === player.capital ? -1 : b === player.capital ? 1 : map.regions[a].name.localeCompare(map.regions[b].name))), [owned, player.capital, map])
   // A country's trait, to filter by.
   const traits = useMemo(() => [...new Set(owned.map((id) => traitOf(id, map.regions[id])))].sort(), [owned, map])
   const filters = useMemo<FilterSpec<string>[]>(
@@ -158,27 +163,41 @@ function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
           {owned.length} countries{unsettled > 0 ? ` · ${unsettled} still settling` : ''}. A governor upgrades a country each month and never spends your last {EMPIRE.governorReserve} money.
         </span>
       </div>
+      {/* The country shown below, picked in one tap; the full list (governors, settling, filters) folds away once the empire is big. */}
+      <label className="flex items-center gap-2 text-[14px]">
+        <span className="text-white/75 shrink-0">Showing</span>
+        <select className="field min-w-0 flex-1 sm:flex-none px-2 py-1.5" aria-label="Country shown below" value={regionId} onChange={(e) => setPicked(e.target.value)}>
+          {byName.map((id) => (
+            <option key={id} value={id}>
+              {map.regions[id].name}
+              {id === player.capital ? ' (capital)' : game.regions[id].integration < 1 ? ' (settling)' : ''}
+            </option>
+          ))}
+        </select>
+      </label>
       <Fold title="Every country at once: upgrades and governors">
         <BulkUpgrade owned={owned} />
         <GovernorForAll owned={owned} />
       </Fold>
-      <DataList
-        rows={owned}
-        rowKey={(id) => id}
-        searchText={(id) => map.regions[id].name}
-        searchLabel="Search your countries"
-        label="Your countries"
-        noun={['country', 'countries']}
-        filters={filters}
-        sorts={sorts}
-        initialSort="population"
-        pageSize={8}
-        renderRow={(id) => {
-          const r = game.regions[id]
-          const detail = `${TRAITS[traitOf(id, map.regions[id])].name} · ${r.integration < 1 ? `settling, ${Math.round(integrationFactor(r) * 100)}% output` : 'fully settled'}${r.rebels > 0 ? ' · rebels' : ''}`
-          return <EmpireRow id={id} name={map.regions[id].name} detail={detail} selected={id === regionId} isCapital={id === player.capital} governor={(r.governor ?? 'off') as Governor} playerId={player.id} />
-        }}
-      />
+      <Fold title="All your countries: governors, settling, rebels" value={owned.length} open={owned.length <= LIST_OPEN}>
+        <DataList
+          rows={owned}
+          rowKey={(id) => id}
+          searchText={(id) => map.regions[id].name}
+          searchLabel="Search your countries"
+          label="Your countries"
+          noun={['country', 'countries']}
+          filters={filters}
+          sorts={sorts}
+          initialSort="population"
+          pageSize={30}
+          renderRow={(id) => {
+            const r = game.regions[id]
+            const detail = `${TRAITS[traitOf(id, map.regions[id])].name} · ${r.integration < 1 ? `settling, ${Math.round(integrationFactor(r) * 100)}% output` : 'fully settled'}${r.rebels > 0 ? ' · rebels' : ''}`
+            return <EmpireRow id={id} name={map.regions[id].name} detail={detail} selected={id === regionId} isCapital={id === player.capital} governor={(r.governor ?? 'off') as Governor} playerId={player.id} />
+          }}
+        />
+      </Fold>
     </div>
   )
 }
