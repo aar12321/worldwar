@@ -71,7 +71,7 @@ Reading: blocs form, take roles and meet objectives; no bloc runs away (3% of co
 
 ## Goldens
 
-Re-pinned (all three) for the rival-operation and missile-program gap fixes: with `withoutGaps` in `turnGolden.test.ts` (`BLOC.aiWars`, `BLOC.liveAnswers`, `MPROG.mediumFounds`, `MPROG.interceptorLine` off; 'the military gap fixes are the only thing that moved the current pins') the previous pins `a0f8d651bfe97`, `1879299a3721df` and `19d872c4a61078` return exactly, and `withoutTies` switches them off too, so every older layer keeps its proof.
+Re-pinned (the Normal and Hard bot worlds, now `1b571aa299e6eb` and `5ed9325cc7c45`; the small war did not move) for the rival-operation and missile-program gap fixes: with `withoutGaps` in `turnGolden.test.ts` (`BLOC.aiWars`, `BLOC.liveAnswers`, `MPROG.mediumFounds`, `MPROG.interceptorLine` off; 'the military gap fixes are the only thing that moved the current pins') the pins from just before them return exactly: `a0f8d651bfe97`, `19d872c4a61078`, and for the Hard world the dealings pin `1909d086a0093` (dealings, from the relations work, merged first). Before that merge the same proof gave `a0f8d651bfe97`, `1879299a3721df` and `19d872c4a61078`. `withoutDealings` and `withoutTies` switch the fixes off too, so every older layer keeps its proof.
 
 
 The Normal and Hard bot worlds were re-pinned (rivals now play blocs); the small war did not move. Switch-off proof: `withoutBlocs` in `turnGolden.test.ts` ('blocs are the only thing that moved the current pins') returns the previous pins `1f72167c03ee2` and `1719b377e4ad6a` exactly, and every earlier layer test also runs with blocs off.

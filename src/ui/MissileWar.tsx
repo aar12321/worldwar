@@ -4,6 +4,7 @@ import { MISSILES } from '../data/missiles'
 import { clockOf, isLive } from '../engine/calendar'
 import { freeUnits } from '../engine/deployment'
 import { enemiesOf } from '../engine/helpers'
+import { truceByOffer } from '../engine/diplomacy'
 import { launchSite, missileKinds, missileStock } from '../engine/missiles'
 import { raidForecast } from '../engine/missileForecast'
 import { batteryLevel, doctrineOf, interceptorCap, interceptorsOf, launchersSeen, ledgerOf, mobileLevel, radarLevel, siteDown, trucePair } from '../engine/missileWar'
@@ -421,14 +422,14 @@ function CeasefireCard({ game, player }: { game: GameState; player: Nation }) {
   return (
     <section className="inset-card p-3.5 space-y-2" aria-label="Ceasefire" data-ceasefire>
       <h3 className="text-[15px] font-semibold">Ceasefire</h3>
-      <p className="text-[12px] text-white/70">A missile ceasefire stops missiles, raids and warheads between two nations for {MW.truceMonths} months and cools the world. Armies keep fighting. Rivals accept when the tension is high or they are losing the exchange.</p>
+      <p className="text-[12px] text-white/70">A missile ceasefire stops missiles, raids and warheads between two nations for {MW.truceMonths} months and cools the world. Armies keep fighting. Rivals accept when the tension is high or they are losing the exchange; another player gets your offer in Diplomacy and answers it there.</p>
       <div className="flex flex-wrap gap-1.5">
         {foes.map((e) => {
           const until = trucePair(game, player.id, e)
           return until !== null ? (
             <OrderButton key={e} order={{ type: 'missileTruce', nationId: player.id, target: e, lift: true }} label={`End with ${nameOf(game, e)}`} effect="Costs reputation." />
           ) : (
-            <OrderButton key={e} order={{ type: 'missileTruce', nationId: player.id, target: e }} label={`Offer ${nameOf(game, e)}`} />
+            <OrderButton key={e} order={{ type: 'missileTruce', nationId: player.id, target: e }} label={`Offer ${nameOf(game, e)}`} effect={truceByOffer(game, { nationId: player.id, target: e }) ? `${nameOf(game, e)} is a player: they accept or decline it in Diplomacy` : undefined} />
           )
         })}
       </div>

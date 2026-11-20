@@ -30,7 +30,7 @@ import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion, addOpinionCapped } from '../ai/opinion'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { annexPuppet, applyDeals, breakPact, cancelDeal, declareWar, expireDiplomacy, forceDeal, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
+import { annexPuppet, applyDeals, breakPact, cancelDeal, declareWar, expireDiplomacy, forceDeal, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond, truceByOffer } from './diplomacy'
 import { addToSector, cleanInvestments, makeInvestment } from './business'
 import { applyEconomy, computeEconomy, nationWorkforce } from './economy'
 import { BANKING } from '../data/banking'
@@ -69,9 +69,10 @@ import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
 import { fadeWarScore } from './warscore'
 import { applyGovern, describePatch } from './puppets'
-import { applyRelate, runRelations } from './relations'
+import { applyRelate, runRelations, thankInvestment } from './relations'
 import { runTies } from './ties'
-import { TIES } from '../data/relations'
+import { dropMootOffers } from './offers'
+import { DEALINGS, RELATIONS, TIES } from '../data/relations'
 import { describeRelate } from './relationsView'
 import { annexTerritory, commanded, releaseTerritory, runTerritoryMonth } from './territories'
 
@@ -499,7 +500,8 @@ export function runMonth(s: GameState, map: WorldMap, orders: Order[]): MonthRes
   s.turn++
   // A live clock reads the 1st of the new month from here on, so the news below carries the right date.
   if (isLive(s)) s.day = 0
-  expireDiplomacy(s)
+  // Offers the month has overtaken are withdrawn once treaties have lapsed and before offers expire, so none expires as "ignored".
+  expireDiplomacy(s, DEALINGS.on ? () => dropMootOffers(s, map) : undefined)
   // Surprise decisions. A one-player game stops for its player. Online, each human gets their own and the month never waits.
   if (s.multiplayer) {
     if (s.turn >= s.nextEventTurn) scheduleHumanEvents(s, map, rng)
@@ -543,6 +545,8 @@ export function applyOrderNow(s: GameState, map: WorldMap, given: Order, pending
     return result ? { error: null, battle: result.report } : { error: 'The attack could not be made' }
   }
   executeOrder(s, map, o, rng)
+  // On a live clock an order can overtake an offer at once (an alliance makes a pact offer moot): it is withdrawn the same day.
+  if (DEALINGS.on && isLive(s)) dropMootOffers(s, map)
   return { error: null }
 }
 
@@ -681,7 +685,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       addToSector(target, o.sector, o.amount, nationWorkforce(s, map, o.target), INVEST.efficiency)
       makeInvestment(s, o.nationId, o.target, o.sector, o.amount)
       // With ties on, the money itself is a lasting line ('Invests in our economy', src/engine/ties.ts); the thanks for each new investment is small and capped.
-      if (TIES.on) addOpinionCapped(s, o.target, o.nationId, 'Invested in our businesses', TIES.invest.thanks, 0.2, TIES.invest.thanksCap)
+      // With DEALINGS on the thanks is also one of the desk's acts for its caps (the warmth factor and the 45 all acts can give): docs/RELATIONS_STATUS.md.
+      if (TIES.on && DEALINGS.on && RELATIONS.on) thankInvestment(s, o.target, o.nationId, o.amount)
+      else if (TIES.on) addOpinionCapped(s, o.target, o.nationId, 'Invested in our businesses', TIES.invest.thanks, 0.2, TIES.invest.thanksCap)
       else addOpinion(s, o.target, o.nationId, 'Invested in our businesses', 12, 0.2)
       if (n.isPlayer) addLog(s, 'economy', `You invested ${Math.round(o.amount)} in ${target.name}'s ${SECTORS[o.sector].name.toLowerCase()}. It pays dividends while you stay at peace.`, [o.nationId, o.target])
       break
@@ -862,7 +868,8 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       applyRecon(s, o)
       break
     case 'missileTruce':
-      applyTruce(s, o)
+      if (truceByOffer(s, o)) propose(s, map, o.nationId, o.target, { kind: 'truce' }, rng)
+      else applyTruce(s, o)
       break
     case 'startAircraftDev':
       applyStartAircraftDev(s, n, o)
