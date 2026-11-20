@@ -1,6 +1,7 @@
 import { UNIT_SPECS } from '../data/unitTypes'
 import { COMMITS, type Commit, type Stance } from '../data/war'
 import { compactUnits, SENDABLE, shareOfPool } from '../engine/deploy'
+import { presetUnits } from '../engine/commander'
 import { forecastMemo, type AttackPlan, type Forecast } from '../engine/forecast'
 import { formatDivisions, totalUnits } from '../engine/helpers'
 import type { GameState, NationId, Order, RegionId, UnitCounts, WorldMap } from '../engine/types'
@@ -18,11 +19,15 @@ export const choiceShare = (c: Choice): number => (c === 'none' ? 0 : COMMITS[c]
 
 /** The divisions a choice sends from `pool`. Warships stay home when the target is inland: they cannot fight there. */
 export function choiceUnits(pool: UnitCounts, c: Choice, coastal: boolean): UnitCounts {
-  const out = shareOfPool(pool, choiceShare(c))
+  if (c !== 'none') return presetUnits(pool, c, coastal)
+  const out = shareOfPool(pool, 0)
   if (!coastal) out.naval = 0
   out.missile = 0
   return out
 }
+
+/** A size and stance to open the War Room on (the target ranking's Open), taken once by the War Room for that target. */
+export const warRoomPick: { current: { target: RegionId; choice: Choice; stance: Stance } | null } = { current: null }
 
 /** The forecast's plan for a choice: named units, never missiles. */
 export function choicePlan(target: RegionId, stance: Stance, units: UnitCounts): AttackPlan {

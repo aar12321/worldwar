@@ -7,7 +7,7 @@ import { formatDivisions, totalUnits } from '../engine/helpers'
 import type { GameState, Nation, Order, RegionId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
-import { choiceName, choicePlan, choiceUnits, type Choice } from './attackChoices'
+import { choiceName, choicePlan, choiceUnits, warRoomPick, type Choice } from './attackChoices'
 import { DataList } from './DataList'
 import { NumberStepper } from './widgets'
 
@@ -116,7 +116,7 @@ export function CommandCenter({
   return (
     <section className="space-y-3" aria-label="AI Battle Command" data-level={level}>
       <p className="text-[12px] text-white/70">
-        Level 1 gives exact odds and picks the best of the four sizes. Level 2 also picks the stance and writes advice. Level 3 also ranks targets with the best force for each and can run a standing auto-command.
+        Level 1 gives exact odds and picks the best of the four sizes. Level 2 also picks the stance and writes advice. Ranking judges every target with the same four choices, so a row's odds are what the War Room shows for that size. Level 3 can also run a standing auto-command.
       </p>
 
       <div role="radiogroup" aria-label="Goal" className="grid grid-cols-2 gap-1.5">
@@ -211,7 +211,7 @@ export function CommandCenter({
                     {r.target === target && <span className="ml-1.5 text-[11px] text-white/55">(this one)</span>}
                   </div>
                   <div className="text-[12px] text-white/70">
-                    {r.ownerName !== r.name ? `${r.ownerName} · ` : ''}{STANCES[r.stance].name} · lose ~{formatDivisions(r.yourLosses)}, they lose ~{formatDivisions(r.theirLosses)}
+                    {r.ownerName !== r.name ? `${r.ownerName} · ` : ''}{choiceName(r.choice)}, {STANCES[r.stance].name} · lose ~{formatDivisions(r.yourLosses)}, they lose ~{formatDivisions(r.theirLosses)}
                   </div>
                   <div className="text-[12px] text-[#6eeb8a]">{r.gains.join(' · ')}</div>
                   {r.risks.length > 0 && <div className="text-[12px] text-[#ffd60a]">{r.risks.join(' · ')}</div>}
@@ -219,7 +219,13 @@ export function CommandCenter({
                 <div className="text-right shrink-0">
                   <div className={`text-[16px] font-semibold tabular-nums ${r.win >= 0.7 ? 'text-[#6eeb8a]' : r.win >= 0.4 ? 'text-[#ffd60a]' : 'text-[#ff8a84]'}`}>{pct(r.win)}</div>
                   {r.target !== target && (
-                    <button className="btn btn-quiet px-2.5 py-1 text-[12px]" onClick={() => open(r.target)}>
+                    <button
+                      className="btn btn-quiet px-2.5 py-1 text-[12px]"
+                      onClick={() => {
+                        warRoomPick.current = { target: r.target, choice: r.choice, stance: r.stance }
+                        open(r.target)
+                      }}
+                    >
                       Open
                     </button>
                   )}

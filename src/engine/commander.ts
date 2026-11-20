@@ -1,7 +1,7 @@
 import { COMMITS, STANCES, WAR, type Commit, type Stance } from '../data/war'
 import { UNIT_SPECS } from '../data/unitTypes'
-import { attackPool, cleanUnits, compactUnits, SENDABLE, worthOf } from './deploy'
-import { forecastPlan, type AttackPlan, type Forecast } from './forecast'
+import { attackPool, cleanUnits, compactUnits, SENDABLE, shareOfPool, worthOf } from './deploy'
+import { forecastMemo, forecastPlan, type AttackPlan, type Forecast } from './forecast'
 import { atWar, emptyUnits, formatDivisions, maxAttacks, totalUnits } from './helpers'
 import { missilesLeft } from './systems'
 import { validateOrder } from './orders'
@@ -216,6 +216,17 @@ export function compareStances(s: GameState, map: WorldMap, id: NationId, plan: 
 const PRESETS: Commit[] = ['probe', 'main', 'allin']
 
 /**
+ * The units one of the War Room's sizes sends from `pool` (ui/attackChoices.ts `choiceUnits` is this): a share of every kind that is
+ * free, warships left home when the target is inland, never missiles.
+ */
+export function presetUnits(pool: UnitCounts, c: Commit, coastal: boolean): UnitCounts {
+  const out = shareOfPool(pool, COMMITS[c].share)
+  if (!coastal) out.naval = 0
+  out.missile = 0
+  return out
+}
+
+/**
  * The best of the three preset sizes (proportional to what you have) and the stance, for an objective: what the War Room's planner
  * recommends at every level, since the War Room sends one of these. `named` gives the units a preset sends when the caller sends named
  * units (the War Room does), so the plan is judged on exactly the force that would go. With a share to keep at home (`keepHome`, or the
@@ -249,6 +260,8 @@ export interface TargetRow {
   line: number
   lineMax: number
   stance: Stance
+  /** The War Room size the odds are for (Probe, Main force or All in): opening the target with it shows the same number. */
+  choice: Commit
   /** What taking it is worth: its people, and a capital's weight. */
   value: number
   capital: boolean
@@ -258,30 +271,25 @@ export interface TargetRow {
   plan: PlannedAttack['plan'] | null
 }
 
-/** Every country you could attack this month, ranked by what a good attack on it would gain. Level 1 ranks with the usual size, level 3 with the best force. */
+/**
+ * Every country you could attack this month, ranked by what a good attack on it would gain. Each is judged with the War Room's own
+ * four choices: the best of Probe, Main force and All in for the goal (and, from level 2, the best stance), sent as the named units the
+ * War Room sends. The odds are the War Room's own forecast of that choice (`forecastMemo` on the same plan), so a row and the planner
+ * show the same number.
+ */
 export function rankTargets(s: GameState, map: WorldMap, id: NationId, o: PlanOptions, level: number): TargetRow[] {
   const rows: TargetRow[] = []
   const nation = s.nations[id]
+  const pool = attackPool(s, id, o.pending ?? [], !!o.live)
   for (const target of attackableRegions(s, map, id)) {
     const region = s.regions[target]
     const owner = s.nations[region.owner]
-    let forecast: Forecast | null = null
-    let plan: PlannedAttack['plan'] | null = null
-    let stance: Stance = 'assault'
-    if (level >= 3) {
-      const p = planAttack(s, map, id, target, { ...o, quick: true, stance: o.stance ?? 'assault' })
-      if (p) {
-        forecast = p.forecast
-        plan = p.plan
-        stance = p.plan.stance
-      }
-    } else {
-      const p = planPreset(s, map, id, target, { ...o, stance: level >= 2 ? o.stance : 'assault' })
-      if (p) {
-        forecast = p.forecast
-        stance = p.stance
-      }
-    }
+    const coastal = !!map.regions[target]?.coastal
+    const p = planPreset(s, map, id, target, { ...o, stance: level >= 2 ? o.stance : 'assault' }, (c) => presetUnits(pool, c, coastal))
+    if (!p) continue
+    const stance = p.stance
+    const plan = { target, stance, units: compactUnits(presetUnits(pool, p.commit, coastal)) }
+    const forecast = forecastMemo(s, map, id, plan)
     if (!forecast) continue
     const capital = owner.capital === target
     const value = region.population * (capital ? 1.5 : 1) + (capital ? 20 : 0)
@@ -310,6 +318,7 @@ export function rankTargets(s: GameState, map: WorldMap, id: NationId, o: PlanOp
       line: forecast.lineBefore,
       lineMax: forecast.lineMax,
       stance,
+      choice: p.commit,
       value,
       capital,
       score: ev,

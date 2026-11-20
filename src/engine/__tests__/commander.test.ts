@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { STANCES, type Stance } from '../../data/war'
 import { advise, capabilities, compareStances, DEFAULT_AUTO, incomingThreats, planAttack, planMonth, planPreset, rankTargets, whatIf } from '../commander'
 import { attackPool, cleanUnits, worthOf } from '../deploy'
-import { forecastPlan } from '../forecast'
+import { forecastMemo, forecastPlan } from '../forecast'
+import { choicePlan, choiceUnits } from '../../ui/attackChoices'
 import { totalUnits } from '../helpers'
 import { validateOrder } from '../orders'
 import type { GameState, UnitCounts, WorldMap } from '../types'
@@ -90,6 +91,30 @@ describe('AI Battle Command: the planner', () => {
     expect(rows.find((r) => r.target === 'r2')!.risks.join(' ')).toMatch(/mountain/)
     // Without the third level the ranking still works, with presets.
     expect(rankTargets(s, map, 'r0', { objective: 'win' }, 1)).toHaveLength(3)
+  })
+
+  it("the ranking's odds are the War Room planner's odds for the chosen size and stance, at every level", () => {
+    const { s, map } = hub()
+    const pool = attackPool(s, 'r0')
+    for (const level of [1, 2, 3]) {
+      for (const objective of ['win', 'losses', 'defend'] as const) {
+        const rows = rankTargets(s, map, 'r0', { objective }, level)
+        expect(rows.length).toBe(3)
+        for (const r of rows) {
+          expect(['probe', 'main', 'allin']).toContain(r.choice)
+          if (level < 2) expect(r.stance).toBe('assault')
+          const coastal = !!map.regions[r.target].coastal
+          // Exactly what the War Room computes for its big number: choicePlan(target, stance, choiceUnits(pool, choice, coastal)) through forecastMemo.
+          const units = choiceUnits(pool, r.choice, coastal)
+          const f = forecastMemo(s, map, 'r0', choicePlan(r.target, r.stance, units))!
+          expect(r.win).toBe(f.winChance)
+          expect(r.plan!.units).toEqual(choicePlan(r.target, r.stance, units).units)
+          // And the size is the planner's pick of the three for the goal.
+          const p = planPreset(s, map, 'r0', r.target, { objective, stance: level >= 2 ? undefined : 'assault' }, (c) => choiceUnits(pool, c, coastal))!
+          expect(r.choice).toBe(p.commit)
+        }
+      }
+    }
   })
 
   it('writes specific advice: waits when it cannot win, and warns of supply and home threats', () => {

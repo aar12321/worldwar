@@ -13,7 +13,7 @@ import type { NationId, RegionId } from '../engine/types'
 import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { CommandCenter } from './CommandCenter'
-import { choiceOrder, choicePlan, choiceUnits, suggestedChoice, type Choice } from './attackChoices'
+import { choiceOrder, choicePlan, choiceUnits, suggestedChoice, warRoomPick, type Choice } from './attackChoices'
 import { DeployPanel, type ChoiceOdds } from './DeployPanel'
 import { usePlayerView } from './hooks'
 import { MilitaryCompare } from './MilitaryCompare'
@@ -60,8 +60,14 @@ function WarRoomDialog({ target }: { target: RegionId }) {
   const pool = game && player ? attackPool(game, player.id, view?.orders ?? [], live) : null
   const { map } = getWorld()
   const coastal = !!map.regions[target]?.coastal
-  const [choice, setChoice] = useState<Choice>(() => (view && pool ? suggestedChoice(view.game, map, view.player.id, target, pool, coastal) : 'main'))
-  const [stance, setStance] = useState<Stance>('assault')
+  // Opened from the target ranking: the size and stance its odds were for, so the big number is the row's number.
+  const [pick] = useState(() => {
+    const p = warRoomPick.current?.target === target ? warRoomPick.current : null
+    warRoomPick.current = null
+    return p
+  })
+  const [choice, setChoice] = useState<Choice>(() => pick?.choice ?? (view && pool ? suggestedChoice(view.game, map, view.player.id, target, pool, coastal) : 'main'))
+  const [stance, setStance] = useState<Stance>(pick?.stance ?? 'assault')
   const [terr, setTerr] = useState<Record<NationId, Choice>>({})
   const sendPrefs = useTerritoryPrefs((s) => s.send)
   const level = player ? commandLevel(game!, player.id) : 0
