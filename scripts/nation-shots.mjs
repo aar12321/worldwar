@@ -3,7 +3,7 @@
 // (`desk-<name>.png`, `phone-<name>.png`) and the whole scrolled page (`deskfull-<name>.png`, `phonefull-<name>.png`), and
 // prints how tall each page is, so overload can be compared before and after.
 // The globe is hidden (the desks are what is being looked at, and drawing it in software is what makes screenshots time out
-// on a loaded machine). Usage: node scripts/nation-shots.mjs [--mode live] [--out dir] [--only economy-budget,tech] [--empire]
+// on a loaded machine). Usage: node scripts/nation-shots.mjs [--mode live] [--out dir] [--only economy-budget,tech] [--empire] [--top]
 // --empire: a large empire instead of Poland alone. Eighteen nations nearby are conquered through the engine's own transferRegion, a
 // puppet and a territory are bound, and a war with Russia is started, so the empire list and its fold, the war-time Bank cards and
 // the long Empire tables show; the puppet's "Set it free" confirmation is opened, shot, confirmed and the result shot too.
@@ -17,6 +17,8 @@ const mode = arg('--mode') ?? 'turns'
 const outDir = arg('--out')
 const only = arg('--only')?.split(',')
 const empire = args.includes('--empire')
+// --top: only the top of each page (heights are still printed); the whole-page shots are what take long on a loaded machine.
+const topOnly = args.includes('--top')
 
 const TARGETS = [
   ...['country', 'people', 'budget', 'bank', 'business', 'projects', 'space', 'market', 'stocks', 'government'].map((t) => ['economy', t]),
@@ -127,6 +129,7 @@ await withGame({ nation: 'poland', seed: 3, mode, outDir }, async (g) => {
       })
       if (!m) continue
       console.log(`${name} ${label}: ${m.scroll}px of content in a ${m.client}px window (${(m.scroll / m.client).toFixed(1)} screens)`)
+      if (topOnly) continue
       const extra = Math.min(5000, m.scroll - m.client)
       if (extra > 0) {
         await g.page.setViewportSize({ width: vp.width, height: vp.height + extra })

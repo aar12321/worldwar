@@ -1,7 +1,8 @@
 /// <reference types="vitest/config" />
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { existsSync, realpathSync } from 'node:fs'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
 
 /**
  * Test sets (see docs/SPEED.md). VITEST_SET=fast leaves out the long simulation and golden files, sims runs only those, golden only the pinned
@@ -53,6 +54,9 @@ export default defineConfig({
     },
   },
   server: {
+    // A worktree whose node_modules is a link to the main checkout's (the agents' worktrees) is served from outside its root, and
+    // Vite refused that path with 403 (the Inter font, once per page). Allow the real folder the link points to as well.
+    fs: { allow: [searchForWorkspaceRoot(process.cwd()), ...(existsSync('node_modules') ? [realpathSync('node_modules')] : [])] },
     host: '0.0.0.0',
     port: 5000,
     strictPort: true,
