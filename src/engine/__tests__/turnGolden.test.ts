@@ -9,6 +9,7 @@ import { lineMap, setMilitary, startState } from './fixtures'
 import { PRESENCE } from '../../data/presence'
 import { DEALINGS, RELATIONS, TIES } from '../../data/relations'
 import { MPROG } from '../../data/missileProgram'
+import { AI_TRUCE } from '../../data/missileWar'
 import { CIVICS } from '../../data/civics'
 import { BLOC } from '../../data/blocs'
 import { SOCIAL_RULES } from '../../data/society'
@@ -79,12 +80,30 @@ function withoutGaps<T>(fn: () => T): T {
   MPROG.mediumFounds = false
   MPROG.interceptorLine = false
   try {
-    return fn()
+    return withoutAiMissile(fn)
   } finally {
     BLOC.aiWars = was.aiWars
     BLOC.liveAnswers = was.liveAnswers
     MPROG.mediumFounds = was.mediumFounds
     MPROG.interceptorLine = was.interceptorLine
+  }
+}
+
+/**
+ * Runs `fn` with the rivals' two missile behaviours switched off (docs/MISSILE_PROGRAM_STATUS.md, "Rivals offer ceasefires" and "Rivals
+ * queue interceptor rounds"): ceasefire offers from rivals, with the answer rule they share (`AI_TRUCE.on`), and interceptor rounds on a
+ * rival's own production line (`MPROG.aiInterceptorLine`). They came after the military gap fixes, so `withoutGaps` (and through it
+ * `withoutDeskShare`, `withoutDealings`, `withoutTies` and every older layer) switches them off too.
+ */
+function withoutAiMissile<T>(fn: () => T): T {
+  const was = { truce: AI_TRUCE.on, line: MPROG.aiInterceptorLine }
+  AI_TRUCE.on = false
+  MPROG.aiInterceptorLine = false
+  try {
+    return fn()
+  } finally {
+    AI_TRUCE.on = was.truce
+    MPROG.aiInterceptorLine = was.line
   }
 }
 
@@ -226,6 +245,11 @@ function withoutPresence<T>(fn: () => T): T {
  * answer the next day, Medium rivals found missile programs more readily, and interceptor rounds go on the production line. Checked before
  * pinning: with those four switches off (`withoutGaps`, 'the military gap fixes are the only thing ...'; `withoutDeskShare`, `withoutDealings` and `withoutTies` now switch them off
  * too, so every older layer keeps its proof) the previous pins (those of the one ceiling on care: 66d50a51fed96, 2008f877453d, 19d872c4a61078) return exactly.
+ * Re-pinned (the small war only; its log, the Normal and the Hard bot worlds did not move) for the rivals' two missile behaviours
+ * (docs/MISSILE_PROGRAM_STATUS.md, "Rivals offer ceasefires" and "Rivals queue interceptor rounds"): a rival under fire with nothing to
+ * answer with offers the player a ceasefire in Diplomacy. Neither bot world fires enough missiles for an offer or a batch in its months.
+ * Checked before pinning: with both switches off (`withoutAiMissile`, 'rival ceasefire offers and interceptor lines are the only thing ...';
+ * `withoutGaps` and so every older layer now switches them off too) the previous pins (1ac09e89311c99, 11eb593efb5a5a, 19d872c4a61078) return exactly.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -313,7 +337,9 @@ describe('turn mode resolves exactly as pinned', () => {
     const { state, log } = smallWar()
     // Re-pinned for ties (the war is remembered for a long peace later): with them off 'd077c31c237c4' returns (see below). The log did not move.
     // The one ceiling on care and the desk did not move it (no desk in it adds stability on top of care in three months).
-    expect(hash(JSON.stringify(state))).toBe('19d872c4a61078')
+    // Re-pinned for rival ceasefire offers: a rival struck by the player's missiles, with none of its own, offers the player one. With them off
+    // '19d872c4a61078' returns (see below). The log did not move.
+    expect(hash(JSON.stringify(state))).toBe('33ccbe6b094dc')
     expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
   })
 
@@ -377,6 +403,16 @@ describe('turn mode resolves exactly as pinned', () => {
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
     }))
   }, 400_000)
+
+  it('rival ceasefire offers and interceptor lines are the only thing that moved the current pins: with them switched off the pins of the gap fixes return', () => {
+    withoutAiMissile(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('1ac09e89311c99')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('11eb593efb5a5a')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('19d872c4a61078')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    })
+  }, 360_000)
 
   it('the military gap fixes are the only thing that moved the current pins: with them switched off the pins of the one ceiling on care return', () => {
     withoutGaps(() => {
