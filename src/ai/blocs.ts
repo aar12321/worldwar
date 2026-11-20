@@ -2,18 +2,20 @@ import { BLOC, ROLES } from '../data/blocs'
 import { difficultyOf } from '../data/difficulty'
 import { FACTION } from '../data/factions'
 import { PERSONALITIES } from '../data/personalities'
-import { blocOf, blocPower, forecastOp, joinProblem, leaderOf, sendable } from '../engine/bloc'
+import { blocOf, blocPower, forecastOp, hasPerk, joinProblem, leaderOf, sendable } from '../engine/bloc'
 import { isLive } from '../engine/calendar'
 import { SENDABLE } from '../engine/deploy'
 import { factionName, factionOf } from '../engine/factions'
-import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey, regionsOf, totalUnits } from '../engine/helpers'
+import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, maxWars, pairKey, regionsOf, totalUnits } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { createRng } from '../engine/rng'
 import type { Rng } from '../engine/rng'
 import type { BlocRole, Faction, GameState, NationId, Order, RegionId, UnitCounts, WorldMap } from '../engine/types'
 import { canAttackRegion } from '../engine/warfare'
+import { joinWarBlocked } from '../engine/diplomacy'
 import { botAcceptsInvite } from './factions'
 import { opinionOf } from './opinion'
+import { diceChance, sumFactors, type DiceRule, type OddsFactor } from './diplomat'
 
 type TryAdd = (o: Order) => boolean
 
@@ -34,20 +36,101 @@ export function preferredRoles(s: GameState, id: NationId): BlocRole[] {
   return [...new Set(prefs)]
 }
 
-/** Whether a rival answers a call to arms: it dislikes the enemy, the bloc is stronger, and it is not busy with a war of its own. */
-export function botJoinsCall(s: GameState, map: WorldMap, id: NationId, by: NationId, target: NationId, rng: { range: (a: number, b: number) => number }): boolean {
+/** The dice a rival rolls on a bloc's call to arms: a draw from [-5, 5) added to its score, which must beat 2. */
+export const CALL_NOISE = 5
+const CALL_NEED = 2
+
+/**
+ * How a rival weighs a bloc's call to arms from `by` against `target`: a refusal it cannot get past (`no`), or its score before the dice
+ * and its terms. `botJoinsCall` and the Bloc desk's odds (`joinCallOutlook`) both read it, so they cannot disagree.
+ */
+export function joinCallRule(s: GameState, map: WorldMap, id: NationId, by: NationId, target: NationId): { no: string } | { dice: DiceRule; factors: OddsFactor[] } {
   const diff = difficultyOf(s.settings.difficulty)
-  if (joinProblem(s, id, target)) return false
-  if (s.humans.includes(target) && (s.turn < diff.playerGracePeriod || enemiesOf(s, target).length >= diff.maxWarsOnPlayer)) return false
+  const problem = joinProblem(s, id, target)
+  if (problem) return { no: problem }
+  if (s.humans.includes(target) && s.turn < diff.playerGracePeriod) return { no: `${s.nations[target]?.name ?? 'They'} is still in its first months` }
+  if (s.humans.includes(target) && enemiesOf(s, target).length >= diff.maxWarsOnPlayer) return { no: `${s.nations[target]?.name ?? 'They'} has enough enemies already` }
   const f = factionOf(s, id)
-  if (!f) return false
+  if (!f) return { no: 'Not in a bloc' }
   const persona = PERSONALITIES[s.nations[id].personality ?? 'honorable']
   const ratio = blocPower(s, f) / Math.max(1, militaryPower(s, target))
   const opT = opinionOf(s, map, id, target, { coalition: false })
   const opB = opinionOf(s, map, id, by, { coalition: false })
   const busy = enemiesOf(s, id).length
-  const score = -opT * 0.4 + opB * 0.15 + (persona.loyalty - 1) * 20 + (persona.aggression - 1) * 12 + (ratio - 1.3) * 10 - busy * 8 + rng.range(-5, 5)
-  return score > 2
+  const tName = s.nations[target]?.name ?? 'the enemy'
+  // The score is these added up in this order, then the dice.
+  const factors: OddsFactor[] = [
+    { label: `Their opinion of ${tName}`, value: -opT * 0.4 },
+    { label: `Their opinion of ${s.nations[by]?.name ?? 'the caller'}`, value: opB * 0.15 },
+    { label: 'Their loyalty', value: (persona.loyalty - 1) * 20 },
+    { label: 'Their appetite for war', value: (persona.aggression - 1) * 12 },
+    { label: `The bloc's strength against ${tName}`, value: (ratio - 1.3) * 10 },
+    { label: 'Wars of their own', value: -(busy * 8) },
+  ]
+  return { dice: { base: sumFactors(factors), need: CALL_NEED, spread: CALL_NOISE }, factors }
+}
+
+/** Whether a rival answers a call to arms: it dislikes the enemy, the bloc is stronger, and it is not busy with a war of its own. */
+export function botJoinsCall(s: GameState, map: WorldMap, id: NationId, by: NationId, target: NationId, rng: { range: (a: number, b: number) => number }): boolean {
+  const r = joinCallRule(s, map, id, by, target)
+  if ('no' in r) return false
+  return r.dice.base + rng.range(-CALL_NOISE, CALL_NOISE) > r.dice.need
+}
+
+/** How a member would answer a bloc's call to arms: as `OfferOutlook`, or `human` for a player, who decides. */
+export interface CallOutlook {
+  outlook: 'likely' | 'unsure' | 'unlikely' | 'human'
+  /** The chance it joins (0 for a player: not a guess). */
+  chance: number
+  /** The top reason: what stops it, or the term that weighs most toward its answer. */
+  reason: string
+  dice?: DiceRule
+  factors?: OddsFactor[]
+  /** Mutual Defence: it joins as the call goes out, before anyone else answers. */
+  atOnce?: true
+}
+
+/**
+ * Whether member `id` would join a call to arms from `by` against `target`, read off the rules that decide it: Mutual Defence (a rival
+ * joins as the call opens), a rival's monthly answer (`joinCallRule`, the same as `botJoinsCall`), and Easy rivals, who never answer.
+ * `opening`: the call is not made yet (a war about to start, or the leader about to call). As things stand now.
+ */
+export function joinCallOutlook(s: GameState, map: WorldMap, id: NationId, by: NationId, target: NationId, opening: boolean): CallOutlook {
+  if (s.humans.includes(id) || s.nations[id]?.isPlayer) return { outlook: 'human', chance: 0, reason: 'Your friend decides' }
+  const problem = joinProblem(s, id, target)
+  if (problem) return { outlook: 'unlikely', chance: 0, reason: problem }
+  // A yes that starts no war (`declareWar` keeps the enemy to its limit of wars) is no help.
+  const full = joinWarBlocked(s, id, target)
+  if (full) return { outlook: 'unlikely', chance: 0, reason: full }
+  const f = factionOf(s, id)
+  if (opening && hasPerk(f, 'defence')) return { outlook: 'likely', chance: 1, reason: 'Mutual Defence: they join as the call goes out', atOnce: true }
+  if (!BLOC.on || !difficultyOf(s.settings.difficulty).coalitions) return { outlook: 'unlikely', chance: 0, reason: 'Rivals on this difficulty stay out of bloc wars' }
+  const r = joinCallRule(s, map, id, by, target)
+  if ('no' in r) return { outlook: 'unlikely', chance: 0, reason: r.no }
+  const chance = diceChance(r.dice)
+  const outlook = chance >= 1 ? 'likely' : chance <= 0 ? 'unlikely' : 'unsure'
+  // The term that pulls hardest toward the answer: for it when it joins, against it otherwise (an even chance: against).
+  const toward = chance > 0.5 ? r.factors.reduce((a, b) => (b.value > a.value ? b : a)) : r.factors.reduce((a, b) => (b.value < a.value ? b : a))
+  const signed = `${toward.value >= 0 ? '+' : '−'}${Math.abs(Math.round(toward.value))}`
+  return { outlook, chance, reason: `${toward.label} (${signed})`, dice: r.dice, factors: r.factors }
+}
+
+/**
+ * Every member's answer to a call to arms from `by` against `target` (the caller and territories left out), with the enemy's room for wars:
+ * Mutual Defence members join first, in the bloc's order, while the enemy has room for another war (as `openCall` does); once it has none,
+ * nobody else can join. When more may join than it has room for, `room` says so (the first to answer go to war).
+ */
+export function callOutlooks(s: GameState, map: WorldMap, f: Faction, by: NationId, target: NationId, opening: boolean): { members: { id: NationId; o: CallOutlook }[]; room: number } {
+  let room = maxWars(s, target) - enemiesOf(s, target).length
+  const fullText = `${s.nations[target]?.name ?? 'The enemy'} is fighting all the wars it can, so nobody more can join`
+  const members = f.members.filter((m) => m !== by && s.nations[m]?.alive && !s.nations[m].territoryOf).map((id) => ({ id, o: joinCallOutlook(s, map, id, by, target, opening) }))
+  for (const m of members) {
+    if (!m.o.atOnce) continue
+    if (room > 0) room--
+    else m.o = { outlook: 'unlikely', chance: 0, reason: fullText }
+  }
+  if (room <= 0) for (const m of members) if (!m.o.atOnce && (m.o.outlook === 'likely' || m.o.outlook === 'unsure')) m.o = { outlook: 'unlikely', chance: 0, reason: fullText }
+  return { members, room }
 }
 
 /** A pledge for an operation: a share of what the rival can send, kept to tenths of a division. */

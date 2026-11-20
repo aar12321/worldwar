@@ -94,11 +94,20 @@ export function releasePuppet(s: GameState, master: NationId, puppet: NationId) 
   addLog(s, 'diplomacy', `${name(s, master)} set ${name(s, puppet)} free.`, [master, puppet])
 }
 
+/**
+ * Why `a` cannot join a war on `b` beside someone (a call to arms, a bloc's call), or null: nobody fights more than MAX_WARS wars at once,
+ * and allies who are already stretched stay out. A yes then starts no war.
+ */
+export function joinWarBlocked(s: GameState, a: NationId, b: NationId): string | null {
+  if (enemiesOf(s, a).length >= maxWars(s, a)) return `${name(s, a)} is fighting all the wars it can`
+  if (enemiesOf(s, b).length >= maxWars(s, b)) return `${name(s, b)} is fighting all the wars it can, so nobody more can join`
+  return null
+}
+
 export function declareWar(s: GameState, map: WorldMap, a: NationId, b: NationId, rng: Rng, callAllies = true) {
   const key = pairKey(a, b)
   if (s.wars.includes(key)) return
-  // Nobody fights more than MAX_WARS wars at once. Allies who are already stretched stay out.
-  if (!callAllies && (enemiesOf(s, a).length >= maxWars(s, a) || enemiesOf(s, b).length >= maxWars(s, b))) return
+  if (!callAllies && joinWarBlocked(s, a, b)) return
   // A war with a reason is a legitimate act. A war without one is aggression, and the world remembers it.
   const justified = !callAllies || hasCasusBelli(s, a, b)
   // A war begun under "Free X from Y" is remembered: it gives the right to free X at the peace table.

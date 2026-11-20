@@ -9,7 +9,7 @@ import { computeEconomy, militaryPower, type EconomyReport } from '../engine/eco
 import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey } from '../engine/helpers'
 import type { Rng } from '../engine/rng'
 import { bundleEmpty, bundleEntries, marketPrices, stockOf, type MarketPrices } from '../engine/trade'
-import type { GameState, NationId, Proposal, ProposalDraft, ResourceBundle, TradeResource, WorldMap } from '../engine/types'
+import type { GameState, NationId, PeaceTerms, Proposal, ProposalDraft, ResourceBundle, TradeResource, WorldMap } from '../engine/types'
 import { netWarScore, termsCost } from '../engine/warscore'
 import { coalitionActive, nationNeighbors, opinionOf } from './opinion'
 import { DEALINGS } from '../data/relations'
@@ -58,15 +58,96 @@ export const TRADE_RESERVE: Record<TradeResource, number> = { capital: 25, food:
 /** A rival gives itself up as a territory only when the war has gone this far against it: well past the point where it would take a puppet's chains. */
 export const TERRITORY_AI_ACCEPT = 16
 
+/** The dice every answer rolls: a draw spread evenly from -NOISE up to (not quite) +NOISE, added to the score. */
+export const NOISE = 6
+
+/**
+ * A decision made on a roll of the dice: yes exactly when `base` plus a draw spread evenly over [-spread, spread) is above `need`.
+ * The answers that read their score this way (peace, a call to arms, a bloc's call) return it, so the screens can give the real chance.
+ */
+export interface DiceRule {
+  base: number
+  need: number
+  spread: number
+}
+
+/** The chance a dice rule says yes: 1 when it does even on the worst draw, 0 when not even on the best, otherwise the share of draws that do. */
+export function diceChance(r: DiceRule): number {
+  if (r.base - r.spread > r.need) return 1
+  if (r.base + r.spread <= r.need) return 0
+  return Math.min(1, Math.max(0, (r.base + r.spread - r.need) / (2 * r.spread)))
+}
+
+/** One term of a score, for the details on the screens. */
+export interface OddsFactor {
+  label: string
+  value: number
+}
+
+/** A score from its terms, added in order from the first (exactly as the rule always added them). */
+export const sumFactors = (fs: OddsFactor[]): number => fs.reduce((sum, f) => sum + f.value, 0)
+
 export interface Verdict {
   accept: boolean
   reason: string
   opinion: number
   /** Their trust in the one proposing, when it was weighed (`DEALINGS.on`, a treaty, a trade deal or a loan). */
   trust?: TrustReport
+  /** For an answer that rolls dice on a score: the score before the dice and what it must beat. */
+  dice?: DiceRule
+  /** The terms of that score, in the order they are added. */
+  factors?: OddsFactor[]
 }
 
 const withOpinion = (reason: string, op: number) => (Math.abs(op) >= 20 ? `${reason} (opinion ${op > 0 ? '+' : ''}${op})` : reason)
+
+/**
+ * How `botId` weighs peace terms from `from`: the score before the dice, what it must beat (more for a puppet, a territory or a freed
+ * puppet) and the answer for a score. `evaluateProposal` and the screens' outlook both read it, so they cannot disagree.
+ */
+export function peaceRule(s: GameState, map: WorldMap, botId: NationId, from: NationId, terms: PeaceTerms, op: number, ratio: number) {
+  const me = s.nations[botId]
+  const net = netWarScore(s, from, botId)
+  const { demand, concession } = termsCost(s, map, terms, from, botId)
+  const started = s.warStarted[pairKey(from, botId)] ?? s.turn
+  const fresh = s.turn - started < 3
+  const bias = { expansionist: -12, opportunist: -4, turtle: 10, trader: 8, honorable: 0 }[me.personality ?? 'honorable']
+  // A general peace also stops the wars its friends are winning, so it is a harder sell.
+  const others = terms.general ? generalPeaceTies(s, from, botId).length : 0
+  // The score is these added up in this order, then the dice.
+  const factors: OddsFactor[] = [
+    { label: 'War weariness', value: me.warWeariness * 1.1 },
+    { label: 'Your strength against theirs', value: (ratio - 1) * 25 },
+    { label: 'War score', value: net * 0.6 },
+    { label: 'What you give', value: concession },
+    { label: 'What you demand', value: -(demand * 0.8) },
+    { label: 'Their opinion of you', value: op * 0.15 },
+    { label: `Temperament (${me.personality ?? 'honorable'})`, value: bias },
+    { label: 'The war has only just begun', value: -(fresh ? 12 : 0) },
+    { label: 'Pride', value: -8 },
+    { label: 'Their friends at war with yours', value: -Math.min(10, others * 2.5) },
+  ]
+  const base = sumFactors(factors)
+  const need = Math.max(0, terms.puppet ? 8 : 0, terms.territory ? TERRITORY_AI_ACCEPT : 0, terms.liberate !== undefined ? 8 : 0)
+  const decide = (score: number): { accept: boolean; reason: string } => {
+    const no = (reason: string) => ({ accept: false, reason })
+    const yes = (reason: string) => ({ accept: true, reason })
+    if (terms.puppet && score <= 8) return no('we will never be your puppet')
+    if (terms.territory && score <= TERRITORY_AI_ACCEPT) return no(TERRITORY_TEXT.refusal)
+    if (terms.liberate !== undefined && score <= 8) return no(LIBERATE_TEXT.refusal)
+    if (score > 0) {
+      if (me.warWeariness > 25) return yes('the war has bled us dry')
+      if (ratio > 1.3 || net > 15) return yes('we cannot win this war')
+      if (concession > 0) return yes('your terms are generous')
+      return yes('we welcome an end to the bloodshed')
+    }
+    if (demand > concession + 10) return no('your demands are too harsh')
+    if (net < -10) return no('we are winning this war')
+    if (fresh) return no('the war has only just begun')
+    return no('we will fight on')
+  }
+  return { factors, base, need, decide }
+}
 
 /** A bot's answer to a proposal, with the reason a human diplomat would give. */
 export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p: Proposal, rng: Rng, prices?: MarketPrices, leaders?: ThreatReport[]): Verdict {
@@ -79,7 +160,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
   const myP = Math.max(1, militaryPower(s, botId))
   const theirP = perceivedPower(s, map, botId, p.from)
   const ratio = theirP / myP
-  const noise = rng.range(-6, 6)
+  const noise = rng.range(-NOISE, NOISE)
   // Trust (src/engine/ties.ts): worked out only for the offers that weigh it, and only with DEALINGS on, so nothing changes with it off.
   let trust: TrustReport | undefined
   const weighs = DEALINGS.on && (p.kind === 'pact' || p.kind === 'alliance' || p.kind === 'guarantee' || p.kind === 'trade' || p.kind === 'loan')
@@ -98,27 +179,9 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
   }
   switch (p.kind) {
     case 'peace': {
-      const net = netWarScore(s, p.from, botId)
-      const { demand, concession } = termsCost(s, map, p.terms, p.from, botId)
-      const started = s.warStarted[pairKey(p.from, botId)] ?? s.turn
-      const fresh = s.turn - started < 3
-      const bias = { expansionist: -12, opportunist: -4, turtle: 10, trader: 8, honorable: 0 }[me.personality ?? 'honorable']
-      // A general peace also stops the wars its friends are winning, so it is a harder sell.
-      const others = p.terms.general ? generalPeaceTies(s, p.from, botId).length : 0
-      const score = me.warWeariness * 1.1 + (ratio - 1) * 25 + net * 0.6 + concession - demand * 0.8 + op * 0.15 + bias - (fresh ? 12 : 0) - 8 - Math.min(10, others * 2.5) + noise
-      if (p.terms.puppet && score <= 8) return verdict(false, 'we will never be your puppet')
-      if (p.terms.territory && score <= TERRITORY_AI_ACCEPT) return verdict(false, TERRITORY_TEXT.refusal)
-      if (p.terms.liberate !== undefined && score <= 8) return verdict(false, LIBERATE_TEXT.refusal)
-      if (score > 0) {
-        if (me.warWeariness > 25) return verdict(true, 'the war has bled us dry')
-        if (ratio > 1.3 || net > 15) return verdict(true, 'we cannot win this war')
-        if (concession > 0) return verdict(true, 'your terms are generous')
-        return verdict(true, 'we welcome an end to the bloodshed')
-      }
-      if (demand > concession + 10) return verdict(false, 'your demands are too harsh')
-      if (net < -10) return verdict(false, 'we are winning this war')
-      if (fresh) return verdict(false, 'the war has only just begun')
-      return verdict(false, 'we will fight on')
+      const r = peaceRule(s, map, botId, p.from, p.terms, op, ratio)
+      const d = r.decide(r.base + noise)
+      return { ...verdict(d.accept, d.reason), dice: { base: r.base, need: r.need, spread: NOISE }, factors: r.factors }
     }
     case 'pact': {
       let score = (ratio - 0.8) * 30 + op * 0.5 + persona.pactBias + (borders ? 0 : 6) - 6 + noise
@@ -228,50 +291,94 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       if (hasPact(s, botId, enemy) || isAllied(s, botId, enemy)) return verdict(false, `we are bound by treaty with ${enemyName}`)
       const eP = perceivedPower(s, map, botId, enemy)
       const opEnemy = opinionOf(s, map, botId, enemy, { borders: myNeighbors.has(enemy), coalition })
-      const score =
-        -8 +
-        op * 0.45 +
-        (isAllied(s, botId, p.from) ? 20 : 0) +
-        (persona.loyalty - 1) * 30 -
-        (eP / myP) * 18 -
-        me.warWeariness * 0.6 -
-        enemiesOf(s, botId).length * 14 -
-        opEnemy * 0.25 +
-        (myNeighbors.has(enemy) ? 5 : -5) +
-        // Rivals rally to a war against a leader the world fears.
-        (difficultyOf(s.settings.difficulty).coalitions ? (leaders ?? leadersOf(s, map, COALITION.allyFrom, { output: false }).map((l) => l.threat)).filter((l) => l.nation === enemy).reduce((sum, l) => sum + COALITION.armsBonus * Math.min(1, l.pressure), 0) : 0) +
-        noise
-      if (score > 0) return verdict(true, 'we stand with our allies')
-      if (eP > myP * 1.2) return verdict(false, `${enemyName} is too strong for us`)
-      if (me.warWeariness > 20) return verdict(false, 'our people are weary of war')
-      return verdict(false, 'we will not bleed for you')
+      // Rivals rally to a war against a leader the world fears.
+      const rally = difficultyOf(s.settings.difficulty).coalitions ? (leaders ?? leadersOf(s, map, COALITION.allyFrom, { output: false }).map((l) => l.threat)).filter((l) => l.nation === enemy).reduce((sum, l) => sum + COALITION.armsBonus * Math.min(1, l.pressure), 0) : 0
+      // The score is these added up in this order, then the dice.
+      const factors: OddsFactor[] = [
+        { label: 'Going to war at all', value: -8 },
+        { label: 'Their opinion of you', value: op * 0.45 },
+        { label: 'Your alliance', value: isAllied(s, botId, p.from) ? 20 : 0 },
+        { label: 'Their loyalty', value: (persona.loyalty - 1) * 30 },
+        { label: `${enemyName}'s strength`, value: -((eP / myP) * 18) },
+        { label: 'War weariness', value: -(me.warWeariness * 0.6) },
+        { label: 'Wars of their own', value: -(enemiesOf(s, botId).length * 14) },
+        { label: `Their opinion of ${enemyName}`, value: -(opEnemy * 0.25) },
+        { label: myNeighbors.has(enemy) ? `${enemyName} is their neighbour` : `${enemyName} is far away`, value: myNeighbors.has(enemy) ? 5 : -5 },
+        { label: `${enemyName} is a leader the world fears`, value: rally },
+      ]
+      const base = sumFactors(factors)
+      const dice: DiceRule = { base, need: 0, spread: NOISE }
+      const v = (accept: boolean, reason: string): Verdict => ({ ...verdict(accept, reason), dice, factors })
+      if (base + noise > 0) return v(true, 'we stand with our allies')
+      if (eP > myP * 1.2) return v(false, `${enemyName} is too strong for us`)
+      if (me.warWeariness > 20) return v(false, 'our people are weary of war')
+      return v(false, 'we will not bleed for you')
     }
   }
 }
 
-/** A rival's likely answer to an offer, for the screens: `likely` when it would say yes even on a bad day, `unlikely` when not even on a good one. */
+/**
+ * A rival's answer to an offer before it is asked, for the screens: `likely` when it says yes on every draw of its dice, `unlikely` when on
+ * none, `unsure` when the dice decide, with the real chance.
+ */
 export interface OfferOutlook {
   outlook: 'likely' | 'unsure' | 'unlikely'
-  /** The reason it would give (on a good day for a refusal, on an average day when unsure). */
+  /** The chance it says yes: 1 when likely, 0 when unlikely, otherwise the share of its draws that say yes. */
+  chance: number
+  /** The reason it would give (on an average draw; when the dice decide, the reason it gives when it says no). */
   reason: string
   /** Their trust in you, when this kind of offer weighs it. */
   trust?: TrustReport
+  /** The score and what it must beat, for the answers that read a score (peace, a call to arms). */
+  dice?: DiceRule
+  /** The terms of that score. */
+  factors?: OddsFactor[]
 }
 
 /** A stand-in for the dice: always the same draw, so the answer can be read before it is asked. */
 const fixedDraw = (x: number): Rng => ({ next: () => 0.5, range: () => x, int: (min) => min, chance: () => false, pick: (items) => items[0] })
 
+const outlookWord = (chance: number): OfferOutlook['outlook'] => (chance >= 1 ? 'likely' : chance <= 0 ? 'unlikely' : 'unsure')
+
 /**
- * How `botId` would answer `draft` from `from`, read off `evaluateProposal` itself at the worst, middle and best of its dice, so the screen and
- * the rival can never disagree. Pure: changes nothing.
+ * How a decision that rolls one draw from [-spread, spread) would come out, read off the decision itself (`at(x)` is its answer on draw x).
+ * A rule that says how it reads its score (`dice`) gives the exact chance. Any other moves one way only as the draw grows (up for a treaty,
+ * down for a price), so its two ends say whether the dice matter and the edge between them, found by halving, gives the chance.
+ */
+export function outlookFrom(at: (x: number) => Verdict, spread = NOISE): OfferOutlook {
+  const read = (v: Verdict, chance: number): OfferOutlook => ({
+    outlook: outlookWord(chance),
+    chance,
+    reason: v.reason,
+    ...(v.trust ? { trust: v.trust } : {}),
+    ...(v.dice ? { dice: v.dice } : {}),
+    ...(v.factors ? { factors: v.factors } : {}),
+  })
+  const mid = at(0)
+  if (mid.dice) {
+    const chance = diceChance(mid.dice)
+    // When the dice decide, the reason is the one it gives on the draws that say no (a low draw lowers the score).
+    return read(chance > 0 && chance < 1 ? at(-mid.dice.spread) : mid, chance)
+  }
+  const lo = at(-spread)
+  const hi = at(spread)
+  if (lo.accept === hi.accept) return read(mid, lo.accept ? 1 : 0)
+  let a = -spread
+  let b = spread
+  for (let i = 0; i < 24; i++) {
+    const m = (a + b) / 2
+    if (at(m).accept === lo.accept) a = m
+    else b = m
+  }
+  const chance = lo.accept ? (b + spread) / (2 * spread) : (spread - b) / (2 * spread)
+  return read(lo.accept ? hi : lo, Math.min(0.999, Math.max(0.001, chance)))
+}
+
+/**
+ * How `botId` would answer `draft` from `from`, read off `evaluateProposal` itself (`outlookFrom`), so the screen and the rival can never
+ * disagree. Pure: changes nothing. As things stand now: an offer answered at the month's end is weighed on the world then.
  */
 export function offerOutlook(s: GameState, map: WorldMap, botId: NationId, from: NationId, draft: ProposalDraft, prices?: MarketPrices): OfferOutlook {
   const p = { ...draft, id: 'outlook', from, to: botId, created: s.turn, expires: s.turn } as Proposal
-  const at = (x: number) => evaluateProposal(s, map, botId, p, fixedDraw(x), prices)
-  const bad = at(-6)
-  if (bad.accept) return { outlook: 'likely', reason: bad.reason, trust: bad.trust }
-  const good = at(6)
-  if (!good.accept) return { outlook: 'unlikely', reason: good.reason, trust: good.trust }
-  const mid = at(0)
-  return { outlook: 'unsure', reason: mid.reason, trust: mid.trust }
+  return outlookFrom((x) => evaluateProposal(s, map, botId, p, fixedDraw(x), prices))
 }
