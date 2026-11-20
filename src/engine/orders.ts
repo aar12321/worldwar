@@ -30,7 +30,7 @@ import { MW } from '../data/missileWar'
 import { defenseCost, defenseProblem, doctrineProblem, raidCost, raidProblem, reconProblem, scrambleProblem, truceProblem } from './missileWar'
 import { buildWarheadCost, buildWarheadProblem, nukeProblem } from './nuclear'
 import { opCost, validateDomestic, validateFund, validateOperation } from './agencies'
-import { validateProposal } from './diplomacy'
+import { truceByOffer, truceOfferProblem, validateProposal } from './diplomacy'
 import { cityDevelopCost, cityLevelCap } from './cities'
 import { investedIn, sectorCap, sectorYield } from './business'
 import { buildingCap, computeEconomy, nationWorkforce, regionWorkforce } from './economy'
@@ -781,7 +781,8 @@ function checkRules(s: GameState, map: WorldMap, o: Order, pending: Order[]): st
     case 'recon':
       return reconProblem(s, o)
     case 'missileTruce':
-      return truceProblem(s, o)
+      // Between two players the offer goes to the other's inbox, through the normal offer path (src/engine/diplomacy.ts).
+      return truceByOffer(s, o) ? truceOfferProblem(s, map, o) : truceProblem(s, o)
     case 'startAircraftDev':
       return startAircraftDevProblem(s, n, o, pending)
     case 'pauseAircraftDev':

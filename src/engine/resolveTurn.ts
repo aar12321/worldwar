@@ -30,7 +30,7 @@ import { INVEST, SECTORS } from '../data/business'
 import { GOVERNMENTS, REFORM } from '../data/government'
 import { addOpinion, addOpinionCapped } from '../ai/opinion'
 import { BUILDING_SPECS, DRAFT_LIMITS, LAW_SPECS, MARKET, PROPOSAL_LABELS, UNIT_SPECS, trainingRank } from '../data/unitTypes'
-import { annexPuppet, applyDeals, breakPact, cancelDeal, declareWar, expireDiplomacy, forceDeal, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond } from './diplomacy'
+import { annexPuppet, applyDeals, breakPact, cancelDeal, declareWar, expireDiplomacy, forceDeal, imposeSanctions, leaveAlliance, liftSanctions, propose, releasePuppet, respond, truceByOffer } from './diplomacy'
 import { addToSector, cleanInvestments, makeInvestment } from './business'
 import { applyEconomy, computeEconomy, nationWorkforce } from './economy'
 import { BANKING } from '../data/banking'
@@ -868,7 +868,8 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       applyRecon(s, o)
       break
     case 'missileTruce':
-      applyTruce(s, o)
+      if (truceByOffer(s, o)) propose(s, map, o.nationId, o.target, { kind: 'truce' }, rng)
+      else applyTruce(s, o)
       break
     case 'startAircraftDev':
       applyStartAircraftDev(s, n, o)

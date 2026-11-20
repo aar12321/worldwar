@@ -14,6 +14,7 @@ import { netWarScore, termsCost } from '../engine/warscore'
 import { coalitionActive, nationNeighbors, opinionOf } from './opinion'
 import { DEALINGS } from '../data/relations'
 import { trustFactor, trustReport, type TrustReport } from '../engine/ties'
+import { truceWilling } from '../engine/missileWar'
 
 export function perceivedPower(s: GameState, _map: WorldMap, _viewer: NationId, target: NationId): number {
   return militaryPower(s, target)
@@ -215,6 +216,11 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       const threatened = enemiesOf(s, botId).length > 0 || [...myNeighbors].some((x) => perceivedPower(s, map, botId, x) > myP * 1.3)
       if (threatened || gop > 10) return verdict(true, threatened ? 'we welcome a protector' : 'our friendship is strong')
       return verdict(false, 'we are not in need of protection')
+    }
+    case 'truce': {
+      // Only a player is sent this offer; a bot standing in for one answers as a rival would.
+      const w = truceWilling(s, botId)
+      return verdict(w.accepts, w.accepts ? 'we will stop the missiles' : 'we see no reason to stop yet')
     }
     case 'callToArms': {
       const enemy = p.enemy

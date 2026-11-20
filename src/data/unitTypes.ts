@@ -129,6 +129,7 @@ export const PROPOSAL_COSTS: Record<ProposalKind, number> = {
   callToArms: 10,
   loan: 5,
   guarantee: 10,
+  truce: 0,
 }
 
 export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
@@ -139,6 +140,7 @@ export const PROPOSAL_LABELS: Record<ProposalKind, string> = {
   callToArms: 'Call to arms',
   loan: 'Loan',
   guarantee: 'Guarantee of independence',
+  truce: 'Missile ceasefire',
 }
 
 /** Repeatable drilling. Rank 0 is Green; rank 5 is Guard. */
