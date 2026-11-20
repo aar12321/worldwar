@@ -14,6 +14,7 @@ import { tierOf } from '../engine/empire'
 import { isLive } from '../engine/calendar'
 import { CRISIS } from '../data/crises'
 import { EMPIRE, JUSTIFY } from '../data/war'
+import { warRefusal } from './warHint'
 import { validateOrder } from '../engine/orders'
 import { bundleValue, describeBundle, marketPrices, stockOf } from '../engine/trade'
 import type { Deal, Dispatch, GameState, NationId, Proposal, RegionId, ResourceBundle, SectorId, TradeResource } from '../engine/types'
@@ -570,6 +571,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
               <OrderButton
                 order={{ type: 'declareWar', nationId: player.id, target: id }}
                 label="Declare war"
+                explain={(why) => warRefusal(game, player.id, id, why)}
                 cost={`${warCost(game, player.id, id)} influence`}
                 effect={cb ? `Reason: ${justificationOf(game, player.id, id)?.reason}. Then attack from the War Room.` : 'No reason to fight: costs stability and the world will distrust you. Build a case first.'}
                 tone="btn-red"
