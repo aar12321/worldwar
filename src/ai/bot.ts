@@ -39,6 +39,7 @@ import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
 import { lockedByMaster } from '../engine/puppets'
 import { liberationChoice, managePuppets, wantsPuppet } from './puppets'
 import { manageCivics } from './civics'
+import { queueInterceptorRounds } from './missileProgram'
 import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
 import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
@@ -284,6 +285,8 @@ function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer:
 
   // Cities, laws, business, bonds and investment, for bots that run their whole country.
   if (diff.skill >= 1 && owned.length && rng.chance(0.6)) budget -= manageCountry(s, nationId, econ, diff.skill as 1 | 2, rng, tryAdd, budget, myNeighbors)
+  // Interceptor rounds on the program's line when missiles threaten (MPROG.aiInterceptorLine, src/ai/missileProgram.ts). Every month, no random draws.
+  budget -= queueInterceptorRounds(s, map, nationId, econ, diff.skill, tryAdd, budget)
   // The government desk (src/ai/civics.ts): ministers, the civil service and reforms, on a fixed schedule with no random draws.
   if (owned.length) manageCivics(s, nationId, econ, diff.skill, tryAdd)
 

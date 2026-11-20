@@ -1,4 +1,6 @@
 import { MW, rungOf } from '../data/missileWar'
+import { MPROG } from '../data/missileProgram'
+import { roundsOnLine } from '../engine/missileProgram'
 import { buildRoom, buildRoomFor, missileStock, programLevel } from '../engine/missiles'
 import { defenseCost, doctrineOf, interceptorCap, interceptorsOf, launchersSeen, mobileLevel, missilesInStore, radarLevel, raidPlan, tensionOf, truceAnswer, trucePair } from '../engine/missileWar'
 import { freeUnits } from '../engine/deployment'
@@ -50,7 +52,8 @@ export function missileWarOrders(s: GameState, map: WorldMap, id: NationId, skil
   if (theirs >= 3) {
     const cap = skill === 2 ? 3 : 1
     if (radarLevel(n) < cap && (n.missileWar?.radar ?? 0) < cap && money > defenseCost(s, { type: 'missileDefense', nationId: id, item: 'radar' }).capital + 200) prep.push({ type: 'missileDefense', nationId: id, item: 'radar' })
-    const room = interceptorCap(n) - interceptorsOf(n)
+    // Rounds already on the program's line count as bought (MPROG.aiInterceptorLine: rivals queue them there).
+    const room = interceptorCap(n) - interceptorsOf(n) - (MPROG.aiInterceptorLine && MPROG.interceptorLine ? roundsOnLine(n) : 0)
     if (interceptorCap(n) > 0 && room >= 4 && money > room * MW.roundCost + 150) prep.push({ type: 'missileDefense', nationId: id, item: 'interceptors', count: Math.min(room, MW.roundsMaxOrder) })
     if (skill === 2 && home.length && money > MW.batteryMoney + 250) {
       // A battery where the people are.

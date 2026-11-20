@@ -26,6 +26,26 @@ export const MPROG = {
    * delivered into the store at the line's pace. Off: the order is refused.
    */
   interceptorLine: true,
+  /**
+   * Rivals put interceptor rounds on their own lines (src/ai/missileProgram.ts): a Medium or Hard program with a plant and the
+   * interceptor works, under missile threat (an enemy with missiles in range, struck lately, or a low store), queues a batch within
+   * the program's usual money guards. Easy rivals never do. Needs `interceptorLine`. Off: rivals only buy rounds outright, as before.
+   */
+  aiInterceptorLine: true,
+}
+
+/** How a rival uses the line for interceptor rounds (MPROG.aiInterceptorLine). */
+export const AI_LINE = {
+  /** A store (counting rounds on the line) below this share of what it holds is low. */
+  lowStore: 0.5,
+  /** Smallest batch worth queuing. */
+  minBatch: 4,
+  /** An enemy holding at least this many missiles is a threat when one of its launch sites reaches us. */
+  armed: 3,
+  /** Struck within this many months. */
+  struck: 3,
+  /** Most countries of ours checked for an enemy in range (the most populous first). */
+  homes: 4,
 }
 
 // ---- Facilities ----
