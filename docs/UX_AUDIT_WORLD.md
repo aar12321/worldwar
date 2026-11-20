@@ -34,7 +34,7 @@ Scroll height of each desk on a desktop, in pixels, in the demo state:
 | Systems | 2 364 | 922 |
 | Wars | 718 | 512 |
 | Missile War | 2 357 | 2 267 to 2 582 (the "In the air" list now shows; the ledger folds) |
-| Missile Program | 3 762 | about the same (the build rows moved in; only the open kinds get one) |
+| Missile Program | 3 762 | about the same (the build rows moved in; only the open kinds get one); later split into six sections (Overview, Facilities, Staff, Development, Arsenal, Rivals), each a screen or two |
 | Forces, Armies, Agencies, Bloc | unchanged | unchanged |
 
 ## What was duplicated, and where it lives now

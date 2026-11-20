@@ -41,6 +41,16 @@ The missile screen is now a program you build and run, on one tab: **Military, M
 - `deployment.test.ts` (its pre-feature hash) switches `MPROG.on` off as it does `RELATIONS.on`; `registry.test.ts` lists the new tab.
 - Goldens: only the Hard-bot world moved (`1719b377e4ad6a` to `6899ffe1eaea4`); the Normal-bot world and the small war did not. Proof: the new test 'the missile program is the only thing that moved the current pins' runs all three with `MPROG.on = false` and gets every previous pin back, and every older layer test is wrapped in `withoutProgram` too.
 
+## Test arc in a running browser
+
+Checked with Playwright on the dev server (software GL, `scripts/shots.mjs`): a live game, a test of inertial guidance ordered on day 0 (countdown to day 2, lands day 3), the clock run at 1x with the day lengthened tenfold through the dev server's own `LIVE` module so screenshots could follow it. Frames at clock 2.05, 2.25, 2.44, 2.65 and 2.86 show the arc leaving Germany and climbing out over the North Sea, the head moving each frame; at 3.0 the test has landed and the arc is gone. What the earlier stepped screenshot saw was a real fault: the flight engine played a flight's launch flash when it first saw it, which for a test is the order, two days before lift-off. `FxEngine.syncFlights` now holds the lift-off of a flight seen before its launch time and plays it when the clock reaches it (`fx.test.ts`, 'flights and their lift-off'); missiles, which launch when seen, are unchanged.
+
+## Tests added with the gap fixes
+
+- `missileProgram.test.ts`, 'interceptor rounds on the production line' (5): needs a plant, the works and room counting the line; cost at 75%; 6 rounds a month from a level-1 plant (against the same month without the batch); a full store holds the line and nothing is lost; switched off it is refused; the live clock wakes for the next round and not for a full store.
+- `missileProgramSim.test.ts`: Medium founds at least three programs in 24 months (6 on seed 5; Hard 15), bill under 12% of income.
+- `src/ui/levelText.test.ts`: the six sections, Overview first; the line names interceptor rounds.
+
 ## Not done / not verified
 
 - No espionage operation to poach or steal from a rival program on purpose (poaching is passive, by the monthly roll).
