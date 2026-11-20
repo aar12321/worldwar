@@ -99,6 +99,33 @@ describe('lod', () => {
   })
 })
 
+describe('flights and their lift-off', () => {
+  it('a test launch seen on the pad lifts off (flash and plume) when the clock reaches its launch, not when it is ordered; a missile flies at once', () => {
+    const e = new FxEngine()
+    const seen: string[] = []
+    e.onLaunch = (rt) => seen.push(rt.id)
+    e.clockT = 10
+    const pad = { id: 't1', kind: 'cruise' as const, from: { lat: 52, lng: 13 }, to: { lat: 58, lng: 3 }, launched: 12, lands: 13, count: 1, mine: true, incoming: false }
+    const now = { ...pad, id: 'f1', launched: 10, lands: 11 }
+    e.syncFlights([pad, now])
+    expect(seen).toEqual(['f1'])
+    e.update(16)
+    expect(seen).toEqual(['f1'])
+    e.clockT = 12.01
+    e.update(16)
+    expect(seen).toEqual(['f1', 't1'])
+    e.update(16)
+    expect(seen).toEqual(['f1', 't1'])
+    // A flight gone before lift-off never plays it.
+    const late = { ...pad, id: 't2', launched: 20, lands: 21 }
+    e.syncFlights([late])
+    e.syncFlights([])
+    e.clockT = 25
+    e.update(16)
+    expect(seen).toEqual(['f1', 't1'])
+  })
+})
+
 describe('engine caps and budget', () => {
   it('never holds more effects than the cap and drops the least important first', () => {
     const e = new FxEngine()

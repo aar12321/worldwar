@@ -299,8 +299,9 @@ export class FxEngine {
         rt = fresh
         rt.set(s.id, s.kind, s.from.lat, s.from.lng, s.to.lat, s.to.lng)
         this.flights.set(s.id, rt)
-        // The launch itself: flash, plume and ground smoke at the site.
-        this.onLaunch?.(rt, s)
+        // The launch itself: flash, plume and ground smoke at the site, when it lifts off (a test launch is seen during its countdown).
+        if (s.launched > this.clockT + 1e-6) this.pendingLaunch.set(s.id, { ...s })
+        else this.onLaunch?.(rt, s)
       }
       rt.launched = s.launched
       rt.lands = s.lands
@@ -311,6 +312,7 @@ export class FxEngine {
     for (const [id, rt] of this.flights) {
       if (!keep.has(id)) {
         this.flights.delete(id)
+        this.pendingLaunch.delete(id)
         rt.alive = false
         this.flightPool.release(rt)
       }
@@ -321,8 +323,10 @@ export class FxEngine {
     this.touch()
   }
 
-  /** Set by the sequence module: what happens when a new flight is seen. */
+  /** Set by the sequence module: what happens when a flight lifts off (when it is first seen, or later when its countdown ends). */
   onLaunch: ((rt: FlightRt, s: FlightSpec) => void) | null = null
+  /** Flights seen before their launch time (a test on the pad): their lift-off plays when the game clock reaches it. */
+  private pendingLaunch = new Map<string, FlightSpec>()
 
   setDecals(list: readonly DecalSpec[]) {
     this.decals = list.slice(0, this.caps.decals)
@@ -389,6 +393,12 @@ export class FxEngine {
     const dt = Math.min(dtMs, 100)
     this.now += dt
     const now = this.now
+    for (const [id, s] of this.pendingLaunch) {
+      if (this.clockT + 1e-6 < s.launched) continue
+      this.pendingLaunch.delete(id)
+      const rt = this.flights.get(id)
+      if (rt) this.onLaunch?.(rt, s)
+    }
     for (let i = this.live.length - 1; i >= 0; i--) {
       const f = this.live[i]
       if (now < f.t0) continue

@@ -59,9 +59,31 @@ function withoutTies<T>(fn: () => T): T {
   const on = TIES.on
   TIES.on = false
   try {
-    return fn()
+    return withoutGaps(fn)
   } finally {
     TIES.on = on
+  }
+}
+
+/**
+ * Runs `fn` with the military gap fixes switched off (docs/BLOC_STATUS.md and docs/MISSILE_PROGRAM_STATUS.md): rival blocs choosing a
+ * war and its operation (`BLOC.aiWars`), live bot members answering the next day (`BLOC.liveAnswers`), Medium rivals founding missile
+ * programs more readily (`MPROG.mediumFounds`) and interceptor rounds on the production line (`MPROG.interceptorLine`). They came after
+ * ties, so `withoutTies` switches them off too and every older layer keeps its proof.
+ */
+function withoutGaps<T>(fn: () => T): T {
+  const was = { aiWars: BLOC.aiWars, liveAnswers: BLOC.liveAnswers, mediumFounds: MPROG.mediumFounds, interceptorLine: MPROG.interceptorLine }
+  BLOC.aiWars = false
+  BLOC.liveAnswers = false
+  MPROG.mediumFounds = false
+  MPROG.interceptorLine = false
+  try {
+    return fn()
+  } finally {
+    BLOC.aiWars = was.aiWars
+    BLOC.liveAnswers = was.liveAnswers
+    MPROG.mediumFounds = was.mediumFounds
+    MPROG.interceptorLine = was.interceptorLine
   }
 }
 
@@ -302,6 +324,16 @@ describe('turn mode resolves exactly as pinned', () => {
       expect(hash(JSON.stringify(state))).toBe('6be372c0f58e4')
       expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
     }))
+  }, 400_000)
+
+  it('the military gap fixes are the only thing that moved the current pins: with them switched off the pins from before them return', () => {
+    withoutGaps(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('a0f8d651bfe97')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1879299a3721df')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('19d872c4a61078')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    })
   }, 400_000)
 
   it('ties are the only thing that moved the current pins: with them switched off the pins from before them return', () => {

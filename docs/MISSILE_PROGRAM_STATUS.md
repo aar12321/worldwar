@@ -6,7 +6,7 @@ The missile screen is now a program you build and run, on one tab: **Military, M
 
 | part | file |
 |---|---|
-| numbers, with comments | `src/data/missileProgram.ts` (`FACILITIES`, `STAFF`, `CHIEF_TRAITS`, `DEVS`, `CONTRACTORS`, `PROGRAM_RULES`, `TEST_RULES`, `PRODUCTION_RULES`, `POACH`, `MPROG.on`) |
+| numbers, with comments | `src/data/missileProgram.ts` (`FACILITIES`, `STAFF`, `CHIEF_TRAITS`, `DEVS`, `CONTRACTORS`, `PROGRAM_RULES`, `TEST_RULES`, `PRODUCTION_RULES`, `POACH`, `MPROG.on`, `MPROG.mediumFounds`, `MPROG.interceptorLine`) |
 | rules | `src/engine/missileProgram.ts` (validation, costs, apply, settle, month, live day, tests, poaching, rivals' view, news) |
 | effects on strikes | `src/engine/programEffects.ts`, read by `missiles.ts` (range, price, capacity, stores), `missileWar.ts` (evasion, interception, rounds, radar, mobile cover, harm, hardening) and `missileForecast.ts` |
 | order path | one order type, `{ type: 'missileProgram', nationId, action }` (types.ts, orders.ts, resolveTurn.ts PHASES next to `space`, executeOrder, describeOrder) |
@@ -15,7 +15,7 @@ The missile screen is now a program you build and run, on one tab: **Military, M
 | money | `economy.ts`: its own treasury line "Missile program"; staff add to `extraEngineers` (drawn from the factories) |
 | talent pool | `space.ts talentCap` and `programTalentCap` share one pool (one space hire = two program places) |
 | AI | `src/ai/missileProgram.ts`, called last in `manageCountry` |
-| screen | `src/ui/MissileProgramDesk.tsx`, `src/ui/missileProgramText.ts`; tab registered in `registry.ts` (`program`), globe arcs in `fx/FxOverlay.tsx`, toasts in `ui/livePresent.ts` and `store.ts presentMonth` |
+| screen | `src/ui/MissileProgramDesk.tsx` (six sections), `src/ui/programSection.ts` (the open section, `openProgram(section)` for links), `src/ui/missileProgramText.ts`; tab registered in `registry.ts` (`program`), globe arcs in `fx/FxOverlay.tsx`, toasts in `ui/livePresent.ts` and `store.ts presentMonth` |
 
 ## Done
 
@@ -26,8 +26,9 @@ The missile screen is now a program you build and run, on one tab: **Military, M
 - **What it changes** (capped): range up to +60%, harm per landed missile up to +50% (CEP shown shrinking), up to 30% of enemy interception evaded, up to +20% interception, +60% interceptor rounds, +2 radar, +2 mobile launcher cover, up to 60% of a store safe from counterforce, up to 35% cheaper missiles, +20 a month, +60 stored. The War Room, Missile War tab and forecasts use the same functions.
 - **Budget**: Lean 50% / 75% / Normal / 125% / Crash 150%: work at 0.6 + 0.4 x budget speed; operations cost x budget. Bill = upkeep + salaries + operations; an empty treasury at the month end stalls in-house work next month.
 - **Production line**: with a plant, batches of up to 20 (4 waiting), 10% cheaper, delivered one missile at a time (3 a month per plant level, +1 per production manager, +2 for a production genius).
-- **Rivals**: poaching about 5% a month for a program with 3+ staff (x1.6 lean, x0.6 rich budget, -20% per analyst, half with no rival program near); the staff (or a skill 3+ chief) go to the rival program. Analysts show rival programs (1: levels; 3: what they develop). Medium rivals run a small program, Hard a bigger one and shed staff when the bill grows past a tenth of income; Easy never.
-- **Live screen**: header (charter, bill breakdown, talent, experience, budget), milestone strip (9), next steps with Do-it buttons, timeline with days left and moving bars, test range with odds bar, countdown animation (3-2-1-LAUNCH, reduced-motion aware), facility cards, staff and chief, development tree by branch with contractor choice, stockpile and production line, capability table (range and CEP by kind), defences summary linking Missile War, rival programs. Tab badge counts projects ready to test. Toasts when a facility opens, a project is ready, a test lands, staff are poached, a milestone is reached (live days and turn months).
+- **Interceptor rounds on the line** (`MPROG.interceptorLine`): `produce` with `missile: 'interceptor'` needs a plant and the interceptor works and a store with room (counting rounds already on the line); it costs 75% of buying the rounds at once (`MW.roundCost`), paid when queued, and the line makes 2 rounds in the time of one missile, straight into the store. A full store holds the line (missiles behind wait; nothing is lost) and the live clock does not wake for it. Shown in Arsenal, Production line (`Interceptor rounds`), with the store, the pace and the price.
+- **Rivals**: poaching about 5% a month for a program with 3+ staff (x1.6 lean, x0.6 rich budget, -20% per analyst, half with no rival program near); the staff (or a skill 3+ chief) go to the rival program. Analysts show rival programs (1: levels; 3: what they develop). Medium rivals run a small program, Hard a bigger one and shed staff when the bill grows past a tenth of income; Easy never. With `MPROG.mediumFounds` a Medium rival at war with money to spare founds one now and then (15% a month), a rich one a little more readily (10%), and it gets on with it the month it decides; growth and the bill limits are unchanged.
+- **Screen, in sections** (a segmented control like the Government desk; the section is kept between visits): **Overview** (header with charter, bill breakdown, talent, experience and budget; milestone strip; next steps with Do-it buttons, and Open for a step that has none; test range with odds bar and the 3-2-1-LAUNCH countdown; timeline with days left and moving bars), **Facilities** (facility cards, defences summary linking Missile War), **Staff** (chief, staff, poaching, and a link to Economy, Government, Talent where the pool comes from), **Development** (tree by branch with contractor choice), **Arsenal** (build rows, the production line with interceptor rounds, the capability table), **Rivals**. The segmented control carries badges: tests ready (Overview), facilities building, projects in development. Links land on the right section: the advisor's 'Build missiles' and Missile War's build step and the Systems summary on Arsenal, 'Open the program' on Overview (`openProgram`, the advisor target's `section`). Desktop height went from about 3 760 px on one page to the longest section (Development) alone. Tab badge counts projects ready to test. Toasts when a facility opens, a project is ready, a test lands, staff are poached, a milestone is reached (live days and turn months).
 - **Online**: everything is an order through the normal path (host validates and acks; refused with words); state is shared and deterministic; the live room test runs both screens through a month, a mid-month finish and a test launch with identical fingerprints.
 - **Old saves**: `mprog` and `missileTests` are optional; a nation without them is exactly as before (bill 0, no line, no field, all effects `undefined`).
 
@@ -43,12 +44,12 @@ The missile screen is now a program you build and run, on one tab: **Military, M
 ## Not done / not verified
 
 - No espionage operation to poach or steal from a rival program on purpose (poaching is passive, by the monthly roll).
-- Only the production line and the charter workshop build missiles; there is no separate interceptor production queue (the works raise the store size instead).
+- Rivals do not queue interceptor rounds on their lines (they buy rounds and the store refills by itself).
 - Rival test launches make news only for players they touch (near, at war); a Hard world rarely shows them to a far-away player.
 - The intel view of rival programs is not shown on the Diplomacy or country panels, only in this tab.
 - Test arcs use the existing missile looks; a test's success or failure has no special impact effect on the globe.
 - Balance is checked by the 24-month sims and the bill-share bounds, not by long human play; the numbers are first guesses in data tables.
 - Two-player online was tested with the in-memory room harness, not across two real browsers.
-- The globe arc of a test is fed to the same flight engine as missiles (`FxOverlay.flightSpecs`), but a screenshot with the clock stepped by hand showed only the launch flash at the capital, not the arc in flight; it was not seen moving in a running browser.
-- Medium rivals found a program rarely (one in 24 months on seed 5); Hard rivals are the visible rivals.
+- The test arc: see 'Test arc in a running browser' below.
+- Medium programs stay small (an institute in two years): they found, but the sim's two years are too short for them to test.
 - Upkeep and salaries are not shown in the Economy desk's forecast breakdown beyond the single "Missile program" line.
