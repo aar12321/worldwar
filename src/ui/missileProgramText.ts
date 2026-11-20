@@ -90,7 +90,7 @@ export function programSteps(game: GameState, n: Nation, workforce: number, limi
   if ((p?.fac.stand ?? 0) < 1 && !p?.builds.some((b) => b.facility === 'stand') && ok({ kind: 'build', facility: 'stand' })) add('stand', 'Build the engine test stand', 'Every test launch needs one.', { kind: 'build', facility: 'stand' })
   const ready = DEV_IDS.find((id) => devStatus(n, id) === 'ready' && ok({ kind: 'develop', dev: id }))
   if (ready) add(`dev-${ready}`, `Develop ${DEVS[ready].name.toLowerCase()}`, `${DEVS[ready].blurb} ${DEVS[ready].money} money, ${DEVS[ready].tp} research, about ${plural(DEVS[ready].months, 'month')}.`, { kind: 'develop', dev: ready })
-  if (p && !p.chief && programLevel(n) >= 1) add('chief', 'Hire a chief designer', 'A star who speeds one branch or steadies every test. See Talent.')
+  if (p && !p.chief && programLevel(n) >= 1) add('chief', 'Hire a chief designer', 'A star who speeds one branch or steadies every test. See Staff.')
   const facility = FACILITY_IDS.find((f) => (p?.fac[f] ?? 0) < 1 && ok({ kind: 'build', facility: f }))
   if (facility && out.length < limit) add(`fac-${facility}`, `Build the ${FACILITIES[facility].name.toLowerCase()}`, FACILITIES[facility].blurb, { kind: 'build', facility })
   return out.slice(0, limit)

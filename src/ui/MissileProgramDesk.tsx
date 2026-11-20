@@ -400,17 +400,17 @@ function Talent({ game, player, workforce }: { game: GameState; player: Nation; 
   const risk = poachRisk(game, player)
   return (
     <Section title="Staff and talent" sub={`Your people can spare ${cap} specialists for missiles (the space agency draws on the same pool). ${room > 0 ? `${room} more can be hired.` : 'The pool is used up: schooling and engineers raise it.'}`} id="talent">
-      <ChiefCard game={game} player={player} />
-      <div className="grid gap-2 sm:grid-cols-2">
-        {STAFF_ROLES.map((r) => (
-          <StaffRow key={r} player={player} role={r} room={room} />
-        ))}
-      </div>
       <div className="rounded-xl bg-white/5 p-2.5 text-[12px] text-white/75 flex flex-wrap items-center justify-between gap-2" data-talent-link>
         <span>The pool comes from your engineers and scientists: schooling and the professions are on the Government desk.</span>
         <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openGovernment('talent')}>
           Government › Talent
         </button>
+      </div>
+      <ChiefCard game={game} player={player} />
+      <div className="grid gap-2 sm:grid-cols-2">
+        {STAFF_ROLES.map((r) => (
+          <StaffRow key={r} player={player} role={r} room={room} />
+        ))}
       </div>
       <p className={`text-[12px] ${risk >= 0.05 ? 'text-[#ffd60a]' : 'text-white/65'}`} data-poach={Math.round(risk * 100)}>
         Rivals poach: {Math.round(risk * 100)}% chance a month of losing staff. Analysts and a bigger budget cut it; experience grows with every test and launch.
@@ -694,8 +694,7 @@ export function MissileProgramTab() {
       <Tabs value={section} onChange={setSection} options={PROGRAM_SECTIONS} label="Missile program sections" badges={{ overview: readyTests || null, facilities: building || null, development: developing || null }} />
       {section === 'overview' && (
         <>
-          <Header player={player} workforce={workforce} />
-          <MilestoneStrip player={player} />
+          {/* What to do now leads: the next steps and the test range, beside what is in hand; then the charter and the budget. */}
           <div className="grid gap-3 lg:grid-cols-2 items-start">
             <div className="space-y-3">
               <Steps game={game} player={player} workforce={workforce} go={setSection} />
@@ -703,6 +702,8 @@ export function MissileProgramTab() {
             </div>
             <Timeline player={player} />
           </div>
+          <Header player={player} workforce={workforce} />
+          <MilestoneStrip player={player} />
         </>
       )}
       {section === 'facilities' && <Structure game={game} player={player} />}
