@@ -206,7 +206,7 @@ export type TradeResource = 'capital' | 'food' | 'tp' | 'manpower' | 'oil' | 'st
 export type Material = 'oil' | 'steel' | 'goods'
 /** First-game goals a player nation has reached. */
 export type Milestone = 'build' | 'train' | 'research' | 'war' | 'win' | 'capture'
-export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms' | 'loan' | 'guarantee'
+export type ProposalKind = 'peace' | 'pact' | 'alliance' | 'trade' | 'callToArms' | 'loan' | 'guarantee' | 'truce'
 
 export const UNIT_TYPES: UnitType[] = ['infantry', 'armor', 'artillery', 'fighter', 'air', 'naval', 'drone', 'robot', 'missile']
 export const BUILDING_TYPES: BuildingType[] = ['factory', 'farm', 'university', 'barracks', 'port', 'civic', 'hospital']
@@ -567,6 +567,8 @@ export type ProposalDraft =
   | { kind: 'callToArms'; enemy: NationId }
   | { kind: 'loan'; amount: number; months: number; /** A World Bank loan from a superpower: the borrower signs a pact for the loan's length. */ pact?: boolean }
   | { kind: 'guarantee' }
+  /** A missile ceasefire offered to another player, who accepts or declines it on their own screen (an AI rival answers the `missileTruce` order at once). */
+  | { kind: 'truce' }
 
 export type Proposal = ProposalDraft & {
   id: string
@@ -754,7 +756,7 @@ export type Order =
   | { type: 'raid'; nationId: NationId; target: RegionId; aim?: StrikeAim; /** Share of the strike aircraft to send (0.1 to 1). */ share?: number }
   /** A recon sortie: shows where the enemy's launchers are for a few months, so mobile launchers cannot hide. */
   | { type: 'recon'; nationId: NationId; target: NationId }
-  /** Offers a missile ceasefire to an AI rival, or ends one (`lift`). */
+  /** Offers a missile ceasefire (an AI rival answers at once; another player gets the offer in their inbox), or ends one (`lift`). */
   | { type: 'missileTruce'; nationId: NationId; target: NationId; lift?: boolean }
   /** Raises the missile program one level. */
   | { type: 'fundMissiles'; nationId: NationId }
@@ -960,6 +962,11 @@ export interface TiesState {
   tradeSince: Record<string, number>
   /** Sorted "a|b" -> the last month a trade deal ran between the two (a short gap between deals does not break the run). */
   tradeLast: Record<string, number>
+  /**
+   * The month the record of wars begins, when that is not the start of the game: a save from before ties kept no record of earlier wars, so
+   * its long peace is counted from the month it was loaded (`DEALINGS.on`). Absent in a game that kept the record from its first month.
+   */
+  since?: number
 }
 
 export type ResolutionKind = 'sanctions' | 'ceasefire' | 'recognition' | 'accord'

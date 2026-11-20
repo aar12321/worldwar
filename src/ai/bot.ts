@@ -1,6 +1,8 @@
 import { MW, rungOf } from '../data/missileWar'
 import { whileFrozen } from '../engine/frozen'
 import { relationBotOrders } from './relations'
+import { DEALINGS } from '../data/relations'
+import { offerIsMoot } from '../engine/offers'
 import { MISSILE_TYPES } from '../data/missiles'
 import { tensionOf } from '../engine/missileWar'
 import { missileWarOrders } from './missileWar'
@@ -219,6 +221,8 @@ function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer:
 
   for (const p of s.proposals) {
     if (p.to !== nationId) continue
+    // An offer the world has overtaken is withdrawn by the engine, not answered (an answer would only fail).
+    if (DEALINGS.on && offerIsMoot(s, map, p)) continue
     const v = evaluateProposal(s, map, nationId, p, rng, ctx.prices, ctx.leaders)
     tryAdd({ type: 'respond', nationId, proposalId: p.id, accept: v.accept })
   }

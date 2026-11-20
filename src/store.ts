@@ -48,6 +48,8 @@ export type EmpireTab = 'overview' | 'provinces' | 'world' | 'reaction' | 'stats
 export type { PeopleSection }
 export type EconomyTab = 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'space' | 'market' | 'stocks' | 'government'
 export type MilitaryTab = 'forces' | 'deploy' | 'theatres' | 'wars' | 'agencies' | 'systems' | 'armies' | 'missiles' | 'program'
+/** The composer Diplomacy opens on for a nation: a trade deal, an investment, a loan, the treaties (pact, alliance, guarantee) or peace. */
+export type DiploCompose = 'trade' | 'invest' | 'loan' | 'treaty' | 'peace'
 /** What the globe's colors mean. */
 export type MapMode = 'political' | 'relations' | 'fronts' | 'borders' | 'blocs'
 
@@ -229,6 +231,8 @@ export interface GameStore {
   factionFocus: NationId | null
   /** Opening Diplomacy from a war: the peace composer opens by itself on that nation. */
   diploPeace: boolean
+  /** Opening Diplomacy on one composer (from the Relations desk, or a war): that nation's trade deal, investment, loan, treaties or peace opens by itself. */
+  diploCompose: DiploCompose | null
   /** Battles waiting to play in the battle window. The first one is showing. */
   fxQueue: BattleReport[]
   /** How many battles this batch started with, for "Battle 2 of 4". */
@@ -299,7 +303,7 @@ export interface GameStore {
   setMapMode(mode: MapMode): void
   /** Follows an advisor button to the desk, tab, country or window it points at. */
   goTo(target: AdviceTarget): void
-  openDiplomacy(nationId: NationId | null, opts?: { peace?: boolean }): void
+  openDiplomacy(nationId: NationId | null, opts?: { peace?: boolean; compose?: DiploCompose }): void
   /** Opens the Faction desk. */
   openFaction(nation?: NationId | null): void
   /** Opens the Relations desk, on a partner if one is given. */
@@ -998,6 +1002,7 @@ export const useGame = create<GameStore>((set, get) => ({
   factionFocus: null,
   relFocus: null,
   diploPeace: false,
+  diploCompose: null,
   fxQueue: [],
   fxTotal: 0,
   summary: null,
@@ -1240,7 +1245,8 @@ export const useGame = create<GameStore>((set, get) => ({
   },
 
   openDiplomacy(nationId, opts) {
-    set({ panel: 'diplomacy', diploFocus: nationId, diploPeace: !!opts?.peace })
+    const compose = opts?.compose ?? (opts?.peace ? 'peace' : null)
+    set({ panel: 'diplomacy', diploFocus: nationId, diploPeace: compose === 'peace', diploCompose: nationId ? compose : null })
   },
 
   openRelations(nation) {

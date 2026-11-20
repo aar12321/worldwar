@@ -34,6 +34,11 @@ import { Ledger } from './Ledger'
 import { FactionNoticeLine, FactionRow } from './FactionLinks'
 import { factionChip } from './pickerItems'
 import { closeNations, offerIsMoot } from './diplomacyList'
+import { offerOutlook } from '../ai/diplomat'
+import { trustLean } from '../engine/ties'
+import type { ProposalDraft } from '../engine/types'
+import { OUTLOOK_TEXT } from './pickerItems'
+import type { DiploCompose } from '../store'
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 /** The engine's alliance groups are named "X bloc"; the Bloc desk's blocs are something else, so here they are alliances. */
@@ -223,6 +228,35 @@ function AmountInput({ value, onChange }: { value: number; onChange: (v: number)
   )
 }
 
+const TONE_TEXT = { good: 'text-[#6eeb8a]', warn: 'text-[#ffd60a]', bad: 'text-[#ff8a84]', none: 'text-white/60' } as const
+
+/**
+ * How a rival would answer an offer, read off its own rule (`offerOutlook`), with the part trust plays. Nothing for another player, who decides
+ * for themselves, or for an offer that cannot be made.
+ */
+function OfferOdds({ target, draft, label }: { target: NationId; draft: ProposalDraft | null; label?: string }) {
+  const view = usePlayerView()!
+  const { game, player } = view
+  const { map } = getWorld()
+  const human = game.humans.includes(target) || !!game.nations[target]?.isPlayer
+  // Keyed by the terms' text, so a new object with the same terms does not ask again.
+  const key = draft ? JSON.stringify(draft) : ''
+  const o = useMemo(() => (human || !key ? null : offerOutlook(game, map, target, player.id, JSON.parse(key) as ProposalDraft)), [game, map, target, player.id, human, key])
+  if (!o) return null
+  const t = OUTLOOK_TEXT[o.outlook]
+  // Untested trust weighs nothing: saying so on every line is noise.
+  const lean = o.trust ? trustLean(o.trust) : null
+  const showLean = lean && lean.tone !== 'none'
+  return (
+    <p className="text-[12px] leading-snug" data-offer-odds={o.outlook}>
+      {label && <span className="text-white/75">{label}: </span>}
+      <span className={TONE_TEXT[t.tone]}>{t.text}</span>
+      <span className="text-white/60"> · “{o.reason}”</span>
+      {showLean && <span className={TONE_TEXT[lean.tone]}> · {lean.text}</span>}
+    </p>
+  )
+}
+
 function TradeComposer({ target }: { target: NationId }) {
   const view = usePlayerView()!
   const { game, player } = view
@@ -271,6 +305,7 @@ function TradeComposer({ target }: { target: NationId }) {
         Market value: you give <span className="text-white">{gv.toFixed(0)}</span>, you get <span className="text-white">{rv.toFixed(0)}</span> money.{' '}
         {rv > 0 && gv / rv < 1 && 'They will want more for it, unless they are short of what you offer.'}
       </div>
+      <OfferOdds target={target} draft={gv + rv > 0 ? { kind: 'trade', terms } : null} />
       <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label="Offer deal" cost={`${PROPOSAL_COSTS.trade} influence`} effect={offerWhen(game, human)} tone="btn-primary" />
     </div>
   )
@@ -409,8 +444,17 @@ function PeaceComposer({ target }: { target: NationId }) {
 }
 
 /** Loans and investment: lend money, or put money into their business. */
-function MoneyComposer({ target }: { target: NationId }) {
+function MoneyComposer({ target, focus }: { target: NationId; focus?: 'loan' | 'invest' }) {
   const view = usePlayerView()!
+  // Coming from the Relations desk for a loan or an investment, that part is brought into view and marked.
+  const loanRef = useRef<HTMLDivElement>(null)
+  const investRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    // After the composer has unfolded (0.2 s), or the part would be measured at its folded place.
+    const t = setTimeout(() => (focus === 'loan' ? loanRef.current : focus === 'invest' ? investRef.current : null)?.scrollIntoView({ block: 'center' }), 260)
+    return () => clearTimeout(t)
+  }, [focus])
+  const mark = (on: boolean) => (on ? 'rounded-lg ring-1 ring-[#0a84ff]/70 p-2 -m-2' : '')
   const { game, player } = view
   const [amount, setAmount] = useState(100)
   const [months, setMonths] = useState(12)
@@ -421,7 +465,7 @@ function MoneyComposer({ target }: { target: NationId }) {
   const them = game.nations[target]
   return (
     <div className="space-y-3 rounded-lg bg-black/30 p-2.5">
-      <div className="space-y-1.5">
+      <div ref={loanRef} className={`space-y-1.5 ${mark(focus === 'loan')}`} data-compose-part="loan">
         <div className="text-[15px] font-semibold">Lend them money</div>
         <div className="flex justify-between text-[14px]">
           <span className="text-white/75">Amount</span>
@@ -446,9 +490,10 @@ function MoneyComposer({ target }: { target: NationId }) {
         <p className="text-[13px] text-white/70">
           They pay {loanPayment(amount, months).toFixed(1)} a month, {(loanPayment(amount, months) * months - amount).toFixed(0)} more than you lend. Someone who cannot pay breaks the deal and loses your trust.
         </p>
+        <OfferOdds target={target} draft={{ kind: 'loan', amount: Math.min(amount, lender.loanMax), months: Math.min(months, lender.loanMonths), ...(withPact && lender.loanPact ? { pact: true } : {}) }} />
         <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'loan', amount: Math.min(amount, lender.loanMax), months: Math.min(months, lender.loanMonths), ...(withPact && lender.loanPact ? { pact: true } : {}) } }} label="Offer the loan" cost={`${PROPOSAL_COSTS.loan} influence`} effect="Money moves when they accept" tone="btn-primary" />
       </div>
-      <div className="space-y-1.5 border-t border-white/10 pt-3">
+      <div ref={investRef} className={`space-y-1.5 border-t border-white/10 pt-3 ${mark(focus === 'invest')}`} data-compose-part="invest">
         <div className="text-[15px] font-semibold">Invest in their business</div>
         <p className="text-[13px] text-white/70">It makes their firms grow, pays you {(INVEST.dividend * 100).toFixed(1)}% a month, and they like you for it. If you go to war, you lose it.</p>
         <select className="field w-full px-3 py-2 text-[14px]" aria-label="Sector" value={sector} onChange={(e) => setSector(e.target.value as SectorId)}>
@@ -477,11 +522,24 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
   const { game, player } = view
   const { map } = getWorld()
   const ref = useRef<HTMLDivElement>(null)
-  // Coming from the Wars tab, the nation's peace composer is already open.
-  const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'money'>(() => (focused && useGame.getState().diploPeace && atWar(game, player.id, id) ? 'peace' : 'none'))
+  // Coming from the Wars tab or the Relations desk, the composer asked for is already open: peace, a trade deal, a loan or an investment, or the treaties.
+  const [compose] = useState<DiploCompose | null>(() => (focused ? useGame.getState().diploCompose : null))
+  const [mode, setMode] = useState<'none' | 'trade' | 'peace' | 'money'>(() => {
+    const war = atWar(game, player.id, id)
+    if (compose === 'peace') return war ? 'peace' : 'none'
+    if (war) return 'none'
+    return compose === 'trade' ? 'trade' : compose === 'loan' || compose === 'invest' ? 'money' : 'none'
+  })
+  const treatyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (focused) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [focused])
+    if (compose !== 'treaty') return
+    const t = setTimeout(() => treatyRef.current?.scrollIntoView({ block: 'center' }), 260)
+    return () => clearTimeout(t)
+  }, [compose])
+  useEffect(() => {
+    // A composer part (treaties, a loan, an investment) brings itself into view; a smooth scroll of the row would carry it away again.
+    if (focused && compose !== 'treaty' && compose !== 'loan' && compose !== 'invest') ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focused, compose])
   const n = game.nations[id]
   const war = atWar(game, player.id, id)
   const allied = isAllied(game, player.id, id)
@@ -598,6 +656,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
         )}
       </div>
       {!war && !allied && (
+        <div ref={treatyRef} className={`space-y-1.5 ${compose === 'treaty' ? 'rounded-lg ring-1 ring-[#0a84ff]/70 p-2' : ''}`} data-compose-part="treaty">
         <div className="flex flex-wrap gap-1.5">
           {!pact && (
             <OrderButton
@@ -619,6 +678,10 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
             cost={`${PROPOSAL_COSTS.guarantee} influence`}
             effect={`You defend them if attacked, for ${DIPLOMACY.guarantee.months} months`}
           />
+        </div>
+        {!pact && <OfferOdds target={id} draft={{ kind: 'pact' }} label="Pact" />}
+        <OfferOdds target={id} draft={{ kind: 'alliance' }} label="Alliance" />
+        <OfferOdds target={id} draft={{ kind: 'guarantee' }} label="Guarantee" />
         </div>
       )}
       {!war && (
@@ -657,7 +720,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
       <AnimatePresence initial={false}>
         {mode !== 'none' && (war || open) && (
           <motion.div key={mode} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
-            {mode === 'trade' ? <TradeComposer target={id} /> : mode === 'money' ? <MoneyComposer target={id} /> : <PeaceComposer target={id} />}
+            {mode === 'trade' ? <TradeComposer target={id} /> : mode === 'money' ? <MoneyComposer target={id} focus={compose === 'loan' || compose === 'invest' ? compose : undefined} /> : <PeaceComposer target={id} />}
           </motion.div>
         )}
       </AnimatePresence>
@@ -714,9 +777,9 @@ export function DiplomacyPanel() {
   const view = usePlayerView()
   const focus = useGame((s) => s.diploFocus)
   const [tab, setTab] = useState<'nations' | 'ledger'>('nations')
-  const peaceIntent = useGame((s) => s.diploPeace)
-  // Coming from a war, the row opens with its peace composer: a new key starts it fresh even when the panel was already open.
-  const rowKey = (id: NationId) => (focus === id && peaceIntent ? `${id}:peace` : id)
+  const composeIntent = useGame((s) => s.diploCompose)
+  // Coming from a war or the Relations desk, the row opens on its composer: a new key starts it fresh even when the panel was already open.
+  const rowKey = (id: NationId) => (focus === id && composeIntent ? `${id}:${composeIntent}` : id)
   const openDiplomacy = useGame((s) => s.openDiplomacy)
   const game = view?.game
   const ctx = useMemo<RowContext | null>(() => {
