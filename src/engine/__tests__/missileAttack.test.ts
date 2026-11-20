@@ -130,7 +130,8 @@ describe('the advisor after a missile strike', () => {
     const s = struck()
     const a = advise(s, map, 'r0', [], 20).find((x) => x.id === 'struck-r1')!
     expect(a.urgency).toBe('now')
-    expect(a.target).toEqual({ desk: 'military', tab: 'program' })
+    // It opens the Missile Program on its Overview, where the charter is raised.
+    expect(a.target).toEqual({ desk: 'military', tab: 'program', section: 'overview' })
     expect(a.detail).toMatch(/missile program/)
     expect(a.detail).toMatch(/120 money, 10 research/)
   })
