@@ -1,4 +1,4 @@
-import { MW, rungOf } from '../data/missileWar'
+import { AI_TRUCE, MW, rungOf } from '../data/missileWar'
 import { whileFrozen } from '../engine/frozen'
 import { relationBotOrders } from './relations'
 import { DEALINGS } from '../data/relations'
@@ -6,6 +6,7 @@ import { offerIsMoot } from '../engine/offers'
 import { MISSILE_TYPES } from '../data/missiles'
 import { tensionOf } from '../engine/missileWar'
 import { missileWarOrders } from './missileWar'
+import { missileTruceOffers } from './missileTruce'
 import { COALITION } from '../data/coalition'
 import { dueStrike, jointTarget, leadersOf, type ThreatReport } from '../engine/coalition'
 import { aiNuclearOrder } from '../engine/nuclear'
@@ -38,6 +39,7 @@ import { evaluateProposal, perceivedPower, TRADE_RESERVE } from './diplomat'
 import { lockedByMaster } from '../engine/puppets'
 import { liberationChoice, managePuppets, wantsPuppet } from './puppets'
 import { manageCivics } from './civics'
+import { queueInterceptorRounds } from './missileProgram'
 import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from './management'
 import { coalitionActive, opinionOf } from './opinion'
 import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
@@ -283,6 +285,8 @@ function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer:
 
   // Cities, laws, business, bonds and investment, for bots that run their whole country.
   if (diff.skill >= 1 && owned.length && rng.chance(0.6)) budget -= manageCountry(s, nationId, econ, diff.skill as 1 | 2, rng, tryAdd, budget, myNeighbors)
+  // Interceptor rounds on the program's line when missiles threaten (MPROG.aiInterceptorLine, src/ai/missileProgram.ts). Every month, no random draws.
+  budget -= queueInterceptorRounds(s, map, nationId, econ, diff.skill, tryAdd, budget)
   // The government desk (src/ai/civics.ts): ministers, the civil service and reforms, on a fixed schedule with no random draws.
   if (owned.length) manageCivics(s, nationId, econ, diff.skill, tryAdd)
 
@@ -701,6 +705,19 @@ function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer:
     }
   }
   // Rebels in a country are fought every month with no order needed.
+
+  // A missile ceasefire offer, at most one a month, after everything else so a strike ordered this month holds it back (AI_TRUCE,
+  // src/ai/missileTruce.ts). Its own random stream; to a player it counts against the inbox limits like any offer.
+  if (AI_TRUCE.on) {
+    for (const o of missileTruceOffers(s, nationId, diff.skill, orders)) {
+      if (o.type !== 'missileTruce' || !canAsk(o.target) || !tryAdd(o)) continue
+      if (humans.has(o.target)) {
+        ctx.proposalsTo.set(o.target, (ctx.proposalsTo.get(o.target) ?? 0) + 1)
+        ctx.inbox.set(o.target, (ctx.inbox.get(o.target) ?? 0) + 1)
+      }
+      break
+    }
+  }
 
   return orders
 }

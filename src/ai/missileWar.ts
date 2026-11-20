@@ -1,4 +1,6 @@
 import { MW, rungOf } from '../data/missileWar'
+import { MPROG } from '../data/missileProgram'
+import { roundsOnLine } from '../engine/missileProgram'
 import { buildRoom, buildRoomFor, missileStock, programLevel } from '../engine/missiles'
 import { defenseCost, doctrineOf, interceptorCap, interceptorsOf, launchersSeen, mobileLevel, missilesInStore, radarLevel, raidPlan, tensionOf, truceAnswer, trucePair } from '../engine/missileWar'
 import { freeUnits } from '../engine/deployment'
@@ -35,7 +37,7 @@ export function missileWarOrders(s: GameState, map: WorldMap, id: NationId, skil
   // 1. De-escalation: as the world climbs the ladder, offer a ceasefire to a rival that would take it.
   // The offer is made once the tension reaches what a rival of this difficulty would accept (and only to a rival that would).
   if (tension >= MW.truceTension[skill]) {
-    for (const e of foes) if (trucePair(s, id, e) === null && !s.humans.includes(e) && truceAnswer(s, e).accepts) out.push({ type: 'missileTruce', nationId: id, target: e })
+    for (const e of foes) if (trucePair(s, id, e) === null && !s.humans.includes(e) && truceAnswer(s, e, id).accepts) out.push({ type: 'missileTruce', nationId: id, target: e })
   }
 
   // 2. Doctrine. A nation with missiles answers a strike; one with good radar and a calm world fires on warning. Never on warning at the top of the ladder.
@@ -50,7 +52,8 @@ export function missileWarOrders(s: GameState, map: WorldMap, id: NationId, skil
   if (theirs >= 3) {
     const cap = skill === 2 ? 3 : 1
     if (radarLevel(n) < cap && (n.missileWar?.radar ?? 0) < cap && money > defenseCost(s, { type: 'missileDefense', nationId: id, item: 'radar' }).capital + 200) prep.push({ type: 'missileDefense', nationId: id, item: 'radar' })
-    const room = interceptorCap(n) - interceptorsOf(n)
+    // Rounds already on the program's line count as bought (MPROG.aiInterceptorLine: rivals queue them there).
+    const room = interceptorCap(n) - interceptorsOf(n) - (MPROG.aiInterceptorLine && MPROG.interceptorLine ? roundsOnLine(n) : 0)
     if (interceptorCap(n) > 0 && room >= 4 && money > room * MW.roundCost + 150) prep.push({ type: 'missileDefense', nationId: id, item: 'interceptors', count: Math.min(room, MW.roundsMaxOrder) })
     if (skill === 2 && home.length && money > MW.batteryMoney + 250) {
       // A battery where the people are.

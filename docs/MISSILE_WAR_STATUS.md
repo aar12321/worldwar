@@ -33,7 +33,8 @@ alarms, a ladder of escalation and ways to climb down, aircraft that matter, an 
   lost, line dealt and taken, sites hit, store destroyed, rounds spent, aircraft lost.
 - **AI** (`src/ai/missileWar.ts`, one call in `bot.ts`, its own random stream): Easy nothing; Normal doctrine, radar, rounds, occasional raids, ceasefires;
   Hard counterforce with decoys first, raids on launchers, recon, batteries, mobile launchers, launch on warning with good radar, ceasefires. No new salvos
-  at the brink. Nothing in it builds or fires a warhead.
+  at the brink. Nothing in it builds or fires a warhead. Normal and Hard rivals also offer a player a ceasefire through Diplomacy, and queue interceptor
+  rounds on their program line under threat (`src/ai/missileTruce.ts`, `src/ai/missileProgram.ts`; docs/MISSILE_PROGRAM_STATUS.md).
 
 ### 3. Aircraft
 - **Fighters** (at home, on air patrol, scrambled) shoot missiles down; in a live game `scramble` is an order against one flight (wing counts 1.5 times, +10% stop).

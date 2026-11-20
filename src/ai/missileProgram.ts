@@ -1,11 +1,13 @@
-import { DEVS, DEV_IDS, FACILITIES, MPROG, type MissileDevId, type MissileProgramAction } from '../data/missileProgram'
+import { AI_LINE, DEVS, DEV_IDS, FACILITIES, MPROG, PRODUCTION_RULES, type MissileDevId, type MissileProgramAction } from '../data/missileProgram'
+import { MISSILE_TYPES } from '../data/missiles'
 import type { EconomyReport } from '../engine/economy'
 import { enemiesOf } from '../engine/helpers'
-import { chiefCandidates, chiefHireCost, devStatus, programBill, programProblem, programTalentCap, testMoney } from '../engine/missileProgram'
-import { fundMissilesCost, fundMissilesProblem, programLevel } from '../engine/missiles'
+import { chiefCandidates, chiefHireCost, devStatus, programBill, programCost, programProblem, programTalentCap, roundsOnLine, testMoney } from '../engine/missileProgram'
+import { fundMissilesCost, fundMissilesProblem, launchSite, missileStock, programLevel } from '../engine/missiles'
+import { interceptorCap, interceptorsOf, missilesInStore, struckLately } from '../engine/missileWar'
 import { programStaff } from '../engine/programEffects'
 import { createRng } from '../engine/rng'
-import type { GameState, NationId, Order } from '../engine/types'
+import type { GameState, NationId, Order, WorldMap } from '../engine/types'
 
 /**
  * A rival's missile program. Easy rivals never run one. A Medium rival with a missile charter (or at war) builds an institute and a test
@@ -114,4 +116,62 @@ export function manageMissileProgram(s: GameState, nationId: NationId, econ: Eco
     }
   }
   return spent
+}
+
+/**
+ * Why a nation's interceptor store is under missile threat (MPROG.aiInterceptorLine), or null: struck by an enemy lately, a store already
+ * run low (counting rounds on the line) while at war, or an enemy holding missiles with a launch site that reaches one of its most
+ * populous countries. Pure.
+ */
+export function interceptorThreat(s: GameState, map: WorldMap, id: NationId): 'struck' | 'lowStore' | 'inRange' | null {
+  const n = s.nations[id]
+  const foes = enemiesOf(s, id).filter((e) => s.nations[e]?.alive)
+  if (!n || !foes.length) return null
+  if (struckLately(s, n, AI_LINE.struck).length) return 'struck'
+  const cap = interceptorCap(n)
+  if (cap > 0 && (interceptorsOf(n) + roundsOnLine(n)) / cap < AI_LINE.lowStore) return 'lowStore'
+  const homes = Object.values(s.regions)
+    .filter((r) => r.owner === id)
+    .sort((a, b) => b.population - a.population || (a.id < b.id ? -1 : 1))
+    .slice(0, AI_LINE.homes)
+  for (const foe of [...foes].sort()) {
+    const f = s.nations[foe]
+    if (missilesInStore(f) < AI_LINE.armed) continue
+    const kinds = MISSILE_TYPES.filter((k) => missileStock(f, k) >= 1)
+    if (homes.some((r) => kinds.some((k) => launchSite(s, map, foe, r.id, k) !== null))) return 'inRange'
+  }
+  return null
+}
+
+/**
+ * A rival under missile threat puts interceptor rounds on its program's production line (MPROG.aiInterceptorLine): Medium and Hard, with a
+ * plant and the interceptor works, never Easy. The batch fills the store's room (counting rounds already on the line), at least
+ * `AI_LINE.minBatch` rounds, and only within the program's own money guards: not while the program is being cut back (income in the red or
+ * its bill past a tenth of income), income of at least 6 a month,
+ * the price plus a margin inside the budget and the treasury's reserve. No random draws: the same world gives the same batch.
+ * Returns what it spent.
+ */
+export function queueInterceptorRounds(s: GameState, map: WorldMap, nationId: NationId, econ: EconomyReport, skill: 0 | 1 | 2, tryAdd: (o: Order) => boolean, budget: number): number {
+  if (!MPROG.on || !MPROG.interceptorLine || !MPROG.aiInterceptorLine || skill < 1) return 0
+  const n = s.nations[nationId]
+  const p = n?.mprog
+  if (!p || (p.fac.plant ?? 0) < 1 || (p.fac.works ?? 0) < 1) return 0
+  const cap = interceptorCap(n)
+  if (cap <= 0) return 0
+  // The program's guards (manageMissileProgram): a program being cut back (income in the red, or its bill past a tenth of income) buys
+  // nothing; a batch adds no upkeep, so otherwise the per-order guard holds: income at least 6 a month, the price inside budget and reserve.
+  if (econ.netCapital < 6 || programBill(n).total > 0.1 * econ.gross) return 0
+  const room = Math.min(PRODUCTION_RULES.batchMax, cap - interceptorsOf(n) - roundsOnLine(n))
+  if (room < AI_LINE.minBatch) return 0
+  if (!interceptorThreat(s, map, nationId)) return 0
+  // As many rounds as the money allows, keeping the program's margin and reserve.
+  const limit = Math.min(budget, n.resources.capital - 40) - 20
+  const each = programCost(s, n, { kind: 'produce', missile: 'interceptor', count: 1 }).capital
+  const count = Math.min(room, each > 0 ? Math.floor(limit / each) : room)
+  if (count < AI_LINE.minBatch) return 0
+  const action: MissileProgramAction = { kind: 'produce', missile: 'interceptor', count }
+  if (programProblem(s, n, action, econ.workforce)) return 0
+  const cost = programCost(s, n, action).capital
+  if (cost + 20 > Math.min(budget, n.resources.capital - 40)) return 0
+  return tryAdd({ type: 'missileProgram', nationId, action }) ? cost : 0
 }

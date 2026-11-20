@@ -1167,6 +1167,11 @@ export interface GameState {
   opinions: Record<string, OpinionModifier[]>
   /** "from>to:kind" -> last turn that proposal was made, so bots do not spam. */
   proposalMemory: Record<string, number>
+  /**
+   * "from>to" -> the turn a player declined (or let lapse) a rival's missile ceasefire offer, so the rival waits before offering again
+   * (AI_TRUCE, src/ai/missileTruce.ts). Absent until it happens; entries are dropped once the wait is over.
+   */
+  truceRefused?: Record<string, number>
   /** Diplomatic outcomes from the most recent turn. */
   dispatches: Dispatch[]
   pendingEvent: PendingEvent | null

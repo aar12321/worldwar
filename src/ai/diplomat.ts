@@ -285,7 +285,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
     }
     case 'truce': {
       // Only a player is sent this offer; a bot standing in for one answers as a rival would.
-      const w = truceWilling(s, botId)
+      const w = truceWilling(s, botId, p.from)
       return verdict(w.accepts, w.accepts ? 'we will stop the missiles' : 'we see no reason to stop yet')
     }
     case 'callToArms': {
