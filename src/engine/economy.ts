@@ -1,4 +1,5 @@
 import { difficultyOf } from '../data/difficulty'
+import { memoFrozen } from './frozen'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, DIPLOMACY, UNIT_SPECS } from '../data/unitTypes'
 import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
@@ -201,7 +202,8 @@ export interface EconomyReport {
 }
 
 export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId): EconomyReport {
-  if (!settled.has(s)) return economyOf(s, map, nationId)
+  // A state the rivals are planning on is frozen: each nation's report is worked out once for the whole plan.
+  if (!settled.has(s)) return memoFrozen(s, 'economy', nationId, () => economyOf(s, map, nationId))
   let byNation = econCache.get(s)
   if (!byNation) econCache.set(s, (byNation = new Map()))
   let report = byNation.get(nationId)

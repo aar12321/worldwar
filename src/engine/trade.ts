@@ -2,6 +2,7 @@ import { MARKET, TRADE_LIMITS } from '../data/unitTypes'
 import { MATERIALS } from '../data/deposits'
 import { ECON, computeEconomy, marketSpread } from './economy'
 import { clamp } from './helpers'
+import { memoFrozen } from './frozen'
 import type { GameState, Nation, NationId, ResourceBundle, TradeResource, TradeTerms, WorldMap } from './types'
 import { TRADE_RESOURCES } from './types'
 
@@ -22,6 +23,11 @@ function median(values: number[]): number {
 
 /** Capital value of one unit of each resource, driven by how scarce it is across the living world. */
 export function marketPrices(s: GameState): MarketPrices {
+  // Callers may keep and read the prices, never change them: a frozen state hands every caller the same record.
+  return memoFrozen(s, 'marketPrices', 0, () => pricesOf(s))
+}
+
+function pricesOf(s: GameState): MarketPrices {
   const alive = Object.values(s.nations).filter((n) => n.alive)
   const out = {} as MarketPrices
   for (const r of TRADE_RESOURCES) {

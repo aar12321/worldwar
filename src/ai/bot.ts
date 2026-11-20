@@ -1,4 +1,5 @@
 import { MW, rungOf } from '../data/missileWar'
+import { whileFrozen } from '../engine/frozen'
 import { relationBotOrders } from './relations'
 import { MISSILE_TYPES } from '../data/missiles'
 import { tensionOf } from '../engine/missileWar'
@@ -825,6 +826,11 @@ function sellSurplus(
 }
 
 export function generateAllBotOrders(s: GameState, map: WorldMap, includePlayer = false): Order[] {
+  // Planning only reads the world, so what every rival looks up (economies, strength, prices) is worked out once.
+  return whileFrozen(s, () => allBotOrders(s, map, includePlayer))
+}
+
+function allBotOrders(s: GameState, map: WorldMap, includePlayer: boolean): Order[] {
   const ctx = buildTurnContext(s, map)
   const ids = shuffle(Object.keys(s.nations).sort(), createRng(s.seed, s.turn * 7919 + 17))
   const all = ids.flatMap((id) => generateBotOrders(s, map, id, includePlayer, ctx))
