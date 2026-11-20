@@ -239,7 +239,6 @@ export function CountryTab() {
                     order={{ type: 'developCity', nationId: player.id, regionId, cityId: city.id }}
                     label={`Grow to level ${city.level + 1}`}
                     cost={`${cityDevelopCost(city)} money`}
-                    effect="More workers, and a stronger focus"
                     tone="btn-primary"
                   />
                 )}
@@ -254,31 +253,30 @@ export function CountryTab() {
           <h3 className="text-[16px] font-semibold">Upgrades</h3>
           <p className="text-[13px] text-white/70">Each upgrade works the moment you buy it. Bigger countries can reach higher levels.</p>
         </div>
-        {BUILDING_TYPES.map((b) => {
-          const spec = BUILDING_SPECS[b]
-          const level = region.buildings[b]
-          const cap = buildingCap(workforce, b)
-          if (spec.requiresCoast && !map.regions[regionId].coastal) return null
-          const order = { type: 'build' as const, nationId: player.id, regionId, building: b }
-          return (
-            <div key={b} className="inset-card p-3.5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-[16px] font-semibold tracking-tight">{spec.name}</div>
-                  <div className="text-[13px] text-white/70 mt-0.5">{spec.description}</div>
+        {/* One row a building: what a level does under its name, the price on the button (a phone shows all of them in about a screen). */}
+        <ul className="inset-card px-3.5 py-1 divide-y divide-white/8">
+          {BUILDING_TYPES.map((b) => {
+            const spec = BUILDING_SPECS[b]
+            const level = region.buildings[b]
+            const cap = buildingCap(workforce, b)
+            if (spec.requiresCoast && !map.regions[regionId].coastal) return null
+            const order = { type: 'build' as const, nationId: player.id, regionId, building: b }
+            return (
+              <li key={b} className="py-2.5 flex items-center justify-between gap-3">
+                <div className="min-w-0" title={spec.description}>
+                  <div className="text-[15px] font-semibold tracking-tight">
+                    {spec.name}
+                    <span className="ml-1.5 text-[12px] font-normal text-white/60 tabular-nums">
+                      level {level} of {cap}
+                    </span>
+                  </div>
+                  <div className="text-[12px] text-white/65">{spec.effect}</div>
                 </div>
-                <span className="text-[14px] font-semibold tabular-nums shrink-0">
-                  Level {level}
-                  <span className="text-white/60"> of {cap}</span>
-                </span>
-              </div>
-              <div className="mt-2.5 flex items-center justify-between gap-3">
-                <Pips value={Math.min(level, 10)} max={Math.min(cap, 10)} />
-                {level >= cap ? <span className="chip chip-green">Highest level</span> : <OrderButton order={order} label="Upgrade" cost={`${orderCost(game, order).capital} money`} effect={spec.effect} tone="btn-primary" />}
-              </div>
-            </div>
-          )
-        })}
+                {level >= cap ? <span className="chip chip-green shrink-0">Highest</span> : <OrderButton order={order} label="Upgrade" cost={`${orderCost(game, order).capital} money`} className="shrink-0" tone="btn-primary" />}
+              </li>
+            )
+          })}
+        </ul>
       </div>
     </section>
   )
