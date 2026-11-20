@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { DEALINGS } from '../../data/relations'
 import { DOCTRINES, MW, rungOf } from '../../data/missileWar'
 import { MISSILES, MISSILE_TYPES } from '../../data/missiles'
 import { SHIELD_STOPS } from '../../data/systems'
@@ -794,11 +795,19 @@ describe('ceasefire and de-escalation', () => {
     expect(trucePair(s, 'r0', 'r1')).toBeNull()
   })
 
-  it('cannot be offered to a human, a stranger or a nation you are not fighting', () => {
+  it('cannot be offered to a stranger or a nation you are not fighting; to another player it is an offer they answer (DEALINGS)', () => {
     const s = war()
     s.missileTension = 80
     s.humans.push('r1')
-    expect(validateOrder(s, map, offer(s))).toMatch(/Only AI rivals/)
+    s.nations.r1.isPlayer = true
+    // Between two players it goes to their inbox (src/net/missileTruceOnline.test.ts); with DEALINGS off it is refused as before.
+    expect(validateOrder(s, map, offer(s))).toBeNull()
+    DEALINGS.on = false
+    try {
+      expect(validateOrder(s, map, offer(s))).toMatch(/Only AI rivals/)
+    } finally {
+      DEALINGS.on = true
+    }
     expect(validateOrder(war(), map, { ...offer(s), target: 'zz' })).toMatch(/Unknown nation/)
     const t = war()
     t.missileTension = 80

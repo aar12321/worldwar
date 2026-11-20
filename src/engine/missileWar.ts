@@ -552,6 +552,13 @@ export function applyScramble(s: GameState, o: Extract<Order, { type: 'scramble'
 export function truceAnswer(s: GameState, to: NationId): { accepts: boolean; why: string } {
   const t = s.nations[to]
   if (!t || t.isPlayer || s.humans.includes(to)) return { accepts: false, why: 'Only AI rivals answer ceasefire offers' }
+  return truceWilling(s, to)
+}
+
+/** Whether a nation's own interest says yes to a ceasefire (the rival's rule, also used by a bot standing in for a player). */
+export function truceWilling(s: GameState, to: NationId): { accepts: boolean; why: string } {
+  const t = s.nations[to]
+  if (!t) return { accepts: false, why: 'Unknown nation' }
   const skill = difficultyOf(s.settings.difficulty).skill
   const need = MW.truceTension[skill]
   const tension = tensionOf(s)

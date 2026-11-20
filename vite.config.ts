@@ -23,6 +23,7 @@ const SIMS = [
   'src/engine/__tests__/spaceLong.test.ts',
   'src/engine/__tests__/missileProgramSim.test.ts',
   'src/engine/__tests__/tiesSim.test.ts',
+  'src/engine/__tests__/dealingsSim.test.ts',
   'src/ai/tiers.test.ts',
   'src/ai/bot.test.ts',
   'src/ai/strategy.test.ts',

@@ -1,5 +1,5 @@
-import { addOpinion, opinionOf, storedOpinion } from '../ai/opinion'
-import { FAVOUR_ASKS, ACTS, AID, PROGRAMS, RELATIONS, VISIT } from '../data/relations'
+import { addOpinion, nationNeighbors, opinionOf, storedOpinion } from '../ai/opinion'
+import { DEALINGS, FAVOUR_ASKS, ACTS, AID, PROGRAMS, RELATIONS, TIES, VISIT } from '../data/relations'
 import { INVEST, SECTORS, SECTOR_IDS } from '../data/business'
 import { TECH_BY_ID } from '../data/techTree'
 import { DIPLOMACY } from '../data/unitTypes'
@@ -9,6 +9,7 @@ import { nationWorkforce } from './economy'
 import { addLog, atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied, newId, pairKey } from './helpers'
 import { createRng, type Rng } from './rng'
 import { relationLines } from './relationParts'
+import { trustFactor, trustReport } from './ties'
 import { cancelDeal } from './diplomacy'
 import { marketPrices } from './trade'
 import { regionValue } from './warscore'
@@ -46,9 +47,14 @@ export function cooldownLeft(s: GameState, o: RelateOrder): number {
 /** Every opinion line these rules add, so the total they can give one nation is capped. */
 const EARNED = new Set<string>([...Object.values(ACTS).map((a) => a!.label), 'Rescued us', 'Answered our call', 'Embassy', 'Treaty anniversary', 'Steadfast ally', 'Fought beside us', 'Exchange students', 'Trade routes', 'Joint research', 'Mediated for us', 'Backed us at the Council', 'Warm reception'])
 
+/** The thanks for each new investment (`invest`). With `DEALINGS.on` it is one of the desk's acts for the caps: see `thankInvestment`. */
+export const INVEST_THANKS = 'Invested in our businesses'
+
+const earned = (label: string) => EARNED.has(label) || (DEALINGS.on && label === INVEST_THANKS)
+
 function earnedSum(s: GameState, holder: NationId, target: NationId): number {
   let sum = 0
-  for (const m of storedOpinion(s, holder, target)) if (m.value > 0 && EARNED.has(m.label)) sum += m.value
+  for (const m of storedOpinion(s, holder, target)) if (m.value > 0 && earned(m.label)) sum += m.value
   for (const l of relationLines(s, holder, target)) if (l.value > 0) sum += l.value
   return sum
 }
@@ -73,6 +79,24 @@ export function warm(s: GameState, holder: NationId, target: NationId, label: st
   addOpinion(s, holder, target, label, v, decay)
   r.soft[key(holder, target)] = soft + v
   return v
+}
+
+/**
+ * The thanks for a new investment, with ties on: +3, its own line stacking to 6 (`TIES.invest`). With `DEALINGS.on` (and the desk on) it is
+ * also warmth like any act of the desk: worth less the more that nation was given lately, and inside the 45 that all acts together can give.
+ * The money itself is a separate, lasting line ('Invests in our economy', src/engine/ties.ts), which these caps do not touch.
+ * Returns what was added.
+ */
+export function thankInvestment(s: GameState, host: NationId, investor: NationId, amount: number): number {
+  const have = storedOpinion(s, host, investor).find((m) => m.label === INVEST_THANKS)?.value ?? 0
+  const v = Math.min(TIES.invest.thanks, Math.max(0, TIES.invest.thanksCap - have))
+  const added = v < 0.5 ? 0 : warm(s, host, investor, INVEST_THANKS, v, 0.2)
+  // Like every act of the desk, it is contact (no neglect this month) and it goes in the partners' history. The news line is the order's own.
+  const r = ensureRelations(s)
+  r.log.push({ turn: s.turn, a: investor, b: host, act: 'invest', text: `${name(s, investor)} invested ${Math.round(amount)} in ${name(s, host)}'s businesses.` })
+  if (r.log.length > RELATIONS.logCap) r.log.splice(0, r.log.length - RELATIONS.logCap)
+  touch(s, investor, host)
+  return added
 }
 
 /** A bad turn: unlike warmth it is not softened. */
@@ -137,7 +161,12 @@ export interface Reception {
   opinion: number
   need: number
   reason: string
+  /** For an act that weighs trust (a joint venture, with `DEALINGS.on`): their trust in the giver, and how many points it took off the need (negative: added). */
+  trust?: { total: number; label: string; shift: number }
 }
+
+/** Acts whose acceptance weighs trust as well as opinion: putting money in together is a matter of trust. */
+const TRUSTED_ACTS = new Set<RelateOrder['act']>(['venture'])
 
 /** The opinion a rival needs to take this act from this giver: the act's own line, bent by temperament and by difficulty. */
 export function opinionNeeded(s: GameState, rival: NationId, act: RelateOrder['act']): number {
@@ -157,9 +186,18 @@ export function opinionNeeded(s: GameState, rival: NationId, act: RelateOrder['a
 /** Whether a rival will take this act from this nation. Deterministic: the same state always answers the same, so the screen can say so before you try. */
 export function reception(s: GameState, map: WorldMap, rival: NationId, from: NationId, act: RelateOrder['act'], opinion?: number): Reception {
   const op = opinion ?? opinionOf(s, map, rival, from)
-  const need = opinionNeeded(s, rival, act)
-  if (op >= need) return { ok: true, opinion: op, need, reason: '' }
-  return { ok: false, opinion: op, need, reason: op <= -25 ? 'We do not trust you.' : act === 'visit' ? 'We would rather not receive you now.' : 'The time is not right.' }
+  let need = opinionNeeded(s, rival, act)
+  let trust: Reception['trust']
+  if (DEALINGS.on && TRUSTED_ACTS.has(act)) {
+    const t = trustReport(s, rival, from, { borders: nationNeighbors(s, map, rival).has(from) })
+    const shift = Math.round(trustFactor(t.total) * DEALINGS.trust.venture)
+    need -= shift
+    trust = { total: t.total, label: t.label, shift }
+  }
+  const extra = trust ? { trust } : {}
+  if (op >= need) return { ok: true, opinion: op, need, reason: '', ...extra }
+  const reason = op <= -25 ? 'We do not trust you.' : trust && trust.shift < 0 ? 'We doubt your word.' : act === 'visit' ? 'We would rather not receive you now.' : 'The time is not right.'
+  return { ok: false, opinion: op, need, reason, ...extra }
 }
 
 // ---- costs ---------------------------------------------------------------------------------------------------------------
@@ -387,7 +425,7 @@ export function relationProblem(s: GameState, map: WorldMap, o: RelateOrder, pen
   // A rival takes only what its opinion of you allows. (Asked last, so the more useful reason comes first.)
   if (spec && spec.minOpinion > -100 && !themHuman && o.act !== 'apology') {
     const r = reception(s, map, o.target, o.nationId, o.act)
-    if (!r.ok && !(o.act === 'aid' && needLevel(s, o.target, o.resource ?? 'food') !== 'flush' && r.opinion > -60)) return `${them.name} will not take it: ${r.reason} (their opinion of you is ${r.opinion}; this needs ${r.need})`
+    if (!r.ok && !(o.act === 'aid' && needLevel(s, o.target, o.resource ?? 'food') !== 'flush' && r.opinion > -60)) return `${them.name} will not take it: ${r.reason} (their opinion of you is ${r.opinion}; this needs ${r.need}${r.trust?.shift ? `, ${r.trust.shift > 0 ? 'less' : 'more'} because their trust in you is ${r.trust.total}` : ''})`
   }
   return null
 }

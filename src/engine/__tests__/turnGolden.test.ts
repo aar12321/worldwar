@@ -7,7 +7,7 @@ import { applyOrderNow, resolveTurn } from '../resolveTurn'
 import type { GameState, Order } from '../types'
 import { lineMap, setMilitary, startState } from './fixtures'
 import { PRESENCE } from '../../data/presence'
-import { RELATIONS, TIES } from '../../data/relations'
+import { DEALINGS, RELATIONS, TIES } from '../../data/relations'
 import { MPROG } from '../../data/missileProgram'
 import { CIVICS } from '../../data/civics'
 import { BLOC } from '../../data/blocs'
@@ -60,16 +60,32 @@ function withoutTies<T>(fn: () => T): T {
   const on = TIES.on
   TIES.on = false
   try {
-    return withoutDeskShare(fn)
+    return withoutDealings(fn)
   } finally {
     TIES.on = on
   }
 }
 
 /**
+ * Runs `fn` with dealings (docs/RELATIONS_STATUS.md, "Gaps closed": moot offers withdrawn, trust in a rival's answer, investment thanks under
+ * the desk's caps, the long peace of old saves, ceasefires between players) switched off. Dealings came after ties, so `withoutTies` switches
+ * them off too, and every older layer's proof keeps running against its own world. The one ceiling on care
+ * came after dealings, so this switches it off too.
+ */
+function withoutDealings<T>(fn: () => T): T {
+  const on = DEALINGS.on
+  DEALINGS.on = false
+  try {
+    return withoutDeskShare(fn)
+  } finally {
+    DEALINGS.on = on
+  }
+}
+
+/**
  * Runs `fn` with the government desk's stability added on its own line, outside the one ceiling on care (`SOCIAL_RULES.deskShares`
- * off: docs/UX_AUDIT_NATION.md, "Stability: one ceiling"). It came after ties, so `withoutTies` (and every older layer through it)
- * switches it off too.
+ * off: docs/UX_AUDIT_NATION.md, "Stability: one ceiling"). It came after dealings, so `withoutDealings` (and through it `withoutTies` and
+ * every older layer) switches it off too.
  */
 function withoutDeskShare<T>(fn: () => T): T {
   const on = SOCIAL_RULES.deskShares
@@ -174,10 +190,15 @@ function withoutPresence<T>(fn: () => T): T {
  * no fear of a big nation before it takes land, and the record of wars and runs of trade (the new `ties` field). Checked before pinning: with
  * `TIES.on` switched off (`withoutTies`, 'ties are the only thing that moved ...'; `withoutBlocs` now switches it off too, so every older layer keeps
  * its proof) the previous pins (10cf7a356e2bea, 11d73d1672f834, d077c31c237c4) return exactly.
- * Re-pinned (the Normal and Hard bot worlds; the small war did not move) when the government desk's stability began to share the one
+ * Re-pinned (the Hard-bot world only; the Normal-bot world and the small war did not move) for dealings (docs/RELATIONS_STATUS.md, "Gaps closed"):
+ * trust counts in a rival's answer to a pact, an alliance, a guarantee, a trade deal, a loan or a joint venture; offers the world has overtaken are
+ * withdrawn; investment thanks counts under the desk's caps. Checked before pinning: with `DEALINGS.on` switched off (`withoutDealings`, 'dealings
+ * are the only thing ...'; `withoutTies` now switches it off too, so every older layer keeps its proof) the previous pins (a0f8d651bfe97,
+ * 1879299a3721df, 19d872c4a61078) return exactly.
+ * Re-pinned (the Normal and Hard bot worlds; the small war did not move), after dealings, when the government desk's stability began to share the one
  * soft ceiling on care with the programs and projects (`SOCIAL_RULES.deskShares`, docs/UX_AUDIT_NATION.md): a desk that adds calm on
- * top of full care adds less. Checked before pinning: with it switched off (`withoutDeskShare`, also inside `withoutTies`, so every older
- * layer test keeps its proof) the previous pins (a0f8d651bfe97, 1879299a3721df, 19d872c4a61078) return exactly.
+ * top of full care adds less. Checked before pinning: with it switched off (`withoutDeskShare`, also inside `withoutDealings` and so `withoutTies`, so
+ * every older layer test keeps its proof) the previous pins (a0f8d651bfe97, 1909d086a0093, 19d872c4a61078) return exactly.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -254,8 +275,9 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned for the missile program (Hard rivals build, hire, develop and test): with it switched off '1719b377e4ad6a' returns (see below).
     // Missile program + government desk + blocs together (each proven alone below).
     // Re-pinned for ties: with them off '11d73d1672f834' returns (see below).
-    // Re-pinned for the one ceiling on care and the desk: with it off '1879299a3721df' returns (see below).
-    expect(hash(JSON.stringify(s))).toBe('165d08ef09d489')
+    // Re-pinned for dealings (trust in a rival's answer, moot offers withdrawn): with them off '1879299a3721df' returns (see below).
+    // Re-pinned for the one ceiling on care and the desk: with it off '1909d086a0093' returns (see below).
+    expect(hash(JSON.stringify(s))).toBe('2008f877453d')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
@@ -330,6 +352,16 @@ describe('turn mode resolves exactly as pinned', () => {
   it('the one ceiling on care and the desk is the only thing that moved the current pins: switched off, the pins from before it return', () => {
     withoutDeskShare(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('a0f8d651bfe97')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1909d086a0093')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('19d872c4a61078')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    })
+  }, 400_000)
+
+  it('dealings are the only thing that moved the current pins: with them switched off the pins from before them return', () => {
+    withoutDealings(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('a0f8d651bfe97')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1879299a3721df')
       const { state, log } = smallWar()
       expect(hash(JSON.stringify(state))).toBe('19d872c4a61078')
@@ -337,7 +369,7 @@ describe('turn mode resolves exactly as pinned', () => {
     })
   }, 400_000)
 
-  it('ties are the only thing that moved the current pins: with them switched off the pins from before them return', () => {
+  it('ties are the only thing that moved the pins before dealings: with them switched off the pins from before them return', () => {
     withoutTies(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('10cf7a356e2bea')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('11d73d1672f834')

@@ -95,6 +95,22 @@ export const TRUST = {
   war: -40,
 }
 
+/**
+ * Dealings (docs/RELATIONS_STATUS.md, "Gaps closed"): offers the world has overtaken are withdrawn instead of waiting to expire, trust
+ * counts in a rival's answer to a treaty, a trade deal, a loan or a joint venture, a save from before ties starts its long-peace clock when
+ * it is loaded, investment thanks counts under the same caps as the desk's acts, and two players can agree a missile ceasefire.
+ * `on` is the switch the golden tests use (`withoutDealings`): with it off every rule is exactly as before.
+ */
+export const DEALINGS = {
+  on: true,
+  /**
+   * What trust is worth in a rival's answer. Trust (0 to 100) becomes a factor from -1 (none at all) through 0 (50, untested) to +1 (complete),
+   * and each kind of offer weighs it: points on the score of a pact or an alliance (whose dice span ±6), points of opinion for a guarantee,
+   * a loan or a joint venture, and a share off (or on) the price a trade deal must reach.
+   */
+  trust: { pact: 10, alliance: 12, guarantee: 10, loan: 15, venture: 8, tradePrice: 0.08 },
+}
+
 export type ActGroup = 'goodwill' | 'presence' | 'economy' | 'aid' | 'military' | 'plans' | 'repair' | 'favours'
 
 export const ACT_GROUPS: { id: ActGroup; name: string; blurb: string }[] = [

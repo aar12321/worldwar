@@ -1,6 +1,8 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, addOpinionCapped, decayOpinions } from '../ai/opinion'
-import { TIES } from '../data/relations'
+import { DEALINGS, TIES } from '../data/relations'
+import { MW } from '../data/missileWar'
+import { applyTruce, trucePair } from './missileWar'
 import { LIBERATE_TEXT, PUPPET } from '../data/puppets'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
 import { EMPIRE, JUSTIFY, WAR } from '../data/war'
@@ -257,7 +259,26 @@ export function validateProposal(s: GameState, map: WorldMap, from: NationId, to
       if (hasPact(s, to, d.enemy) || isAllied(s, to, d.enemy)) return `${t.name} has a treaty with ${enemy.name}`
       return null
     }
+    case 'truce':
+      if (!DEALINGS.on || !isHumanNation(s, to) || !isHumanNation(s, from)) return 'A missile ceasefire is offered from the Missile War desk'
+      if (!atWar(s, from, to)) return 'Not at war'
+      if (trucePair(s, from, to) !== null) return 'A ceasefire already holds'
+      return null
   }
+}
+
+const isHumanNation = (s: GameState, id: NationId) => s.humans.includes(id) || !!s.nations[id]?.isPlayer
+
+/** Whether a `missileTruce` order is an offer to another player (who answers it on their own screen) rather than a rival's answer on the spot. */
+export const truceByOffer = (s: GameState, o: { nationId: NationId; target: NationId; lift?: boolean }): boolean =>
+  DEALINGS.on && !o.lift && isHumanNation(s, o.target) && isHumanNation(s, o.nationId)
+
+/** What stops a missile ceasefire offer to another player, or null. */
+export function truceOfferProblem(s: GameState, map: WorldMap, o: { nationId: NationId; target: NationId }): string | null {
+  if (!s.nations[o.target]?.alive || o.target === o.nationId) return 'Unknown nation'
+  if (s.proposals.some((p) => p.kind === 'truce' && p.from === o.nationId && p.to === o.target)) return 'Awaiting their answer'
+  if (s.proposals.some((p) => p.kind === 'truce' && p.from === o.target && p.to === o.nationId)) return 'They have offered you one: answer it in Diplomacy'
+  return validateProposal(s, map, o.nationId, o.target, { kind: 'truce' })
 }
 
 export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (ProposalDraft & { from: NationId; to: NationId })): string {
@@ -299,6 +320,8 @@ export function describeProposal(s: GameState, map: WorldMap, p: Proposal | (Pro
     }
     case 'guarantee':
       return `${name(s, p.from)} promises to defend ${name(s, p.to)} for ${DIPLOMACY.guarantee.months} months`
+    case 'truce':
+      return `Neither side fires missiles or bombers at the other for ${MW.truceMonths} months; the armies stay at war`
   }
 }
 
@@ -397,6 +420,9 @@ function applyProposal(s: GameState, map: WorldMap, p: Proposal, rng: Rng): stri
     case 'guarantee':
       s.guarantees.push({ from: p.from, to: p.to, until: s.turn + DIPLOMACY.guarantee.months })
       addOpinion(s, p.to, p.from, 'Guaranteed our independence', 25, 0.15)
+      return null
+    case 'truce':
+      applyTruce(s, { type: 'missileTruce', nationId: p.from, target: p.to })
       return null
   }
 }
@@ -597,14 +623,18 @@ function stillRelevant(s: GameState, p: Proposal): boolean {
       return !atWar(s, p.from, p.to)
     case 'guarantee':
       return !atWar(s, p.from, p.to) && !isAllied(s, p.from, p.to)
+    case 'truce':
+      return atWar(s, p.from, p.to) && trucePair(s, p.from, p.to) === null
   }
 }
 
-export function expireDiplomacy(s: GameState) {
+/** The month's end for treaties and offers. `withdraw` runs once treaties have lapsed and before offers expire: it takes out offers the world has overtaken. */
+export function expireDiplomacy(s: GameState, withdraw?: () => void) {
   for (const [k, until] of Object.entries(s.pacts)) if (until < s.turn) delete s.pacts[k]
   for (const [k, until] of Object.entries(s.casusBelli)) if (until < s.turn) delete s.casusBelli[k]
   s.sanctions = (s.sanctions ?? []).filter((x) => x.until >= s.turn)
   s.guarantees = (s.guarantees ?? []).filter((x) => x.until >= s.turn)
+  withdraw?.()
   const kept: Proposal[] = []
   for (const p of s.proposals) {
     if (!stillRelevant(s, p)) continue

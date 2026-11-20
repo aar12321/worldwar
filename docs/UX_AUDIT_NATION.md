@@ -133,9 +133,10 @@ Seen with `--empire` (19 countries, a puppet, a territory, at war) in turn and l
    cabinet with reforms could add about +12 on top of care already near its soft cap of 18. Now `deskStability` puts what the desk
    adds on top of programs and projects under the same `softCap`; what it takes away counts in full. The Government overview and
    Groups show the counted value beside the raw one, and the People breakdown says the three share one ceiling
-   (`careCap.test.ts`). Goldens: Normal `66d50a51fed96`, Hard `165d08ef09d489` (the small war did not move); with the flag off
-   (`withoutDeskShare`, also inside `withoutTies`, so every older layer test keeps its proof) `a0f8d651bfe97`, `1879299a3721df`
-   and `19d872c4a61078` return exactly.
+   (`careCap.test.ts`). Goldens: Normal `66d50a51fed96`, Hard `2008f877453d` (the small war did not move); with the flag off
+   (`withoutDeskShare`, also inside `withoutDealings` and `withoutTies`, so every older layer test keeps its proof) the pins
+   before it return exactly: `a0f8d651bfe97`, `1879299a3721df`, `19d872c4a61078` on this branch, and after merging main's
+   dealings layer `a0f8d651bfe97`, `1909d086a0093`, `19d872c4a61078`.
 6. **The 403 on every page** was ours: the Inter font (`@fontsource-variable/inter/.../inter-latin-wght-normal.woff2`) requested
    from `/@fs/home/user/worldwar/node_modules/...`. In a worktree whose `node_modules` links to the main checkout, the real path is
    outside Vite's allowed root and Vite answered 403. `vite.config.ts` now allows the link's real folder. Not a proxy block.
