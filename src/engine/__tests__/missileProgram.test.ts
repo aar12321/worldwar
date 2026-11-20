@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEVS, FACILITIES, MPROG, PROGRAM_RULES, STAFF, TEST_RULES, type MissileProgramAction } from '../../data/missileProgram'
+import { DEVS, FACILITIES, MPROG, PRODUCTION_RULES, PROGRAM_RULES, STAFF, TEST_RULES, type MissileProgramAction } from '../../data/missileProgram'
 import { MISSILES, MISSILE_PROGRAM } from '../../data/missiles'
 import { absDay, clockOf, daysInMonth } from '../calendar'
 import { computeEconomy, nationWorkforce } from '../economy'
@@ -8,6 +8,7 @@ import { strikeForecast } from '../missileForecast'
 import {
   activeDevs,
   chiefCandidates,
+  describeProgram,
   dayAfter,
   devRate,
   devStatus,
@@ -24,7 +25,8 @@ import {
   testRange,
 } from '../missileProgram'
 import { buildMissilesCost, buildRoom, launchSite, reachKm, storageCap } from '../missiles'
-import { harmOf, interceptorCap, salvoDefense } from '../missileWar'
+import { harmOf, interceptorCap, interceptorsOf, salvoDefense } from '../missileWar'
+import { MW } from '../../data/missileWar'
 import { validateOrder } from '../orders'
 import { programFx } from '../programEffects'
 import { applyOrderNow, resolveTurn } from '../resolveTurn'
@@ -418,6 +420,87 @@ describe('the production line', () => {
     s.nations.r0.mprog!.fac.plant = 1
     s.nations.r0.arsenal = { cruise: storageCap(s.nations.r0) }
     expect(validateOrder(s, map, act({ kind: 'produce', missile: 'cruise', count: 1 }))).toMatch(/stores are full/)
+  })
+})
+
+describe('interceptor rounds on the production line (MPROG.interceptorLine)', () => {
+  /** A program with a plant and the interceptor works, a shield, and an empty store. */
+  function armed() {
+    const s = founded()
+    const n = s.nations.r0
+    n.mprog!.fac.plant = 1
+    n.mprog!.fac.works = 1
+    n.systems = { ...(n.systems ?? {}), shield: 2 }
+    n.missileWar = { ...(n.missileWar ?? {}), interceptors: 0 }
+    return s
+  }
+  const rounds = (count: number) => act({ kind: 'produce', missile: 'interceptor', count })
+
+  it('needs a plant, the interceptor works and a store with room, counting the rounds already on the line', () => {
+    const s = armed()
+    s.nations.r0.mprog!.fac.works = 0
+    expect(validateOrder(s, map, rounds(4))).toMatch(/interceptor works/)
+    s.nations.r0.mprog!.fac.works = 1
+    s.nations.r0.mprog!.fac.plant = 0
+    expect(validateOrder(s, map, rounds(4))).toMatch(/production plant/)
+    s.nations.r0.mprog!.fac.plant = 1
+    const cap = interceptorCap(s.nations.r0)
+    expect(validateOrder(s, map, rounds(cap + 1))).toMatch(/room for/)
+    apply(s, rounds(cap))
+    expect(validateOrder(s, map, rounds(1))).toMatch(/store is full/)
+    s.nations.r0.systems!.shield = 0
+    s.nations.r0.missileWar = {}
+    expect(validateOrder(s, map, rounds(1))).toMatch(/store is full|Interceptor Shield/)
+  })
+
+  it('costs money at once, cheaper than buying the rounds, and arrives at the line pace', () => {
+    const s0 = armed()
+    const money = s0.nations.r0.resources.capital
+    apply(s0, rounds(10))
+    expect(money - s0.nations.r0.resources.capital).toBe(Math.ceil(10 * MW.roundCost * PRODUCTION_RULES.roundPrice))
+    expect(s0.nations.r0.mprog!.line[0]).toMatchObject({ kind: 'interceptor', count: 10, made: 0 })
+    // The same month without the batch: the store refills by itself (half a store a month).
+    const control = month(armed())
+    const s = month(s0)
+    // A level-1 plant makes 3 missiles' worth a month: 6 rounds.
+    expect(interceptorsOf(s.nations.r0) - interceptorsOf(control.nations.r0)).toBe(3 * PRODUCTION_RULES.roundsPerMissile)
+    expect(s.nations.r0.mprog!.line[0].made).toBeCloseTo(6, 6)
+    expect(describeProgram({ kind: 'produce', missile: 'interceptor', count: 10 })).toMatch(/10 interceptor rounds/)
+  })
+
+  it('a full store holds the line (missiles behind wait too); nothing is lost', () => {
+    let s = armed()
+    apply(s, rounds(4), act({ kind: 'produce', missile: 'cruise', count: 2 }))
+    // The store fills up before the line delivers (say, the shield was refilled).
+    s.nations.r0.missileWar!.interceptors = interceptorCap(s.nations.r0)
+    const cruise = s.nations.r0.arsenal?.cruise ?? 0
+    s = month(s)
+    expect(s.nations.r0.mprog!.line[0]).toMatchObject({ kind: 'interceptor', made: 0 })
+    expect(s.nations.r0.arsenal?.cruise ?? 0).toBe(cruise)
+    // Rounds fired: room again, and the batch delivers.
+    s.nations.r0.missileWar = { ...(s.nations.r0.missileWar ?? {}), interceptors: 0 }
+    s = month(s)
+    expect(s.nations.r0.mprog!.line.some((b) => b.kind === 'interceptor')).toBe(false)
+  })
+
+  it('switched off, the order is refused', () => {
+    const s = armed()
+    MPROG.interceptorLine = false
+    try {
+      expect(validateOrder(s, map, rounds(2))).toMatch(/Missile War/)
+    } finally {
+      MPROG.interceptorLine = true
+    }
+  })
+
+  it('a live game: the clock wakes for the next round, and a full store does not keep it busy', () => {
+    const s = armed()
+    startLive(s)
+    apply(s, rounds(6))
+    const n = s.nations.r0
+    expect(nextDue(n)).toBeLessThan(Infinity)
+    n.missileWar!.interceptors = interceptorCap(n)
+    expect(nextDue(n)).toBe(Infinity)
   })
 })
 

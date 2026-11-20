@@ -18,6 +18,7 @@ import { ALERT_COLOR, flightsFor, lookColor, stageOf, type Incoming, type Palett
 import { ladderNote, raidReach, nextSteps, salvoLine, warStatus, type Step } from './missileWarText'
 import { missileName } from './missileText'
 import { OrderButton } from './panel'
+import { openProgram } from './programSection'
 
 const { map } = getWorld()
 const nameOf = (game: GameState, id: string) => game.nations[id]?.name ?? id
@@ -119,7 +120,8 @@ function StepRow({ step, game }: { step: Step; game: GameState }) {
               if (step.target) useGame.setState({ selectedRegion: step.target })
               openMilitary('missiles')
               setTimeout(() => document.querySelector('[data-planner]')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 0)
-            } else openMilitary(step.go === 'deploy' ? 'deploy' : step.go === 'war' ? 'wars' : step.go === 'program' ? 'program' : 'systems')
+            } else if (step.go === 'program') openProgram(step.id === 'build' ? 'arsenal' : 'overview')
+            else openMilitary(step.go === 'deploy' ? 'deploy' : step.go === 'war' ? 'wars' : 'systems')
           }}
         >
           {step.go === 'strike' ? 'Open the strike planner' : step.go === 'deploy' ? 'Open Deployment' : step.go === 'war' ? 'Open Wars' : step.go === 'systems' ? 'Open Systems' : 'Open the program'}

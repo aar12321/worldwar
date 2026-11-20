@@ -1,4 +1,4 @@
-import { BASE_CEP, DEVS, DEV_IDS, FACILITIES, FACILITY_IDS, PROGRAM_RULES, STAFF, type FacilityId, type MissileDevId, type MissileProgramAction } from '../data/missileProgram'
+import { BASE_CEP, DEVS, DEV_IDS, FACILITIES, FACILITY_IDS, PRODUCTION_RULES, PROGRAM_RULES, STAFF, type FacilityId, type LineKind, type MissileDevId, type MissileProgramAction } from '../data/missileProgram'
 import { MISSILES, MISSILE_PROGRAM, PROGRAM_MISSILES } from '../data/missiles'
 import { clockOf, isLive } from '../engine/calendar'
 import { buildDue, buildRate, devDue, devRate, devStatus, lineRate, monthEnd, monthsBetween, programProblem, testOdds } from '../engine/missileProgram'
@@ -55,11 +55,16 @@ export function timeline(game: GameState, n: Nation): TimelineItem[] {
   }
   const b = p.line[0]
   if (b) {
-    const r = lineRate(n)
+    const r = lineRate(n) * (b.kind === 'interceptor' ? PRODUCTION_RULES.roundsPerMissile : 1)
     const made = Math.min(b.count, b.made + (now > p.asOf ? monthsBetween(p.asOf, now) * r : 0))
-    out.push({ id: `l-${b.id}`, kind: 'line', title: `Production line: ${Math.floor(made)} of ${b.count} ${MISSILES[b.kind].name.toLowerCase()}s`, due: r > 0 ? now + Math.ceil(((b.count - made) / r) * 30) : Infinity, share: made / b.count, color: '#30d158' })
+    out.push({ id: `l-${b.id}`, kind: 'line', title: `Production line: ${Math.floor(made)} of ${b.count} ${lineKindName(b.kind)}`, due: r > 0 ? now + Math.ceil(((b.count - made) / r) * 30) : Infinity, share: made / b.count, color: b.kind === 'interceptor' ? '#64d2ff' : '#30d158' })
   }
   return out.sort((x, y) => x.due - y.due || (x.id < y.id ? -1 : 1))
+}
+
+/** What a batch on the line makes, in the plural: "cruise missiles", "interceptor rounds". */
+export function lineKindName(k: LineKind): string {
+  return k === 'interceptor' ? 'interceptor rounds' : `${MISSILES[k].name.toLowerCase()}s`
 }
 
 export interface ProgramStep {

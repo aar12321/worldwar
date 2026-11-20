@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AGENCY, AGENCY_ROLE, DOMESTIC_OPS, FOREIGN_OPS, agencyName, levelsCost, type AgencyId, type DomesticOp, type ForeignOp } from '../data/agencies'
+import { AGENCY, AGENCY_ROLE, DOMESTIC_OPS, FOREIGN_OPS, agencyLevelText, agencyName, levelsCost, type AgencyId, type DomesticOp, type ForeignOp } from '../data/agencies'
 import { operationOdds } from '../engine/agencies'
 import { atWar, nationModifiers } from '../engine/helpers'
 import { hasIntel, powerView } from '../engine/intel'
@@ -36,20 +36,28 @@ function AgencyCard({ id }: { id: AgencyId }) {
       <div className="text-[13px] text-white/75">
         Teams this month: {Math.max(0, a.level - used)} of {a.level} · Experience {a.exp} · Costs {fmt(a.level * AGENCY.upkeepPerLevel, 1)} money a month
       </div>
-      {a.level < AGENCY.maxLevel && (
-        <div className="space-y-1.5">
-          <div className="grid grid-cols-2 gap-2">
-            {Array.from({ length: Math.min(4, AGENCY.maxLevel - a.level) }, (_, i) => i + 1).map((levels) => (
-              <OrderButton
-                key={levels}
-                order={{ type: 'fundAgency', nationId: player.id, agency: id, levels }}
-                label={levels === 1 ? `Raise to level ${a.level + 1}` : `Raise to level ${a.level + levels}`}
-                cost={`${levelsCost(a.level, levels)} money`}
-                effect={levels === 1 ? 'One more team, better odds, more operations. Takes effect at once.' : `${levels} levels at once.`}
-              />
-            ))}
-          </div>
+      {a.level < AGENCY.maxLevel ? (
+        <div className="space-y-1.5" data-raise={a.level + 1}>
+          <OrderButton
+            order={{ type: 'fundAgency', nationId: player.id, agency: id, levels: 1 }}
+            label={`Raise to level ${a.level + 1}`}
+            cost={`${levelsCost(a.level, 1)} money · +${fmt(AGENCY.upkeepPerLevel, 1)}/mo`}
+            effect={`${agencyLevelText(id, a.level + 1)}. Takes effect at once.`}
+            tone="btn-primary"
+            className="w-full sm:w-auto"
+          />
+          {a.level + 1 < AGENCY.maxLevel && (
+            <ul className="text-[12px] text-white/60 space-y-0.5" aria-label="Later levels">
+              {Array.from({ length: AGENCY.maxLevel - a.level - 1 }, (_, i) => a.level + 2 + i).map((l) => (
+                <li key={l}>
+                  <span className="text-white/75 font-semibold">Level {l}:</span> {agencyLevelText(id, l)} · {levelsCost(l - 1, 1)} money
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
+      ) : (
+        <p className="text-[13px] text-[#6eeb8a]">At its highest level.</p>
       )}
     </div>
   )

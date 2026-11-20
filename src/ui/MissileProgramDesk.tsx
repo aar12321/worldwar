@@ -11,6 +11,7 @@ import {
   FACILITIES,
   FACILITY_IDS,
   MILESTONES,
+  MPROG,
   PRODUCTION_RULES,
   PROGRAM_RULES,
   STAFF,
@@ -25,9 +26,9 @@ import {
 import { MISSILES, MISSILE_PROGRAM, PROGRAM_MISSILES } from '../data/missiles'
 import { MW } from '../data/missileWar'
 import { clockOf, isLive } from '../engine/calendar'
-import { activeDevs, chiefCandidates, chiefHireCost, chiefSalary, devLock, devPrice, devSlots, devStatus, lineRate, milestones, poachRisk, programBill, programTalentCap, rivalPrograms, testMoney, testOdds, testsAllowed, testsUsed, type DevStatus } from '../engine/missileProgram'
+import { activeDevs, chiefCandidates, chiefHireCost, chiefSalary, devLock, devPrice, devSlots, devStatus, lineRate, milestones, poachRisk, programBill, roundsOnLine, programTalentCap, rivalPrograms, testMoney, testOdds, testsAllowed, testsUsed, type DevStatus } from '../engine/missileProgram'
 import { arsenalSize, buildRoom, fundMissilesCost, programLevel, storageCap } from '../engine/missiles'
-import { interceptorCap, mobileCover, radarLevel } from '../engine/missileWar'
+import { interceptorCap, interceptorsOf, mobileCover, radarLevel } from '../engine/missileWar'
 import { programFx, programStaff } from '../engine/programEffects'
 import type { GameState, MissileType, Nation, Order } from '../engine/types'
 import { useGame } from '../store'
@@ -36,8 +37,10 @@ import { fmt, usePlayerView } from './hooks'
 import { Bar, StatTile, Tiles } from './kit'
 import { MISSILE_SWATCH, PROGRAM_KINDS } from './missileText'
 import { BuildRow } from './MissileProgram'
-import { capabilities, devEffectLines, nextLevel, programSteps, timeline, whenText } from './missileProgramText'
-import { OrderButton } from './panel'
+import { openGovernment } from './economy/government/section'
+import { PROGRAM_SECTIONS, setProgramSection, useProgramSection, type ProgramSection } from './programSection'
+import { capabilities, devEffectLines, lineKindName, nextLevel, programSteps, timeline, whenText } from './missileProgramText'
+import { OrderButton, Tabs } from './panel'
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
 const act = (n: Nation, action: MissileProgramAction): Order => ({ type: 'missileProgram', nationId: n.id, action })
@@ -136,7 +139,7 @@ function MilestoneStrip({ player }: { player: Nation }) {
   )
 }
 
-function Steps({ game, player, workforce }: { game: GameState; player: Nation; workforce: number }) {
+function Steps({ game, player, workforce, go }: { game: GameState; player: Nation; workforce: number; go: (s: ProgramSection) => void }) {
   const steps = programSteps(game, player, workforce, 3)
   if (!steps.length) return null
   return (
@@ -148,7 +151,15 @@ function Steps({ game, player, workforce }: { game: GameState; player: Nation; w
             <div className="text-[14px] font-semibold">{st.title}</div>
             <div className="text-[12px] text-white/70">{st.detail}</div>
           </div>
-          {st.order && <OrderButton order={st.order} label="Do it" tone="btn-primary" className="shrink-0" />}
+          {st.order ? (
+            <OrderButton order={st.order} label="Do it" tone="btn-primary" className="shrink-0" />
+          ) : (
+            STEP_SECTION.some(([re]) => re.test(st.id)) && (
+              <button className="btn btn-quiet px-3 py-1.5 text-[13px] shrink-0" onClick={() => go(STEP_SECTION.find(([re]) => re.test(st.id))![1])}>
+                Open
+              </button>
+            )
+          )}
         </div>
       ))}
     </section>
@@ -290,7 +301,7 @@ function FacilityCard({ game, player, id }: { game: GameState; player: Nation; i
 function Structure({ game, player }: { game: GameState; player: Nation }) {
   const mw = player.missileWar
   return (
-    <Section title="Structure" sub="Facilities take months to build and cost upkeep. A facility can be one level above the charter; bigger empires build bigger ones and more at once." id="structure">
+    <Section title="Facilities" sub="Facilities take months to build and cost upkeep. A facility can be one level above the charter; bigger empires build bigger ones and more at once." id="structure">
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {FACILITY_IDS.map((f) => (
           <FacilityCard key={f} game={game} player={player} id={f} />
@@ -388,12 +399,18 @@ function Talent({ game, player, workforce }: { game: GameState; player: Nation; 
   const room = cap - programStaff(player)
   const risk = poachRisk(game, player)
   return (
-    <Section title="Talent" sub={`Your people can spare ${cap} specialists for missiles (the space agency draws on the same pool). ${room > 0 ? `${room} more can be hired.` : 'The pool is used up: schooling and engineers raise it.'}`} id="talent">
+    <Section title="Staff and talent" sub={`Your people can spare ${cap} specialists for missiles (the space agency draws on the same pool). ${room > 0 ? `${room} more can be hired.` : 'The pool is used up: schooling and engineers raise it.'}`} id="talent">
       <ChiefCard game={game} player={player} />
       <div className="grid gap-2 sm:grid-cols-2">
         {STAFF_ROLES.map((r) => (
           <StaffRow key={r} player={player} role={r} room={room} />
         ))}
+      </div>
+      <div className="rounded-xl bg-white/5 p-2.5 text-[12px] text-white/75 flex flex-wrap items-center justify-between gap-2" data-talent-link>
+        <span>The pool comes from your engineers and scientists: schooling and the professions are on the Government desk.</span>
+        <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openGovernment('talent')}>
+          Government › Talent
+        </button>
       </div>
       <p className={`text-[12px] ${risk >= 0.05 ? 'text-[#ffd60a]' : 'text-white/65'}`} data-poach={Math.round(risk * 100)}>
         Rivals poach: {Math.round(risk * 100)}% chance a month of losing staff. Analysts and a bigger budget cut it; experience grows with every test and launch.
@@ -443,7 +460,7 @@ function DevCard({ game, player, id, by }: { game: GameState; player: Nation; id
           <Bar value={item.share} color={DEV_BRANCHES[spec.branch].color} label={spec.name} />
         </div>
       )}
-      {status === 'test' && <p className="text-[12px] text-[#ff8a84]">Work done: test it on the range above ({Math.round(testOdds(player, id) * 100)}%).</p>}
+      {status === 'test' && <p className="text-[12px] text-[#ff8a84]">Work done: test it on the range in Overview ({Math.round(testOdds(player, id) * 100)}%).</p>}
       {lock && <p className="text-[12px] text-white/60">{lock}</p>}
       {status === 'ready' && (
         <OrderButton order={act(player, { kind: 'develop', dev: id, by })} label="Develop" cost={`${price.capital} money · ${price.tp} research · ${spec.months} mo${spec.test !== undefined ? ' + test' : ''}`} className="w-full" />
@@ -499,16 +516,23 @@ function Development({ game, player }: { game: GameState; player: Nation }) {
 
 // ---- Production and stockpile ----
 
+type LineChoice = ProgramKind | 'interceptor'
+
 function Production({ game, player }: { game: GameState; player: Nation }) {
-  const [kind, setKind] = useState<ProgramKind>('cruise')
+  const [kind, setKind] = useState<LineChoice>('cruise')
   const plant = player.mprog?.fac.plant ?? 0
+  const works = player.mprog?.fac.works ?? 0
   const rate = lineRate(player)
   const level = programLevel(player)
   const room = buildRoom(player, game.turn)
+  const rounds = kind === 'interceptor'
+  const storeRoom = interceptorCap(player) - interceptorsOf(player) - roundsOnLine(player)
+  const roundsCount = Math.max(1, Math.min(10, storeRoom))
+  const choices: LineChoice[] = [...PROGRAM_MISSILES.filter((k) => MISSILES[k].level <= level).map((k) => k as ProgramKind), ...(MPROG.interceptorLine ? (['interceptor'] as const) : [])]
   return (
-    <Section title="Production and stockpile" sub={`Stores ${arsenalSize(player)} of ${storageCap(player)} · the workshop builds ${room} more this month, at once · the line delivers ${fmt(rate, 1)} a month. Missiles are fired from Missile War.`} id="production">
+    <Section title="Arsenal and production" sub={`Stores ${arsenalSize(player)} of ${storageCap(player)} · the workshop builds ${room} more this month, at once · the line delivers ${fmt(rate, 1)} a month. Missiles are fired from Missile War.`} id="production">
       {level < 1 ? (
-        <p className="text-[13px] text-[#ffd60a]">Raise the charter to level 1 to build missiles.</p>
+        <p className="text-[13px] text-[#ffd60a]">Raise the charter to level 1 to build missiles (Overview).</p>
       ) : (
         <div className="space-y-2">
           {PROGRAM_KINDS.filter((k) => MISSILES[k].level <= level).map((k) => (
@@ -519,40 +543,53 @@ function Production({ game, player }: { game: GameState; player: Nation }) {
               Later: {PROGRAM_KINDS.filter((k) => MISSILES[k].level > level).map((k) => `${MISSILES[k].name.toLowerCase()}s at charter level ${MISSILES[k].level}`).join(', ')}.
             </p>
           )}
-          <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
-            <div className="text-[14px] font-semibold">Production line</div>
-            {plant > 0 ? (
-              <>
-                <div className="flex gap-1 flex-wrap" role="radiogroup" aria-label="Missile for the line">
-                  {PROGRAM_MISSILES.filter((k) => MISSILES[k].level <= level).map((k) => (
-                    <button key={k} role="radio" aria-checked={kind === k} className={`btn px-2.5 py-1.5 text-[13px] ${kind === k ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setKind(k as ProgramKind)}>
-                      {MISSILES[k].name}
-                    </button>
-                  ))}
-                </div>
-                <OrderButton order={act(player, { kind: 'produce', missile: kind, count: 6 })} label={`Queue 6 ${MISSILES[kind].name.toLowerCase()}s`} effect={`${Math.round((1 - PRODUCTION_RULES.price) * 100)}% cheaper than the workshop, delivered one by one.`} />
-              </>
-            ) : (
-              <p className="text-[12px] text-white/60">Build a production plant (Structure, above) for a line that delivers day by day, cheaper than the workshop.</p>
-            )}
-          </div>
         </div>
       )}
-      {(player.mprog?.line.length ?? 0) > 0 && (
-        <ul className="space-y-1.5" aria-label="Production line">
-          {player.mprog!.line.map((b, i) => (
-            <li key={b.id} className="space-y-1">
-              <div className="flex justify-between text-[12px]">
-                <span>
-                  {i === 0 ? 'On the line' : 'Waiting'}: {b.count} {MISSILES[b.kind].name.toLowerCase()}s
-                </span>
-                <span className="tabular-nums text-white/70">{Math.floor(b.made)} done</span>
-              </div>
-              <Bar value={b.made / b.count} color={MISSILE_SWATCH[b.kind]} label={`Batch of ${MISSILES[b.kind].name}`} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2" data-line>
+        <div className="text-[14px] font-semibold">Production line</div>
+        {plant > 0 ? (
+          <>
+            <div className="flex gap-1 flex-wrap" role="radiogroup" aria-label="What the line makes">
+              {choices.map((k) => (
+                <button key={k} role="radio" aria-checked={kind === k} className={`btn px-2.5 py-1.5 text-[13px] ${kind === k ? 'btn-primary' : 'btn-quiet'}`} onClick={() => setKind(k)}>
+                  {k === 'interceptor' ? 'Interceptor rounds' : MISSILES[k].name}
+                </button>
+              ))}
+            </div>
+            {rounds ? (
+              works < 1 ? (
+                <p className="text-[12px] text-white/65">Interceptor rounds need the interceptor works (Facilities).</p>
+              ) : (
+                <>
+                  <p className="text-[12px] text-white/70">
+                    Interceptor store {interceptorsOf(player)} of {interceptorCap(player)}{roundsOnLine(player) ? ` · ${roundsOnLine(player)} on the line` : ''}. The line makes {fmt(rate * PRODUCTION_RULES.roundsPerMissile, 1)} rounds a month at {Math.round(PRODUCTION_RULES.roundPrice * 100)}% of the price of buying them at once; a full store holds the line.
+                  </p>
+                  <OrderButton order={act(player, { kind: 'produce', missile: 'interceptor', count: roundsCount })} label={`Queue ${roundsCount} interceptor rounds`} cost={`${Math.ceil(roundsCount * MW.roundCost * PRODUCTION_RULES.roundPrice)} money · about ${Math.max(1, Math.ceil((roundsCount / Math.max(0.1, rate * PRODUCTION_RULES.roundsPerMissile)) * 30))} days`} />
+                </>
+              )
+            ) : (
+              <OrderButton order={act(player, { kind: 'produce', missile: kind as ProgramKind, count: 6 })} label={`Queue 6 ${lineKindName(kind)}`} effect={`${Math.round((1 - PRODUCTION_RULES.price) * 100)}% cheaper than the workshop, delivered one by one.`} />
+            )}
+          </>
+        ) : (
+          <p className="text-[12px] text-white/60">Build a production plant (Facilities) for a line that delivers day by day, cheaper than the workshop: missiles, and interceptor rounds once the interceptor works stands.</p>
+        )}
+        {(player.mprog?.line.length ?? 0) > 0 && (
+          <ul className="space-y-1.5" aria-label="Production line">
+            {player.mprog!.line.map((b, i) => (
+              <li key={b.id} className="space-y-1">
+                <div className="flex justify-between text-[12px]">
+                  <span>
+                    {i === 0 ? 'On the line' : 'Waiting'}: {b.count} {lineKindName(b.kind)}
+                  </span>
+                  <span className="tabular-nums text-white/70">{Math.floor(b.made)} done</span>
+                </div>
+                <Bar value={b.made / b.count} color={b.kind === 'interceptor' ? '#64d2ff' : MISSILE_SWATCH[b.kind]} label={`Batch of ${lineKindName(b.kind)}`} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Section>
   )
 }
@@ -627,33 +664,57 @@ function Rivals({ game, player }: { game: GameState; player: Nation }) {
   )
 }
 
-/** The Missile Program tab of the Military desk: the whole program on one screen. */
+/** Which section a next step belongs to, for its "Open" link when it has no button of its own. */
+const STEP_SECTION: [RegExp, ProgramSection][] = [
+  [/^(chief|engineers)/, 'staff'],
+  [/^(institute|stand|fac-)/, 'facilities'],
+  [/^dev-/, 'development'],
+]
+
+/**
+ * The Missile Program tab of the Military desk, in sections like the Government desk: the Overview leads with the charter, the budget,
+ * the next steps, the test range and the timeline; facilities, staff, development, the arsenal and rival programs each have their own.
+ */
 export function MissileProgramTab() {
   const view = usePlayerView()
+  const today = useToday()
+  // The section lives outside the tab, so a link from elsewhere (the advisor, Missile War) can open one while the tab is showing.
+  const section = useProgramSection()
+  const setSection = setProgramSection
   if (!view) return null
   const { game, player, econ } = view
   const workforce = econ.workforce
+  const now = today ?? game
+  const me = now.nations[player.id] ?? player
+  const readyTests = DEV_IDS.filter((id) => me.mprog?.devs[id]?.state === 'test' && !now.missileTests?.some((t) => t.nationId === me.id && t.dev === id)).length
+  const building = me.mprog?.builds.length ?? 0
+  const developing = DEV_IDS.filter((id) => me.mprog?.devs[id]?.state === 'dev').length
   return (
-    <div className="space-y-3" data-missile-program>
-      <Header player={player} workforce={workforce} />
-      <MilestoneStrip player={player} />
-      <div className="grid gap-3 lg:grid-cols-2 items-start">
-        <div className="space-y-3">
-          <Steps game={game} player={player} workforce={workforce} />
-          <TestPad player={player} />
-        </div>
-        <Timeline player={player} />
-      </div>
-      <Structure game={game} player={player} />
-      <Talent game={game} player={player} workforce={workforce} />
-      <Development game={game} player={player} />
-      <div className="grid gap-3 lg:grid-cols-2 items-start">
-        <Production game={game} player={player} />
-        <div className="space-y-3">
+    <div className="space-y-3" data-missile-program data-program-section={section}>
+      <Tabs value={section} onChange={setSection} options={PROGRAM_SECTIONS} label="Missile program sections" badges={{ overview: readyTests || null, facilities: building || null, development: developing || null }} />
+      {section === 'overview' && (
+        <>
+          <Header player={player} workforce={workforce} />
+          <MilestoneStrip player={player} />
+          <div className="grid gap-3 lg:grid-cols-2 items-start">
+            <div className="space-y-3">
+              <Steps game={game} player={player} workforce={workforce} go={setSection} />
+              <TestPad player={player} />
+            </div>
+            <Timeline player={player} />
+          </div>
+        </>
+      )}
+      {section === 'facilities' && <Structure game={game} player={player} />}
+      {section === 'staff' && <Talent game={game} player={player} workforce={workforce} />}
+      {section === 'development' && <Development game={game} player={player} />}
+      {section === 'arsenal' && (
+        <div className="grid gap-3 lg:grid-cols-2 items-start">
+          <Production game={game} player={player} />
           <Capabilities player={player} />
-          <Rivals game={game} player={player} />
         </div>
-      </div>
+      )}
+      {section === 'rivals' && <Rivals game={game} player={player} />}
       <p className="text-[12px] text-white/55">Missiles are fired from the Missile War tab. {MW.enabled ? 'Every test and strike moves the world up the tension ladder.' : ''}</p>
     </div>
   )

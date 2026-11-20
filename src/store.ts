@@ -30,6 +30,7 @@ import { takeoverNote } from './ui/onlineLiveText'
 import { speak } from './ui/plain'
 import type { PendingConfirm } from './ui/confirmRules'
 import { applyPrefs, defaultPrefs, migrateSettingsUi, motionReduced, sanitizePrefs, systemReducesMotion, type UiPrefs } from './ui/prefs'
+import { isProgramSection, setProgramSection } from './ui/programSection'
 
 const SAVE_KEY = 'worlds-of-others-save-v4'
 const ORDERS_KEY = 'worlds-of-others-orders-v4'
@@ -1211,6 +1212,7 @@ export const useGame = create<GameStore>((set, get) => ({
         if (target.section) set({ peopleSection: target.section })
         break
       case 'military':
+        if (target.tab === 'program' && isProgramSection(target.section)) setProgramSection(target.section)
         get().openMilitary(target.tab)
         if (target.region) set({ selectedRegion: target.region })
         break

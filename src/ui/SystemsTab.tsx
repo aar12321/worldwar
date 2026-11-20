@@ -31,24 +31,33 @@ function SystemCard({ id }: { id: SystemId }) {
       </div>
       <Pips value={level} max={SYSTEM_MAX} />
       {level > 0 && <p className="text-[13px] text-[#6eeb8a]">Now: {spec.levels[level - 1]}</p>}
-      {level < SYSTEM_MAX && unlocked && <p className="text-[13px] text-white/75">Next level: {spec.levels[level]}</p>}
       <p className="text-[12px] text-white/60">Weakness: {spec.counter}</p>
       <div className="text-[13px] text-white/75">Costs {spec.upkeep} money a month for each level.</div>
       {!unlocked ? (
         <p className="text-[13px] text-[#ffd60a]">Research {TECH_BY_ID[spec.tech]?.name ?? 'a technology'} to unlock it.</p>
       ) : (
-        level + queued < SYSTEM_MAX && (
-          <div className="grid grid-cols-2 gap-2">
-            {Array.from({ length: SYSTEM_MAX - level }, (_, i) => i + 1).map((levels) => (
-              <OrderButton
-                key={levels}
-                order={{ type: 'fundSystem', nationId: player.id, system: id, levels }}
-                label={`Raise to level ${level + levels}`}
-                cost={`${fmt(fundSystemCost(game, { type: 'fundSystem', nationId: player.id, system: id, levels }), 0)} money`}
-                effect={levels === 1 ? 'Takes effect at once.' : `${levels} levels at once.`}
-              />
-            ))}
+        level + queued < SYSTEM_MAX ? (
+          <div className="space-y-1.5" data-raise={level + queued + 1}>
+            <OrderButton
+              order={{ type: 'fundSystem', nationId: player.id, system: id, levels: 1 }}
+              label={`Raise to level ${level + queued + 1}`}
+              cost={`${fmt(fundSystemCost(game, { type: 'fundSystem', nationId: player.id, system: id, levels: 1 }), 0)} money · +${spec.upkeep}/mo`}
+              effect={spec.levels[level + queued]}
+              tone="btn-primary"
+              className="w-full sm:w-auto"
+            />
+            {level + queued + 1 < SYSTEM_MAX && (
+              <ul className="text-[12px] text-white/60 space-y-0.5" aria-label="Later levels">
+                {spec.levels.slice(level + queued + 1).map((text, i) => (
+                  <li key={i}>
+                    <span className="text-white/75 font-semibold">Level {level + queued + 2 + i}:</span> {text}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+        ) : (
+          level >= SYSTEM_MAX && <p className="text-[13px] text-[#6eeb8a]">At its highest level.</p>
         )
       )}
     </div>

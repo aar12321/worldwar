@@ -35,7 +35,8 @@ import { tierSpec } from '../data/empire'
 import { absDay, clockOf, daysInMonth, fromAbsDay, isLive } from './calendar'
 import { addLog, atWar, clamp, distanceKm } from './helpers'
 import { arsenalSize, buildMissilesCost, programLevel, storageCap } from './missiles'
-import { ledgerOf } from './missileWar'
+import { interceptorCap, interceptorsOf, ledgerOf } from './missileWar'
+import { MW } from '../data/missileWar'
 import { branchSpeed, programFx, programStaff, usefulStaff } from './programEffects'
 import { createRng } from './rng'
 import { nationWorkforce } from './economy'
@@ -123,6 +124,12 @@ function note(s: GameState, n: Nation, text: string, kind: LogKind = 'tech', als
   if (n.isPlayer || s.humans?.includes(n.id) || also.some((id) => s.nations[id]?.isPlayer || s.humans?.includes(id))) addLog(s, kind, text, [n.id, ...also])
 }
 
+/** Rounds the interceptor store has room for now. */
+const storeRoom = (n: Nation): number => interceptorCap(n) - interceptorsOf(n)
+
+/** Interceptor rounds on the line not yet delivered. */
+export const roundsOnLine = (n: Nation): number => (n.mprog?.line ?? []).reduce((a, b) => (b.kind === 'interceptor' ? a + b.count - Math.floor(b.made + 1e-9) : a), 0)
+
 /**
  * Moves every job of a nation's program on to `now` and finishes what is due. Mutates `s`. Every rate change must call this first.
  * Order of completion is fixed (facilities in the table's order, then developments, then the line) so it is the same on every screen.
@@ -143,6 +150,26 @@ export function settle(s: GameState, n: Nation, now: number) {
     let made = dm * lineRate(n)
     while (made > 1e-9 && p.line.length) {
       const b = p.line[0]
+      if (b.kind === 'interceptor') {
+        // Rounds go straight into the store; a full store holds the line until rounds are fired.
+        const per = PRODUCTION_RULES.roundsPerMissile
+        const limit = Math.min(b.count, Math.floor(b.made + 1e-9) + Math.max(0, storeRoom(n)))
+        const step = Math.min(limit - b.made, made * per)
+        if (step <= 1e-9) break
+        const before = Math.floor(b.made + 1e-9)
+        b.made += step
+        made -= step / per
+        const after = Math.floor(b.made + 1e-9)
+        if (after > before) {
+          const war = (n.missileWar ??= {})
+          war.interceptors = Math.min(interceptorCap(n), interceptorsOf(n) + (after - before))
+        }
+        if (b.made >= b.count - 1e-9) {
+          p.line.shift()
+          note(s, n, `The production line finished ${plural(b.count, 'interceptor round')}.`)
+        }
+        continue
+      }
       const room = b.count - b.made
       const step = Math.min(room, made)
       const before = Math.floor(b.made + 1e-9)
@@ -196,7 +223,10 @@ export function nextDue(n: Nation): number {
   }
   const lr = lineRate(n)
   const b = p.line[0]
-  if (b && lr > 0) {
+  if (b?.kind === 'interceptor') {
+    // The next whole round, unless the store is full (then the line waits for rounds to be fired).
+    if (lr > 0 && storeRoom(n) > 0) best = Math.min(best, dayAfter(p.asOf, (Math.floor(b.made + 1e-9) + 1 - b.made) / (lr * PRODUCTION_RULES.roundsPerMissile)))
+  } else if (b && lr > 0) {
     // The next whole missile.
     const need = Math.floor(b.made + 1e-9) + 1 - b.made
     best = Math.min(best, dayAfter(p.asOf, need / lr))
@@ -419,13 +449,25 @@ export function programProblem(s: GameState, n: Nation, a: Act, workforce: numbe
       if (!PROGRAM_RULES.budgets.includes(a.level)) return 'Choose a budget'
       return (p?.budget ?? 1) === a.level ? 'That is the budget already' : null
     case 'produce': {
+      if (a.missile === 'interceptor') {
+        if (!MPROG.interceptorLine) return 'Interceptor rounds are bought from Missile War'
+        if (!isCount(a.count, PRODUCTION_RULES.batchMax)) return `A batch is 1 to ${PRODUCTION_RULES.batchMax}`
+        if ((p?.fac.plant ?? 0) < 1) return 'The production line needs a production plant'
+        if ((p?.fac.works ?? 0) < 1) return 'Interceptor rounds need the interceptor works'
+        const batches = (p?.line.length ?? 0) + queued.filter((q) => q.kind === 'produce').length
+        if (batches >= PRODUCTION_RULES.queueMax) return `The line holds ${PRODUCTION_RULES.queueMax} batches`
+        if (interceptorCap(n) <= 0) return 'Needs an Interceptor Shield or a battery to hold rounds'
+        const room = storeRoom(n) - roundsOnLine(n) - queued.reduce((sum, q) => (q.kind === 'produce' && q.missile === 'interceptor' && isCount(q.count, PRODUCTION_RULES.batchMax) ? sum + q.count : sum), 0)
+        if (a.count > room) return room <= 0 ? 'The interceptor store is full, counting the rounds on the line' : `The interceptor store has room for ${room} more`
+        return null
+      }
       if (typeof a.missile !== 'string' || !PROGRAM_MISSILES.includes(a.missile)) return 'Unknown missile'
       if (!isCount(a.count, PRODUCTION_RULES.batchMax)) return `A batch is 1 to ${PRODUCTION_RULES.batchMax}`
       if ((p?.fac.plant ?? 0) < 1) return 'The production line needs a production plant'
       if (programLevel(n) < MISSILES[a.missile].level) return `Needs the program at level ${MISSILES[a.missile].level}`
       const batches = (p?.line.length ?? 0) + queued.filter((q) => q.kind === 'produce').length
       if (batches >= PRODUCTION_RULES.queueMax) return `The line holds ${PRODUCTION_RULES.queueMax} batches`
-      const onLine = (p?.line ?? []).reduce((sum, b) => sum + (b.count - Math.floor(b.made + 1e-9)) * MISSILES[b.kind].slots, 0) + queued.reduce((sum, q) => (q.kind === 'produce' && isCount(q.count, PRODUCTION_RULES.batchMax) ? sum + q.count * MISSILES[q.missile].slots : sum), 0)
+      const onLine = (p?.line ?? []).reduce((sum, b) => (b.kind === 'interceptor' ? sum : sum + (b.count - Math.floor(b.made + 1e-9)) * MISSILES[b.kind].slots), 0) + queued.reduce((sum, q) => (q.kind === 'produce' && q.missile !== 'interceptor' && PROGRAM_MISSILES.includes(q.missile) && isCount(q.count, PRODUCTION_RULES.batchMax) ? sum + q.count * MISSILES[q.missile].slots : sum), 0)
       const room = Math.floor((storageCap(n) - arsenalSize(n) - onLine) / MISSILES[a.missile].slots + 1e-9)
       if (a.count > room) return room <= 0 ? `The stores are full (${storageCap(n)}). A silo field holds more.` : `The stores have room for ${room} more`
       if (n.resources.oil < MISSILES[a.missile].oil * a.count) return `Not enough oil (needs ${MISSILES[a.missile].oil * a.count})`
@@ -460,6 +502,7 @@ export function programCost(s: GameState, n: Nation | undefined, a: Act): { capi
     case 'test':
       return isDev(a.dev) ? { ...none, capital: testMoney(n, a.dev) } : none
     case 'produce': {
+      if (a.missile === 'interceptor') return isCount(a.count, PRODUCTION_RULES.batchMax) ? { ...none, capital: Math.ceil(a.count * MW.roundCost * PRODUCTION_RULES.roundPrice) } : none
       if (typeof a.missile !== 'string' || !PROGRAM_MISSILES.includes(a.missile) || !isCount(a.count, PRODUCTION_RULES.batchMax)) return none
       const k = buildMissilesCost({ type: 'buildMissiles', nationId: n.id, kind: a.missile, count: a.count }, n)
       return { capital: Math.ceil(k.capital * PRODUCTION_RULES.price), tp: 0, steel: k.steel }
@@ -517,7 +560,7 @@ export function applyProgram(s: GameState, map: WorldMap, n: Nation, a: Act) {
       p.budget = a.level
       break
     case 'produce':
-      n.resources.oil -= MISSILES[a.missile].oil * a.count
+      if (a.missile !== 'interceptor') n.resources.oil -= MISSILES[a.missile].oil * a.count
       p.line.push({ id: `b${++p.seq}`, kind: a.missile, count: a.count, made: 0 })
       break
   }
@@ -543,6 +586,7 @@ export function describeProgram(a: Act): string {
     case 'budget':
       return `Set the missile budget to ${Math.round((a.level ?? 1) * 100)}%`
     case 'produce':
+      if (a.missile === 'interceptor') return `Put ${a.count} interceptor round${a.count === 1 ? '' : 's'} on the production line`
       return `Put ${a.count} ${MISSILES[a.missile]?.name.toLowerCase() ?? 'missile'}${a.count === 1 ? '' : 's'} on the production line`
     default:
       return 'Missile program'

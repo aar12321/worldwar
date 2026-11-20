@@ -86,3 +86,9 @@ export function levelsCost(level: number, levels: number): number {
   for (let i = 0; i < levels; i++) total += levelCost(level + i)
   return total
 }
+
+/** What reaching level `l` adds, in a few words: a team, and the operations that open at that level. */
+export function agencyLevelText(id: AgencyId, l: number): string {
+  const ops = Object.values(id === 'foreign' ? FOREIGN_OPS : DOMESTIC_OPS).filter((o) => o.level === l).map((o) => o.name.toLowerCase())
+  return `${l} teams a month${ops.length ? `; opens ${ops.join(', ')}` : ', better odds'}`
+}

@@ -331,6 +331,9 @@ export const PRODUCTION_RULES = {
   queueMax: 4,
   /** Most in one batch. */
   batchMax: 20,
+  /** Interceptor rounds (MPROG.interceptorLine): rounds the line makes in the time of one missile, and their price as a share of buying rounds at once (MW.roundCost). */
+  roundsPerMissile: 2,
+  roundPrice: 0.75,
 }
 
 export const POACH = {
@@ -393,9 +396,12 @@ export interface FacilityBuild {
   total: number
 }
 
+/** What the production line makes: a program missile, or interceptor rounds for the store. */
+export type LineKind = ProgramKind | 'interceptor'
+
 export interface LineBatch {
   id: string
-  kind: ProgramKind
+  kind: LineKind
   count: number
   /** Missiles finished so far (a fraction while one is on the line). */
   made: number
@@ -456,4 +462,4 @@ export type MissileProgramAction =
   | { kind: 'develop'; dev: MissileDevId; by?: Contractor }
   | { kind: 'test'; dev: MissileDevId }
   | { kind: 'budget'; level: number }
-  | { kind: 'produce'; missile: ProgramKind; count: number }
+  | { kind: 'produce'; missile: LineKind; count: number }

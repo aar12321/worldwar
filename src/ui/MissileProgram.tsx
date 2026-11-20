@@ -6,7 +6,7 @@ import { usePlayerView } from './hooks'
 import { CountPicker } from './MissileSection'
 import { MISSILE_SWATCH, PROGRAM_KINDS, buildCostText, clampCount, effectText } from './missileText'
 import { OrderButton } from './panel'
-import { useGame } from '../store'
+import { openProgram } from './programSection'
 
 /** One kind the program builds: what is in store, what one costs, and buttons to build one or a chosen number. */
 export function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> }) {
@@ -65,7 +65,6 @@ export function BuildRow({ kind }: { kind: Exclude<MissileType, 'hypersonic'> })
  */
 export function MissileProgramCard() {
   const view = usePlayerView()
-  const openMilitary = useGame((s) => s.openMilitary)
   if (!view) return null
   const { player } = view
   const level = programLevel(player)
@@ -79,7 +78,7 @@ export function MissileProgramCard() {
           Charter level {level} of {max} · {stock} missile{stock === 1 ? '' : 's'} in store. The charter, facilities, talent, development, test launches and building missiles are all in the Missile Program tab.
         </p>
       </div>
-      <button className="btn btn-primary px-3 py-1.5 text-[13px] shrink-0" onClick={() => openMilitary('program')}>
+      <button className="btn btn-primary px-3 py-1.5 text-[13px] shrink-0" onClick={() => openProgram('arsenal')}>
         Open the Missile Program
       </button>
     </section>

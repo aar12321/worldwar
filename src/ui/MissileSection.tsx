@@ -10,6 +10,7 @@ import { getWorld } from '../map/world'
 import { useGame } from '../store'
 import { OrderButton } from './panel'
 import { MISSILE_SWATCH, clampCount, effectText, flightText, missileName, shieldNote } from './missileText'
+import { openProgram } from './programSection'
 
 /**
  * A whole number between 1 and `max`, with a stepper either side. The box can be emptied while typing; it settles on a valid
@@ -122,7 +123,7 @@ function KindRow({ game, player, target, orders, live, kind }: { game: GameState
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[13px] text-white/70">{kind === 'hypersonic' ? 'None in stock. Train them under Forces.' : 'None in stock. Build them in the missile program.'}</span>
-          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openMilitary(kind === 'hypersonic' ? 'forces' : 'program')}>
+          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => (kind === 'hypersonic' ? openMilitary('forces') : openProgram('arsenal'))}>
             {kind === 'hypersonic' ? 'Open Forces' : 'Open the program'}
           </button>
         </div>
@@ -137,7 +138,6 @@ function KindRow({ game, player, target, orders, live, kind }: { game: GameState
  * it resolves at the month's end.
  */
 export function MissileSection({ game, player, target, orders, live }: { game: GameState; player: Nation; target: RegionId; orders: Order[]; live: boolean }) {
-  const openMilitary = useGame((s) => s.openMilitary)
   const kinds = missileKinds(player)
   const orbital = (player.systems?.orbital ?? 0) > 0
   const orbitalOrder: Order = { type: 'strike', nationId: player.id, target, weapon: 'orbital' }
@@ -153,7 +153,7 @@ export function MissileSection({ game, player, target, orders, live }: { game: G
       {kinds.length === 0 && (
         <div className="inset-card p-3 flex flex-wrap items-center justify-between gap-2">
           <span className="text-[13px] text-white/75">You have no missiles. Raise the missile program, or research Hypersonic Missiles.</span>
-          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openMilitary('program')}>
+          <button className="btn btn-quiet px-3 py-1.5 text-[13px]" onClick={() => openProgram('overview')}>
             Open the program
           </button>
         </div>
