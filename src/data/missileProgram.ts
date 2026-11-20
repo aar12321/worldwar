@@ -11,7 +11,22 @@ import type { MissileType, Tier } from '../engine/types'
  */
 
 /** The master switch. Off (tests only), nothing in this file changes a game: no bot uses the program and every effect is zero. */
-export const MPROG = { on: true }
+export const MPROG = {
+  on: true,
+  /**
+   * Medium rivals found programs more often (docs/MISSILE_PROGRAM_STATUS.md): one at war now and then, and a rich one a little more
+   * readily, with the same bill limits. Off: as before (about one Medium program in two years).
+   */
+  mediumFounds: true,
+  /** Medium: the monthly chance a rival at war founds one, and the chance for a rich and restless one at peace. */
+  mediumWar: 0.15,
+  mediumRich: 0.1,
+  /**
+   * Interceptor rounds on the production line (`produce` with `missile: 'interceptor'`): needs a plant and the interceptor works,
+   * delivered into the store at the line's pace. Off: the order is refused.
+   */
+  interceptorLine: true,
+}
 
 // ---- Facilities ----
 

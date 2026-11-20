@@ -75,12 +75,15 @@ describe('rivals and the missile program', () => {
     expect(r.worstShare).toBeLessThan(0.12)
   }, 600_000)
 
-  it('Medium rivals are modest', () => {
+  it('Medium rivals are modest: a handful found a program, with the bill bounded as on Hard', () => {
     const hard = play('hard', 24)
     const medium = play('normal', 24)
     const { s: _m, ...line } = medium
     console.info('normal 24 months', JSON.stringify(line))
     expect(medium.facilities).toBeLessThanOrEqual(hard.facilities)
     expect(medium.worstShare).toBeLessThan(0.12)
+    // A handful found one (MPROG.mediumFounds: 6 on seed 5), fewer than the Hard world's.
+    expect(medium.programs).toBeGreaterThanOrEqual(3)
+    expect(medium.programs).toBeLessThanOrEqual(Math.max(hard.programs, 12))
   }, 900_000)
 })
