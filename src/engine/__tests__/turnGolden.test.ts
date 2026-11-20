@@ -173,6 +173,11 @@ function withoutPresence<T>(fn: () => T): T {
  * no fear of a big nation before it takes land, and the record of wars and runs of trade (the new `ties` field). Checked before pinning: with
  * `TIES.on` switched off (`withoutTies`, 'ties are the only thing that moved ...'; `withoutBlocs` now switches it off too, so every older layer keeps
  * its proof) the previous pins (10cf7a356e2bea, 11d73d1672f834, d077c31c237c4) return exactly.
+ * Re-pinned (the Hard-bot world only; the Normal-bot world and the small war did not move) for dealings (docs/RELATIONS_STATUS.md, "Gaps closed"):
+ * trust counts in a rival's answer to a pact, an alliance, a guarantee, a trade deal, a loan or a joint venture; offers the world has overtaken are
+ * withdrawn; investment thanks counts under the desk's caps. Checked before pinning: with `DEALINGS.on` switched off (`withoutDealings`, 'dealings
+ * are the only thing ...'; `withoutTies` now switches it off too, so every older layer keeps its proof) the previous pins (a0f8d651bfe97,
+ * 1879299a3721df, 19d872c4a61078) return exactly.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -248,7 +253,8 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned for the missile program (Hard rivals build, hire, develop and test): with it switched off '1719b377e4ad6a' returns (see below).
     // Missile program + government desk + blocs together (each proven alone below).
     // Re-pinned for ties: with them off '11d73d1672f834' returns (see below).
-    expect(hash(JSON.stringify(s))).toBe('1879299a3721df')
+    // Re-pinned for dealings (trust in a rival's answer, moot offers withdrawn): with them off '1879299a3721df' returns (see below).
+    expect(hash(JSON.stringify(s))).toBe('1909d086a0093')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
