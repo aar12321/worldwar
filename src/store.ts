@@ -801,7 +801,7 @@ function liveOrder(e: OrderEvent) {
   useGame.setState({ game, orders: waitingOf(game) })
   // Offers between friends and the answers to them are news on the day: nobody is watching the Diplomacy desk while the clock runs.
   // Answer opens the desk at its top, where the offers waiting for an answer are.
-  const news = orderNews(prev, game, e.own)
+  const news = orderNews(prev, game, e.own, e.order)
   for (const n of news) st.toast(n.text, n.tone, 6500, n.open ? { label: 'Answer', run: () => useGame.getState().openDiplomacy(null) } : undefined)
   if (e.own) {
     if (e.order.type === 'attack') {

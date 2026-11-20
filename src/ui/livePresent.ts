@@ -1,11 +1,13 @@
 import { useFxPrefs } from '../fx/settings'
-import { UNIT_SPECS } from '../data/unitTypes'
+import { PROPOSAL_LABELS, UNIT_SPECS } from '../data/unitTypes'
 import { absDate } from '../engine/calendar'
 import { lineMax } from '../engine/economy'
 import { guessDivisions, hasIntel, showDivisions } from '../engine/intel'
 import { totalUnits } from '../engine/helpers'
 import type { LiveEvent, LiveStep } from '../engine/live'
-import type { Army, BattleReport, Dispatch, GameState, NationId, Order } from '../engine/types'
+import type { Army, BattleReport, Dispatch, GameState, NationId, Order, Proposal, WorldMap } from '../engine/types'
+import { offerIsMoot } from '../engine/offers'
+import { validateOrder } from '../engine/orders'
 import { getWorld } from '../map/world'
 import { battleLine, scenesFor } from './battleText'
 import { useFx } from './globeBridge'
@@ -272,17 +274,30 @@ export interface OrderNews {
  * answer, a rival's answer to this player's offer comes back at once, and an offer this player sent to a friend is on its way.
  * Only notes the order itself added (same month) count; the month's end has its own summary.
  */
-export function orderNews(before: GameState | null, after: GameState, own: boolean): OrderNews[] {
+export function orderNews(before: GameState | null, after: GameState, own: boolean, order?: Order, map: WorldMap = getWorld().map): OrderNews[] {
   if (!before || before.turn !== after.turn) return []
   const player = after.playerId
   const name = (id: NationId) => after.nations[id]?.name ?? id
   const fresh = after.dispatches.slice(before.dispatches.length).filter((d) => newsFor(d, player))
   const out: OrderNews[] = []
+  // A Clear on an offer that became impossible (both already allied, say) is a tidy-up, not a snub: it reads as one.
+  const cleared = clearedOffer(before, map, order)
   for (const d of fresh) {
-    if (d.kind === 'proposal' && d.from === player) {
+    if (cleared && d.kind === 'rejected' && d.from === cleared.to && d.to === cleared.from && d.proposalKind === cleared.kind) {
+      out.push({ text: `${name(d.from)} cleared ${name(d.to)}'s ${PROPOSAL_LABELS[cleared.kind].toLowerCase()} offer: it was no longer possible (${cleared.why.charAt(0).toLowerCase()}${cleared.why.slice(1)}).`, tone: 'info' })
+    } else if (d.kind === 'proposal' && d.from === player) {
       if (own) out.push({ text: `Offer sent to ${name(d.to)}. They answer from their Diplomacy desk.`, tone: 'success' })
     } else if (d.kind === 'proposal' && d.to === player) out.push({ text: d.text, tone: 'info', open: d.from })
     else out.push({ text: d.text, tone: DISPATCH_TONE[d.kind] })
   }
   return out.slice(-3)
+}
+
+/** The offer a `respond` order turned down because it could no longer be accepted, with the reason, or null. */
+function clearedOffer(before: GameState, map: WorldMap, order?: Order): { from: NationId; to: NationId; kind: Proposal['kind']; why: string } | null {
+  if (!order || order.type !== 'respond' || order.accept) return null
+  const p = before.proposals.find((x) => x.id === order.proposalId)
+  if (!p || !offerIsMoot(before, map, p)) return null
+  const why = validateOrder(before, map, { type: 'respond', nationId: p.to, proposalId: p.id, accept: true }) ?? ''
+  return { from: p.from, to: p.to, kind: p.kind, why }
 }

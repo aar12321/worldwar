@@ -4,6 +4,7 @@ import { atWar } from '../engine/helpers'
 import type { GameState, Order } from '../engine/types'
 import { confirmFor } from '../ui/confirmRules'
 import { warRefusal } from '../ui/warHint'
+import { orderNews } from '../ui/livePresent'
 import { speak } from '../ui/plain'
 import { validateOrder } from '../engine/orders'
 import { gameOf, liveRoom, patchAll, same, settle, type LiveRoom } from './liveHarness'
@@ -103,9 +104,15 @@ describe('two humans, live room', () => {
     await room.run(400)
     expect(gameOf(host).proposals.some((p) => p.id === theirs.id)).toBe(true)
     expect(offerIsMoot(gameOf(host), room.map, theirs)).toBe(true)
+    const guestBefore = structuredClone(gameOf(guest))
+    const seen = guest.orders.length
     expect(host.s.sendCommand({ type: 'respond', nationId: 'r0', proposalId: theirs.id, accept: false }).error).toBeNull()
     await room.run(400)
     for (const x of [host, guest]) expect(gameOf(x).proposals.some((p) => p.id === theirs.id)).toBe(false)
+    // The friend whose offer was cleared hears it was tidied away, not that it was rejected.
+    const e = guest.orders.slice(seen).find((o) => o.order.type === 'respond')!
+    const news = orderNews({ ...guestBefore, playerId: 'r1' }, e.state, e.own, e.order, room.map)
+    expect(news.map((n) => n.text)).toEqual(["Region 0 cleared Region 1's non-aggression pact offer: it was no longer possible (pact already in force)."])
     expect(same(room)).toBe(true)
   })
 
