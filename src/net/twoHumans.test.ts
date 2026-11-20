@@ -92,7 +92,7 @@ describe('two humans, live room', () => {
     expect(same(room)).toBe(true)
   })
 
-  it('an offer between the players that became moot (both offered a pact, one was accepted) folds, and Clear removes it on both screens', async () => {
+  it('an offer between the players that the world overtook (both offered a pact, one was accepted) is withdrawn on both screens at once', async () => {
     const room = await liveRoom(2)
     const [host, guest] = room.seats
     rich(room)
@@ -103,18 +103,27 @@ describe('two humans, live room', () => {
     const theirs = gameOf(host).proposals.find((p) => p.from === 'r1' && p.to === 'r0')!
     expect(guest.s.sendCommand({ type: 'respond', nationId: 'r1', proposalId: mine.id, accept: true }).error).toBeNull()
     await room.run(400)
-    expect(gameOf(host).proposals.some((p) => p.id === theirs.id)).toBe(true)
-    expect(offerIsMoot(gameOf(host), room.map, theirs)).toBe(true)
-    const guestBefore = structuredClone(gameOf(guest))
-    const seen = guest.orders.length
-    expect(host.s.sendCommand({ type: 'respond', nationId: 'r0', proposalId: theirs.id, accept: false }).error).toBeNull()
-    await room.run(400)
     for (const x of [host, guest]) expect(gameOf(x).proposals.some((p) => p.id === theirs.id)).toBe(false)
-    // The friend whose offer was cleared hears it was tidied away, not that it was rejected.
-    const e = guest.orders.slice(seen).find((o) => o.order.type === 'respond')!
-    const news = orderNews({ ...guestBefore, playerId: 'r1' }, e.state, e.own, e.order, room.map)
-    expect(news.map((n) => n.text)).toEqual(["Region 0 cleared Region 1's non-aggression pact offer: it was no longer possible (pact already in force)."])
     expect(same(room)).toBe(true)
+  })
+
+  it('a Clear on an offer that can no longer be accepted reads as a tidy-up with the reason, not as a rejection', async () => {
+    const room = await liveRoom(2)
+    const [host] = room.seats
+    // An offer still waiting that a pact already in force made moot (an older save, or one the withdrawal has not reached yet).
+    const before = structuredClone(gameOf(host))
+    before.pacts['r0|r1'] = before.turn + 24
+    before.proposals.push({ id: 'pX', kind: 'pact', from: 'r1', to: 'r0', created: before.turn, expires: before.turn + 3 } as never)
+    expect(offerIsMoot(before, room.map, before.proposals.at(-1)!)).toBe(true)
+    const after = structuredClone(before)
+    after.proposals = after.proposals.filter((p) => p.id !== 'pX')
+    after.dispatches.push({ kind: 'rejected', from: 'r0', to: 'r1', proposalKind: 'pact', text: "Region 0 rejected Region 1's non-aggression pact." } as never)
+    const order: Order = { type: 'respond', nationId: 'r0', proposalId: 'pX', accept: false }
+    const news = orderNews({ ...before, playerId: 'r1' }, { ...after, playerId: 'r1' }, false, order, room.map)
+    expect(news.map((n) => n.text)).toEqual(["Region 0 cleared Region 1's non-aggression pact offer: it was no longer possible (pact already in force)."])
+    // A real rejection still reads as one.
+    const plain = orderNews({ ...before, playerId: 'r1' }, { ...after, playerId: 'r1' }, false, { ...order, proposalId: 'other' } as Order, room.map)
+    expect(plain.map((n) => n.text)).toEqual(["Region 0 rejected Region 1's non-aggression pact."])
   })
 
   it('a peace that makes the loser a puppet: the winner proposes, the friend accepts, both screens agree; a territory of a player is refused with a reason', async () => {
