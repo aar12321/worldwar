@@ -37,6 +37,16 @@ export function softCap(raw: number): number {
   return cap * (1 - Math.exp(-raw / cap))
 }
 
+/**
+ * The government desk's stability as it counts, given the care (programs, campaigns, projects) before the ceiling. What the desk adds
+ * goes on top of the care under the one soft ceiling, so the two together still never pass `stabilityCap`; what it takes away counts in
+ * full. With `deskShares` off it counts in full either way.
+ */
+export function deskStability(desk: number, care: number): number {
+  if (!SOCIAL_RULES.deskShares || desk <= 0) return desk
+  return softCap(care + desk) - softCap(care)
+}
+
 const CAPPED_SHARES: (keyof SocialEffects)[] = ['famine', 'epidemic', 'order']
 
 type Held = Pick<Nation, 'social' | 'campaigns'> & Partial<Pick<Nation, 'projects'>>

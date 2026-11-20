@@ -7,6 +7,7 @@ import { COMBAT, hasCombinedArms } from './combat'
 import { forceUnits, nationModifiers, totalUnits } from './helpers'
 import { trainingSlots } from './training'
 import type { GameState, NationId, UnitType } from './types'
+import { memoFrozen } from './frozen'
 import { UNIT_TYPES } from './types'
 
 /** One thing that changes a unit's stats, so the player can see where a number comes from. */
@@ -117,7 +118,7 @@ export function militarySheet(s: GameState, nationId: NationId): MilitarySheet {
 /** Strength of a nation's whole military, armies in the field included. Diplomacy, the AI and the screens read this. */
 export function militaryPower(s: GameState, nationId: NationId): number {
   if (!s.nations[nationId]) return 0
-  return militarySheet(s, nationId).totalPower
+  return memoFrozen(s, 'militaryPower', nationId, () => militarySheet(s, nationId).totalPower)
 }
 
 /** Strength of the units at home, the ones that would defend if a country were attacked today. The same as `militaryPower` in a turn game. */

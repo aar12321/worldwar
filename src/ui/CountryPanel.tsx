@@ -11,6 +11,7 @@ import { integrationFactor, lineMax, regionWorkforce } from '../engine/economy'
 import { atWar, formatDivisions, hasPact, isAllied, justificationOf } from '../engine/helpers'
 import { warCost } from '../engine/orders'
 import { JUSTIFY } from '../data/war'
+import { warRefusal } from './warHint'
 import { militaryPower } from '../engine/militaryStats'
 import { powerView, showPower } from '../engine/intel'
 import { validateOrder } from '../engine/orders'
@@ -130,6 +131,7 @@ export function CountryPanel() {
               <OrderButton
                 order={{ type: 'declareWar', nationId: player.id, target: owner.id }}
                 label="Declare war"
+                explain={(why) => warRefusal(game, player.id, owner.id, why)}
                 cost={`${warCost(game, player.id, owner.id)} influence`}
                 effect={justificationOf(game, player.id, owner.id) ? `Reason: ${justificationOf(game, player.id, owner.id)!.reason}. Then plan attacks here.` : 'No reason to fight: costs stability and the world will distrust you. Build a case first.'}
                 tone="btn-red"

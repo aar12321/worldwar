@@ -11,6 +11,7 @@ import { DEALINGS, RELATIONS, TIES } from '../../data/relations'
 import { MPROG } from '../../data/missileProgram'
 import { CIVICS } from '../../data/civics'
 import { BLOC } from '../../data/blocs'
+import { SOCIAL_RULES } from '../../data/society'
 import { withOldCombat } from './oldCombat'
 import { withOldMissiles } from './oldMissiles'
 import { withOldWarScore } from './oldWarScore'
@@ -69,7 +70,7 @@ function withoutTies<T>(fn: () => T): T {
  * Runs `fn` with the military gap fixes switched off (docs/BLOC_STATUS.md and docs/MISSILE_PROGRAM_STATUS.md): rival blocs choosing a
  * war and its operation (`BLOC.aiWars`), live bot members answering the next day (`BLOC.liveAnswers`), Medium rivals founding missile
  * programs more readily (`MPROG.mediumFounds`) and interceptor rounds on the production line (`MPROG.interceptorLine`). They came after
- * dealings, so `withoutDealings` (and so `withoutTies`) switches them off too and every older layer keeps its proof.
+ * the one ceiling on care, so `withoutDeskShare` (and through it `withoutDealings`, `withoutTies` and every older layer) switches them off too.
  */
 function withoutGaps<T>(fn: () => T): T {
   const was = { aiWars: BLOC.aiWars, liveAnswers: BLOC.liveAnswers, mediumFounds: MPROG.mediumFounds, interceptorLine: MPROG.interceptorLine }
@@ -90,15 +91,31 @@ function withoutGaps<T>(fn: () => T): T {
 /**
  * Runs `fn` with dealings (docs/RELATIONS_STATUS.md, "Gaps closed": moot offers withdrawn, trust in a rival's answer, investment thanks under
  * the desk's caps, the long peace of old saves, ceasefires between players) switched off. Dealings came after ties, so `withoutTies` switches
- * them off too, and every older layer's proof keeps running against its own world.
+ * them off too, and every older layer's proof keeps running against its own world. The one ceiling on care
+ * came after dealings, so this switches it off too.
  */
 function withoutDealings<T>(fn: () => T): T {
   const on = DEALINGS.on
   DEALINGS.on = false
   try {
-    return withoutGaps(fn)
+    return withoutDeskShare(fn)
   } finally {
     DEALINGS.on = on
+  }
+}
+
+/**
+ * Runs `fn` with the government desk's stability added on its own line, outside the one ceiling on care (`SOCIAL_RULES.deskShares`
+ * off: docs/UX_AUDIT_NATION.md, "Stability: one ceiling"). It came after dealings, so `withoutDealings` (and through it `withoutTies` and
+ * every older layer) switches it off too.
+ */
+function withoutDeskShare<T>(fn: () => T): T {
+  const on = SOCIAL_RULES.deskShares
+  SOCIAL_RULES.deskShares = false
+  try {
+    return withoutGaps(fn)
+  } finally {
+    SOCIAL_RULES.deskShares = on
   }
 }
 
@@ -200,11 +217,15 @@ function withoutPresence<T>(fn: () => T): T {
  * withdrawn; investment thanks counts under the desk's caps. Checked before pinning: with `DEALINGS.on` switched off (`withoutDealings`, 'dealings
  * are the only thing ...'; `withoutTies` now switches it off too, so every older layer keeps its proof) the previous pins (a0f8d651bfe97,
  * 1879299a3721df, 19d872c4a61078) return exactly.
+ * Re-pinned (the Normal and Hard bot worlds; the small war did not move), after dealings, when the government desk's stability began to share the one
+ * soft ceiling on care with the programs and projects (`SOCIAL_RULES.deskShares`, docs/UX_AUDIT_NATION.md): a desk that adds calm on
+ * top of full care adds less. Checked before pinning: with it switched off (`withoutDeskShare`, also inside `withoutDealings` and so `withoutTies`, so
+ * every older layer test keeps its proof) the previous pins (a0f8d651bfe97, 1909d086a0093, 19d872c4a61078) return exactly.
  * Re-pinned (the Normal and Hard bot worlds; the small war did not move) for the military gap fixes (docs/BLOC_STATUS.md "Rival operations",
  * docs/MISSILE_PROGRAM_STATUS.md): rival blocs at peace choose a war they can win together and fight it as a joint operation, live bot members
  * answer the next day, Medium rivals found missile programs more readily, and interceptor rounds go on the production line. Checked before
- * pinning: with those four switches off (`withoutGaps`, 'the military gap fixes are the only thing ...'; `withoutDealings` and `withoutTies` now switch them off
- * too, so every older layer keeps its proof) the previous pins (the dealings pins: a0f8d651bfe97, 1909d086a0093, 19d872c4a61078) return exactly.
+ * pinning: with those four switches off (`withoutGaps`, 'the military gap fixes are the only thing ...'; `withoutDeskShare`, `withoutDealings` and `withoutTies` now switch them off
+ * too, so every older layer keeps its proof) the previous pins (those of the one ceiling on care: 66d50a51fed96, 2008f877453d, 19d872c4a61078) return exactly.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -267,8 +288,9 @@ describe('turn mode resolves exactly as pinned', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
     // Re-pinned for ties (trade, investment and a long peace in every opinion; the milder starting mood): with them off '10cf7a356e2bea' returns (see below).
-    // Re-pinned for the military gap fixes (rival blocs choose a war, Medium missile programs): with them off 'a0f8d651bfe97' returns (see below).
-    expect(hash(JSON.stringify(s))).toBe('1b571aa299e6eb')
+    // Re-pinned for the one ceiling on care and the desk: with it off 'a0f8d651bfe97' returns (see below).
+    // Re-pinned for the military gap fixes (rival blocs choose a war, Medium missile programs): with them off '66d50a51fed96' returns (see below).
+    expect(hash(JSON.stringify(s))).toBe('1ac09e89311c99')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -282,13 +304,15 @@ describe('turn mode resolves exactly as pinned', () => {
     // Missile program + government desk + blocs together (each proven alone below).
     // Re-pinned for ties: with them off '11d73d1672f834' returns (see below).
     // Re-pinned for dealings (trust in a rival's answer, moot offers withdrawn): with them off '1879299a3721df' returns (see below).
-    // Re-pinned for the military gap fixes: with them off the dealings pin '1909d086a0093' returns (see below).
-    expect(hash(JSON.stringify(s))).toBe('5ed9325cc7c45')
+    // Re-pinned for the one ceiling on care and the desk: with it off '1909d086a0093' returns (see below).
+    // Re-pinned for the military gap fixes: with them off '2008f877453d' returns (see below).
+    expect(hash(JSON.stringify(s))).toBe('11eb593efb5a5a')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
     const { state, log } = smallWar()
     // Re-pinned for ties (the war is remembered for a long peace later): with them off 'd077c31c237c4' returns (see below). The log did not move.
+    // The one ceiling on care and the desk did not move it (no desk in it adds stability on top of care in three months).
     expect(hash(JSON.stringify(state))).toBe('19d872c4a61078')
     expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
   })
@@ -354,8 +378,18 @@ describe('turn mode resolves exactly as pinned', () => {
     }))
   }, 400_000)
 
-  it('the military gap fixes are the only thing that moved the current pins: with them switched off the dealings pins return', () => {
+  it('the military gap fixes are the only thing that moved the current pins: with them switched off the pins of the one ceiling on care return', () => {
     withoutGaps(() => {
+      expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('66d50a51fed96')
+      expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('2008f877453d')
+      const { state, log } = smallWar()
+      expect(hash(JSON.stringify(state))).toBe('19d872c4a61078')
+      expect(hash(JSON.stringify(log))).toBe('d1dad457aab3c')
+    })
+  }, 400_000)
+
+  it('the one ceiling on care and the desk is the only thing that moved the pins before the gap fixes: switched off (with the fixes), the pins from before it return', () => {
+    withoutDeskShare(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('a0f8d651bfe97')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1909d086a0093')
       const { state, log } = smallWar()
@@ -364,7 +398,7 @@ describe('turn mode resolves exactly as pinned', () => {
     })
   }, 400_000)
 
-  it('dealings are the only thing that moved the pins before the gap fixes: with them (and the fixes) switched off the pins from before them return', () => {
+  it('dealings are the only thing that moved the current pins: with them switched off the pins from before them return', () => {
     withoutDealings(() => {
       expect(hash(JSON.stringify(botWorld(7, 'normal', 'poland', 12).s))).toBe('a0f8d651bfe97')
       expect(hash(JSON.stringify(botWorld(5, 'hard', 'china', 30).s))).toBe('1879299a3721df')

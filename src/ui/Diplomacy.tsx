@@ -14,6 +14,8 @@ import { tierOf } from '../engine/empire'
 import { isLive } from '../engine/calendar'
 import { CRISIS } from '../data/crises'
 import { EMPIRE, JUSTIFY } from '../data/war'
+import { warRefusal } from './warHint'
+import { offerWhen } from './offerWhen'
 import { validateOrder } from '../engine/orders'
 import { bundleValue, describeBundle, marketPrices, stockOf } from '../engine/trade'
 import type { Deal, Dispatch, GameState, NationId, Proposal, RegionId, ResourceBundle, SectorId, TradeResource } from '../engine/types'
@@ -304,7 +306,7 @@ function TradeComposer({ target }: { target: NationId }) {
         {rv > 0 && gv / rv < 1 && 'They will want more for it, unless they are short of what you offer.'}
       </div>
       <OfferOdds target={target} draft={gv + rv > 0 ? { kind: 'trade', terms } : null} />
-      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label="Offer deal" cost={`${PROPOSAL_COSTS.trade} influence`} effect={human ? `${human} sees it when the next month begins` : 'They answer when the month ends'} tone="btn-primary" />
+      <OrderButton order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'trade', terms } }} label="Offer deal" cost={`${PROPOSAL_COSTS.trade} influence`} effect={offerWhen(game, human)} tone="btn-primary" />
     </div>
   )
 }
@@ -434,7 +436,7 @@ function PeaceComposer({ target }: { target: NationId }) {
         order={{ type: 'propose', nationId: player.id, target, proposal: { kind: 'peace', terms } }}
         label={live.length === 0 && reparations === 0 && !puppet && !territory && !terms.liberate && !terms.general ? 'Offer peace with no terms' : 'Send terms'}
         cost={`${PROPOSAL_COSTS.peace} influence`}
-        effect={human ? `${human} sees it when the next month begins` : 'They answer when the month ends'}
+        effect={offerWhen(game, human)}
         tone="btn-primary"
       />
     </div>
@@ -628,6 +630,7 @@ function NationRow({ id, ctx, focused }: { id: NationId; ctx: RowContext; focuse
               <OrderButton
                 order={{ type: 'declareWar', nationId: player.id, target: id }}
                 label="Declare war"
+                explain={(why) => warRefusal(game, player.id, id, why)}
                 cost={`${warCost(game, player.id, id)} influence`}
                 effect={cb ? `Reason: ${justificationOf(game, player.id, id)?.reason}. Then attack from the War Room.` : 'No reason to fight: costs stability and the world will distrust you. Build a case first.'}
                 tone="btn-red"

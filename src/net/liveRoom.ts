@@ -1,5 +1,7 @@
 import { generateAllBotOrders, generateBotOrders } from '../ai/bot'
 import { advanceDay, type LiveStep } from '../engine/live'
+import { daysInMonth, isLive } from '../engine/calendar'
+import { whileFrozen } from '../engine/frozen'
 import { isMonthEndOrder, validateOrder } from '../engine/orders'
 import { applyOrderNow } from '../engine/resolveTurn'
 import type { Army, GameState, NationId, Order, WorldMap } from '../engine/types'
@@ -85,10 +87,39 @@ export function monthOrdersOf(s: GameState): Order[] {
   return humanOrder(s.seed, s.turn, Object.keys(waiting).sort()).flatMap((id) => waiting[id] ?? [])
 }
 
+/** The rivals' plan for the month that ends after `prev`, and the nations played by the AI while their players are away. */
+function planFor(s: GameState, map: WorldMap, ai: NationId[]): Order[] {
+  // Planning only reads the world: one freeze covers the rivals and the nations whose players are away.
+  return whileFrozen(s, () => [...generateAllBotOrders(s, map), ...ai.flatMap((id) => (s.nations[id]?.alive ? generateBotOrders(s, map, id, true) : []))])
+}
+
+/** Plans made ahead of the month's end, for exactly this state. A state that changed is a new object and finds none. */
+const plannedAhead = new WeakMap<GameState, Order[]>()
+
+/** True when the next day of `prev` is the end of its month (the day the rivals plan). */
+export function monthEndsNext(prev: GameState): boolean {
+  return isLive(prev) && prev.outcome === 'playing' && !prev.pendingEvent && prev.pendingDay === undefined && (prev.day ?? 0) >= daysInMonth(prev.turn) - 1
+}
+
+/**
+ * Plans the rivals' month ahead of time, on a quiet tick before the last day is played, so the month's end is two shorter pauses
+ * instead of one long one. The plan is what `stepRoomDay` would make on that day from the same state, so the game is the same.
+ * Returns true when it planned something.
+ */
+export function planAhead(prev: GameState, map: WorldMap): boolean {
+  if (!monthEndsNext(prev) || plannedAhead.has(prev)) return false
+  const s = structuredClone(prev)
+  s.day = daysInMonth(s.turn)
+  plannedAhead.set(prev, planFor(s, map, prev.liveAi ?? []))
+  return true
+}
+
 /** Moves a shared live game on by one day. The AI plans for the nations nobody is at, as well as for all the rivals. */
 export function stepRoomDay(prev: GameState, map: WorldMap): LiveStep {
   const ai = prev.liveAi ?? []
-  const planner = (s: GameState, m: WorldMap): Order[] => [...generateAllBotOrders(s, m), ...ai.flatMap((id) => (s.nations[id]?.alive ? generateBotOrders(s, m, id, true) : []))]
+  const ahead = plannedAhead.get(prev)
+  plannedAhead.delete(prev)
+  const planner = (s: GameState, m: WorldMap): Order[] => ahead ?? planFor(s, m, ai)
   const step = advanceDay(prev, map, { monthOrders: monthOrdersOf(prev), planner })
   if (step.monthEnded && step.state.liveOrders) step.state.liveOrders = {}
   return step

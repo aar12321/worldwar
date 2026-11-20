@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { LABS, PAD, ROCKETS, ROCKET_IDS, ROCKET_RULES, SAT_EFFECT, SAT_NAMES, SPACE } from '../../data/space'
 import { discoveryBonus, expBonus, rocketBuildCost, rocketDevCost, rocketDevMonths, spaceComplexLevel } from '../../engine/spaceEffects'
-import { freeAstronauts, freeEngineers, padSlots, padsInUse, spaceLocked, spaceProblem, staffOf, talentCap } from '../../engine/space'
+import { freeAstronauts, freeEngineers, monthsToFinish, padSlots, padsInUse, rocketBuildRate, rocketDevRate, spaceLocked, spaceProblem, staffOf, talentCap } from '../../engine/space'
 import { signed, usePlayerView } from '../hooks'
 import { Pips } from '../bits'
 import { Bar, StatTile } from '../kit'
@@ -214,6 +214,13 @@ function RocketsSection() {
         const have = sp?.hangar[id] ?? 0
         const building = (sp?.builds ?? []).filter((b) => b.rocket === id)
         const launch = spec.reliability + ROCKET_RULES.perLevel * Math.max(0, level - 1) + discoveryBonus(sp).reliability + expBonus(sp?.exp ?? 0)
+        // The month end adds `rocketDevRate` (engineers on staff against what the class asks) and `rocketBuildRate` (discoveries), and
+        // the bill runs every month until done, so months and money follow the rate, not the plan.
+        const devRate = rocketDevRate(sp, id)
+        const devMonths = monthsToFinish(0, rocketDevMonths(id, nextL), devRate) ?? rocketDevMonths(id, nextL)
+        const devSlow = devRate < 0.999 ? ` (slowed: ${sp?.engineers ?? 0} of ${spec.engineers} engineers)` : ''
+        const buildRate = rocketBuildRate(sp)
+        const buildMonths = monthsToFinish(0, spec.months, buildRate) ?? spec.months
               return (
           <div key={id} className={`inset-card p-3.5 space-y-2 ${level > 0 ? 'ring-1 ring-[#30d158]/25' : ''}`}>
             <div className="flex items-start justify-between gap-3">
@@ -229,7 +236,7 @@ function RocketsSection() {
             <div className="flex flex-wrap gap-1.5">
               <Chip>launch odds {level > 0 ? percent(Math.min(SPACE.maxOdds, launch)) : `about ${percent(spec.reliability)}`}</Chip>
               <Chip>needs pad {spec.pad}</Chip>
-              <Chip>{spec.engineers} engineers</Chip>
+              <Chip tone={level < ROCKET_RULES.maxLevel && devRate < 0.999 ? 'warn' : undefined}>{devRate < 0.999 ? `needs ${spec.engineers} engineers, you have ${sp?.engineers ?? 0}` : `${spec.engineers} engineers`}</Chip>
               <Chip tone={have > 0 ? 'good' : undefined}>{have} in the hangar</Chip>
               {building.length > 0 && <Chip tone="warn">{building.length} being built</Chip>}
             </div>
@@ -237,13 +244,14 @@ function RocketsSection() {
               <div className="space-y-1">
                 <Bar value={sp.dev.progress / rocketDevMonths(id, level + 1)} label={`${spec.name} development`} color="#bf5af2" />
                 <div className="text-[12px] text-white/65">
-                  Developing level {level + 1}: {Math.max(0, rocketDevMonths(id, level + 1) - sp.dev.progress).toFixed(0)} months left, {money(rocketDevCost(id, level + 1) / rocketDevMonths(id, level + 1))} a month
+                  Developing level {level + 1}: {monthsText(monthsToFinish(sp.dev.progress, rocketDevMonths(id, level + 1), devRate) ?? 0)} left, {money(rocketDevCost(id, level + 1) / rocketDevMonths(id, level + 1))} a month{devSlow}
                 </div>
               </div>
             )}
             {building.map((b, i) => (
               <div key={i} className="space-y-1">
                 <Bar value={b.progress / spec.months} label={`${spec.name} on the line`} color="#ff9f0a" />
+                <div className="text-[12px] text-white/65">{monthsText(monthsToFinish(b.progress, spec.months, buildRate) ?? 0)} left</div>
               </div>
             ))}
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -253,14 +261,14 @@ function RocketsSection() {
                 <OrderButton
                   order={spaceOrder(player, { kind: 'develop', rocket: id })}
                   label={developing ? 'Being developed' : level === 0 ? 'Develop' : `Improve to level ${nextL}`}
-                  cost={developing ? undefined : `${rocketDevCost(id, nextL)} over ${rocketDevMonths(id, nextL)} mo`}
+                  cost={developing ? undefined : `${Math.round((rocketDevCost(id, nextL) / rocketDevMonths(id, nextL)) * devMonths)} over ${devMonths} mo`}
                   tone={level === 0 && !developing ? 'btn-primary' : ''}
                 />
               )}
               <OrderButton
                 order={spaceOrder(player, { kind: 'build', rocket: id })}
                 label="Build one"
-                cost={`${Math.round(rocketBuildCost(id, sp, player))} money, ${spec.steel} steel, ${spec.months} mo`}
+                cost={`${Math.round((rocketBuildCost(id, sp, player) / spec.months) * buildMonths)} money, ${spec.steel} steel, ${buildMonths} mo`}
               />
             </div>
           </div>

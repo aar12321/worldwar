@@ -604,6 +604,32 @@ function stepMission(s: GameState, n: Nation, m: Mission, broke: boolean) {
   }
 }
 
+// ---- How fast the work goes (the screen counts months with these, so it says what the month end will do) ----
+
+/** Rockets on the line: a month of work a month, faster with discoveries. */
+export const rocketBuildRate = (sp: SpaceState | undefined) => 1 + discoveryBonus(sp).buildSpeed
+
+/** Rocket development: the build rate, slowed (to 30% at worst) when the agency has fewer engineers than the class asks. */
+export const rocketDevRate = (sp: SpaceState | undefined, rocket: RocketId) => rocketBuildRate(sp) * clamp((sp?.engineers ?? 0) / ROCKETS[rocket].engineers, 0.3, 1)
+
+/** A bench in the labs: the lab level's speed times how well the universities are staffed with scientists (`researchStaff`). */
+export const benchRate = (sp: SpaceState | undefined, researchStaff: number) => LABS.speed[sp?.labs ?? 0] * researchStaff
+
+/**
+ * Month ends until `progress` reaches `need` at `rate` a month, adding the rate the way `runSpace` does (same sums, same tolerance),
+ * so it is exact. Null when the work does not move (no labs, no scientists).
+ */
+export function monthsToFinish(progress: number, need: number, rate: number): number | null {
+  if (!(rate > 0)) return null
+  let p = progress
+  let months = 0
+  while (p < need - 1e-9 && months < 1200) {
+    p += rate
+    months++
+  }
+  return months
+}
+
 /** The agency's month: rockets and labs advance, flights fly, outposts are supplied and mines dig. Returns money to give back for work the treasury could not pay. */
 export function runSpace(s: GameState, map: WorldMap, n: Nation, researchStaff: number): number {
   const sp = n.space
@@ -613,15 +639,14 @@ export function runSpace(s: GameState, map: WorldMap, n: Nation, researchStaff: 
   const broke = n.resources.capital < 0
   const bill = spaceBill(sp, n)
   const refund = broke ? bill.building : 0
-  const bonus = discoveryBonus(sp)
-  const speed = 1 + bonus.buildSpeed
+  const speed = rocketBuildRate(sp)
 
   if (!broke) {
     // Rocket development.
     if (sp.dev) {
       const spec = ROCKETS[sp.dev.rocket]
       const level = (sp.rockets[sp.dev.rocket] ?? 0) + 1
-      sp.dev.progress += speed * clamp(sp.engineers / spec.engineers, 0.3, 1)
+      sp.dev.progress += rocketDevRate(sp, sp.dev.rocket)
       if (sp.dev.progress >= rocketDevMonths(sp.dev.rocket, level) - 1e-9) {
         sp.rockets[sp.dev.rocket] = level
         note(s, n, `The ${spec.name.toLowerCase()} ${level === 1 ? 'is certified for flight' : `reached level ${level}`}.`, true, level === 1 && spec.rank >= 3)
@@ -656,7 +681,7 @@ export function runSpace(s: GameState, map: WorldMap, n: Nation, researchStaff: 
     // Discoveries.
     for (const r of [...sp.research]) {
       const node = NODES[r.node]
-      r.progress += LABS.speed[sp.labs] * researchStaff
+      r.progress += benchRate(sp, researchStaff)
       if (r.progress >= node.months - 1e-9) {
         sp.research.splice(sp.research.indexOf(r), 1)
         sp.discoveries.push(r.node)

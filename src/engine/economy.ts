@@ -1,4 +1,5 @@
 import { difficultyOf } from '../data/difficulty'
+import { memoFrozen } from './frozen'
 import { TERRAIN } from '../data/terrain'
 import { BUILDING_SPECS, DIPLOMACY, UNIT_SPECS } from '../data/unitTypes'
 import { MATERIALS, OIL_DEPOSITS, STEEL_DEPOSITS } from '../data/deposits'
@@ -30,7 +31,7 @@ import { lineBonus } from './deployment'
 import { adminReport, combineTraits, occupationFloor, settleSpeed, type AdminReport } from './empire'
 import { activeProjects, armsExportIncome, enterpriseIncome, industryCapMult, powerMult, programEffects, projectBill, projectPower, projectSpeed, runArmsExports, runProjects, scaleBonus, scaleFactor, worksEffects } from './industry'
 import { activeLocal, localBill, localEffects, runLocalProjects } from './works'
-import { societyBill, societyEffects, runSociety, softCap, type SocietySource } from './society'
+import { deskStability, societyBill, societyEffects, runSociety, softCap, type SocietySource } from './society'
 import { coverageMult, coverageOf, demandOf, peopleStability, populationGrowth, runPeople, spendingBill, type Demand, type PeopleBasis } from './people'
 import { commanderTrait } from './generals'
 import { spaceEffects } from './spaceEffects'
@@ -201,7 +202,8 @@ export interface EconomyReport {
 }
 
 export function computeEconomy(s: GameState, map: WorldMap, nationId: NationId): EconomyReport {
-  if (!settled.has(s)) return economyOf(s, map, nationId)
+  // A state the rivals are planning on is frozen: each nation's report is worked out once for the whole plan.
+  if (!settled.has(s)) return memoFrozen(s, 'economy', nationId, () => economyOf(s, map, nationId))
   let byNation = econCache.get(s)
   if (!byNation) econCache.set(s, (byNation = new Map()))
   let report = byNation.get(nationId)
@@ -439,8 +441,9 @@ function economyOf(s: GameState, map: WorldMap, nationId: NationId): EconomyRepo
     { label: 'Programs for the people', value: soc.stability },
     // Projects in your countries (cultural centres) share the one ceiling on care with the programs, so a centre in every country cannot buy perfect calm.
     { label: 'Projects in your countries', value: softCap(soc.rawStability + localStability) - soc.stability },
-    // The government desk (ministers, civil service, reforms, interest groups): a line only for a nation that has one.
-    ...(n.civics ? [{ label: 'Cabinet and reforms', value: civicsEffects(n).stability }] : []),
+    // The government desk (ministers, civil service, reforms, interest groups): a line only for a nation that has one. What it adds
+    // shares the same ceiling, on top of the programs and projects (`deskStability`).
+    ...(n.civics ? [{ label: 'Cabinet and reforms', value: deskStability(civicsEffects(n).stability, soc.rawStability + localStability) }] : []),
   ]
   const stabilityTarget = clamp(
     stabilityParts.reduce((sum, p) => sum + p.value, 0),

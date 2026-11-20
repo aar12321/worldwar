@@ -6,7 +6,7 @@ import type { LiveStep } from '../engine/live'
 import { resolveTurn } from '../engine/resolveTurn'
 import type { GameState, NationId, Order, WorldMap } from '../engine/types'
 import { liveFingerprint } from './fingerprint'
-import { applyCommand, checkCommand, humanOrder, stepRoomDay, votesNeeded } from './liveRoom'
+import { applyCommand, checkCommand, humanOrder, planAhead, stepRoomDay, votesNeeded } from './liveRoom'
 import { decodeState, encodeState, isLiveRoom, MAX_PLAYERS, type ChatMessage, type ClientId, type ClockRequest, type ClockView, type Lobby, type NetMessage, type OpenSeat, type RoomSettings, type StreamItem } from './protocol'
 import type { Transport, TransportStatus } from './transport'
 
@@ -780,6 +780,8 @@ export class OnlineSession {
       n++
     }
     if (n) this.hostDays(n)
+    // A tick with no day to play, just before a month ends: the rivals plan now, so the month's end is a shorter pause.
+    else planAhead(this.game!, this.map)
     this.emitLive()
   }
 
@@ -836,6 +838,8 @@ export class OnlineSession {
         this.send({ t: 'cmd', from: this.clientId, cid, order: p.order })
       }
     }
+    // Between the host's days, a screen about to reach the month's end plans the rivals' month ahead (the same plan, made earlier).
+    if (!this.syncing && this.game && this.clock.running) planAhead(this.game, this.map)
     this.emitLive()
   }
 

@@ -102,6 +102,8 @@ describe('the advisor on the new systems', () => {
     s.nations.r0.stability = 40
     const e = advise(s, map, 'r0', [], 12).find((a) => a.id === 'election')
     expect(e?.title).toMatch(/3 months/)
+    // The button opens Government on Laws, where the election and its bar are.
+    expect(e?.target).toEqual({ desk: 'economy', tab: 'government', gov: 'constitution' })
     s.nations.r0.stability = 90
     expect(ids(advise(s, map, 'r0', [], 12))).not.toContain('election')
   })

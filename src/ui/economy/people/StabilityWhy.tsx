@@ -1,7 +1,9 @@
+import { SOCIAL_RULES } from '../../../data/society'
 import { usePlayerView } from '../../hooks'
 import { Card } from '../parts'
 
 const SHORT: Record<string, string> = { 'High taxes': 'Taxes', 'Low taxes': 'Taxes' }
+const CARE = ['Programs for the people', 'Projects in your countries', 'Cabinet and reforms']
 
 /** Why stability is heading where it is: every cause with its points, so the player knows which lever to pull. */
 export function StabilityWhy() {
@@ -16,6 +18,8 @@ export function StabilityWhy() {
   const now = Math.round(player.stability)
   // The engine clamps the sum to 0..100 (economy.ts, stabilityTarget), so the lines can add up to more than where it heads.
   const raw = econ.stabilityParts.reduce((a, p) => a + p.value, 0)
+  // Care and the desk's gain share one soft ceiling (society.ts, softCap and deskStability).
+  const care = econ.stabilityParts.filter((p) => CARE.includes(p.label)).reduce((a, p) => a + Math.max(0, p.value), 0)
   const capped = raw > 100 ? 100 : raw < 0 ? 0 : null
   return (
     <Card title="Why stability is heading for" hint="Every cause, in points. Add the lines to the starting calm and you get where it is heading. Pull the biggest lever first." right={<span className="text-[20px] font-semibold tabular-nums">{target}%</span>}>
@@ -48,9 +52,9 @@ export function StabilityWhy() {
           <span className="tabular-nums">{target}%</span>
         </div>
       </div>
-      {econ.society.rawStability > 0 && (
+      {care > 0.05 && (
         <p className="text-[12px] text-white/60">
-          Your programs add {econ.society.stability.toFixed(1)} points. Care helps most at first: the more you add, the less each new program gives.
+          Programs, projects for the people and the government desk add {care.toFixed(1)} points together, under one ceiling of {SOCIAL_RULES.stabilityCap}: care helps most at first, and the more you add, the less each new program, project or reform gives.
         </p>
       )}
     </Card>

@@ -1,4 +1,5 @@
 import { PERSONALITIES } from '../data/personalities'
+import { frozenMemo, memoFrozen } from '../engine/frozen'
 import { atWar, clamp, enemiesOf, hasCasusBelli, hasPact, isAllied } from '../engine/helpers'
 import type { GameState, NationId, OpinionModifier, WorldMap } from '../engine/types'
 import { conquestGoal, countriesTaken, populationShare } from '../engine/victory'
@@ -64,6 +65,10 @@ export function forgetNation(s: GameState, id: NationId) {
 
 /** Rivals also band together once the player has taken half the countries their victory needs. */
 export function coalitionActive(s: GameState, map?: WorldMap): boolean {
+  return memoFrozen(s, 'coalition', !!map, () => coalitionOf(s, map))
+}
+
+function coalitionOf(s: GameState, map?: WorldMap): boolean {
   // With ties on, a difficulty without coalitions (Easy) never has one, whoever asks.
   if (TIES.on && !difficultyOf(s.settings.difficulty).coalitions) return false
   return s.humans.some((id) => {
@@ -115,6 +120,18 @@ export interface OpinionContext {
   enemies?: Map<NationId, NationId[]>
 }
 
+/** True when the two trade: a scan of the deals, or, while the rivals plan on a frozen state, one look in a set built once. */
+function tradePartners(s: GameState, a: NationId, b: NationId): boolean {
+  const memo = frozenMemo<number, Set<string>>(s, 'tradePairs')
+  if (!memo) return s.deals.some((d) => d.kind === 'trade' && ((d.from === a && d.to === b) || (d.from === b && d.to === a)))
+  let pairs = memo.get(0)
+  if (!pairs) {
+    memo.set(0, (pairs = new Set()))
+    for (const d of s.deals) if (d.kind === 'trade') pairs.add(`${d.from}>${d.to}`).add(`${d.to}>${d.from}`)
+  }
+  return pairs.has(`${a}>${b}`)
+}
+
 /** How `holder` feels about `target`, from -100 (hatred) to 100 (devotion), with the reasons. */
 export function opinionReport(s: GameState, map: WorldMap, holder: NationId, target: NationId, ctx: OpinionContext = {}): OpinionReport {
   const h = s.nations[holder]
@@ -128,7 +145,7 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   if (atWar(s, holder, target)) push('At war', -50)
   if (isAllied(s, holder, target)) push('Allies', 35)
   else if (hasPact(s, holder, target)) push('Non-aggression pact', 10)
-  const trading = s.deals.some((d) => d.kind === 'trade' && ((d.from === holder && d.to === target) || (d.from === target && d.to === holder)))
+  const trading = tradePartners(s, holder, target)
   // With ties on, trade is a line that grows with the deal's worth and how long the trade has run (below).
   if (trading && !TIES.on) push('Trade partners', 10)
   const theirEnemies = ctx.enemies ? (ctx.enemies.get(target) ?? []) : enemiesOf(s, target)
@@ -167,8 +184,9 @@ export function opinionReport(s: GameState, map: WorldMap, holder: NationId, tar
   return { total, parts }
 }
 
+/** A frozen state (rivals planning) asks the same question from several places: each answer is worked out once. */
 export const opinionOf = (s: GameState, map: WorldMap, holder: NationId, target: NationId, ctx?: OpinionContext) =>
-  opinionReport(s, map, holder, target, ctx).total
+  memoFrozen(s, 'opinion', `${holder}>${target}:${ctx?.borders}:${ctx?.coalition}`, () => opinionReport(s, map, holder, target, ctx).total)
 
 export function opinionLabel(v: number): string {
   if (v >= 60) return 'Devoted'

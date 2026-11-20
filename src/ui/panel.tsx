@@ -277,6 +277,7 @@ export function OrderButton({
   className = '',
   onDone,
   game,
+  explain,
 }: {
   order: Order
   label: string
@@ -289,12 +290,14 @@ export function OrderButton({
   onDone?: () => void
   /** A fresher game to check the order against than the desks' slower copy (a salvo launched today, for one). */
   game?: GameState
+  /** Turns the reason it cannot be pressed into one that says what to do instead. */
+  explain?: (why: string) => string
 }) {
   const view = usePlayerView()!
   const issueOrder = useGame((s) => s.issueOrder)
   const askConfirm = useGame((s) => s.askConfirm)
   const err = validateOrder(game ?? view.game, getWorld().map, order, view.orders)
-  const why = err ? speak(err) : null
+  const why = err ? (explain ? explain(speak(err)) : speak(err)) : null
   const detail = why ?? effect
   return (
     <button

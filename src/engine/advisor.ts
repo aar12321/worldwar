@@ -44,9 +44,12 @@ import { netWarScore } from './warscore'
 /** The parts of the People tab. */
 export type PeopleSection = 'overview' | 'health' | 'learning' | 'work' | 'family' | 'safety' | 'campaigns'
 
+/** The parts of the Government tab ('constitution' is shown as Laws, where the form of government and elections are). */
+export type GovSection = 'command' | 'cabinet' | 'talent' | 'jobs' | 'policies' | 'groups' | 'constitution'
+
 /** Where an advice button takes the player. The screens turn this into a panel, tab or window. */
 export type AdviceTarget =
-  | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection }
+  | { desk: 'economy'; tab: 'country' | 'people' | 'budget' | 'bank' | 'business' | 'projects' | 'market' | 'stocks' | 'government' | 'space'; region?: RegionId; /** Which part of the People tab. */ section?: PeopleSection; /** Which part of the Government tab. */ gov?: GovSection }
   | { desk: 'empire'; tab: 'overview' | 'provinces' | 'world' | 'reaction' | 'puppets' | 'territories' }
   | { desk: 'military'; tab: 'forces' | 'deploy' | 'theatres' | 'wars' | 'program' | 'missiles' | 'agencies' | 'systems' | 'armies'; /** A country to aim the Missile War's strike planner at. */ region?: RegionId; /** The Missile Program's section to open (overview, facilities, staff, development, arsenal, rivals). */ section?: string }
   | { desk: 'research' }
@@ -233,7 +236,7 @@ export function advise(s: GameState, map: WorldMap, nationId: NationId, pending:
   const election = monthsToElection(s, nationId)
   const need = Math.round(electionNeed(n, ELECTION.needed))
   if (election !== null && election <= 6 && n.stability < need + 8) {
-    add('soon', 52, { id: 'election', title: `An election is ${election === 0 ? 'this month' : `${election} months away`}`, detail: `Stability is ${Math.round(n.stability)}% and you need ${need}% to win. Lower taxes, or spend on pensions, housing and health. Unemployment raises the bar.`, action: 'Open Government', target: { desk: 'economy', tab: 'government' } })
+    add('soon', 52, { id: 'election', title: `An election is ${election === 0 ? 'this month' : `${election} months away`}`, detail: `Stability is ${Math.round(n.stability)}% and you need ${need}% to win. Lower taxes, or spend on pensions, housing and health. Unemployment raises the bar.`, action: 'Open Laws', target: { desk: 'economy', tab: 'government', gov: 'constitution' } })
   }
 
   // The people: staffing, health, schools, jobs, epidemics
