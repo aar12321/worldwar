@@ -171,7 +171,7 @@ Opinions stay in range and nobody is pinned at the ends (at most 4 of 1000 pairs
 - Trade and loans live in the Diplomacy desk: the Relations desk links to each composer there, and Diplomacy cards have "Build relations".
 - Stock stakes in a foreign company do not exist in this game (shares can only be held in companies in your own territory), so there is no stock-stake line; foreign stakes are investments, which have one.
 - A long peace starts counting from the first month of the game; a save from before ties starts it when loaded (see Gaps closed), so a pair that fought before that save gets no long-peace line for having fought (only neighbours do).
-- AI rivals still never offer a player a missile ceasefire (they make one between themselves, and answer a player's); two players offer each other through the inbox.
+- AI rivals now offer a player a missile ceasefire through the inbox (docs/MISSILE_PROGRAM_STATUS.md, "Rivals offer ceasefires"); two players offer each other the same way.
 - The acceptance odds are shown for pacts, alliances, guarantees, loans and trade offers, not for peace (its own screen shows the war score) or calls to arms.
 - The tier threat of the coalition model (`threatOf`: a Superpower draws rivals together from its tier alone) is unchanged; only the opinion line "Fears your power" and `coalitionActive` are now earned.
 - Online (several humans): relationship acts toward another player are refused and the card says so; checked in a two-human game on one machine (live screens), not over the network.
