@@ -5,6 +5,7 @@ import type { GameState, Order } from '../engine/types'
 import { confirmFor } from '../ui/confirmRules'
 import { warRefusal } from '../ui/warHint'
 import { orderNews } from '../ui/livePresent'
+import { offerWhen } from '../ui/offerWhen'
 import { speak } from '../ui/plain'
 import { validateOrder } from '../engine/orders'
 import { gameOf, liveRoom, patchAll, same, settle, type LiveRoom } from './liveHarness'
@@ -126,6 +127,8 @@ describe('two humans, live room', () => {
       g.warScore['r0>r1'] = 100
     })
     expect(host.s.sendCommand(peace('r0', 'r1', { territory: true })).error).toMatch(/run by a player/)
+    // The Send terms button says when the friend sees it: at once, in a live room.
+    expect(offerWhen(gameOf(host), 'Bo')).toBe('Bo sees it at once and answers from their Diplomacy desk')
     expect(host.s.sendCommand(peace('r0', 'r1', { puppet: true })).error).toBeNull()
     await room.run(400)
     const offer = gameOf(guest).proposals.find((p) => p.from === 'r0' && p.kind === 'peace')!
@@ -229,6 +232,7 @@ describe('two humans, turn room', () => {
     patchAll(room, (g) => {
       g.warScore['r0>r1'] = 100
     })
+    expect(offerWhen(gameOf(room.seats[0]), 'Bo')).toBe('Bo sees it when the next month begins')
     await month(room, [[peace('r0', 'r1', { puppet: true })], []])
     const offer = gameOf(room.seats[1]).proposals.find((p) => p.from === 'r0' && p.kind === 'peace')!
     expect(offer).toBeTruthy()
