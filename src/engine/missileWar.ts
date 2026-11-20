@@ -1,6 +1,7 @@
 import { addOpinion } from '../ai/opinion'
 import { AIRCRAFT_RULES } from '../data/aircraft'
-import { DEFENSE_TEXT, DOCTRINES, MW, rungOf } from '../data/missileWar'
+import { AI_TRUCE, DEFENSE_TEXT, DOCTRINES, MW, rungOf } from '../data/missileWar'
+import { PERSONALITIES } from '../data/personalities'
 import { LEGACY_MISSILES, MISSILES, type MissileSpec } from '../data/missiles'
 import { STATION } from '../data/deployment'
 import { difficultyOf } from '../data/difficulty'
@@ -548,25 +549,86 @@ export function applyScramble(s: GameState, o: Extract<Order, { type: 'scramble'
 
 // ---- Ceasefire ----
 
-/** Whether an AI rival would accept a missile ceasefire to make one. Deterministic: no dice, so the answer can be shown before it is asked. */
-export function truceAnswer(s: GameState, to: NationId): { accepts: boolean; why: string } {
+/**
+ * Whether an AI rival would accept a missile ceasefire to make one. Deterministic: no dice, so the answer can be shown before it is asked.
+ * `from` is the nation asking (with AI_TRUCE on, how the exchange with it has gone counts too).
+ */
+export function truceAnswer(s: GameState, to: NationId, from?: NationId): { accepts: boolean; why: string } {
   const t = s.nations[to]
   if (!t || t.isPlayer || s.humans.includes(to)) return { accepts: false, why: 'Only AI rivals answer ceasefire offers' }
-  return truceWilling(s, to)
+  return truceWilling(s, to, from)
 }
 
-/** Whether a nation's own interest says yes to a ceasefire (the rival's rule, also used by a bot standing in for a player). */
-export function truceWilling(s: GameState, to: NationId): { accepts: boolean; why: string } {
+/**
+ * Whether a nation's own interest says yes to a ceasefire (the rival's rule, also used by a bot standing in for a player, and by a rival
+ * deciding to offer one: src/ai/missileTruce.ts). The world on edge, or more lost than dealt in the whole missile war; with AI_TRUCE on
+ * also under fire with nothing left to stop or answer it, or losing the exchange with `other` lately.
+ */
+export function truceWilling(s: GameState, to: NationId, other?: NationId): { accepts: boolean; why: string } {
   const t = s.nations[to]
   if (!t) return { accepts: false, why: 'Unknown nation' }
-  const skill = difficultyOf(s.settings.difficulty).skill
-  const need = MW.truceTension[skill]
+  const need = truceNeed(s, t)
   const tension = tensionOf(s)
   const led = ledgerOf(t)
   const hurting = led.lost > 0.2 && led.lost > led.killed * 1.2
   if (tension >= need) return { accepts: true, why: `The world is on edge (tension ${Math.round(tension)}).` }
   if (hurting) return { accepts: true, why: `${t.name} has lost more than it has dealt.` }
+  if (AI_TRUCE.on) {
+    const spent = outOfMeans(s, t)
+    if (spent) return { accepts: true, why: spent }
+    if (other && s.nations[other]) {
+      const x = exchangeOf(s, to, other)
+      if (x.taken > AI_TRUCE.losing && x.taken > x.dealt * 1.2) return { accepts: true, why: `${t.name} is losing the missile exchange with ${s.nations[other].name}.` }
+    }
+  }
   return { accepts: false, why: `${t.name} sees no reason to stop yet (tension ${Math.round(tension)}, it needs ${need}).` }
+}
+
+/**
+ * What `a` and `b` did to each other in the salvos on record (the last MW.keepSalvos, so "lately"): people killed each way (millions), and
+ * the last turn `a` fired at `b` by its own order or a raid (a doctrine's automatic answer is not counted: it only answers).
+ */
+export function exchangeOf(s: Pick<GameState, 'salvos'>, a: NationId, b: NationId): { dealt: number; taken: number; lastOrdered: number | null } {
+  let dealt = 0
+  let taken = 0
+  let lastOrdered: number | null = null
+  for (const r of s.salvos ?? []) {
+    if (r.from === a && r.to === b) {
+      dealt += r.dead
+      if (!r.auto) lastOrdered = Math.max(lastOrdered ?? r.turn, r.turn)
+    } else if (r.from === b && r.to === a) taken += r.dead
+  }
+  return { dealt, taken, lastOrdered }
+}
+
+/**
+ * The world tension at which a nation takes a ceasefire: by difficulty (MW.truceTension), and with AI_TRUCE on, moved by its temperament
+ * (a merchant's need is lower, an expansionist's higher).
+ */
+export function truceNeed(s: GameState, t: Nation): number {
+  const base = MW.truceTension[difficultyOf(s.settings.difficulty).skill]
+  if (!AI_TRUCE.on) return base
+  const temper = clamp(PERSONALITIES[t.personality ?? 'honorable']?.aggression ?? 1, AI_TRUCE.temperMin, AI_TRUCE.temperMax)
+  return Math.round(base * temper)
+}
+
+/** Nations at war with `t` that struck it within `months` (the most recent first, then by id). */
+export function struckLately(s: GameState, t: Pick<Nation, 'id' | 'struckBy'>, months: number): NationId[] {
+  return Object.entries(t.struckBy ?? {})
+    .filter(([id, turn]) => s.turn - turn <= months && s.nations[id]?.alive && atWar(s, t.id, id))
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .map(([id]) => id)
+}
+
+/** Why a nation under fire has nothing left to stop or answer the missiles with (AI_TRUCE), or null. */
+export function outOfMeans(s: GameState, t: Nation): string | null {
+  const attackers = struckLately(s, t, AI_TRUCE.underFire)
+  if (!attackers.length) return null
+  const cap = interceptorCap(t)
+  if (cap > 0 && interceptorsOf(t) <= cap * AI_TRUCE.lowRounds) return `${t.name} is under fire and its interceptor store is nearly empty.`
+  const armed = attackers.some((a) => missilesInStore(s.nations[a]) >= AI_TRUCE.armed)
+  if (armed && missilesInStore(t) <= AI_TRUCE.lowMissiles) return `${t.name} is under fire and has almost nothing to answer with.`
+  return null
 }
 
 export function truceProblem(s: GameState, o: Extract<Order, { type: 'missileTruce' }>): string | null {
@@ -574,7 +636,7 @@ export function truceProblem(s: GameState, o: Extract<Order, { type: 'missileTru
   if (o.lift) return trucePair(s, o.nationId, o.target) === null ? 'There is no ceasefire to lift' : null
   if (!atWar(s, o.nationId, o.target)) return 'You are not at war with them'
   if (trucePair(s, o.nationId, o.target) !== null) return 'A ceasefire already holds'
-  const a = truceAnswer(s, o.target)
+  const a = truceAnswer(s, o.target, AI_TRUCE.on ? o.nationId : undefined)
   return a.accepts ? null : a.why
 }
 

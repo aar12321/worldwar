@@ -1,4 +1,4 @@
-import { MW, rungOf } from '../data/missileWar'
+import { AI_TRUCE, MW, rungOf } from '../data/missileWar'
 import { whileFrozen } from '../engine/frozen'
 import { relationBotOrders } from './relations'
 import { DEALINGS } from '../data/relations'
@@ -6,6 +6,7 @@ import { offerIsMoot } from '../engine/offers'
 import { MISSILE_TYPES } from '../data/missiles'
 import { tensionOf } from '../engine/missileWar'
 import { missileWarOrders } from './missileWar'
+import { missileTruceOffers } from './missileTruce'
 import { COALITION } from '../data/coalition'
 import { dueStrike, jointTarget, leadersOf, type ThreatReport } from '../engine/coalition'
 import { aiNuclearOrder } from '../engine/nuclear'
@@ -701,6 +702,19 @@ function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer:
     }
   }
   // Rebels in a country are fought every month with no order needed.
+
+  // A missile ceasefire offer, at most one a month, after everything else so a strike ordered this month holds it back (AI_TRUCE,
+  // src/ai/missileTruce.ts). Its own random stream; to a player it counts against the inbox limits like any offer.
+  if (AI_TRUCE.on) {
+    for (const o of missileTruceOffers(s, nationId, diff.skill, orders)) {
+      if (o.type !== 'missileTruce' || !canAsk(o.target) || !tryAdd(o)) continue
+      if (humans.has(o.target)) {
+        ctx.proposalsTo.set(o.target, (ctx.proposalsTo.get(o.target) ?? 0) + 1)
+        ctx.inbox.set(o.target, (ctx.inbox.get(o.target) ?? 0) + 1)
+      }
+      break
+    }
+  }
 
   return orders
 }

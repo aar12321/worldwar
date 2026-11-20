@@ -5,7 +5,7 @@ import { enemiesOf } from '../engine/helpers'
 import { freeUnits } from '../engine/deployment'
 import { buildRoom, launchSite, missileKinds, missileStock, programLevel } from '../engine/missiles'
 import { doctrineOf, interceptorCap, interceptorsOf, ledgerOf, radarLevel, raidBase, tensionOf, trucePair } from '../engine/missileWar'
-import type { GameState, Nation, NationId, Order, SalvoReport, WorldMap } from '../engine/types'
+import type { Dispatch, GameState, Nation, NationId, Order, SalvoReport, WorldMap } from '../engine/types'
 import { flightsFor } from './missileFx'
 
 /** Plain words for the missile war: the war's status, the next steps, and a readable line for every salvo. Pure, so they are tested. */
@@ -139,4 +139,19 @@ export function raidReach(game: GameState, map: WorldMap, player: Nation, target
   if (!raidBase(game, map, player.id, target)) return `Out of range: bombers reach ${Math.round(airReach(player))} km from a country with a factory`
   if (freeUnits(game, player.id).air < MW.raid.minBombers) return 'Needs strike aircraft at home'
   return null
+}
+
+/** Whether a dispatch is a rival's missile ceasefire offer to this player (it gets its own toast: `rivalTruceOffers`). */
+export const isRivalTruceOffer = (game: Pick<GameState, 'humans'>, d: Dispatch, player: NationId): boolean =>
+  d.kind === 'proposal' && d.proposalKind === 'truce' && d.to === player && !game.humans.includes(d.from)
+
+/**
+ * The toasts for missile ceasefires rivals offered this player since `before` (AI_TRUCE): one line each, saying where to answer. Read off the
+ * offers waiting in the inbox, so a turn's month end and a live month end say the same.
+ */
+export function rivalTruceOffers(before: GameState | null, next: GameState, player: NationId): string[] {
+  const seen = new Set((before?.proposals ?? []).map((p) => p.id))
+  return next.proposals
+    .filter((p) => p.kind === 'truce' && p.to === player && !seen.has(p.id) && !next.humans.includes(p.from))
+    .map((p) => `${next.nations[p.from]?.name ?? p.from} offers you a missile ceasefire: no missiles, raids or warheads between you for ${MW.truceMonths} months. Accept or decline it in Diplomacy.`)
 }

@@ -1,7 +1,7 @@
 import { evaluateProposal } from '../ai/diplomat'
 import { addOpinion, addOpinionCapped, decayOpinions } from '../ai/opinion'
 import { DEALINGS, TIES } from '../data/relations'
-import { MW } from '../data/missileWar'
+import { AI_TRUCE, MW } from '../data/missileWar'
 import { applyTruce, trucePair } from './missileWar'
 import { LIBERATE_TEXT, PUPPET } from '../data/puppets'
 import { DIPLOMACY, PROPOSAL_LABELS } from '../data/unitTypes'
@@ -260,7 +260,8 @@ export function validateProposal(s: GameState, map: WorldMap, from: NationId, to
       return null
     }
     case 'truce':
-      if (!DEALINGS.on || !isHumanNation(s, to) || !isHumanNation(s, from)) return 'A missile ceasefire is offered from the Missile War desk'
+      // Between two players; with AI_TRUCE on, also from a rival to a player (src/ai/missileTruce.ts).
+      if (!DEALINGS.on || !isHumanNation(s, to) || !(isHumanNation(s, from) || AI_TRUCE.on)) return 'A missile ceasefire is offered from the Missile War desk'
       if (!atWar(s, from, to)) return 'Not at war'
       if (trucePair(s, from, to) !== null) return 'A ceasefire already holds'
       return null
@@ -269,9 +270,21 @@ export function validateProposal(s: GameState, map: WorldMap, from: NationId, to
 
 const isHumanNation = (s: GameState, id: NationId) => s.humans.includes(id) || !!s.nations[id]?.isPlayer
 
-/** Whether a `missileTruce` order is an offer to another player (who answers it on their own screen) rather than a rival's answer on the spot. */
+/**
+ * Whether a `missileTruce` order is an offer to another player (who answers it on their own screen) rather than a rival's answer on the spot.
+ * With AI_TRUCE on, a rival's offer to a player goes the same way.
+ */
 export const truceByOffer = (s: GameState, o: { nationId: NationId; target: NationId; lift?: boolean }): boolean =>
-  DEALINGS.on && !o.lift && isHumanNation(s, o.target) && isHumanNation(s, o.nationId)
+  DEALINGS.on && !o.lift && isHumanNation(s, o.target) && (isHumanNation(s, o.nationId) || AI_TRUCE.on)
+
+/** A rival remembers a player who declined (or let lapse) its ceasefire offer, so it waits before it offers again (AI_TRUCE). */
+function rememberTruceRefusal(s: GameState, p: Proposal) {
+  if (!AI_TRUCE.on || p.kind !== 'truce' || isHumanNation(s, p.from)) return
+  ;(s.truceRefused ??= {})[`${p.from}>${p.to}`] = s.turn
+}
+
+/** The turn `to` last refused `from`'s ceasefire offer, or null. */
+export const truceRefusedAt = (s: Pick<GameState, 'truceRefused'>, from: NationId, to: NationId): number | null => s.truceRefused?.[`${from}>${to}`] ?? null
 
 /** What stops a missile ceasefire offer to another player, or null. */
 export function truceOfferProblem(s: GameState, map: WorldMap, o: { nationId: NationId; target: NationId }): string | null {
@@ -443,6 +456,7 @@ function settle(s: GameState, map: WorldMap, p: Proposal, accept: boolean, reaso
     pushDispatch(s, { kind: 'accepted', from: p.to, to: p.from, proposalKind: p.kind, text })
     return
   }
+  rememberTruceRefusal(s, p)
   if (p.kind === 'callToArms') addOpinion(s, p.from, p.to, 'Ignored our call to arms', -25, 0.5)
   else if (p.kind === 'alliance') addOpinion(s, p.from, p.to, 'Spurned our alliance', -6, 0.5)
   else addOpinion(s, p.from, p.to, 'Rebuffed our offer', -3, 0.5)
@@ -647,10 +661,15 @@ export function expireDiplomacy(s: GameState, withdraw?: () => void) {
       pushDispatch(s, { kind: 'expired', from: p.to, to: p.from, proposalKind: p.kind, text: `${name(s, p.to)} never answered ${name(s, p.from)}'s call to arms.` })
     } else {
       addOpinion(s, p.from, p.to, 'Ignored our offer', -3, 0.5)
+      rememberTruceRefusal(s, p)
     }
   }
   s.proposals = kept
   for (const [k, turn] of Object.entries(s.proposalMemory)) if (s.turn - turn > 24) delete s.proposalMemory[k]
+  if (s.truceRefused) {
+    for (const [k, turn] of Object.entries(s.truceRefused)) if (s.turn - turn > AI_TRUCE.afterRefusal) delete s.truceRefused[k]
+    if (Object.keys(s.truceRefused).length === 0) delete s.truceRefused
+  }
   decayOpinions(s)
   fizzleStaleWars(s)
 }

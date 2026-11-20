@@ -35,7 +35,7 @@ export function missileWarOrders(s: GameState, map: WorldMap, id: NationId, skil
   // 1. De-escalation: as the world climbs the ladder, offer a ceasefire to a rival that would take it.
   // The offer is made once the tension reaches what a rival of this difficulty would accept (and only to a rival that would).
   if (tension >= MW.truceTension[skill]) {
-    for (const e of foes) if (trucePair(s, id, e) === null && !s.humans.includes(e) && truceAnswer(s, e).accepts) out.push({ type: 'missileTruce', nationId: id, target: e })
+    for (const e of foes) if (trucePair(s, id, e) === null && !s.humans.includes(e) && truceAnswer(s, e, id).accepts) out.push({ type: 'missileTruce', nationId: id, target: e })
   }
 
   // 2. Doctrine. A nation with missiles answers a strike; one with good radar and a calm world fires on warning. Never on warning at the top of the ladder.

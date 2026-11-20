@@ -123,6 +123,39 @@ export const MW = {
   infamyMax: 6,
 }
 
+/**
+ * Rivals offer missile ceasefires (docs/MISSILE_PROGRAM_STATUS.md, "Rivals offer ceasefires"). With it on, a rival at war that would itself
+ * accept a ceasefire (`truceWilling`: the world on edge, the exchange going against it, or under fire with its interceptor store or its
+ * own missiles spent; its temperament moves the tension it needs) offers one: to a player through the Diplomacy inbox (Accept / Decline,
+ * a `truce` offer as between two players), to another rival on the spot when that rival would accept. Off: exactly as before (rivals
+ * never offer a player a ceasefire, and the answer rule is the tension-or-hurting one).
+ */
+export const AI_TRUCE = {
+  on: true,
+  /** Months between two offers from the same rival to the same player. */
+  every: 4,
+  /** Months a rival waits after a player declined (or let lapse) its offer. */
+  afterRefusal: 9,
+  /** A rival that fired at this nation by its own order this recently (months; 1 = this month or last: a doctrine's answer does not count) does not offer it a ceasefire: it just escalated. */
+  escalated: 1,
+  /** The pair counts as exchanging missiles while either struck the other within this many months. */
+  exchange: 6,
+  /** Under fire: struck within this many months. */
+  underFire: 3,
+  /** Losing the exchange with one enemy: more than this many millions killed by it in the salvos on record, and a fifth more than dealt back. */
+  losing: 0.1,
+  /** Under fire with an interceptor store at or under this share of what it holds counts as out of means. */
+  lowRounds: 0.25,
+  /** Under fire by an enemy holding at least `armed` missiles, with at most `lowMissiles` of its own to answer with, also counts. */
+  lowMissiles: 2,
+  armed: 3,
+  /** The tension a rival needs (MW.truceTension) is scaled by its personality's aggression, held to these bounds. */
+  temperMin: 0.6,
+  temperMax: 1.4,
+  /** The chance a month that a rival with a reason makes an offer (its own random stream). */
+  chance: 0.6,
+}
+
 export const DOCTRINES: Record<Doctrine, { name: string; blurb: string }> = {
   hold: { name: 'Hold fire', blurb: 'Never answers on its own. Your orders decide every launch.' },
   retaliate: { name: 'Retaliate', blurb: 'When struck, answers with up to a third of the store at the launch site that hit you. Never answers an answer.' },

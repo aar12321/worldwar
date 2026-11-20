@@ -422,7 +422,7 @@ function CeasefireCard({ game, player }: { game: GameState; player: Nation }) {
   return (
     <section className="inset-card p-3.5 space-y-2" aria-label="Ceasefire" data-ceasefire>
       <h3 className="text-[15px] font-semibold">Ceasefire</h3>
-      <p className="text-[12px] text-white/70">A missile ceasefire stops missiles, raids and warheads between two nations for {MW.truceMonths} months and cools the world. Armies keep fighting. Rivals accept when the tension is high or they are losing the exchange; another player gets your offer in Diplomacy and answers it there.</p>
+      <p className="text-[12px] text-white/70">A missile ceasefire stops missiles, raids and warheads between two nations for {MW.truceMonths} months and cools the world. Armies keep fighting. Rivals accept when the tension is high, they are losing the exchange or they are under fire with nothing left to stop or answer it; for the same reasons a rival offers you one, in Diplomacy. Another player gets your offer in Diplomacy and answers it there.</p>
       <div className="flex flex-wrap gap-1.5">
         {foes.map((e) => {
           const until = trucePair(game, player.id, e)

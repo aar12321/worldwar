@@ -5,6 +5,7 @@ import type { AdviceTarget, GovSection, PeopleSection } from './engine/advisor'
 import { applyEventChoice } from './engine/events'
 import { factionNews } from './engine/factions'
 import { programNews } from './engine/missileProgram'
+import { isRivalTruceOffer, rivalTruceOffers } from './ui/missileWarText'
 import { blocNews } from './engine/bloc'
 import { commandLevel, DEFAULT_AUTO, planMonth, type AutoSettings } from './engine/commander'
 import { maxAttacks, turnDate } from './engine/helpers'
@@ -707,9 +708,11 @@ function presentMonth(before: GameState, next: GameState, player: NationId) {
   // The missile program's month: what opened, what is ready to test, how the tests went.
   for (const n of programNews(before === next ? null : before, next, player)) toast(n.text, n.tone, 6500)
   for (const text of blocNews(before === next ? null : before, next, player).slice(0, 3)) toast(text, 'info', 7000)
+  // A rival's missile ceasefire offer waits for an answer: always said, report or not (AI_TRUCE).
+  for (const text of rivalTruceOffers(before === next ? null : before, next, player)) toast(text, 'info', 8000)
   // With the report off, the turn's big moments still get a line.
   if (!settings.monthlyReport) {
-    const mineNews = next.dispatches.filter((d) => newsFor(d, player))
+    const mineNews = next.dispatches.filter((d) => newsFor(d, player) && !isRivalTruceOffer(next, d, player))
     for (const d of mineNews.slice(-3)) toast(d.text, DISPATCH_TONE[d.kind], 6000)
     if (!fx.length) for (const b of mine) if (b.captured) toast(battleLine(b, next, player).text, b.defender.nationId === player ? 'error' : 'success', 6000)
   }
@@ -784,7 +787,8 @@ function liveDay(prev: GameState, step: LiveStep) {
     const risings = game.battles.filter((b) => b.attacker.nationId === 'rebels' && b.defender.nationId === player).map(lineOf)
     patch.liveNote = buildReport(month.stats, game, player, [...month.battles, ...risings])
     game.monthStart = markMonth(game, player, presented.mine.filter((b) => b.attacker.nationId !== 'rebels').map(lineOf))
-    for (const d of game.dispatches.filter((x) => newsFor(x, player)).slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
+    for (const text of rivalTruceOffers(prev, game, player)) st.toast(text, 'info', 8000)
+    for (const d of game.dispatches.filter((x) => newsFor(x, player) && !isRivalTruceOffer(game, x, player)).slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
     for (const text of factionNews(prev, game, player).slice(0, 3)) st.toast(text, 'info', 7000)
     for (const text of blocNews(prev, game, player).slice(0, 3)) st.toast(text, 'info', 7000)
     const failed = game.log.filter((e) => e.turn === prev.turn && e.text.startsWith('Order failed') && e.nations.includes(player))
@@ -1610,7 +1614,8 @@ export const useGame = create<GameStore>((set, get) => ({
       if (st.settings.liveReport === 'pause') patch.summary = report
       else patch.liveNote = report
       // The month's diplomacy still gets a line while the clock runs: wars declared on you, offers, answers.
-      const news = step.state.dispatches.filter((d) => newsFor(d, game.playerId))
+      for (const text of rivalTruceOffers(game, step.state, game.playerId)) st.toast(text, 'info', 8000)
+      const news = step.state.dispatches.filter((d) => newsFor(d, game.playerId) && !isRivalTruceOffer(step.state, d, game.playerId))
       for (const d of news.slice(-3)) st.toast(d.text, DISPATCH_TONE[d.kind], 6500)
       for (const text of factionNews(game, step.state, game.playerId).slice(0, 3)) st.toast(text, 'info', 7000)
       for (const text of blocNews(game, step.state, game.playerId).slice(0, 3)) st.toast(text, 'info', 7000)
