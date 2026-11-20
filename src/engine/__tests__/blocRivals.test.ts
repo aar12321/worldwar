@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { blocBotOrders, blocOpEnemies, warOfChoice } from '../../ai/blocs'
 import { BLOC } from '../../data/blocs'
 import { blocOf } from '../bloc'
@@ -37,6 +37,21 @@ function atPeace(humans: string[] = []) {
 }
 
 describe('rival blocs choose a war they can win (BLOC.aiWars)', () => {
+  // The test map has eight nations; the real world's bound (only while 100 are alive) is checked on its own below.
+  const minNations = BLOC.warMinNations
+  beforeEach(() => {
+    BLOC.warMinNations = 0
+  })
+  afterEach(() => {
+    BLOC.warMinNations = minNations
+  })
+
+  it('a world already thinned out is left alone: no war of choice below the least number of nations alive', () => {
+    const { s, f } = atPeace()
+    BLOC.warMinNations = Object.values(s.nations).filter((n) => n.alive).length + 1
+    expect(warOfChoice(s, map, f(), 0.85)).toBeNull()
+  })
+
   it('picks the weak neighbour, forecasts it with every member that could join, and leaves the state exactly as it was', () => {
     const { s, f } = atPeace()
     const before = JSON.stringify(s)

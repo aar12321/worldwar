@@ -58,6 +58,8 @@ export const BLOC = {
   warPowerShare: 0.5,
   /** The leader's opinion of the target must be below this: a neighbour it is cool to, not a friend. */
   warOpinion: 10,
+  /** Wars of choice only while at least this many nations are alive (the real world starts with 175), so a thinned world is not finished off. */
+  warMinNations: 100,
   warChance: { normal: 0.2, hard: 0.3 },
   /** Operations a rival bloc plans with `aiWars` on: the least odds of the pledged force (Normal, Hard). */
   opFloor: { normal: 0.6, hard: 0.55 },

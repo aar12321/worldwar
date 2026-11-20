@@ -107,6 +107,8 @@ export function warOfChoice(s: GameState, map: WorldMap, f: Faction, share: numb
   const leader = leaderOf(f)
   const members = f.members.filter((m) => s.nations[m]?.alive && !s.nations[m].territoryOf && !s.nations[m].overlord).sort()
   if (members.length < 2) return null
+  // Only while the world still has plenty of nations: in a world already eaten down to a few, blocs do not finish off the rest.
+  if (Object.values(s.nations).filter((n) => n.alive).length < BLOC.warMinNations) return null
   const power = blocPower(s, f)
   const started = (id: NationId) => hasCasusBelli(s, leader, id) || (s.cases ?? []).some((c) => c.holder === leader && c.target === id)
   const owned = new Set(members.flatMap((m) => regionsOf(s, m)))
