@@ -1,4 +1,4 @@
-import { TIES, TRUST } from '../data/relations'
+import { DEALINGS, TIES, TRUST } from '../data/relations'
 import { MARKET } from '../data/unitTypes'
 import { atWar, clamp, hasPact, isAllied, pairKey } from './helpers'
 import { sameFaction } from './factions'
@@ -38,11 +38,24 @@ export function tradeMonths(s: GameState, a: NationId, b: NationId): number {
   return since === undefined ? 0 : Math.max(0, s.turn - since)
 }
 
-/** Months since two nations last fought (counting from the start of the game when they never have). */
+/**
+ * Months since two nations last fought, counting from the start of the record when they never have: the first month of the game, or for a
+ * save made before ties the month it was loaded (`TiesState.since`), so a pair that fought before that save earns no long peace it did not keep.
+ */
 export function peaceMonths(s: GameState, a: NationId, b: NationId): number {
   if (atWar(s, a, b)) return 0
   const last = s.ties?.fought[pairKey(a, b)]
-  return Math.max(0, s.turn - (last ?? 1))
+  return Math.max(0, s.turn - (last ?? s.ties?.since ?? 1))
+}
+
+/**
+ * A save loaded without a record of ties (made before them) starts its record now: no pair has a long peace until 12 months of it have been
+ * seen. A game at its first month is unchanged (its record starts there anyway). Only with ties and `DEALINGS` on.
+ */
+export function startTiesRecord(s: GameState): void {
+  if (!TIES.on || !DEALINGS.on || s.ties || !(s.turn > 1)) return
+  s.ties = { fought: {}, tradeSince: {}, tradeLast: {}, since: s.turn }
+  for (const k of s.wars) s.ties.fought[k] = s.turn
 }
 
 /** Whether two nations have fought in this game (as far as the record goes). */
@@ -155,7 +168,8 @@ export function trustLabel(v: number): TrustReport['label'] {
 
 /**
  * How far `holder` expects `target` to keep its word, from its record: treaties kept, steady trade, deals honoured, an embassy, a shared
- * bloc and a long peace on one side; broken promises, spies, aggression and war on the other. A reading for the screens; no rule uses it.
+ * bloc and a long peace on one side; broken promises, spies, aggression and war on the other. With `DEALINGS.on` a rival weighs it in its
+ * answer to a treaty, a trade deal, a loan or a joint venture (`trustFactor`, src/ai/diplomat.ts).
  */
 export function trustReport(s: GameState, holder: NationId, target: NationId, ctx: { borders?: boolean; stored?: { label: string; value: number }[] } = {}): TrustReport {
   const parts: TrustReport['parts'] = []
@@ -183,4 +197,19 @@ export function trustReport(s: GameState, holder: NationId, target: NationId, ct
   if (atWar(s, holder, target)) push('At war', TRUST.war)
   const total = Math.round(clamp(TRUST.base + parts.reduce((sum, p) => sum + p.value, 0), 0, 100))
   return { total, label: trustLabel(total), parts }
+}
+
+/**
+ * What trust is worth in a decision: -1 (trust 0) through 0 (50, untested) to +1 (trust 100), and 0 with `DEALINGS` off. Each kind of offer
+ * multiplies it by its own weight (`DEALINGS.trust`), so its effect is bounded and can be said in a sentence.
+ */
+export function trustFactor(total: number): number {
+  return DEALINGS.on ? clamp((total - TRUST.base) / (100 - TRUST.base), -1, 1) : 0
+}
+
+/** How trust leans an answer, in words for the screens: "Trust 64 (Reliable) counts for you". */
+export function trustLean(t: TrustReport): { text: string; tone: 'good' | 'bad' | 'none' } {
+  const f = trustFactor(t.total)
+  if (Math.abs(f) < 0.1) return { text: `Trust ${t.total} (${t.label}): no weight either way`, tone: 'none' }
+  return f > 0 ? { text: `Trust ${t.total} (${t.label}) counts for you`, tone: 'good' } : { text: `Trust ${t.total} (${t.label}) counts against you`, tone: 'bad' }
 }

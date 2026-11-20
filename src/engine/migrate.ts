@@ -11,6 +11,7 @@ import { EVENT_GAP_TURNS, FIRST_EVENT_TURN } from './events'
 import { cleanCivics } from './civics'
 import type { Faction, GameState, WorldMap } from './types'
 import { migrateBlocs } from './bloc'
+import { startTiesRecord } from './ties'
 
 /** Checks a loaded save and fills a few fields, so a damaged or slightly older game can still load. */
 export function normalizeGame(game: GameState, map: WorldMap): GameState {
@@ -65,6 +66,8 @@ export function normalizeGame(game: GameState, map: WorldMap): GameState {
   game.eliminated ??= []
   game.worldGross ??= 0
   game.investments ??= []
+  // A save from before ties kept no record of earlier wars: its long peace starts counting now (src/engine/ties.ts).
+  startTiesRecord(game)
   game.settings.goal ??= 'classic'
   cleanFactions(game)
   game.reasons ??= {}

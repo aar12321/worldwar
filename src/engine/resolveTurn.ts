@@ -69,10 +69,10 @@ import { checkOutcome, worldGross } from './victory'
 import { killNation, resolveAttack, resolveRebels } from './warfare'
 import { fadeWarScore } from './warscore'
 import { applyGovern, describePatch } from './puppets'
-import { applyRelate, runRelations } from './relations'
+import { applyRelate, runRelations, thankInvestment } from './relations'
 import { runTies } from './ties'
 import { dropMootOffers } from './offers'
-import { DEALINGS, TIES } from '../data/relations'
+import { DEALINGS, RELATIONS, TIES } from '../data/relations'
 import { describeRelate } from './relationsView'
 import { annexTerritory, commanded, releaseTerritory, runTerritoryMonth } from './territories'
 
@@ -685,7 +685,9 @@ function executeOrder(s: GameState, map: WorldMap, o: Order, rng: ReturnType<typ
       addToSector(target, o.sector, o.amount, nationWorkforce(s, map, o.target), INVEST.efficiency)
       makeInvestment(s, o.nationId, o.target, o.sector, o.amount)
       // With ties on, the money itself is a lasting line ('Invests in our economy', src/engine/ties.ts); the thanks for each new investment is small and capped.
-      if (TIES.on) addOpinionCapped(s, o.target, o.nationId, 'Invested in our businesses', TIES.invest.thanks, 0.2, TIES.invest.thanksCap)
+      // With DEALINGS on the thanks is also one of the desk's acts for its caps (the warmth factor and the 45 all acts can give): docs/RELATIONS_STATUS.md.
+      if (TIES.on && DEALINGS.on && RELATIONS.on) thankInvestment(s, o.target, o.nationId, o.amount)
+      else if (TIES.on) addOpinionCapped(s, o.target, o.nationId, 'Invested in our businesses', TIES.invest.thanks, 0.2, TIES.invest.thanksCap)
       else addOpinion(s, o.target, o.nationId, 'Invested in our businesses', 12, 0.2)
       if (n.isPlayer) addLog(s, 'economy', `You invested ${Math.round(o.amount)} in ${target.name}'s ${SECTORS[o.sector].name.toLowerCase()}. It pays dividends while you stay at peace.`, [o.nationId, o.target])
       break

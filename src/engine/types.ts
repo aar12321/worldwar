@@ -960,6 +960,11 @@ export interface TiesState {
   tradeSince: Record<string, number>
   /** Sorted "a|b" -> the last month a trade deal ran between the two (a short gap between deals does not break the run). */
   tradeLast: Record<string, number>
+  /**
+   * The month the record of wars begins, when that is not the start of the game: a save from before ties kept no record of earlier wars, so
+   * its long peace is counted from the month it was loaded (`DEALINGS.on`). Absent in a game that kept the record from its first month.
+   */
+  since?: number
 }
 
 export type ResolutionKind = 'sanctions' | 'ceasefire' | 'recognition' | 'accord'

@@ -9,9 +9,11 @@ import { computeEconomy, militaryPower, type EconomyReport } from '../engine/eco
 import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey } from '../engine/helpers'
 import type { Rng } from '../engine/rng'
 import { bundleEmpty, bundleEntries, marketPrices, stockOf, type MarketPrices } from '../engine/trade'
-import type { GameState, NationId, Proposal, ResourceBundle, TradeResource, WorldMap } from '../engine/types'
+import type { GameState, NationId, Proposal, ProposalDraft, ResourceBundle, TradeResource, WorldMap } from '../engine/types'
 import { netWarScore, termsCost } from '../engine/warscore'
 import { coalitionActive, nationNeighbors, opinionOf } from './opinion'
+import { DEALINGS } from '../data/relations'
+import { trustFactor, trustReport, type TrustReport } from '../engine/ties'
 
 export function perceivedPower(s: GameState, _map: WorldMap, _viewer: NationId, target: NationId): number {
   return militaryPower(s, target)
@@ -59,6 +61,8 @@ export interface Verdict {
   accept: boolean
   reason: string
   opinion: number
+  /** Their trust in the one proposing, when it was weighed (`DEALINGS.on`, a treaty, a trade deal or a loan). */
+  trust?: TrustReport
 }
 
 const withOpinion = (reason: string, op: number) => (Math.abs(op) >= 20 ? `${reason} (opinion ${op > 0 ? '+' : ''}${op})` : reason)
@@ -75,7 +79,15 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
   const theirP = perceivedPower(s, map, botId, p.from)
   const ratio = theirP / myP
   const noise = rng.range(-6, 6)
-  const verdict = (accept: boolean, reason: string): Verdict => ({ accept, reason: withOpinion(reason, op), opinion: op })
+  // Trust (src/engine/ties.ts): worked out only for the offers that weigh it, and only with DEALINGS on, so nothing changes with it off.
+  let trust: TrustReport | undefined
+  const weighs = DEALINGS.on && (p.kind === 'pact' || p.kind === 'alliance' || p.kind === 'guarantee' || p.kind === 'trade' || p.kind === 'loan')
+  if (weighs) trust = trustReport(s, botId, p.from, { borders })
+  /** Trust as a factor from -1 to +1 (0 untested, and always 0 with DEALINGS off). */
+  const tf = trust ? trustFactor(trust.total) : 0
+  const verdict = (accept: boolean, reason: string): Verdict => ({ accept, reason: withOpinion(reason, op), opinion: op, ...(trust ? { trust } : {}) })
+  /** A refusal that distrust tipped says so. */
+  const distrust = tf <= -0.3
 
   // A territory's master speaks for it: it takes its master's trade deals without a word and turns down everything else.
   if (me.territoryOf) {
@@ -109,11 +121,13 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
     }
     case 'pact': {
       let score = (ratio - 0.8) * 30 + op * 0.5 + persona.pactBias + (borders ? 0 : 6) - 6 + noise
+      if (tf) score += tf * DEALINGS.trust.pact
       if (hasCasusBelli(s, botId, p.from)) score -= 12
       const eyeing = (me.personality === 'expansionist' || me.personality === 'opportunist') && borders && myP > theirP * 1.5
       if (eyeing) score -= 20
       if (score > 0) return verdict(true, ratio > 1.2 ? 'peace with a strong neighbor is wise' : 'a sensible guarantee')
       if (op <= -20) return verdict(false, 'we do not trust you')
+      if (distrust) return verdict(false, 'your word counts for little with us')
       if (eyeing || myP > theirP * 1.5) return verdict(false, 'we have no need to tie our hands')
       return verdict(false, 'not at this time')
     }
@@ -137,7 +151,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       const allies = alliesOf(s, botId).length
       // A leader the world fears draws its rivals together: two nations that both border it, or fight it, stand together.
       const alarm = difficultyOf(s.settings.difficulty).coalitions ? alarmBetween(s, map, botId, p.from, leaders) : null
-      const score = -28 + op * 0.7 + shared * 28 + (threat ? 22 : 0) + (alarm ? COALITION.allyBonus * Math.min(1, alarm.pressure) : 0) + Math.min(15, ratio * 8) + (persona.loyalty - 1) * 20 - dragged - Math.max(0, allies - 1) * 12 + noise
+      const score = -28 + op * 0.7 + shared * 28 + (threat ? 22 : 0) + (alarm ? COALITION.allyBonus * Math.min(1, alarm.pressure) : 0) + Math.min(15, ratio * 8) + (persona.loyalty - 1) * 20 - dragged - Math.max(0, allies - 1) * 12 + noise + tf * DEALINGS.trust.alliance
       if (score > 0) {
         if (shared > 0) return verdict(true, 'a common enemy unites us')
         if (threat) return verdict(true, `together we can stand against ${s.nations[threat].name}`)
@@ -145,6 +159,7 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
         return verdict(true, 'our friendship is strong')
       }
       if (op < -10) return verdict(false, 'we do not trust you')
+      if (distrust) return verdict(false, 'your word counts for little with us')
       if (dragged > 0) return verdict(false, 'we will not be dragged into your wars')
       if (allies >= 3) return verdict(false, 'we are committed elsewhere')
       return verdict(false, 'we see no common cause')
@@ -175,25 +190,30 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       }
       let threshold = 1.05 - op * 0.004 - (persona.dealAppetite - 1) * 0.25 - (isAllied(s, botId, p.from) ? 0.05 : 0) - Math.min(0.1, (p.terms.collateral ?? 0) / 1000)
       if (months > 0 && op < 0) threshold += 0.1
+      // A partner they trust gets a better price; one they doubt must pay more.
+      if (tf) threshold -= tf * DEALINGS.trust.tradePrice
       const fairness = got / Math.max(0.01, paid)
       if (fairness >= threshold + noise / 150) return verdict(true, fairness > 1.25 ? 'an excellent bargain' : 'a fair exchange')
-      return verdict(false, `the price is too low (worth ${Math.round(fairness * 100)}% to us)`)
+      return verdict(false, `the price is too low (worth ${Math.round(fairness * 100)}% to us${distrust ? ', and we doubt your word' : ''})`)
     }
     case 'loan': {
       if (atWar(s, botId, p.from)) return verdict(false, 'we do not borrow from enemies')
       const econ = computeEconomy(s, map, botId)
       const pay = loanPayment(p.amount, p.months)
       if (econ.netCapital < pay * 0.8) return verdict(false, 'we could not make the payments')
-      if (op < -25) return verdict(false, 'we do not trust you with our debts')
+      // Trust counts as opinion would: a lender they trust is a friend, one they doubt a risk.
+      const lop = op + tf * DEALINGS.trust.loan
+      if (lop < -25) return verdict(false, 'we do not trust you with our debts')
       const hungry = me.resources.capital < 40 || econ.netCapital < 2
       if (hungry) return verdict(true, 'we need the money')
-      return op > 15 && p.amount < me.resources.capital ? verdict(true, 'a friendly loan is welcome') : verdict(false, 'we have no need to borrow')
+      return lop > 15 && p.amount < me.resources.capital ? verdict(true, 'a friendly loan is welcome') : verdict(false, distrust ? 'we would rather not owe you' : 'we have no need to borrow')
     }
     case 'guarantee': {
-      if (op < -20) return verdict(false, 'a guarantee from you is no comfort')
+      const gop = op + tf * DEALINGS.trust.guarantee
+      if (gop < -20) return verdict(false, 'a guarantee from you is no comfort')
       if (me.overlord === p.from) return verdict(false, 'we are already yours')
       const threatened = enemiesOf(s, botId).length > 0 || [...myNeighbors].some((x) => perceivedPower(s, map, botId, x) > myP * 1.3)
-      if (threatened || op > 10) return verdict(true, threatened ? 'we welcome a protector' : 'our friendship is strong')
+      if (threatened || gop > 10) return verdict(true, threatened ? 'we welcome a protector' : 'our friendship is strong')
       return verdict(false, 'we are not in need of protection')
     }
     case 'callToArms': {
@@ -221,4 +241,31 @@ export function evaluateProposal(s: GameState, map: WorldMap, botId: NationId, p
       return verdict(false, 'we will not bleed for you')
     }
   }
+}
+
+/** A rival's likely answer to an offer, for the screens: `likely` when it would say yes even on a bad day, `unlikely` when not even on a good one. */
+export interface OfferOutlook {
+  outlook: 'likely' | 'unsure' | 'unlikely'
+  /** The reason it would give (on a good day for a refusal, on an average day when unsure). */
+  reason: string
+  /** Their trust in you, when this kind of offer weighs it. */
+  trust?: TrustReport
+}
+
+/** A stand-in for the dice: always the same draw, so the answer can be read before it is asked. */
+const fixedDraw = (x: number): Rng => ({ next: () => 0.5, range: () => x, int: (min) => min, chance: () => false, pick: (items) => items[0] })
+
+/**
+ * How `botId` would answer `draft` from `from`, read off `evaluateProposal` itself at the worst, middle and best of its dice, so the screen and
+ * the rival can never disagree. Pure: changes nothing.
+ */
+export function offerOutlook(s: GameState, map: WorldMap, botId: NationId, from: NationId, draft: ProposalDraft, prices?: MarketPrices): OfferOutlook {
+  const p = { ...draft, id: 'outlook', from, to: botId, created: s.turn, expires: s.turn } as Proposal
+  const at = (x: number) => evaluateProposal(s, map, botId, p, fixedDraw(x), prices)
+  const bad = at(-6)
+  if (bad.accept) return { outlook: 'likely', reason: bad.reason, trust: bad.trust }
+  const good = at(6)
+  if (!good.accept) return { outlook: 'unlikely', reason: good.reason, trust: good.trust }
+  const mid = at(0)
+  return { outlook: 'unsure', reason: mid.reason, trust: mid.trust }
 }
