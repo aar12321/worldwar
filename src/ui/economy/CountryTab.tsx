@@ -172,7 +172,7 @@ function Empire({ owned, regionId }: { owned: string[]; regionId: string }) {
         filters={filters}
         sorts={sorts}
         initialSort="population"
-        pageSize={30}
+        pageSize={8}
         renderRow={(id) => {
           const r = game.regions[id]
           const detail = `${TRAITS[traitOf(id, map.regions[id])].name} · ${r.integration < 1 ? `settling, ${Math.round(integrationFactor(r) * 100)}% output` : 'fully settled'}${r.rebels > 0 ? ' · rebels' : ''}`

@@ -1,6 +1,7 @@
 import { BANKING } from '../../data/banking'
 import { SECTORS, SECTOR_IDS } from '../../data/business'
-import { tierOf } from '../../engine/empire'
+import { TIERS, tierSpec } from '../../data/empire'
+import { empireCount, tierFor, tierOf } from '../../engine/empire'
 import { fundReturn, newBondRate } from '../../engine/bank'
 import type { SectorId } from '../../engine/types'
 import { useGame } from '../../store'
@@ -22,6 +23,14 @@ export function BankTab() {
   const setPrograms = useGame((s) => s.setPrograms)
   const { game, player, econ } = view
   const spec = tierOf(player)
+  // The tier is set at the month end (updateTiers), so land taken this month counts from then: say so rather than seem stuck.
+  const count = empireCount(game, player.id)
+  const coming = tierFor(count, player.tier ?? 1)
+  const sizeNote = `Your empire counts ${count} ${count === 1 ? 'country' : 'countries'}.${coming > spec.id ? ` From the month end you are a ${tierSpec(coming).name}.` : ''}`
+  const opensAt = (has: (t: (typeof TIERS)[number]) => boolean) => {
+    const t = TIERS.find(has)
+    return t ? `${t.name} (${t.countries})` : ''
+  }
   const b = player.bank
   const world = game.worldStats
   const range = spec.rate
@@ -141,10 +150,10 @@ export function BankTab() {
       )}
 
       {(!spec.directedCredit || !spec.wealthFund) && (
-        <Card title="Opens with a bigger empire" hint={`You hold ${econ.regionCount} ${econ.regionCount === 1 ? 'country' : 'countries'}. The Empire desk lists everything each size opens.`}>
+        <Card title="Opens with a bigger empire" hint={`${sizeNote} The Empire desk lists everything each size opens.`}>
           <div className="text-[14px] space-y-1">
-            {!spec.directedCredit && <Line k="Directed credit: steer bank lending to one sector" v="Regional power (4)" />}
-            {!spec.wealthFund && <Line k="Wealth fund: savings that earn the world's rate" v="Great power (10)" />}
+            {!spec.directedCredit && <Line k="Directed credit: steer bank lending to one sector" v={opensAt((t) => t.directedCredit)} />}
+            {!spec.wealthFund && <Line k="Wealth fund: savings that earn the world's rate" v={opensAt((t) => t.wealthFund)} />}
           </div>
         </Card>
       )}

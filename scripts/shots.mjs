@@ -63,6 +63,9 @@ export async function openGame(browser, baseUrl, opts = {}) {
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 300)) })
+  // The console's "Failed to load resource" line names no URL; this records which resource it was.
+  page.on('response', (r) => { if (r.status() >= 400) errors.push(`http ${r.status()} ${r.url().slice(0, 200)}`) })
+  page.on('requestfailed', (r) => errors.push(`failed ${r.url().slice(0, 200)}: ${r.failure()?.errorText ?? ''}`))
   // Skip the first-run help: the flag lives in settings.
   await page.addInitScript(() => {
     try {
