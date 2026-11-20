@@ -39,7 +39,7 @@ import { manageCountry, sameSpending, wantedCorporateTax, wantedSpending } from 
 import { coalitionActive, opinionOf } from './opinion'
 import { assessStrategy, cashMonths, chooseMissileStrikes, chooseWarTarget, counterOf, goodAlly, pickUnit, planAttacks, readyToStrike, warLooksWinnable, wantsPeace, type Sight } from './strategy'
 import { factionBotOrders } from './factions'
-import { blocBotOrders } from './blocs'
+import { blocBotOrders, blocOpEnemies } from './blocs'
 import { BLOC } from '../data/blocs'
 import { territoryOrders, wantsTerritory } from './territories'
 
@@ -669,6 +669,8 @@ function botOrders(s: GameState, map: WorldMap, nationId: NationId, allowPlayer:
   const planned = clockMonth(s)
   const warTargets = new Set(enemies.filter((e) => !humans.has(e) || planned - (s.warStarted[pairKey(nationId, e)] ?? -99) > BOT.reactionTurns))
   for (const o of orders) if (o.type === 'declareWar' && !humans.has(o.target)) warTargets.add(o.target)
+  // A rival bloc's operation is fought together on D-Day: a member does not throw its own army at that enemy before then.
+  if (BLOC.on && BLOC.aiWars) for (const e of blocOpEnemies(s, nationId, orders)) warTargets.delete(e)
   // A coalition's joint strike: every member declares and attacks the same shared target this month, whatever else it was planning.
   let jointDone = planStrike
   const strike = diff.skill === 2 ? dueStrike(s, nationId) : null

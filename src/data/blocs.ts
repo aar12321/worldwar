@@ -48,6 +48,24 @@ export const BLOC = {
   conquer: 2,
   arsenalGrowth: 0.25,
   outmatchRatio: 1.1,
+  /**
+   * Rival blocs choose a war (docs/BLOC_STATUS.md, "Rival operations"): a bloc at peace picks a weak neighbour it can beat together,
+   * builds its case, declares, calls the members in and plans an operation on it. Off: rival blocs fight only wars a member started.
+   */
+  aiWars: true,
+  /** The war of choice: its odds with every member that could join pledging, the most the target may weigh against the bloc, the monthly chance. */
+  warOdds: 0.7,
+  warPowerShare: 0.5,
+  /** The leader's opinion of the target must be below this: a neighbour it is cool to, not a friend. */
+  warOpinion: 10,
+  warChance: { normal: 0.2, hard: 0.3 },
+  /** Operations a rival bloc plans with `aiWars` on: the least odds of the pledged force (Normal, Hard). */
+  opFloor: { normal: 0.6, hard: 0.55 },
+  /**
+   * Live games: rival members answer a call to arms and pledge to an operation on the next day of the clock, not only when the month
+   * turns, so a seven-day operation a player plans does not set out before they can answer. Off: they answer at the month's turn.
+   */
+  liveAnswers: true,
 }
 
 export const PERKS = [

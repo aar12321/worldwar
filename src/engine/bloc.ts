@@ -507,9 +507,21 @@ export function joinProblem(s: GameState, m: NationId, target: NationId): string
   return null
 }
 
+/** Live games: the rival members answer on the next day of the clock (`BLOC.liveAnswers`, carried out by the live day). */
+function askBots(s: GameState, f: Faction) {
+  if (!BLOC.liveAnswers || !isLive(s) || !f.members.some((m) => !s.humans.includes(m) && s.nations[m]?.alive)) return
+  const b = ensure(f)
+  const day = Math.floor(clockOf(s)) + 1
+  b.ask = b.ask === undefined ? day : Math.min(b.ask, day)
+}
+
+/** Live: whether a bloc's rival members have answers due by `today`. */
+export const blocAsksDue = (s: GameState, today: number): boolean => BLOC.on && BLOC.liveAnswers && !!s.factions?.some((f) => f.bloc?.ask !== undefined && f.bloc.ask <= today)
+
 function openCall(s: GameState, map: WorldMap, f: Faction, by: NationId, target: NationId, auto: boolean) {
   const b = ensure(f)
   if (b.calls.some((c) => c.target === target && c.expires >= s.turn)) return
+  askBots(s, f)
   const call: BlocCall = { id: newId(s, 'bc'), by, target, created: s.turn, expires: s.turn + BLOC.callMonths, answers: {}, ...(auto ? { auto: true } : {}) }
   b.calls.push(call)
   feed(s, f, `CALL TO ARMS: ${nm(s, by)} asks ${f.name} to join its war on ${nm(s, target)}.`, 'call')
@@ -546,6 +558,8 @@ export function blocProblem(s: GameState, map: WorldMap, o: BlocOrder, pending: 
   if (n?.territoryOf) return 'A territory follows its master'
   const b = blocOf(f)
   const leader = leaderOf(f) === o.nationId
+  // A war this nation declares in the same month counts: the declaration comes first when the month resolves.
+  const warring = (m: NationId, e: NationId) => atWar(s, m, e) || (m === o.nationId && pending.some((p) => p.type === 'declareWar' && p.nationId === m && p.target === e))
   switch (o.type) {
     case 'blocRole': {
       if (o.role !== null && !ROLE_IDS.includes(o.role)) return 'Unknown role'
@@ -569,7 +583,7 @@ export function blocProblem(s: GameState, map: WorldMap, o: BlocOrder, pending: 
       const t = s.nations[o.target]
       if (!t?.alive) return 'Choose a country'
       if (f.members.includes(o.target)) return 'They are in the bloc'
-      if (!atWar(s, o.nationId, o.target)) return `Declare war on ${t.name} first, then call the bloc to arms`
+      if (!warring(o.nationId, o.target)) return `Declare war on ${t.name} first, then call the bloc to arms`
       if (b.calls.some((c) => c.target === o.target && c.expires >= s.turn) || pending.some((p) => p.type === 'blocCall' && p.target === o.target)) return 'The bloc has already been called against them'
       if (f.members.every((m) => m === o.nationId || atWar(s, m, o.target) || s.nations[m]?.territoryOf)) return 'Every member is already at war with them'
       return null
@@ -586,8 +600,8 @@ export function blocProblem(s: GameState, map: WorldMap, o: BlocOrder, pending: 
       if (!r || !map.regions[o.target]) return 'Choose a country to attack'
       const owner = r.owner
       if (f.members.includes(owner)) return 'A member holds it'
-      if (!f.members.some((m) => atWar(s, m, owner))) return `No member is at war with ${nm(s, owner)}`
-      if (!f.members.some((m) => atWar(s, m, owner) && canAttackRegion(s, map, m, o.target).ok)) return 'No member at war with them can reach it'
+      if (!f.members.some((m) => warring(m, owner))) return `No member is at war with ${nm(s, owner)}`
+      if (!f.members.some((m) => warring(m, owner) && canAttackRegion(s, map, m, o.target).ok)) return 'No member at war with them can reach it'
       const [lo, hi] = isLive(s) ? BLOC.liveWhen : BLOC.turnWhen
       if (!Number.isInteger(o.when) || o.when < lo || o.when > hi) return isLive(s) ? `D-Day is ${lo} to ${hi} days away` : `D-Day is ${lo} to ${hi} months away`
       if (activeOps(b).length + pending.filter((p) => p.type === 'blocPlan').length >= BLOC.maxOps) return `A bloc runs ${BLOC.maxOps} operations at a time`
@@ -661,6 +675,7 @@ export function executeBlocOrder(s: GameState, map: WorldMap, o: BlocOrder, rng:
       const dday = isLive(s) ? clockOf(s) + o.when : s.turn + o.when
       const op: BlocOp = { id: newId(s, 'op'), by: o.nationId, target: o.target, enemy: owner, created: s.turn, dday, pledges: {}, status: 'planned' }
       b.ops.push(op)
+      askBots(s, f)
       feed(s, f, `${nm(s, o.nationId)} plans an operation on ${map.regions[o.target].name}${map.regions[o.target].name === nm(s, owner) ? '' : ` (${nm(s, owner)})`}: D-Day ${isLive(s) ? `in ${o.when} days` : `at the end of ${o.when === 1 ? 'next month' : `${o.when} months from now`}`}. Pledge divisions on the Operations tab.`, 'op', o.nationId)
       break
     }

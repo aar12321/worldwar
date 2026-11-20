@@ -2,12 +2,13 @@ import { armiesToRecall, holdsBackLaunch } from '../ai/liveBot'
 import { LIVE } from '../data/live'
 import { bringHome, calledOff, holdsHome, sendHome, turnBack, launchArmy } from './armies'
 import { fightFactionArmy, launchFactionArmies } from './factions'
-import { blocOpsDue, fightBlocArmy, launchBlocOps } from './bloc'
+import { blocAsksDue, blocOpsDue, fightBlocArmy, launchBlocOps } from './bloc'
+import { blocBotAnswers } from '../ai/blocs'
 import { absDay, clockOf, dayDate, daysInMonth, isLive } from './calendar'
 import { addLog, atWar, newId, totalUnits } from './helpers'
 import { orderCost, validateOrder } from './orders'
 import { asCommand } from './territories'
-import { runMonth } from './resolveTurn'
+import { applyOrderNow, runMonth } from './resolveTurn'
 import { createRng } from './rng'
 import { interception } from './deployment'
 import { strikeHits } from './systems'
@@ -91,6 +92,7 @@ function planLaunches(s: GameState, attacks: AttackOrder[]) {
 function dueToday(s: GameState, map: WorldMap, today: number): boolean {
   if (s.launches?.some((l) => l.at <= today)) return true
   if (blocOpsDue(s, today)) return true
+  if (blocAsksDue(s, today)) return true
   if (s.flights?.some((f) => f.lands <= today)) return true
   if (s.nukes?.some((f) => f.lands <= today)) return true
   // A missile program's facility, development, test or production line comes due.
@@ -133,6 +135,9 @@ function processDay(s: GameState, map: WorldMap, today: number, events: LiveEven
       }
     }
   }
+
+  // 1a. Rival bloc members answer the calls and operations of yesterday (BLOC.liveAnswers), before any operation sets out.
+  if (blocAsksDue(s, today)) blocBotAnswers(s, map, today, (o) => !applyOrderNow(s, map, o).error)
 
   // 1b. Bloc operations set out so that they arrive on D-Day.
   for (const army of launchBlocOps(s, map, today)) events.push({ kind: 'launched', army: snapshot(army) })

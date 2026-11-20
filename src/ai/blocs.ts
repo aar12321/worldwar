@@ -6,9 +6,10 @@ import { blocOf, blocPower, forecastOp, joinProblem, leaderOf, sendable } from '
 import { isLive } from '../engine/calendar'
 import { SENDABLE } from '../engine/deploy'
 import { factionName, factionOf } from '../engine/factions'
-import { alliesOf, atWar, enemiesOf, regionsOf, totalUnits } from '../engine/helpers'
+import { alliesOf, atWar, enemiesOf, hasCasusBelli, hasPact, isAllied, pairKey, regionsOf, totalUnits } from '../engine/helpers'
 import { militaryPower } from '../engine/militaryStats'
 import { createRng } from '../engine/rng'
+import type { Rng } from '../engine/rng'
 import type { BlocRole, Faction, GameState, NationId, Order, RegionId, UnitCounts, WorldMap } from '../engine/types'
 import { canAttackRegion } from '../engine/warfare'
 import { botAcceptsInvite } from './factions'
@@ -87,6 +88,118 @@ function opTarget(s: GameState, map: WorldMap, f: Faction, share: number, floor:
   return best?.id ?? null
 }
 
+/** The enemies of operations this nation's bloc has planned, or is planning in this month's orders: they are hit together on D-Day. */
+export function blocOpEnemies(s: GameState, id: NationId, orders: Order[]): NationId[] {
+  const f = factionOf(s, id)
+  if (!f) return []
+  const out = blocOf(f).ops.filter((o) => o.status === 'planned' || o.status === 'marching').map((o) => o.enemy)
+  for (const o of orders) if (o.type === 'blocPlan' && s.regions[o.target]) out.push(s.regions[o.target].owner)
+  return [...new Set(out)]
+}
+
+/**
+ * A war the bloc chooses (`BLOC.aiWars`): a weak nation next to a member, that the leader does not like, that no member is tied to,
+ * and that the members who could join would beat together with the odds of `BLOC.warOdds` (forecast with their pledges, as if they were
+ * at war, on fixed seeds). Never a person's nation: a bloc at peace picks on rivals, and a player meets it only in wars of their own
+ * or a member's. Null when there is none. The state is borrowed for the forecast and put back exactly.
+ */
+export function warOfChoice(s: GameState, map: WorldMap, f: Faction, share: number): { target: NationId; region: RegionId; odds: number } | null {
+  const leader = leaderOf(f)
+  const members = f.members.filter((m) => s.nations[m]?.alive && !s.nations[m].territoryOf && !s.nations[m].overlord).sort()
+  if (members.length < 2) return null
+  const power = blocPower(s, f)
+  const started = (id: NationId) => hasCasusBelli(s, leader, id) || (s.cases ?? []).some((c) => c.holder === leader && c.target === id)
+  const owned = new Set(members.flatMap((m) => regionsOf(s, m)))
+  const near = new Set<NationId>()
+  for (const r of owned) for (const x of map.regions[r]?.neighbors ?? []) {
+    const o = s.regions[x]?.owner
+    if (o && !members.includes(o)) near.add(o)
+  }
+  const options = [...near]
+    .filter((id) => {
+      const t = s.nations[id]
+      if (!t?.alive || t.overlord || t.territoryOf || s.humans.includes(id) || t.isPlayer) return false
+      if (factionOf(s, id)) return false
+      if (joinProblem(s, leader, id)) return false
+      if (members.some((m) => isAllied(s, m, id) || hasPact(s, m, id))) return false
+      if (militaryPower(s, id) > power * BLOC.warPowerShare) return false
+      return opinionOf(s, map, leader, id, { coalition: false }) < BLOC.warOpinion
+    })
+    // A target the leader is already building a case against (or holds a reason for) comes first, so the bloc follows one war through.
+    .sort((a, b) => Number(started(b)) - Number(started(a)) || militaryPower(s, a) - militaryPower(s, b) || (a < b ? -1 : 1))
+  for (const id of options.slice(0, 4)) {
+    const joiners = members.filter((m) => !joinProblem(s, m, id))
+    if (joiners.length < 2 || !joiners.includes(leader)) continue
+    const keys = joiners.map((m) => pairKey(m, id))
+    const wars = s.wars
+    s.wars = [...wars, ...keys]
+    try {
+      const regions = regionsOf(s, id)
+        .filter((r) => joiners.some((m) => canAttackRegion(s, map, m, r).ok))
+        // The leader declares, so a country it can reach itself comes first: the operation can then be planned in the same month.
+        .sort((a, b) => Number(canAttackRegion(s, map, leader, b).ok) - Number(canAttackRegion(s, map, leader, a).ok) || Number(s.nations[id].capital === b) - Number(s.nations[id].capital === a) || s.regions[a].line - s.regions[b].line || (a < b ? -1 : 1))
+      const region = regions[0]
+      if (!region) continue
+      const pledges: Record<NationId, Partial<UnitCounts>> = {}
+      for (const m of joiners) pledges[m] = pledgeOf(s, m, share)
+      const odds = forecastOp(s, map, f, { id: 'plan', by: leader, target: region, enemy: id, created: s.turn, dday: s.turn + 1, pledges, status: 'planned' }, 8).winChance
+      if (odds >= BLOC.warOdds) return { target: id, region, odds }
+    } finally {
+      s.wars = wars
+    }
+  }
+  return null
+}
+
+/** A member's answers to the bloc's calls to arms, and its pledges to planned operations. */
+function answerAndPledge(s: GameState, map: WorldMap, f: Faction, nationId: NationId, hard: boolean, rng: Rng, tryAdd: TryAdd) {
+  const b = blocOf(f)
+  // Calls to arms: join, or say no so the members know.
+  const joining = new Set<NationId>()
+  for (const c of b.calls) {
+    if (c.by === nationId || c.answers[nationId] || c.expires < s.turn) continue
+    if (joinProblem(s, nationId, c.target)) continue
+    const join = botJoinsCall(s, map, nationId, c.by, c.target, rng)
+    if (tryAdd({ type: 'blocAnswer', nationId, callId: c.id, join }) && join) joining.add(c.target)
+  }
+
+  // Operations: pledge a share of the free divisions to any planned one against an enemy, unless a war of its own needs them at home.
+  // An operation needs a real force to win (a country is defended by its owner's whole army), so a rival sends most of what is free.
+  const share = hard ? 0.85 : 0.75
+  for (const op of b.ops) {
+    if (op.status !== 'planned' || op.pledges[nationId]) continue
+    const owner = s.regions[op.target]?.owner
+    // A member that answers the call this month is at war by the time the operation fights (answers come first).
+    if (!owner || !(atWar(s, nationId, owner) || (BLOC.aiWars && joining.has(owner)))) continue
+    const others = enemiesOf(s, nationId).filter((e) => e !== owner && !f.members.includes(e))
+    if (others.some((e) => militaryPower(s, e) > militaryPower(s, nationId) * 0.8)) continue
+    const units = pledgeOf(s, nationId, share)
+    if (totalUnits({ infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0, ...units }) >= 0.3) tryAdd({ type: 'blocCommit', nationId, opId: op.id, units })
+  }
+
+}
+
+/**
+ * Live games (`BLOC.liveAnswers`): the rival members of each bloc that asked something of them (an operation planned, a call to arms)
+ * answer and pledge on the day after, through the same orders a person gives, so a short operation does not set out without them.
+ * Deterministic: a stream of its own, seeded by the day; members in a fixed order. `apply` carries out one order now and says whether it went through.
+ */
+export function blocBotAnswers(s: GameState, map: WorldMap, today: number, apply: TryAdd) {
+  const diff = difficultyOf(s.settings.difficulty)
+  if (!BLOC.on || !BLOC.liveAnswers || !diff.coalitions) return
+  for (const f of [...(s.factions ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    const b = f.bloc
+    if (!b || b.ask === undefined || b.ask > today) continue
+    delete b.ask
+    for (const m of [...f.members].sort()) {
+      const n = s.nations[m]
+      if (!n?.alive || n.overlord || n.territoryOf || s.humans.includes(m)) continue
+      const rng = createRng((s.seed ^ 0x0b10ca11) >>> 0, today * 100003 + hashString(m))
+      answerAndPledge(s, map, f, m, diff.skill === 2, rng, apply)
+    }
+  }
+}
+
 /**
  * A rival's bloc play for the month: join or found a bloc around friends and shared enemies, take a role, answer calls to arms, pledge
  * divisions to operations and, as leader, invite, call the bloc to arms and plan operations. Easy rivals stay out (they never gang up).
@@ -128,25 +241,8 @@ export function blocBotOrders(s: GameState, map: WorldMap, nationId: NationId, t
     if (role) tryAdd({ type: 'blocRole', nationId, role })
   }
 
-  // Calls to arms: join, or say no so the members know.
-  for (const c of b.calls) {
-    if (c.by === nationId || c.answers[nationId] || c.expires < s.turn) continue
-    if (joinProblem(s, nationId, c.target)) continue
-    tryAdd({ type: 'blocAnswer', nationId, callId: c.id, join: botJoinsCall(s, map, nationId, c.by, c.target, rng) })
-  }
-
-  // Operations: pledge a share of the free divisions to any planned one against an enemy, unless a war of its own needs them at home.
-  // An operation needs a real force to win (a country is defended by its owner's whole army), so a rival sends most of what is free.
+  answerAndPledge(s, map, f, nationId, hard, rng, tryAdd)
   const share = hard ? 0.85 : 0.75
-  for (const op of b.ops) {
-    if (op.status !== 'planned' || op.pledges[nationId]) continue
-    const owner = s.regions[op.target]?.owner
-    if (!owner || !atWar(s, nationId, owner)) continue
-    const others = enemiesOf(s, nationId).filter((e) => e !== owner && !f.members.includes(e))
-    if (others.some((e) => militaryPower(s, e) > militaryPower(s, nationId) * 0.8)) continue
-    const units = pledgeOf(s, nationId, share)
-    if (totalUnits({ infantry: 0, armor: 0, artillery: 0, fighter: 0, air: 0, naval: 0, drone: 0, robot: 0, missile: 0, ...units }) >= 0.3) tryAdd({ type: 'blocCommit', nationId, opId: op.id, units })
-  }
 
   if (leaderOf(f) !== nationId) return
   // The leader brings friends in.
@@ -164,8 +260,25 @@ export function blocBotOrders(s: GameState, map: WorldMap, nationId: NationId, t
   }
   // An operation: one at a time for a rival bloc, against the weakest country of an enemy it can reach.
   if (b.ops.some((o) => o.status === 'planned' || o.status === 'marching')) return
+  // A bloc at peace chooses a war it can win together: the case first, then the war (the members are called in when it starts).
+  if (BLOC.aiWars && s.turn >= 6 && f.members.every((m) => enemiesOf(s, m).length === 0)) {
+    // A case already under way, or a reason in hand, is followed through; otherwise the bloc thinks of a war now and then.
+    const pursuing = (s.cases ?? []).some((c) => c.holder === nationId) || Object.keys(s.casusBelli).some((k) => k.startsWith(`${nationId}|`) && s.casusBelli[k] >= s.turn)
+    if (rng.next() >= (hard ? BLOC.warChance.hard : BLOC.warChance.normal) * persona.aggression && !pursuing) return
+    const war = warOfChoice(s, map, f, share)
+    if (!war) return
+    if (hasCasusBelli(s, nationId, war.target)) {
+      // The war and its operation in one month: the members are called in as it starts, and pledge when they answer.
+      // (A country only another member reaches is planned next month, once that member has answered the call.)
+      if (tryAdd({ type: 'declareWar', nationId, target: war.target }) && canAttackRegion(s, map, nationId, war.region).ok) tryAdd({ type: 'blocPlan', nationId, target: war.region, when: isLive(s) ? 12 : 1 })
+    }
+    else if (!(s.cases ?? []).some((c) => c.holder === nationId && c.target === war.target)) {
+      if (!(hard && tryAdd({ type: 'operation', nationId, op: 'case', target: war.target }))) tryAdd({ type: 'buildCase', nationId, target: war.target })
+    }
+    return
+  }
   if (!rng.chance((hard ? 0.7 : 0.45) * persona.aggression)) return
-  const target = opTarget(s, map, f, share, hard ? 0.4 : 0.5, humanOk)
+  const target = opTarget(s, map, f, share, BLOC.aiWars ? (hard ? BLOC.opFloor.hard : BLOC.opFloor.normal) : hard ? 0.4 : 0.5, humanOk)
   if (!target) return
   tryAdd({ type: 'blocPlan', nationId, target, when: isLive(s) ? 12 : 1 })
 }

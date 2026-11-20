@@ -1628,6 +1628,8 @@ export interface BlocState {
   ops: BlocOp[]
   /** What each member has done for the bloc, for the members list. */
   record: Record<NationId, { ops: number; sent: number; joined: number }>
+  /** Live games: the absolute day the rival members answer what was asked of them (an operation planned, a call to arms). Absent when nothing waits. */
+  ask?: number
 }
 
 /** A nuclear program: warheads built, and the turns the ones under construction are done. */

@@ -61,11 +61,12 @@ describe('rival blocs over two years', () => {
       expect(r.shareOfPower).toBeLessThan(0.5)
       expect(Math.max(...r.levels)).toBeLessThanOrEqual(BLOC.levels.length)
       planned += r.ops
+      // Rival blocs choose a war they can win together (BLOC.aiWars), so each world fights at least one joint operation, by two or more members.
+      expect(r.fought).toBeGreaterThanOrEqual(1)
+      expect(r.multi).toBeGreaterThanOrEqual(1)
     }
-    // Rivals plan operations only where the force they would send has fair odds (a country is defended by its owner's whole army), so
-    // they are rare (with the missile program and the government desk merged, these two worlds plan one and fight none); at least one is planned.
     // Operations a player plans are covered by bloc.test.ts and the live online test.
-    expect(planned).toBeGreaterThan(0)
+    expect(planned).toBeGreaterThan(1)
     console.log(rows.join('\n'))
   }, 900_000)
 
