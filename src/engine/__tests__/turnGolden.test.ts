@@ -180,6 +180,11 @@ function withoutPresence<T>(fn: () => T): T {
  * no fear of a big nation before it takes land, and the record of wars and runs of trade (the new `ties` field). Checked before pinning: with
  * `TIES.on` switched off (`withoutTies`, 'ties are the only thing that moved ...'; `withoutBlocs` now switches it off too, so every older layer keeps
  * its proof) the previous pins (10cf7a356e2bea, 11d73d1672f834, d077c31c237c4) return exactly.
+ * Re-pinned (the Normal and Hard bot worlds; the small war did not move) for the military gap fixes (docs/BLOC_STATUS.md "Rival operations",
+ * docs/MISSILE_PROGRAM_STATUS.md): rival blocs at peace choose a war they can win together and fight it as a joint operation, live bot members
+ * answer the next day, Medium rivals found missile programs more readily, and interceptor rounds go on the production line. Checked before
+ * pinning: with those four switches off (`withoutGaps`, 'the military gap fixes are the only thing ...'; `withoutTies` now switches them off
+ * too, so every older layer keeps its proof) the previous pins (a0f8d651bfe97, 1879299a3721df, 19d872c4a61078) return exactly.
  */
 
 /** A 53-bit string hash (cyrb53). Plenty to notice any change in a saved game. */
@@ -242,7 +247,8 @@ describe('turn mode resolves exactly as pinned', () => {
     const { s } = botWorld(7, 'normal', 'poland', 12)
     expect(s.turn).toBe(13)
     // Re-pinned for ties (trade, investment and a long peace in every opinion; the milder starting mood): with them off '10cf7a356e2bea' returns (see below).
-    expect(hash(JSON.stringify(s))).toBe('a0f8d651bfe97')
+    // Re-pinned for the military gap fixes (rival blocs choose a war, Medium missile programs): with them off 'a0f8d651bfe97' returns (see below).
+    expect(hash(JSON.stringify(s))).toBe('1b571aa299e6eb')
   }, 120_000)
 
   it('thirty months of Hard bots, with wars, battles and strikes', () => {
@@ -255,7 +261,8 @@ describe('turn mode resolves exactly as pinned', () => {
     // Re-pinned for the missile program (Hard rivals build, hire, develop and test): with it switched off '1719b377e4ad6a' returns (see below).
     // Missile program + government desk + blocs together (each proven alone below).
     // Re-pinned for ties: with them off '11d73d1672f834' returns (see below).
-    expect(hash(JSON.stringify(s))).toBe('1879299a3721df')
+    // Re-pinned for the military gap fixes: with them off '1879299a3721df' returns (see below).
+    expect(hash(JSON.stringify(s))).toBe('1be2d34585633f')
   }, 240_000)
 
   it('a small war with attacks, strikes and a capture', () => {
